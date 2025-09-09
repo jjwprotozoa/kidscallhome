@@ -34,10 +34,17 @@ export interface CallNotification {
   timestamp: string;
 }
 
+export interface StatusUpdate {
+  userId: string;
+  isOnline: boolean;
+  lastSeen: string;
+}
+
 // Custom interface to avoid Pusher.Channel type conflicts
 interface PusherChannel {
   bind<T = unknown>(event: string, callback: (data: T) => void): void;
   unbind<T = unknown>(event?: string, callback?: (data: T) => void): void;
+  trigger(event: string, data: unknown): void;
 }
 
 class PusherService {
@@ -52,7 +59,7 @@ class PusherService {
       const pusherKey = import.meta.env.VITE_PUSHER_KEY;
       const pusherCluster = import.meta.env.VITE_PUSHER_CLUSTER || 'us2';
       
-      console.log('🔧 Initializing Pusher with:', { pusherKey, pusherCluster });
+      console.log('🔧 Initializing Pusher with cluster:', pusherCluster);
       
       // Check if we have a valid Pusher key
       if (!pusherKey) {
@@ -331,6 +338,52 @@ class PusherService {
     if (!this.channel) return;
     this.channel.bind('webrtc-end-call', (data: SignalingData) => {
       if (data.to === this.deviceId) {
+        callback(data);
+      }
+    });
+  }
+
+  /**
+   * Send status update
+   */
+  async sendStatusUpdate(isOnline: boolean): Promise<void> {
+    if (!this.familyId || !this.deviceId) return;
+    
+    try {
+      const response = await fetch('http://localhost:3001/api/signaling', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'status-update',
+          fromDeviceId: this.deviceId,
+          toDeviceId: 'all', // Broadcast to all family members
+          familyId: this.familyId,
+          data: {
+            isOnline,
+            lastSeen: new Date().toISOString()
+          }
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      console.log('Status update sent successfully');
+    } catch (error) {
+      console.error('Failed to send status update:', error);
+    }
+  }
+
+  /**
+   * Listen for status updates from other family members
+   */
+  onStatusUpdate(callback: (data: StatusUpdate) => void): void {
+    if (!this.channel) return;
+    this.channel.bind('client-status-update', (data: StatusUpdate) => {
+      if (data.userId !== this.deviceId) {
         callback(data);
       }
     });

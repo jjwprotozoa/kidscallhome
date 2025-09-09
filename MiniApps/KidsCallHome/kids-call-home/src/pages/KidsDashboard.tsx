@@ -297,10 +297,10 @@ const KidsDashboard: React.FC = () => {
               <div className="text-center py-12">
                 <div className="text-6xl sm:text-7xl md:text-8xl mb-6">👨‍👩‍👧‍👦</div>
                 <h3 className="text-2xl sm:text-3xl font-bold text-white mb-4 text-shadow">
-                  No parents added yet
+                  No parents in your family yet
                 </h3>
                 <p className="text-lg sm:text-xl text-white text-opacity-75 text-shadow">
-                  Ask your parents to add themselves to the family!
+                  Ask your parents to join your family! Only family members can call each other.
                 </p>
               </div>
             ) : (

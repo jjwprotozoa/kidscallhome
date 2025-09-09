@@ -25,6 +25,7 @@
 
 import { useEffect } from 'react';
 import { Navigate, Route, BrowserRouter as Router, Routes, useLocation } from 'react-router-dom';
+import pusherService from './services/pusherService';
 import websocketService from './services/websocketService';
 import { useAppStore } from './stores/useAppStore';
 
@@ -101,8 +102,51 @@ function App() {
     }
   }, [initializeApp]);
 
-  // Initialize WebSocket connection when user is logged in
+  // Handle user going offline when page is closed or refreshed
   useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (currentUser) {
+        // Update user's offline status
+        const { updateFamilyMemberStatus } = useAppStore.getState();
+        updateFamilyMemberStatus(currentUser.id, false, new Date());
+        // Also send via Pusher
+        pusherService.sendStatusUpdate(false).catch(console.error);
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.hidden && currentUser) {
+        // User switched tabs or minimized browser
+        const { updateFamilyMemberStatus } = useAppStore.getState();
+        updateFamilyMemberStatus(currentUser.id, false, new Date());
+        // Also send via Pusher
+        pusherService.sendStatusUpdate(false).catch(console.error);
+      } else if (!document.hidden && currentUser) {
+        // User came back to the tab
+        const { updateFamilyMemberStatus } = useAppStore.getState();
+        updateFamilyMemberStatus(currentUser.id, true, new Date());
+        // Also send via Pusher
+        pusherService.sendStatusUpdate(true).catch(console.error);
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [currentUser]);
+
+  // Initialize WebSocket connection when user is logged in (production only)
+  useEffect(() => {
+    // Skip WebSocket in development since we're using Pusher
+    if (import.meta.env.DEV) {
+      console.log('WebSocket disabled in development - using Pusher instead');
+      return;
+    }
+
     if (currentFamily && currentUser) {
       websocketService.connect(currentFamily.id, currentUser.id);
       
@@ -115,6 +159,33 @@ function App() {
       websocketService.disconnect();
     }
   }, [currentFamily?.id, currentUser?.id]); // Only depend on IDs to prevent unnecessary reconnections
+
+  // Initialize Pusher connection and status updates when user is logged in
+  useEffect(() => {
+    if (currentFamily && currentUser) {
+      // Connect to Pusher
+      pusherService.connect(currentFamily.id, currentUser.deviceId);
+      
+      // Send initial online status
+      pusherService.sendStatusUpdate(true).catch(console.error);
+      
+      // Listen for status updates from other family members
+      pusherService.onStatusUpdate((data) => {
+        const { updateFamilyMemberStatus } = useAppStore.getState();
+        updateFamilyMemberStatus(data.userId, data.isOnline, new Date(data.lastSeen));
+      });
+      
+      // Cleanup on unmount or when dependencies change
+      return () => {
+        // Send offline status before disconnecting
+        pusherService.sendStatusUpdate(false).catch(console.error);
+        pusherService.disconnect();
+      };
+    } else {
+      // Disconnect if no user is logged in
+      pusherService.disconnect();
+    }
+  }, [currentFamily?.id, currentUser?.id, currentUser?.deviceId]);
 
   // Apply theme to document
   useEffect(() => {

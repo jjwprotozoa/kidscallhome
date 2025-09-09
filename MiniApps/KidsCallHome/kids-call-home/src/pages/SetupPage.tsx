@@ -29,11 +29,11 @@ import {
     UserPlusIcon
 } from '@heroicons/react/24/outline';
 import { motion } from 'framer-motion';
-import { nanoid } from 'nanoid';
 import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import LoadingSpinner from '../components/shared/LoadingSpinner';
 import PWAInstallPrompt from '../components/shared/PWAInstallPrompt';
+import FamilyDataService from '../services/familyDataService';
 import { useAppStore } from '../stores/useAppStore';
 
 type SetupMode = 'guardian' | 'child' | 'select';
@@ -71,20 +71,6 @@ const SetupPage: React.FC = () => {
     }
   }, [location.state]);
   
-  // Generate memorable family code
-  const generateFamilyCode = (): string => {
-    const words = [
-      'BEAR', 'CAKE', 'STAR', 'MOON', 'SUN', 'TREE', 'BIRD', 'FISH',
-      'LION', 'BEAR', 'WOLF', 'EAGLE', 'ROSE', 'LILY', 'SAGE', 'OAK'
-    ];
-    const numbers = ['2024', '2025', '2026', '2027', '2028'];
-    
-    const word1 = words[Math.floor(Math.random() * words.length)];
-    const word2 = words[Math.floor(Math.random() * words.length)];
-    const year = numbers[Math.floor(Math.random() * numbers.length)];
-    
-    return `${word1}-${word2}-${year}`;
-  };
   
   // Handle guardian family creation
   const handleGuardianSetup = async (e: React.FormEvent) => {
@@ -95,69 +81,35 @@ const SetupPage: React.FC = () => {
     setError(null);
     
     try {
-      // Generate family code
-      const code = generateFamilyCode();
+      // Use real family data service to create family
+      const family = FamilyDataService.createFamily({
+        familyName: familyName.trim(),
+        guardianName: guardianName.trim(),
+        guardianEmail: '', // Optional email
+      });
       
-      // Create family object
-      const family = {
-        id: nanoid(),
-        code,
-        name: familyName.trim(),
-        guardians: [{
-          id: nanoid(),
-          name: guardianName.trim(),
-          email: '',
-          avatar: '👨‍💼',
-          isOnline: true,
-          lastSeen: new Date(),
-          deviceId: nanoid(), // TODO: Generate real device fingerprint
-          preferences: {
-            theme: 'guardian' as const,
-            notifications: {
-              calls: true,
-              messages: true,
-              childOnline: true,
-            },
-            callQuality: 'auto' as const,
-            showTechnicalDetails: true,
-          },
-        }],
-        children: childrenNames
-          .filter(name => name.trim())
-          .map(name => ({
-            id: nanoid(),
-            name: name.trim(),
-            age: undefined,
-            avatar: '👶',
-            deviceId: '',
-            isOnline: false,
-            lastSeen: new Date(),
-            preferences: {
-              theme: 'kids' as const,
-              fontSize: 'medium' as const,
-              soundEffects: true,
-              animations: true,
-              emergencyButtonEnabled: true,
-            },
-            approvedGuardians: [],
-          })),
-        created: new Date(),
-        lastActive: new Date(),
-        settings: {
-          allowChildInitiatedCalls: true,
-          emergencyContacts: [],
-          callTimeout: 30,
-          maxCallDuration: 60,
-          requireGuardianApproval: false,
-          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        },
-      };
+      // Add children to the family
+      for (const childName of childrenNames.filter(name => name.trim())) {
+        FamilyDataService.addChildToFamily(family.id, {
+          childName: childName.trim(),
+        });
+      }
+      
+      // Reload the family to get updated data with children
+      const updatedFamily = FamilyDataService.findFamilyById(family.id);
+      if (!updatedFamily) {
+        throw new Error('Failed to create family');
+      }
       
       // Set current user and family
-      setCurrentFamily(family);
-      setCurrentUser(family.guardians[0]);
+      setCurrentFamily(updatedFamily);
+      setCurrentUser(updatedFamily.guardians[0]);
       setUserType('guardian');
       setTheme('guardian');
+      
+      // Update user's online status
+      const { updateFamilyMemberStatus } = useAppStore.getState();
+      updateFamilyMemberStatus(updatedFamily.guardians[0].id, true, new Date());
       
       setSuccess(true);
       
@@ -182,163 +134,41 @@ const SetupPage: React.FC = () => {
     setError(null);
     
     try {
-      // TODO: Validate family code with backend
-      // For now, simulate family lookup based on code
-      const mockFamily = {
-        id: 'mock-family-id',
-        code: familyCode.trim(),
-        name: 'Mock Family',
-        children: [
-          {
-            name: 'Alex',
-            id: 'alex-id',
-            age: 8,
-            avatar: '👦',
-            deviceId: 'alex-device',
-            isOnline: false,
-            lastSeen: new Date(),
-            preferences: {
-              theme: 'kids' as const,
-              fontSize: 'large' as const,
-              soundEffects: true,
-              animations: true,
-              emergencyButtonEnabled: true,
-            },
-            approvedGuardians: ['guardian-1'],
-          },
-          {
-            name: 'Emma',
-            id: 'emma-id',
-            age: 6,
-            avatar: '👧',
-            deviceId: 'emma-device',
-            isOnline: false,
-            lastSeen: new Date(),
-            preferences: {
-              theme: 'kids' as const,
-              fontSize: 'large' as const,
-              soundEffects: true,
-              animations: true,
-              emergencyButtonEnabled: true,
-            },
-            approvedGuardians: ['guardian-1'],
-          },
-          {
-            name: 'Jake',
-            id: 'jake-id',
-            age: 10,
-            avatar: '👦',
-            deviceId: 'jake-device',
-            isOnline: false,
-            lastSeen: new Date(),
-            preferences: {
-              theme: 'kids' as const,
-              fontSize: 'large' as const,
-              soundEffects: true,
-              animations: true,
-              emergencyButtonEnabled: true,
-            },
-            approvedGuardians: ['guardian-1'],
-          }
-        ],
-        guardians: [{
-          id: 'guardian-1',
-          name: 'Dad',
-          email: '',
-          avatar: '👨‍💼',
-          isOnline: true,
-          lastSeen: new Date(),
-          deviceId: 'guardian-device',
-          preferences: {
-            theme: 'guardian' as const,
-            notifications: {
-              calls: true,
-              messages: true,
-              childOnline: true,
-            },
-            callQuality: 'auto' as const,
-            showTechnicalDetails: true,
-          },
-        }],
-        created: new Date(),
-        lastActive: new Date(),
-        settings: {
-          allowChildInitiatedCalls: true,
-          emergencyContacts: [],
-          callTimeout: 30,
-          maxCallDuration: 60,
-          requireGuardianApproval: false,
-          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        },
-      };
+      // Use real family data service to join family
+      const result = FamilyDataService.joinFamily({
+        familyCode: familyCode.trim(),
+        userName: childName.trim(),
+      });
       
-      // Check if the child's name exists in the family OR if it's a new child
-      const childExists = mockFamily.children.some(
-        child => child.name.toLowerCase() === childName.trim().toLowerCase()
-      );
-      
-      // If child doesn't exist, allow them to join as a new family member
-      if (!childExists) {
-        // Create new child and add to family
-        const newChild = {
-          id: nanoid(),
-          name: childName.trim(),
-          age: 8,
-          avatar: '👶',
-          deviceId: nanoid(), // TODO: Generate real device fingerprint
-          isOnline: true,
-          lastSeen: new Date(),
-          preferences: {
-            theme: 'kids' as const,
-            fontSize: 'large' as const,
-            soundEffects: true,
-            animations: true,
-            emergencyButtonEnabled: true,
-          },
-          approvedGuardians: mockFamily.guardians.map(g => g.id),
-        };
-        
-        // Add new child to family
-        mockFamily.children.push(newChild);
-        
-        // Set current user and family
-        setCurrentFamily(mockFamily);
-        setCurrentUser(newChild);
-        setUserType('child');
-        setTheme('kids');
-        
-        setSuccess(true);
-        
-        // Redirect to kids dashboard after delay
-        setTimeout(() => {
-          navigate('/kids');
-        }, 3000);
+      if (!result) {
+        setError('Invalid family code or child not found. Please check your information and try again.');
         return;
       }
       
-      // If child exists, find them and log them in
-      const existingChild = mockFamily.children.find(
-        child => child.name.toLowerCase() === childName.trim().toLowerCase()
-      );
+      const { family, user, userType } = result;
       
-      if (existingChild) {
-        // Update existing child's online status
-        existingChild.isOnline = true;
-        existingChild.lastSeen = new Date();
-        
-        // Set current user and family
-        setCurrentFamily(mockFamily);
-        setCurrentUser(existingChild);
-        setUserType('child');
-        setTheme('kids');
-        
-        setSuccess(true);
-        
-        // Redirect to kids dashboard after delay
-        setTimeout(() => {
-          navigate('/kids');
-        }, 3000);
+      // Ensure this is a child user
+      if (userType !== 'child') {
+        setError('This name is registered as a guardian. Children should use their own name.');
+        return;
       }
+      
+      // Set current user and family
+      setCurrentFamily(family);
+      setCurrentUser(user);
+      setUserType('child');
+      setTheme('kids');
+      
+      // Update user's online status
+      const { updateFamilyMemberStatus } = useAppStore.getState();
+      updateFamilyMemberStatus(user.id, true, new Date());
+      
+      setSuccess(true);
+      
+      // Redirect to kids dashboard after delay
+      setTimeout(() => {
+        navigate('/kids');
+      }, 3000);
       
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to join family');
@@ -579,7 +409,7 @@ const SetupPage: React.FC = () => {
                   required
                 />
                 <p className="text-sm text-gray-600 mt-2">
-                  If you're not already in the family, you'll be added automatically when you join!
+                  You must be added to the family by a parent first. Ask your parents to add you to the family before joining.
                 </p>
               </div>
               

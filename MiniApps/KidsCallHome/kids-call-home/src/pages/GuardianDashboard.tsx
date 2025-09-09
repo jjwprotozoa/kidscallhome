@@ -29,8 +29,12 @@ import {
     Cog6ToothIcon,
     ExclamationTriangleIcon,
     PhoneIcon,
+    TrashIcon,
+    UserMinusIcon,
+    UserPlusIcon,
     VideoCameraIcon,
-    WifiIcon
+    WifiIcon,
+    XMarkIcon
 } from '@heroicons/react/24/outline';
 import { motion } from 'framer-motion';
 import React, { useState } from 'react';
@@ -39,6 +43,7 @@ import DevelopmentHelper from '../components/shared/DevelopmentHelper';
 import LoadingSpinner from '../components/shared/LoadingSpinner';
 import PermissionHelper from '../components/shared/PermissionHelper';
 import { useSimpleWebRTC } from '../hooks/useSimpleWebRTC';
+import FamilyDataService from '../services/familyDataService';
 import { useAppStore, useCurrentUser, useFamily } from '../stores/useAppStore';
 
 /**
@@ -51,13 +56,19 @@ const GuardianDashboard: React.FC = () => {
   const navigate = useNavigate();
   const family = useFamily();
   const currentUser = useCurrentUser();
-  const { setTheme, setIncomingCall } = useAppStore();
+  const { setTheme, setIncomingCall, setCurrentFamily } = useAppStore();
   
   const [isRingAllActive, setIsRingAllActive] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showPermissionHelper, setShowPermissionHelper] = useState(false);
   const [showDevelopmentHelper, setShowDevelopmentHelper] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
+  const [showFamilyManagement, setShowFamilyManagement] = useState(false);
+  const [newMemberName, setNewMemberName] = useState('');
+  const [newMemberEmail, setNewMemberEmail] = useState('');
+  const [newMemberType, setNewMemberType] = useState<'guardian' | 'child'>('child');
+  const [isAddingMember, setIsAddingMember] = useState(false);
+  const [ringAllTimeout, setRingAllTimeout] = useState<NodeJS.Timeout | null>(null);
   
   // WebRTC hook for calling functionality
   const {
@@ -188,7 +199,21 @@ const GuardianDashboard: React.FC = () => {
       }
     }
     
-    setTimeout(() => setIsRingAllActive(false), 10000); // Stop after 10 seconds
+    // Set timeout to stop after 10 seconds
+    const timeout = setTimeout(() => {
+      setIsRingAllActive(false);
+      setRingAllTimeout(null);
+    }, 10000);
+    setRingAllTimeout(timeout);
+  };
+
+  // Handle cancel ring all
+  const handleCancelRingAll = () => {
+    if (ringAllTimeout) {
+      clearTimeout(ringAllTimeout);
+      setRingAllTimeout(null);
+    }
+    setIsRingAllActive(false);
   };
 
   // Handle copy family code
@@ -236,6 +261,100 @@ const GuardianDashboard: React.FC = () => {
   const handleMessages = (_childId: string) => {
     navigate(`/messages/${family?.id}`);
   };
+
+  // Handle add family member
+  const handleAddMember = async () => {
+    if (!family || !newMemberName.trim()) return;
+    
+    console.log('Adding member:', { 
+      familyId: family.id, 
+      memberType: newMemberType, 
+      memberName: newMemberName.trim(),
+      memberEmail: newMemberEmail.trim()
+    });
+    
+    setIsAddingMember(true);
+    
+    try {
+      let success = false;
+      let result = null;
+      
+      if (newMemberType === 'guardian') {
+        result = FamilyDataService.addGuardianToFamily(
+          family.id, 
+          newMemberName.trim(), 
+          newMemberEmail.trim() || undefined
+        );
+        console.log('Guardian add result:', result);
+      } else {
+        result = FamilyDataService.addChildToFamily(family.id, {
+          childName: newMemberName.trim(),
+        });
+        console.log('Child add result:', result);
+      }
+      
+      success = !!result;
+      console.log('Success:', success);
+      
+      if (success) {
+        // Update the family in the store
+        const updatedFamily = FamilyDataService.findFamilyById(family.id);
+        console.log('Updated family:', updatedFamily);
+        if (updatedFamily) {
+          setCurrentFamily(updatedFamily);
+        }
+        
+        // Reset form
+        setNewMemberName('');
+        setNewMemberEmail('');
+        setNewMemberType('child');
+      } else {
+        console.error('Failed to add member - result was null');
+        alert('Failed to add family member. Please try again.');
+      }
+    } catch (error) {
+      console.error('Failed to add member:', error);
+      alert('Failed to add family member. Please try again.');
+    } finally {
+      setIsAddingMember(false);
+    }
+  };
+
+  // Handle remove family member
+  const handleRemoveMember = (memberId: string, memberType: 'guardian' | 'child') => {
+    if (!family) return;
+    
+    const confirmMessage = memberType === 'guardian' 
+      ? 'Are you sure you want to remove this guardian from the family?'
+      : 'Are you sure you want to remove this child from the family?';
+    
+    if (!confirm(confirmMessage)) return;
+    
+    try {
+      let success = false;
+      if (memberType === 'guardian') {
+        success = FamilyDataService.removeGuardianFromFamily(family.id, memberId);
+      } else {
+        success = FamilyDataService.removeChildFromFamily(family.id, memberId);
+      }
+      
+      if (success) {
+        // Update the family in the store
+        const updatedFamily = FamilyDataService.findFamilyById(family.id);
+        if (updatedFamily) {
+          setCurrentFamily(updatedFamily);
+        }
+      } else {
+        alert(memberType === 'guardian' 
+          ? 'Cannot remove the last guardian from the family.'
+          : 'Failed to remove family member. Please try again.'
+        );
+      }
+    } catch (error) {
+      console.error('Failed to remove member:', error);
+      alert('Failed to remove family member. Please try again.');
+    }
+  };
   
   if (!family || !currentUser) {
     return (
@@ -270,6 +389,15 @@ const GuardianDashboard: React.FC = () => {
               </div>
             </div>
             
+            {/* Family Management */}
+            <button
+              onClick={() => setShowFamilyManagement(true)}
+              className="card-surface p-3 transition-apple hover:bg-theme-surface-secondary"
+              title="Manage Family Members"
+            >
+              <UserPlusIcon className="w-6 h-6 text-theme" />
+            </button>
+            
             {/* Settings */}
             <button
               onClick={handleSettings}
@@ -286,23 +414,32 @@ const GuardianDashboard: React.FC = () => {
         <motion.button
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
-          onClick={handleRingAll}
-          disabled={isRingAllActive || isCallActive}
+          onClick={isRingAllActive ? handleCancelRingAll : handleRingAll}
+          disabled={isCallActive}
           className="w-full p-6 rounded-2xl text-center transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           style={{
-            background: 'rgba(255, 255, 255, 0.25)',
+            background: isRingAllActive 
+              ? 'rgba(255, 0, 0, 0.25)' 
+              : 'rgba(255, 255, 255, 0.25)',
             backdropFilter: 'blur(20px)',
             WebkitBackdropFilter: 'blur(20px)',
-            border: '1px solid rgba(255, 255, 255, 0.3)',
+            border: isRingAllActive 
+              ? '1px solid rgba(255, 0, 0, 0.3)' 
+              : '1px solid rgba(255, 255, 255, 0.3)',
             color: 'var(--theme-text)'
           }}
         >
-          <ExclamationTriangleIcon className="w-12 h-12 text-red-400 mx-auto mb-3" />
+          <ExclamationTriangleIcon className={`w-12 h-12 mx-auto mb-3 ${
+            isRingAllActive ? 'text-red-300' : 'text-red-400'
+          }`} />
           <h2 className="text-2xl font-bold text-white mb-2 text-shadow">
-            {isRingAllActive ? 'Ringing All Children...' : 'Ring All Children'}
+            {isRingAllActive ? 'Cancel Ring All' : 'Ring All Children'}
           </h2>
           <p className="text-white text-opacity-75 text-shadow">
-            Emergency call to all online children
+            {isRingAllActive 
+              ? 'Click to stop ringing all children' 
+              : 'Emergency call to all online children'
+            }
           </p>
         </motion.button>
       </section>
@@ -317,10 +454,10 @@ const GuardianDashboard: React.FC = () => {
           <div className="text-center py-12">
             <div className="text-6xl mb-4">👶</div>
             <h3 className="text-xl font-semibold text-white mb-2 text-shadow">
-              No children added yet
+              No children in your family yet
             </h3>
             <p className="text-white text-opacity-75 text-shadow">
-              Add children to your family to start calling them.
+              Add children to your family to start calling them. Only family members can call each other.
             </p>
           </div>
         ) : (
@@ -351,6 +488,13 @@ const GuardianDashboard: React.FC = () => {
                       </span>
                     </div>
                   </div>
+                  <button
+                    onClick={() => handleRemoveMember(child.id, 'child')}
+                    className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                    title="Remove child from family"
+                  >
+                    <TrashIcon className="w-5 h-5" />
+                  </button>
                 </div>
                 
                 {/* Last Seen */}
@@ -598,6 +742,160 @@ const GuardianDashboard: React.FC = () => {
             </div>
           </motion.div>
         </div>
+      )}
+
+      {/* Family Management Modal */}
+      {showFamilyManagement && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -20 }}
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+          onClick={() => setShowFamilyManagement(false)}
+        >
+          <div
+            className="p-8 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+            style={{
+              background: 'rgba(255, 255, 255, 0.25)',
+              backdropFilter: 'blur(20px)',
+              WebkitBackdropFilter: 'blur(20px)',
+              border: '1px solid rgba(255, 255, 255, 0.3)',
+              color: 'var(--theme-text)'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-2xl font-bold text-white text-shadow">
+                Manage Family Members
+              </h3>
+              <button
+                onClick={() => setShowFamilyManagement(false)}
+                className="p-2 text-white hover:bg-white hover:bg-opacity-20 rounded-lg transition-colors"
+              >
+                <XMarkIcon className="w-6 h-6" />
+              </button>
+            </div>
+            
+            {/* Add New Member */}
+            <div className="mb-8 p-6 rounded-xl bg-white bg-opacity-10">
+              <h4 className="text-lg font-semibold text-white mb-4">Add New Member</h4>
+              <div className="space-y-4">
+                <div className="flex space-x-4">
+                  <button
+                    onClick={() => setNewMemberType('child')}
+                    className={`px-4 py-2 rounded-lg transition-colors ${
+                      newMemberType === 'child' 
+                        ? 'bg-blue-500 text-white' 
+                        : 'bg-white bg-opacity-20 text-white'
+                    }`}
+                  >
+                    Child
+                  </button>
+                  <button
+                    onClick={() => setNewMemberType('guardian')}
+                    className={`px-4 py-2 rounded-lg transition-colors ${
+                      newMemberType === 'guardian' 
+                        ? 'bg-blue-500 text-white' 
+                        : 'bg-white bg-opacity-20 text-white'
+                    }`}
+                  >
+                    Guardian
+                  </button>
+                </div>
+                
+                <div>
+                  <input
+                    type="text"
+                    placeholder={`${newMemberType === 'child' ? 'Child' : 'Guardian'} name`}
+                    value={newMemberName}
+                    onChange={(e) => setNewMemberName(e.target.value)}
+                    className="w-full px-4 py-3 bg-white text-gray-900 rounded-lg border-2 border-gray-300 placeholder-gray-500 focus:border-blue-500 focus:outline-none transition-all"
+                  />
+                </div>
+                
+                {newMemberType === 'guardian' && (
+                  <div>
+                    <input
+                      type="email"
+                      placeholder="Email (optional)"
+                      value={newMemberEmail}
+                      onChange={(e) => setNewMemberEmail(e.target.value)}
+                      className="w-full px-4 py-3 bg-white text-gray-900 rounded-lg border-2 border-gray-300 placeholder-gray-500 focus:border-blue-500 focus:outline-none transition-all"
+                    />
+                  </div>
+                )}
+                
+                <button
+                  onClick={handleAddMember}
+                  disabled={!newMemberName.trim() || isAddingMember}
+                  className="w-full px-4 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {isAddingMember ? 'Adding...' : `Add ${newMemberType === 'child' ? 'Child' : 'Guardian'}`}
+                </button>
+              </div>
+            </div>
+            
+            {/* Current Guardians */}
+            <div className="mb-6">
+              <h4 className="text-lg font-semibold text-white mb-4">Guardians</h4>
+              <div className="space-y-3">
+                {family.guardians.map((guardian) => (
+                  <div key={guardian.id} className="flex items-center justify-between p-4 bg-white bg-opacity-10 rounded-lg">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-10 h-10 bg-gradient-to-br from-blue-400 to-purple-500 rounded-full flex items-center justify-center text-lg">
+                        {guardian.avatar || '👨‍💼'}
+                      </div>
+                      <div>
+                        <div className="text-white font-medium">{guardian.name}</div>
+                        <div className="text-white text-opacity-70 text-sm">
+                          {guardian.isOnline ? 'Online' : 'Offline'}
+                        </div>
+                      </div>
+                    </div>
+                    {family.guardians.length > 1 && (
+                      <button
+                        onClick={() => handleRemoveMember(guardian.id, 'guardian')}
+                        className="p-2 text-red-400 hover:bg-red-500 hover:bg-opacity-20 rounded-lg transition-colors"
+                        title="Remove guardian"
+                      >
+                        <UserMinusIcon className="w-5 h-5" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+            
+            {/* Current Children */}
+            <div>
+              <h4 className="text-lg font-semibold text-white mb-4">Children</h4>
+              <div className="space-y-3">
+                {family.children.map((child) => (
+                  <div key={child.id} className="flex items-center justify-between p-4 bg-white bg-opacity-10 rounded-lg">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-10 h-10 bg-gradient-to-br from-pink-400 to-purple-500 rounded-full flex items-center justify-center text-lg">
+                        {child.avatar || '👶'}
+                      </div>
+                      <div>
+                        <div className="text-white font-medium">{child.name}</div>
+                        <div className="text-white text-opacity-70 text-sm">
+                          {child.isOnline ? 'Online' : 'Offline'}
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleRemoveMember(child.id, 'child')}
+                      className="p-2 text-red-400 hover:bg-red-500 hover:bg-opacity-20 rounded-lg transition-colors"
+                      title="Remove child"
+                    >
+                      <UserMinusIcon className="w-5 h-5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </motion.div>
       )}
 
       {/* Development Helper Modal */}

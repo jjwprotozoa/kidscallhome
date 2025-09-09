@@ -37,6 +37,7 @@ import { motion } from 'framer-motion';
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../stores/useAppStore';
+import { createDemoFamily, getDemoFamilyInfo } from '../utils/demoFamily';
 
 /**
  * LandingPage - Main landing page with problem/solution explanation
@@ -466,6 +467,73 @@ const LandingPage: React.FC = () => {
                   Any device with a browser - tablets, phones, computers, smartwatches.
                 </p>
               </div>
+            </div>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* Demo Section */}
+      <section className="py-16 bg-white bg-opacity-10">
+        <div className="container-responsive">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8 }}
+            className="text-center max-w-4xl mx-auto"
+          >
+            <h2 className="heading-2 text-white mb-6 text-shadow-lg">
+              Try It Out First
+            </h2>
+            <p className="text-xl text-white text-opacity-90 mb-8 text-shadow">
+              Experience the app with our demo family before creating your own.
+            </p>
+            
+            <div className="bg-white bg-opacity-20 backdrop-blur-sm rounded-2xl p-8 mb-8">
+              <h3 className="text-2xl font-bold text-white mb-4">Demo Family</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-left">
+                <div>
+                  <h4 className="text-lg font-semibold text-white mb-2">👨‍👩‍👧‍👦 The Johnson Family</h4>
+                  <p className="text-white text-opacity-90 mb-4">
+                    <strong>Family Code:</strong> <code className="bg-white bg-opacity-30 px-2 py-1 rounded">{getDemoFamilyInfo().familyCode}</code>
+                  </p>
+                  <div className="space-y-2">
+                    <p className="text-white text-opacity-90">
+                      <strong>Guardians:</strong> {getDemoFamilyInfo().guardians.join(', ')}
+                    </p>
+                    <p className="text-white text-opacity-90">
+                      <strong>Children:</strong> {getDemoFamilyInfo().children.join(', ')}
+                    </p>
+                  </div>
+                </div>
+                <div>
+                  <h4 className="text-lg font-semibold text-white mb-2">How to Test</h4>
+                  <ol className="text-white text-opacity-90 space-y-2 text-sm">
+                    <li>1. Click "Try Demo" below</li>
+                    <li>2. Go to Login page</li>
+                    <li>3. Enter the family code</li>
+                    <li>4. Login as any family member</li>
+                    <li>5. See the real family data in action!</li>
+                  </ol>
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+              <button
+                onClick={() => {
+                  createDemoFamily();
+                  navigate('/login');
+                }}
+                className="btn-secondary text-lg px-8 py-4"
+              >
+                Try Demo
+              </button>
+              <button
+                onClick={handleCreateFamily}
+                className="btn-primary text-lg px-8 py-4"
+              >
+                Create Your Family
+              </button>
             </div>
           </motion.div>
         </div>

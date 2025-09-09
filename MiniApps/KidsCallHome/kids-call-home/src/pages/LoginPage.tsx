@@ -32,6 +32,7 @@ import { motion } from 'framer-motion';
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import LoadingSpinner from '../components/shared/LoadingSpinner';
+import FamilyDataService from '../services/familyDataService';
 import { useAppStore } from '../stores/useAppStore';
 
 /**
@@ -58,142 +59,36 @@ const LoginPage: React.FC = () => {
     setError(null);
     
     try {
-      // TODO: Implement real family code validation and user lookup
-      // For now, simulate family lookup based on code
-      const mockFamily = {
-        id: 'family-test-123',
-        code: 'TEST123',
-        name: 'The Test Family',
-        guardians: [
-          {
-            id: 'guardian-1',
-            name: 'Mom',
-            email: '',
-            avatar: '👩‍💼',
-            isOnline: true,
-            lastSeen: new Date(),
-            deviceId: 'guardian-device-1',
-            preferences: {
-              theme: 'guardian' as const,
-              notifications: {
-                calls: true,
-                messages: true,
-                childOnline: true,
-              },
-              callQuality: 'auto' as const,
-              showTechnicalDetails: true,
-            },
-          },
-          {
-            id: 'guardian-2',
-            name: 'Dad',
-            email: '',
-            avatar: '👨‍💼',
-            isOnline: false,
-            lastSeen: new Date(),
-            deviceId: 'guardian-device-2',
-            preferences: {
-              theme: 'guardian' as const,
-              notifications: {
-                calls: true,
-                messages: true,
-                childOnline: true,
-              },
-              callQuality: 'auto' as const,
-              showTechnicalDetails: true,
-            },
-          }
-        ],
-        children: [
-          {
-            id: 'child-1',
-            name: 'Emma',
-            age: 8,
-            avatar: '👧',
-            deviceId: 'child-device-1',
-            isOnline: true,
-            lastSeen: new Date(),
-            preferences: {
-              theme: 'kids' as const,
-              fontSize: 'large' as const,
-              soundEffects: true,
-              animations: true,
-              emergencyButtonEnabled: true,
-            },
-            approvedGuardians: ['guardian-1', 'guardian-2'],
-          },
-          {
-            id: 'child-2',
-            name: 'Jake',
-            age: 6,
-            avatar: '👦',
-            deviceId: 'child-device-2',
-            isOnline: false,
-            lastSeen: new Date(),
-            preferences: {
-              theme: 'kids' as const,
-              fontSize: 'large' as const,
-              soundEffects: true,
-              animations: true,
-              emergencyButtonEnabled: true,
-            },
-            approvedGuardians: ['guardian-1', 'guardian-2'],
-          }
-        ],
-        created: new Date(),
-        lastActive: new Date(),
-        settings: {
-          allowChildInitiatedCalls: true,
-          emergencyContacts: [],
-          callTimeout: 30,
-          maxCallDuration: 60,
-          requireGuardianApproval: false,
-          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        },
-      };
+      // Use real family data service to join family
+      const result = FamilyDataService.joinFamily({
+        familyCode: familyCode.trim(),
+        userName: userName.trim(),
+      });
       
-      // Check if family code matches
-      if (familyCode.trim().toUpperCase() !== 'TEST123') {
-        setError('Invalid family code. Please use TEST123 for testing.');
+      if (!result) {
+        setError('Invalid family code or user not found. Please check your information and try again.');
         return;
       }
       
-      // Look for user in guardians first
-      const guardian = mockFamily.guardians.find(
-        g => g.name.toLowerCase() === userName.trim().toLowerCase()
-      );
+      const { family, user, userType } = result;
       
-      if (guardian) {
-        // User is a guardian
-        setCurrentFamily(mockFamily);
-        setCurrentUser(guardian);
-        setUserType('guardian');
+      // Set current family and user in store
+      setCurrentFamily(family);
+      setCurrentUser(user);
+      setUserType(userType);
+      
+      // Update user's online status
+      const { updateFamilyMemberStatus } = useAppStore.getState();
+      updateFamilyMemberStatus(user.id, true, new Date());
+      
+      // Set appropriate theme and redirect
+      if (userType === 'guardian') {
         setTheme('guardian');
-        
-        // Redirect to guardian dashboard
         navigate('/guardian');
-        return;
-      }
-      
-      // Look for user in children
-      const child = mockFamily.children.find(
-        c => c.name.toLowerCase() === userName.trim().toLowerCase()
-      );
-      
-      if (child) {
-        // User is a child
-        setCurrentFamily(mockFamily);
-        setCurrentUser(child);
-        setUserType('child');
+      } else {
         setTheme('kids');
-        
-        // Redirect to kids dashboard
         navigate('/kids');
-        return;
       }
-      
-      // User not found in family
-      setError(`Sorry, "${userName}" is not a member of this family. Please check your name or ask your parents to add you to the family.`);
       
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed. Please try again.');

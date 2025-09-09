@@ -139,6 +139,23 @@ export const useSimpleWebRTC = ({
       console.log(`📞 Initiating ${type} call to ${targetId}`);
       setError(null);
       
+      // Get current family and user from store
+      const { currentFamily, currentUser } = useAppStore.getState();
+      
+      // Validate family membership
+      if (!currentFamily || !currentUser) {
+        throw new Error('You must be logged into a family to make calls.');
+      }
+      
+      // Check if target is in the same family
+      const isTargetInFamily = 
+        currentFamily.guardians.some(g => g.id === targetId) ||
+        currentFamily.children.some(c => c.id === targetId);
+      
+      if (!isTargetInFamily) {
+        throw new Error('You can only call members of your own family.');
+      }
+      
       // Initialize local stream
       await initializeLocalStream(type === 'video');
       
@@ -263,9 +280,12 @@ export const useSimpleWebRTC = ({
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      endCall();
+      // Only end call if there's actually an active call
+      if (isCallActive || isRinging || isConnecting) {
+        endCall();
+      }
     };
-  }, [endCall]);
+  }, [endCall, isCallActive, isRinging, isConnecting]);
   
   return {
     // Call management

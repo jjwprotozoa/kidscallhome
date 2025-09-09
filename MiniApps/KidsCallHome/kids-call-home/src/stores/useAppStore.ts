@@ -214,7 +214,14 @@ export const useAppStore = create<AppStore>()(
         reset: () => 
           set(initialState, false, 'reset'),
         
-        logout: () => 
+        logout: () => {
+          const state = get();
+          // Update user's offline status before logging out
+          if (state.currentUser) {
+            const { updateFamilyMemberStatus } = get();
+            updateFamilyMemberStatus(state.currentUser.id, false, new Date());
+          }
+          
           set({
             currentFamily: null,
             currentUser: null,
@@ -226,7 +233,8 @@ export const useAppStore = create<AppStore>()(
             error: null,
             socketConnected: false,
             lastHeartbeat: null,
-          }, false, 'logout'),
+          }, false, 'logout');
+        },
         
         initializeApp: async () => {
           set({ isLoading: true }, false, 'initializeApp/start');
@@ -242,6 +250,10 @@ export const useAppStore = create<AppStore>()(
               // User has existing family data, they should be redirected to their dashboard
               // This will be handled by the App component's routing logic
               console.log('Existing family data found, user should be redirected to dashboard');
+              
+              // Update user's online status when app initializes
+              const { updateFamilyMemberStatus } = get();
+              updateFamilyMemberStatus(state.currentUser.id, true, new Date());
             }
             
             set({ isLoading: false }, false, 'initializeApp/success');
