@@ -1,0 +1,31 @@
+{
+  "name": "Kids Call Home",
+  "short_name": "KidsCallHome",
+  "description": "Simple family communication app that works on every device",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#3b82f6",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/vite.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/vite.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "categories": [
+    "communication",
+    "family",
+    "social"
+  ],
+  "lang": "en",
+  "dir": "ltr"
+}
