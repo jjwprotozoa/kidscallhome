@@ -24,12 +24,10 @@ const App = () => (
           <Route path="/" element={<Index />} />
           <Route path="/parent/auth" element={<ParentAuth />} />
           <Route path="/parent/dashboard" element={<ParentDashboard />} />
-          <Route path="/parent/chat/:childId" element={<Chat />} />
           <Route path="/child/login" element={<ChildLogin />} />
           <Route path="/child/dashboard" element={<ChildDashboard />} />
-          <Route path="/child/chat" element={<Chat />} />
-          <Route path="/child/call" element={<VideoCall />} />
-          <Route path="/parent/call/:childId" element={<VideoCall />} />
+          <Route path="/call/:childId" element={<VideoCall />} />
+          <Route path="/chat/:childId" element={<Chat />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

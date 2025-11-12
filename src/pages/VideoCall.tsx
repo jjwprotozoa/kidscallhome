@@ -1,36 +1,49 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 import { Phone, PhoneOff, Mic, MicOff, Video, VideoOff } from "lucide-react";
 
+interface ChildSession {
+  id: string;
+  name: string;
+  avatar_color: string;
+}
+
 const VideoCall = () => {
+  const { childId } = useParams();
   const [isChild, setIsChild] = useState(false);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
-  const [isConnecting, setIsConnecting] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(true);
+  const [callId, setCallId] = useState<string | null>(null);
   
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
+  const iceCandidatesQueue = useRef<RTCIceCandidateInit[]>([]);
   
   const navigate = useNavigate();
   const { toast } = useToast();
 
   useEffect(() => {
     const childSession = localStorage.getItem("childSession");
-    setIsChild(!!childSession);
-    initializeMedia();
+    const isChildUser = !!childSession;
+    setIsChild(isChildUser);
+    
+    initializeCall(isChildUser);
 
     return () => {
       cleanup();
     };
-  }, []);
+  }, [childId]);
 
-  const initializeMedia = async () => {
+  const initializeCall = async (isChildUser: boolean) => {
     try {
+      // Get media stream
       const stream = await navigator.mediaDevices.getUserMedia({
         video: true,
         audio: true,
@@ -40,10 +53,225 @@ const VideoCall = () => {
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = stream;
       }
-    } catch (error) {
+
+      // Create peer connection
+      const pc = new RTCPeerConnection({
+        iceServers: [
+          { urls: "stun:stun.l.google.com:19302" },
+          { urls: "stun:stun1.l.google.com:19302" },
+        ],
+      });
+
+      peerConnectionRef.current = pc;
+
+      // Add local stream tracks
+      stream.getTracks().forEach((track) => {
+        pc.addTrack(track, stream);
+      });
+
+      // Handle remote stream
+      pc.ontrack = (event) => {
+        const [remoteStream] = event.streams;
+        setRemoteStream(remoteStream);
+        if (remoteVideoRef.current) {
+          remoteVideoRef.current.srcObject = remoteStream;
+        }
+      };
+
+      // Handle ICE candidates
+      pc.onicecandidate = async (event) => {
+        if (event.candidate && callId) {
+          const { data: call } = await supabase
+            .from("calls")
+            .select("ice_candidates")
+            .eq("id", callId)
+            .single();
+
+          if (call) {
+            const candidates = (call.ice_candidates as any[]) || [];
+            candidates.push(event.candidate.toJSON());
+
+            await supabase
+              .from("calls")
+              .update({ ice_candidates: candidates })
+              .eq("id", callId);
+          }
+        }
+      };
+
+      // Set up call based on role
+      if (isChildUser) {
+        await handleChildCall(pc);
+      } else {
+        await handleParentCall(pc);
+      }
+    } catch (error: any) {
       toast({
-        title: "Camera/Mic Error",
-        description: "Please allow camera and microphone access",
+        title: "Connection Error",
+        description: error.message,
+        variant: "destructive",
+      });
+      setIsConnecting(false);
+    }
+  };
+
+  const handleParentCall = async (pc: RTCPeerConnection) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user || !childId) return;
+
+      // Create call record
+      const { data: call, error } = await supabase
+        .from("calls")
+        .insert({
+          child_id: childId,
+          parent_id: user.id,
+          caller_type: "parent",
+          status: "ringing",
+        })
+        .select()
+        .single();
+
+      if (error || !call) throw new Error("Failed to create call");
+      setCallId(call.id);
+
+      // Create and set offer
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+
+      await supabase
+        .from("calls")
+        .update({ offer: { type: offer.type, sdp: offer.sdp } })
+        .eq("id", call.id);
+
+      // Listen for answer
+      const channel = supabase
+        .channel(`call:${call.id}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "calls",
+            filter: `id=eq.${call.id}`,
+          },
+          async (payload) => {
+            const updatedCall = payload.new as any;
+            
+            if (updatedCall.answer && pc.remoteDescription === null) {
+              const answerDesc = updatedCall.answer as any;
+              await pc.setRemoteDescription(
+                new RTCSessionDescription(answerDesc)
+              );
+              
+              // Process queued ICE candidates
+              for (const candidate of iceCandidatesQueue.current) {
+                await pc.addIceCandidate(new RTCIceCandidate(candidate));
+              }
+              iceCandidatesQueue.current = [];
+              setIsConnecting(false);
+            }
+
+            // Add ICE candidates
+            if (updatedCall.ice_candidates) {
+              const candidates = updatedCall.ice_candidates as RTCIceCandidateInit[];
+              for (const candidate of candidates) {
+                if (pc.remoteDescription) {
+                  await pc.addIceCandidate(new RTCIceCandidate(candidate));
+                } else {
+                  iceCandidatesQueue.current.push(candidate);
+                }
+              }
+            }
+          }
+        )
+        .subscribe();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleChildCall = async (pc: RTCPeerConnection) => {
+    try {
+      const childSession = localStorage.getItem("childSession");
+      if (!childSession) return;
+
+      const child: ChildSession = JSON.parse(childSession);
+
+      // Find active call
+      const { data: call } = await supabase
+        .from("calls")
+        .select("*")
+        .eq("child_id", child.id)
+        .eq("status", "ringing")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .single();
+
+      if (!call) {
+        toast({
+          title: "No Call Found",
+          description: "No incoming call",
+          variant: "destructive",
+        });
+        navigate("/child/dashboard");
+        return;
+      }
+
+      setCallId(call.id);
+
+      // Set remote description (offer)
+      if (call.offer) {
+        const offerDesc = call.offer as any;
+        await pc.setRemoteDescription(new RTCSessionDescription(offerDesc));
+      }
+
+      // Create answer
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+
+      // Update call with answer
+      await supabase
+        .from("calls")
+        .update({
+          answer: { type: answer.type, sdp: answer.sdp },
+          status: "active",
+        })
+        .eq("id", call.id);
+
+      setIsConnecting(false);
+
+      // Listen for ICE candidates from parent
+      const channel = supabase
+        .channel(`call:${call.id}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "calls",
+            filter: `id=eq.${call.id}`,
+          },
+          async (payload) => {
+            const updatedCall = payload.new as any;
+            
+            if (updatedCall.ice_candidates) {
+              const candidates = updatedCall.ice_candidates as RTCIceCandidateInit[];
+              for (const candidate of candidates) {
+                await pc.addIceCandidate(new RTCIceCandidate(candidate));
+              }
+            }
+          }
+        )
+        .subscribe();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
         variant: "destructive",
       });
     }
@@ -67,7 +295,13 @@ const VideoCall = () => {
     }
   };
 
-  const endCall = () => {
+  const endCall = async () => {
+    if (callId) {
+      await supabase
+        .from("calls")
+        .update({ status: "ended", ended_at: new Date().toISOString() })
+        .eq("id", callId);
+    }
     cleanup();
     navigate(isChild ? "/child/dashboard" : "/parent/dashboard");
   };

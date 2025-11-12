@@ -29,7 +29,9 @@ const ChildDashboard = () => {
   };
 
   const handleCall = () => {
-    navigate("/child/call");
+    if (child) {
+      navigate(`/call/${child.id}`);
+    }
   };
 
   const handleChat = () => {

@@ -59,7 +59,11 @@ const ParentDashboard = () => {
   };
 
   const handleChat = (childId: string) => {
-    navigate(`/parent/chat/${childId}`);
+    navigate(`/chat/${childId}`);
+  };
+
+  const handleCall = (childId: string) => {
+    navigate(`/call/${childId}`);
   };
 
   if (loading) {
@@ -122,6 +126,14 @@ const ParentDashboard = () => {
                 </div>
 
                 <div className="flex gap-2">
+                  <Button
+                    onClick={() => handleCall(child.id)}
+                    className="flex-1"
+                    variant="secondary"
+                  >
+                    <Video className="mr-2 h-4 w-4" />
+                    Call
+                  </Button>
                   <Button
                     onClick={() => handleChat(child.id)}
                     className="flex-1"
