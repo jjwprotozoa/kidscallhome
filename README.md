@@ -2,7 +2,7 @@
 
 A family communication app that helps parents and children stay connected through simple video calls and messaging.
 
-**Domain**: https://kidscallhome.com
+**Domain**: https://www.kidscallhome.com
 
 **Lovable Project URL**: https://lovable.dev/projects/2e0bb7b7-ec23-4451-b444-265fa544e4b5
 

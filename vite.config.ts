@@ -11,10 +11,13 @@ export default defineConfig(({ mode }) => {
       name: "html-transform",
       transformIndexHtml(html: string, ctx) {
         // Get the base URL from environment variable
+        // Vercel provides VERCEL_URL for preview deployments
         // For ngrok testing, set VITE_BASE_URL=https://your-ngrok-url.ngrok-free.app
-        // For production, it will use kidscallhome.com
+        // For production, it will use www.kidscallhome.com
+        // Priority: VITE_BASE_URL > VERCEL_URL > production domain > localhost
         const baseUrl = process.env.VITE_BASE_URL || 
-                       (mode === "production" ? "https://kidscallhome.com" : "http://localhost:8080");
+                       (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ||
+                       (mode === "production" ? "https://www.kidscallhome.com" : "http://localhost:8080");
         return html.replace(/\{\{OG_IMAGE_URL\}\}/g, `${baseUrl}/og-image.png`);
       },
     };
