@@ -274,13 +274,15 @@ export const handleParentCall = async (
       return channel;
     }
 
-    // Offer exists, proceed with answer
+    // Offer exists, proceed with answer (mirror child's approach when answering parent's call)
     const offerDesc =
       incomingCall.offer as unknown as RTCSessionDescriptionInit;
-    console.log("Setting remote description with offer from child...");
+    console.log(
+      "✅ [PARENT HANDLER] Setting remote description with child's offer..."
+    );
     await pc.setRemoteDescription(new RTCSessionDescription(offerDesc));
 
-    // Wait for signaling state to change to have-remote-offer
+    // Wait for signaling state to change to have-remote-offer (mirror child's approach)
     await new Promise<void>((resolve, reject) => {
       const timeout = setTimeout(() => {
         reject(new Error("Timeout waiting for signaling state change"));
@@ -300,7 +302,7 @@ export const handleParentCall = async (
       checkState();
     });
 
-    // CRITICAL: Verify tracks are added before creating answer
+    // CRITICAL: Verify tracks are added before creating answer (mirror child's approach)
     const senderTracks = pc
       .getSenders()
       .map((s) => s.track)
@@ -311,8 +313,25 @@ export const handleParentCall = async (
         audioTracks: senderTracks.filter((t) => t?.kind === "audio").length,
         videoTracks: senderTracks.filter((t) => t?.kind === "video").length,
         totalTracks: senderTracks.length,
+        senders: pc.getSenders().length,
+        trackDetails: senderTracks.map((t) => ({
+          kind: t.kind,
+          id: t.id,
+          enabled: t.enabled,
+          muted: t.muted,
+        })),
       }
     );
+
+    // Warn if no tracks are found - this will cause no video/audio
+    if (senderTracks.length === 0) {
+      console.error(
+        "❌ [PARENT HANDLER] NO TRACKS FOUND in peer connection! This will cause no video/audio."
+      );
+      console.error(
+        "❌ [PARENT HANDLER] Make sure initializeConnection() was called and tracks were added."
+      );
+    }
 
     console.log(
       "✅ [PARENT HANDLER] Creating answer, current state:",
@@ -346,7 +365,37 @@ export const handleParentCall = async (
     }
 
     console.log("✅ [PARENT HANDLER] Answer sent successfully to child");
+
+    // Process any queued ICE candidates that arrived before remote description was set (mirror child's approach)
+    const queuedCount = iceCandidatesQueue.current.length;
+    if (queuedCount > 0) {
+      console.log(
+        `✅ [PARENT HANDLER] Processing ${queuedCount} queued ICE candidates after answer`
+      );
+      for (const candidate of iceCandidatesQueue.current) {
+        try {
+          await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        } catch (err) {
+          // Silently handle duplicate candidates
+          const error = err as Error;
+          if (
+            !error.message?.includes("duplicate") &&
+            !error.message?.includes("already")
+          ) {
+            console.error(
+              "❌ [PARENT HANDLER] Error processing queued ICE candidate:",
+              error.message
+            );
+          }
+        }
+      }
+      iceCandidatesQueue.current = [];
+    }
+
     setIsConnecting(false);
+    console.log(
+      "✅ [PARENT HANDLER] Call connected! Parent answered child's call."
+    );
 
     // Listen for ICE candidates from child
     const channel = supabase
@@ -496,6 +545,7 @@ export const handleParentCall = async (
     setCallId(call.id);
 
     // CRITICAL: Verify tracks are added before creating offer
+    // This mirrors the child-to-parent flow to ensure video/audio work
     const senderTracks = pc
       .getSenders()
       .map((s) => s.track)
@@ -504,22 +554,54 @@ export const handleParentCall = async (
       audioTracks: senderTracks.filter((t) => t?.kind === "audio").length,
       videoTracks: senderTracks.filter((t) => t?.kind === "video").length,
       totalTracks: senderTracks.length,
+      senders: pc.getSenders().length,
+      trackDetails: senderTracks.map((t) => ({
+        kind: t.kind,
+        id: t.id,
+        enabled: t.enabled,
+        muted: t.muted,
+      })),
     });
 
-    // Create and set offer with media constraints
+    // Warn if no tracks are found - this will cause no video/audio
+    if (senderTracks.length === 0) {
+      console.error(
+        "❌ [PARENT CALL] NO TRACKS FOUND in peer connection! This will cause no video/audio."
+      );
+      console.error(
+        "❌ [PARENT CALL] Make sure initializeConnection() was called and tracks were added."
+      );
+    }
+
+    // Create and set offer with media constraints (mirror child-to-parent approach)
+    console.log("Creating offer, current signaling state:", pc.signalingState);
     const offer = await pc.createOffer({
       offerToReceiveAudio: true,
       offerToReceiveVideo: true,
     });
+    console.log("Offer created, setting local description...");
     await pc.setLocalDescription(offer);
 
-    const { error: updateError } = await supabase
+    const offerData = { type: offer.type, sdp: offer.sdp };
+    console.log("Updating call with offer:", { callId: call.id, offerData });
+
+    // Try update without select first to avoid potential issues (mirror child-to-parent approach)
+    const { data: updateData, error: updateError } = await supabase
       .from("calls")
-      .update({ offer: { type: offer.type, sdp: offer.sdp } as Json })
-      .eq("id", call.id);
+      .update({ offer: offerData as Json })
+      .eq("id", call.id)
+      .select();
+
+    console.log("Update response:", { data: updateData, error: updateError });
 
     if (updateError) {
       console.error("Error updating call with offer:", updateError);
+      console.error("Error code:", updateError.code);
+      console.error("Error message:", updateError.message);
+      console.error("Error details:", JSON.stringify(updateError, null, 2));
+      console.error("Call ID:", call.id);
+      console.error("Offer data:", offerData);
+
       // Check if it's a schema cache issue
       if (
         updateError.code === "PGRST204" ||
@@ -529,10 +611,25 @@ export const handleParentCall = async (
           "Database schema cache is out of sync. Please refresh the page or contact support."
         );
       }
+
+      // Check for RLS policy issues (403 Forbidden)
+      if (
+        updateError.code === "42501" ||
+        updateError.code === "PGRST301" ||
+        updateError.message?.includes("permission denied") ||
+        updateError.message?.includes("new row violates row-level security")
+      ) {
+        throw new Error(
+          `Permission denied: ${updateError.message}. Check RLS policies.`
+        );
+      }
+
       throw new Error(`Failed to set offer: ${updateError.message}`);
     }
 
-    console.log("Offer set, waiting for child's answer...");
+    console.log(
+      "✅ [PARENT CALL] Offer sent successfully, waiting for child's answer..."
+    );
 
     // Listen for answer
     const channel = supabase
@@ -550,18 +647,22 @@ export const handleParentCall = async (
             const updatedCall = payload.new as CallRecord;
             const oldCall = payload.old as CallRecord;
 
-            // Only log significant updates to reduce console spam
+            // Only log significant status changes (not every UPDATE)
+            const statusChanged = oldCall?.status !== updatedCall.status;
             if (
-              updatedCall.answer ||
-              updatedCall.status === "ended" ||
-              updatedCall.status === "active"
+              statusChanged &&
+              (updatedCall.status === "ended" ||
+                updatedCall.status === "active")
             ) {
-              console.log("Parent call handler received UPDATE:", {
+              console.log("📞 [PARENT HANDLER] Call status changed:", {
                 callId: updatedCall.id,
-                status: updatedCall.status,
-                hasAnswer: !!updatedCall.answer,
-                currentRemoteDesc: !!pc.remoteDescription,
+                oldStatus: oldCall?.status,
+                newStatus: updatedCall.status,
               });
+            }
+            // Log answer only once when first received
+            if (updatedCall.answer && !oldCall?.answer) {
+              console.log("✅ [PARENT HANDLER] Answer received from child");
             }
 
             // Check if call is in terminal state - only process if status actually changed TO ended
@@ -573,7 +674,7 @@ export const handleParentCall = async (
             // Only process if we have a previous state and it was NOT terminal
             if (isTerminal && oldCall !== undefined && wasTerminal === false) {
               const iceState = pc.iceConnectionState;
-              console.error(
+              console.info(
                 "🛑 [CALL LIFECYCLE] Call ended by remote party (parent handler - parent initiated)",
                 {
                   callId: updatedCall.id,
@@ -667,6 +768,59 @@ export const handleParentCall = async (
                     hasLocalDescription: !!pc.localDescription,
                   }
                 );
+
+                // CRITICAL: Process any existing ICE candidates from child immediately
+                // Child may have already sent candidates before parent's listener processed the answer
+                // Process candidates from the updatedCall payload
+                const existingCandidates = (updatedCall.child_ice_candidates ||
+                  updatedCall.ice_candidates) as unknown as
+                  | RTCIceCandidateInit[]
+                  | null;
+                if (
+                  existingCandidates &&
+                  Array.isArray(existingCandidates) &&
+                  existingCandidates.length > 0
+                ) {
+                  console.log(
+                    "🧊 [PARENT HANDLER] Processing existing ICE candidates from child (immediate after answer):",
+                    {
+                      count: existingCandidates.length,
+                      hasRemoteDescription: !!pc.remoteDescription,
+                      iceConnectionState: pc.iceConnectionState,
+                    }
+                  );
+
+                  // Process candidates in background but await properly
+                  (async () => {
+                    for (const candidate of existingCandidates) {
+                      try {
+                        if (!candidate.candidate) continue;
+                        if (pc.remoteDescription) {
+                          // CRITICAL: Await to ensure candidate is added properly
+                          await pc.addIceCandidate(
+                            new RTCIceCandidate(candidate)
+                          );
+                          console.log(
+                            "✅ [PARENT HANDLER] Added existing ICE candidate from child"
+                          );
+                        } else {
+                          iceCandidatesQueue.current.push(candidate);
+                        }
+                      } catch (err) {
+                        const error = err as Error;
+                        if (
+                          !error.message?.includes("duplicate") &&
+                          !error.message?.includes("already")
+                        ) {
+                          console.error(
+                            "❌ [PARENT HANDLER] Error adding existing ICE candidate:",
+                            error.message
+                          );
+                        }
+                      }
+                    }
+                  })(); // IIFE - runs in background without blocking the handler
+                }
               } catch (error: unknown) {
                 console.error(
                   "❌ [PARENT HANDLER] Error setting remote description:",
@@ -688,20 +842,14 @@ export const handleParentCall = async (
               | null;
 
             if (candidatesToProcess && Array.isArray(candidatesToProcess)) {
-              // Only log if we have candidates and it's a significant update
-              const hasNewCandidates = candidatesToProcess.length > 0;
-              if (hasNewCandidates) {
+              // Only log summary periodically (every 10th batch)
+              const processedCount = candidatesToProcess.length;
+              if (processedCount > 0 && processedCount % 10 === 0) {
                 console.log(
-                  "🧊 [PARENT HANDLER] Processing ICE candidates (parent initiated, from child):",
+                  "🧊 [PARENT HANDLER] Processing ICE candidates (from child):",
                   {
-                    count: candidatesToProcess.length,
-                    hasRemoteDescription: !!pc.remoteDescription,
+                    count: processedCount,
                     iceConnectionState: pc.iceConnectionState,
-                    connectionState: pc.connectionState,
-                    signalingState: pc.signalingState,
-                    source: updatedCall.child_ice_candidates
-                      ? "child_ice_candidates"
-                      : "ice_candidates (legacy)",
                   }
                 );
               }
@@ -730,28 +878,10 @@ export const handleParentCall = async (
                   if (pc.remoteDescription) {
                     const iceCandidate = new RTCIceCandidate(candidate);
                     await pc.addIceCandidate(iceCandidate);
-                    // Only log first few candidates to reduce spam
-                    if (processedCandidates.size <= 3) {
-                      console.log(
-                        "✅ [PARENT HANDLER] Added ICE candidate #" +
-                          processedCandidates.size,
-                        {
-                          candidate:
-                            candidate.candidate?.substring(0, 50) + "...",
-                          sdpMLineIndex: candidate.sdpMLineIndex,
-                          iceConnectionState: pc.iceConnectionState,
-                        }
-                      );
-                    }
+                    // Silently process - only log errors
                   } else {
                     // Queue candidates if remote description not set yet
                     iceCandidatesQueue.current.push(candidate);
-                    // Only log first few queued candidates
-                    if (iceCandidatesQueue.current.length <= 3) {
-                      console.log(
-                        "⏳ [PARENT HANDLER] Queued ICE candidate (waiting for remote description)"
-                      );
-                    }
                   }
                 } catch (err) {
                   const error = err as Error;
@@ -768,8 +898,11 @@ export const handleParentCall = async (
                 }
               }
 
-              // Log summary if we processed candidates
-              if (hasNewCandidates && processedCandidates.size > 0) {
+              // Log summary if we processed candidates (only periodically)
+              if (
+                processedCandidates.size > 0 &&
+                processedCandidates.size % 10 === 0
+              ) {
                 console.log(
                   "✅ [PARENT HANDLER] Processed",
                   processedCandidates.size,

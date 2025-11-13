@@ -514,7 +514,7 @@ export const useVideoCall = () => {
               const pc = peerConnectionRef.current;
               const iceState = pc?.iceConnectionState;
               
-              console.error("🛑 [CALL LIFECYCLE] Call ended by remote party - cleaning up", {
+              console.info("🛑 [CALL LIFECYCLE] Call ended by remote party - cleaning up", {
                 callId: currentCallId,
                 oldStatus: oldCall?.status,
                 newStatus: updatedCall.status,

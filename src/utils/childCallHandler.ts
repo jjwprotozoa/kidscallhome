@@ -409,7 +409,7 @@ const handleExistingCall = async (
           // Only process if we have a previous state and it was NOT terminal
           if (isTerminal && oldCall !== undefined && wasTerminal === false) {
             const iceState = pc.iceConnectionState;
-            console.error("🛑 [CALL LIFECYCLE] Call ended by remote party (child handler - existing call)", {
+            console.info("🛑 [CALL LIFECYCLE] Call ended by remote party (child handler - existing call)", {
               callId: updatedCall.id,
               oldStatus: oldCall?.status,
               newStatus: updatedCall.status,
@@ -469,12 +469,14 @@ const handleExistingCall = async (
           const candidatesToProcess = (updatedCall.parent_ice_candidates || updatedCall.ice_candidates) as unknown as RTCIceCandidateInit[] | null;
           
           if (candidatesToProcess && Array.isArray(candidatesToProcess)) {
-            console.log("🧊 [CHILD HANDLER] Processing ICE candidates (from parent):", {
-              count: candidatesToProcess.length,
-              hasRemoteDescription: !!pc.remoteDescription,
-              iceConnectionState: pc.iceConnectionState,
-              source: updatedCall.parent_ice_candidates ? "parent_ice_candidates" : "ice_candidates (legacy)",
-            });
+            // Only log summary periodically (every 10th batch)
+            const processedCount = candidatesToProcess.length;
+            if (processedCount > 0 && processedCount % 10 === 0) {
+              console.log("🧊 [CHILD HANDLER] Processing ICE candidates (from parent):", {
+                count: processedCount,
+                iceConnectionState: pc.iceConnectionState,
+              });
+            }
             
             for (const candidate of candidatesToProcess) {
               try {
@@ -487,14 +489,10 @@ const handleExistingCall = async (
                 if (pc.remoteDescription) {
                   const iceCandidate = new RTCIceCandidate(candidate);
                   await pc.addIceCandidate(iceCandidate);
-                  console.log("✅ [CHILD HANDLER] Added ICE candidate:", {
-                    candidate: candidate.candidate?.substring(0, 50) + "...",
-                    sdpMLineIndex: candidate.sdpMLineIndex,
-                  });
+                  // Silently process - only log errors
                 } else {
                   // Queue candidates if remote description not set yet
                   iceCandidatesQueue.current.push(candidate);
-                  console.log("⏳ [CHILD HANDLER] Queued ICE candidate (waiting for remote description)");
                 }
               } catch (err) {
                 // Log duplicate candidate errors for debugging
@@ -622,6 +620,51 @@ const handleIncomingCallFromParent = async (
   setIsConnecting(false);
   console.log("✅ [CHILD HANDLER] Call connected! Child answered parent's call.");
 
+  // CRITICAL: Process any existing ICE candidates from parent immediately
+  // Parent may have already sent candidates before child's listener was set up
+  // Process in background but await properly to ensure candidates are added
+  (async () => {
+    try {
+      const { data: currentCall } = await supabase
+        .from("calls")
+        .select("parent_ice_candidates, ice_candidates")
+        .eq("id", call.id)
+        .maybeSingle();
+
+      if (currentCall) {
+        const existingCandidates = (currentCall.parent_ice_candidates || currentCall.ice_candidates) as unknown as RTCIceCandidateInit[] | null;
+        if (existingCandidates && Array.isArray(existingCandidates) && existingCandidates.length > 0) {
+          console.log("🧊 [CHILD HANDLER] Processing existing ICE candidates from parent (immediate):", {
+            count: existingCandidates.length,
+            hasRemoteDescription: !!pc.remoteDescription,
+            iceConnectionState: pc.iceConnectionState,
+          });
+          
+          for (const candidate of existingCandidates) {
+            try {
+              if (!candidate.candidate) continue;
+              if (pc.remoteDescription) {
+                // CRITICAL: Await to ensure candidate is added properly
+                await pc.addIceCandidate(new RTCIceCandidate(candidate));
+                console.log("✅ [CHILD HANDLER] Added existing ICE candidate from parent");
+              } else {
+                iceCandidatesQueue.current.push(candidate);
+              }
+            } catch (err) {
+              const error = err as Error;
+              if (!error.message?.includes("duplicate") && !error.message?.includes("already")) {
+                console.error("❌ [CHILD HANDLER] Error adding existing ICE candidate:", error.message);
+              }
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.error("❌ [CHILD HANDLER] Error fetching existing ICE candidates:", err);
+      // Don't block - continue with listener setup
+    }
+  })(); // IIFE - runs in background without blocking
+
   // Listen for ICE candidates from parent (mirror parent's approach)
   return supabase
     .channel(`call:${call.id}`)
@@ -647,7 +690,7 @@ const handleIncomingCallFromParent = async (
         // Only process if we have a previous state and it was NOT terminal
         if (isTerminal && oldCall !== undefined && wasTerminal === false) {
           const iceState = pc.iceConnectionState;
-          console.error("🛑 [CALL LIFECYCLE] Call ended by remote party (child handler - incoming call)", {
+          console.info("🛑 [CALL LIFECYCLE] Call ended by remote party (child handler - incoming call)", {
             callId: updatedCall.id,
             oldStatus: oldCall?.status,
             newStatus: updatedCall.status,
@@ -679,16 +722,11 @@ const handleIncomingCallFromParent = async (
             const queuedCount = iceCandidatesQueue.current.length;
             const processedCount = candidatesToProcess.length;
             
-            // Only log summary periodically to reduce console spam
-            if (processedCount > 0 && processedCount % 5 === 0) {
+            // Only log summary periodically to reduce console spam (every 10th batch)
+            if (processedCount > 0 && processedCount % 10 === 0) {
               console.log("🧊 [CHILD HANDLER] Processing ICE candidates (incoming call, from parent):", {
                 count: processedCount,
-                queued: queuedCount,
-                hasRemoteDescription: !!pc.remoteDescription,
                 iceConnectionState: pc.iceConnectionState,
-                connectionState: pc.connectionState,
-                signalingState: pc.signalingState,
-                source: updatedCall.parent_ice_candidates ? "parent_ice_candidates" : "ice_candidates (legacy)",
               });
             }
             
@@ -714,20 +752,10 @@ const handleIncomingCallFromParent = async (
                 if (pc.remoteDescription) {
                   const iceCandidate = new RTCIceCandidate(candidate);
                   await pc.addIceCandidate(iceCandidate);
-                  // Only log first few candidates
-                  if (processedCandidates.size <= 3) {
-                    console.log("✅ [CHILD HANDLER] Added ICE candidate #" + processedCandidates.size, {
-                      iceConnectionState: pc.iceConnectionState,
-                      connectionState: pc.connectionState,
-                    });
-                  }
+                  // Silently process - only log errors
                 } else {
                   // Queue candidates if remote description not set yet
                   iceCandidatesQueue.current.push(candidate);
-                  // Only log first few queued candidates
-                  if (iceCandidatesQueue.current.length <= 3) {
-                    console.log("⏳ [CHILD HANDLER] Queued ICE candidate (waiting for remote description)");
-                  }
                 }
               } catch (err) {
                 const error = err as Error;
@@ -741,11 +769,10 @@ const handleIncomingCallFromParent = async (
               }
             }
             
-            // Log summary if we processed candidates
-            if (processedCount > 0 && processedCandidates.size > 0) {
+            // Log summary only periodically (every 10th batch)
+            if (processedCount > 0 && processedCandidates.size > 0 && processedCandidates.size % 10 === 0) {
               console.log("✅ [CHILD HANDLER] Processed", processedCandidates.size, "ICE candidates from parent", {
                 iceConnectionState: pc.iceConnectionState,
-                connectionState: pc.connectionState,
               });
             }
           }
@@ -941,7 +968,7 @@ const handleChildInitiatedCall = async (
         // Only process if we have a previous state and it was NOT terminal
         if (isTerminal && oldCall !== undefined && wasTerminal === false) {
           const iceState = pc.iceConnectionState;
-          console.error("🛑 [CALL LIFECYCLE] Call ended by remote party (child handler - child initiated)", {
+          console.info("🛑 [CALL LIFECYCLE] Call ended by remote party (child handler - child initiated)", {
             callId: updatedCall.id,
             oldStatus: oldCall?.status,
             newStatus: updatedCall.status,
@@ -1017,14 +1044,11 @@ const handleChildInitiatedCall = async (
           const queuedCount = iceCandidatesQueue.current.length;
           const processedCount = candidatesToProcess.length;
           
-          if (processedCount > 0 && processedCount % 5 === 0) {
-            // Log every 5th batch to reduce spam
+          if (processedCount > 0 && processedCount % 10 === 0) {
+            // Log every 10th batch to reduce spam
             console.log("🧊 [CHILD HANDLER] Processing ICE candidates (child initiated, from parent):", {
               count: processedCount,
-              queued: queuedCount,
-              hasRemoteDescription: !!pc.remoteDescription,
               iceConnectionState: pc.iceConnectionState,
-              source: updatedCall.parent_ice_candidates ? "parent_ice_candidates" : "ice_candidates (legacy)",
             });
           }
           
@@ -1038,17 +1062,10 @@ const handleChildInitiatedCall = async (
               if (pc.remoteDescription) {
                 const iceCandidate = new RTCIceCandidate(candidate);
                 await pc.addIceCandidate(iceCandidate);
-                // Only log first few candidates to reduce spam
-                if (processedCount <= 3) {
-                  console.log("✅ [CHILD HANDLER] Added ICE candidate #" + processedCount);
-                }
+                // Silently process - only log errors
               } else {
                 // Queue candidates if remote description not set yet
                 iceCandidatesQueue.current.push(candidate);
-                // Only log first few queued candidates
-                if (queuedCount < 3) {
-                  console.log("⏳ [CHILD HANDLER] Queued ICE candidate (waiting for remote description)");
-                }
               }
             } catch (err) {
               const error = err as Error;
