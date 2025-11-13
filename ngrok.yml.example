@@ -1,0 +1,17 @@
+# ngrok.yml.example
+# Copy this file to ngrok.yml and add your authtoken
+# Configuration file for ngrok tunnel
+# This allows you to access your local dev server from your iPhone
+
+version: "3"
+
+agent:
+  authtoken: YOUR_NGROK_AUTH_TOKEN_HERE
+
+tunnels:
+  dev-server:
+    addr: 8080
+    proto: http
+    schemes: ["https"]  # Enable HTTPS for iOS compatibility
+    inspect: true       # Enable web inspector
+

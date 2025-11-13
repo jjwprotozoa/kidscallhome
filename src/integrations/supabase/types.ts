@@ -22,6 +22,8 @@ export type Database = {
           created_at: string
           ended_at: string | null
           ice_candidates: Json | null
+          parent_ice_candidates: Json | null
+          child_ice_candidates: Json | null
           id: string
           offer: Json | null
           parent_id: string
@@ -34,6 +36,8 @@ export type Database = {
           created_at?: string
           ended_at?: string | null
           ice_candidates?: Json | null
+          parent_ice_candidates?: Json | null
+          child_ice_candidates?: Json | null
           id?: string
           offer?: Json | null
           parent_id: string
@@ -46,6 +50,8 @@ export type Database = {
           created_at?: string
           ended_at?: string | null
           ice_candidates?: Json | null
+          parent_ice_candidates?: Json | null
+          child_ice_candidates?: Json | null
           id?: string
           offer?: Json | null
           parent_id?: string
