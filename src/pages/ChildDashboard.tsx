@@ -17,6 +17,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
+import { useIncomingCallNotifications } from "@/hooks/useIncomingCallNotifications";
 
 interface ChildSession {
   id: string;
@@ -48,6 +49,10 @@ const ChildDashboard = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { toast } = useToast();
+  const { handleIncomingCall, stopIncomingCall } = useIncomingCallNotifications({
+    enabled: true,
+    volume: 0.7,
+  });
 
   useEffect(() => {
     const sessionData = localStorage.getItem("childSession");
@@ -63,7 +68,7 @@ const ChildDashboard = () => {
 
     const setupSubscription = async () => {
       // Function to handle incoming call notification
-      const handleIncomingCall = async (call: CallRecord) => {
+      const handleIncomingCallNotification = async (call: CallRecord) => {
         // Skip if we already showed this call
         if (call.id === lastCheckedCallId) return;
 
@@ -82,6 +87,13 @@ const ChildDashboard = () => {
         setIncomingCall({
           id: call.id,
           parent_id: call.parent_id,
+        });
+        // Handle incoming call with notifications (push notification if tab inactive, ringtone if active)
+        handleIncomingCall({
+          callId: call.id,
+          callerName: "Mom/Dad",
+          callerId: call.parent_id,
+          url: `/call/${childData.id}?callId=${call.id}`,
         });
       };
 
@@ -102,22 +114,23 @@ const ChildDashboard = () => {
         if (existingCalls && existingCalls.length > 0) {
           const call = existingCalls[0];
           if (call.id !== lastCheckedCallId) {
-            await handleIncomingCall(call);
+            await handleIncomingCallNotification(call);
           }
         }
       };
 
       // Polling function to check for new calls (fallback for realtime)
       // IMPORTANT: Only check for parent-initiated calls, not child-initiated ones
+      // Use a longer time window since we poll less frequently
       const pollForCalls = async () => {
-        const twoSecondsAgo = new Date(Date.now() - 2 * 1000).toISOString();
+        const thirtySecondsAgo = new Date(Date.now() - 30 * 1000).toISOString();
         const { data: newCalls } = await supabase
           .from("calls")
           .select("*")
           .eq("child_id", childData.id)
           .eq("caller_type", "parent") // Only parent-initiated calls
           .eq("status", "ringing")
-          .gte("created_at", twoSecondsAgo)
+          .gte("created_at", thirtySecondsAgo)
           .order("created_at", { ascending: false })
           .limit(1);
 
@@ -128,7 +141,7 @@ const ChildDashboard = () => {
               "📞 [CHILD DASHBOARD] Polling found parent-initiated call:",
               call.id
             );
-            await handleIncomingCall(call);
+            await handleIncomingCallNotification(call);
           }
         }
       };
@@ -136,8 +149,9 @@ const ChildDashboard = () => {
       // Check immediately
       await checkExistingCalls();
 
-      // Set up polling as a fallback (every 2 seconds)
-      pollInterval = setInterval(pollForCalls, 2000);
+      // Set up polling as a fallback (every 30 seconds to reduce database queries)
+      // Realtime subscriptions should handle most cases, this is just a safety net
+      pollInterval = setInterval(pollForCalls, 30000);
 
       // Subscribe to new calls from parent
       // Listen to both INSERT and UPDATE events to catch calls that are reset to ringing
@@ -162,7 +176,7 @@ const ChildDashboard = () => {
               call.status === "ringing"
             ) {
               console.log("Call is for this child, showing notification...");
-              await handleIncomingCall(call);
+              await handleIncomingCallNotification(call);
             } else {
               console.log("Call not for this child or not ringing:", {
                 callerType: call.caller_type,
@@ -242,7 +256,7 @@ const ChildDashboard = () => {
               console.log(
                 "Call status changed to ringing, showing notification..."
               );
-              await handleIncomingCall(call);
+              await handleIncomingCallNotification(call);
             }
           }
         )
@@ -259,12 +273,19 @@ const ChildDashboard = () => {
         clearInterval(pollInterval);
       }
     };
-  }, [navigate, location.pathname]);
+  }, [navigate, location.pathname, playRingtone]);
 
   // Keep ref in sync with state so subscription callbacks always have latest value
   useEffect(() => {
     incomingCallRef.current = incomingCall;
   }, [incomingCall]);
+
+  // Stop notifications when incoming call is cleared
+  useEffect(() => {
+    if (!incomingCall && incomingCallRef.current) {
+      stopIncomingCall(incomingCallRef.current.id);
+    }
+  }, [incomingCall, stopIncomingCall]);
 
   const handleLogout = () => {
     localStorage.removeItem("childSession");
@@ -294,6 +315,8 @@ const ChildDashboard = () => {
         childId: child.id,
         timestamp: new Date().toISOString(),
       });
+      // Stop incoming call notifications
+      stopIncomingCall(incomingCall.id);
       // Mark that we're answering to prevent onOpenChange from declining
       isAnsweringRef.current = true;
       const callId = incomingCall.id;
@@ -343,6 +366,8 @@ const ChildDashboard = () => {
           variant: "destructive",
         });
       }
+      // Stop incoming call notifications when declining
+      stopIncomingCall(incomingCall.id);
       setIncomingCall(null);
     }
   };

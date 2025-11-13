@@ -1,8 +1,14 @@
-# Welcome to your Lovable project
+# Kids Call Home
 
-## Project info
+A family communication app that helps parents and children stay connected through simple video calls and messaging.
 
-**URL**: https://lovable.dev/projects/2e0bb7b7-ec23-4451-b444-265fa544e4b5
+**Domain**: https://kidscallhome.com
+
+**Lovable Project URL**: https://lovable.dev/projects/2e0bb7b7-ec23-4451-b444-265fa544e4b5
+
+## About
+
+Kids Call Home is a safe and secure platform for family communication. Parents can create accounts, add their children, and manage access. Children can use a special code to easily initiate video calls and send messages to their parents, keeping families connected anytime, anywhere.
 
 ## How can I edit this code?
 

@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
+import { useAudioNotifications } from "@/hooks/useAudioNotifications";
 import { supabase } from "@/integrations/supabase/client";
 import { useWebRTC } from "./useWebRTC";
 import { handleParentCall } from "@/utils/callHandlers";
@@ -16,6 +17,7 @@ export const useVideoCall = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { playRingtone, stopRingtone, playCallAnswered } = useAudioNotifications({ enabled: true, volume: 0.7 });
   const initializationRef = useRef(false);
 
   const [isChild, setIsChild] = useState(false);
@@ -47,6 +49,28 @@ export const useVideoCall = () => {
   useEffect(() => {
     playAttemptedRef.current = false;
   }, [callId]);
+
+  // Play ringtone for outgoing calls (when connecting and no remote stream yet)
+  useEffect(() => {
+    if (isConnecting && !remoteStream && callId) {
+      // Outgoing call - play ringtone while waiting for answer
+      console.log("🔔 [AUDIO] Outgoing call - starting ringtone");
+      playRingtone();
+    } else if (remoteStream || !isConnecting) {
+      // Call answered or connection established - stop ringtone
+      console.log("🔇 [AUDIO] Call answered or connected - stopping ringtone");
+      stopRingtone();
+      if (remoteStream && !playAttemptedRef.current) {
+        // Play answered sound when remote stream first appears
+        playCallAnswered();
+      }
+    }
+
+    // Cleanup on unmount
+    return () => {
+      stopRingtone();
+    };
+  }, [isConnecting, remoteStream, callId, playRingtone, stopRingtone, playCallAnswered]);
 
   // Play remote video when connection is established and stream is available
   // This happens after user clicks "Answer" (user interaction)
@@ -632,6 +656,9 @@ export const useVideoCall = () => {
 
     // Reset call start time
     callStartTimeRef.current = null;
+    
+    // Stop ringtone if playing
+    stopRingtone();
     
     // Clean up all resources (force cleanup on explicit hangup)
     // Pass true to force cleanup even if ICE is still establishing

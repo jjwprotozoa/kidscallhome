@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
+import { useIncomingCallNotifications } from "@/hooks/useIncomingCallNotifications";
 import { supabase } from "@/integrations/supabase/client";
 import { endCall as endCallUtil } from "@/utils/callEnding";
 import type { RealtimeChannel } from "@supabase/supabase-js";
@@ -54,6 +55,12 @@ const ParentDashboard = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { toast } = useToast();
+  const { handleIncomingCall, stopIncomingCall } = useIncomingCallNotifications(
+    {
+      enabled: true,
+      volume: 0.7,
+    }
+  );
 
   const checkAuth = useCallback(async () => {
     const {
@@ -100,7 +107,7 @@ const ParentDashboard = () => {
       if (!user) return;
 
       // Function to handle incoming call notification
-      const handleIncomingCall = async (call: CallRecord) => {
+      const handleIncomingCallNotification = async (call: CallRecord) => {
         // Skip if we already showed this call
         if (call.id === lastCheckedCallId) return;
 
@@ -129,6 +136,13 @@ const ParentDashboard = () => {
             child_name: childData.name,
             child_avatar_color: childData.avatar_color,
           });
+          // Handle incoming call with notifications (push notification if tab inactive, ringtone if active)
+          handleIncomingCall({
+            callId: call.id,
+            callerName: childData.name,
+            callerId: call.child_id,
+            url: `/call/${call.child_id}?callId=${call.id}`,
+          });
         } else {
           console.error("Failed to fetch child data for call");
         }
@@ -151,22 +165,23 @@ const ParentDashboard = () => {
         if (existingCalls && existingCalls.length > 0) {
           const call = existingCalls[0];
           if (call.id !== lastCheckedCallId) {
-            await handleIncomingCall(call);
+            await handleIncomingCallNotification(call);
           }
         }
       };
 
       // Polling function to check for new calls (fallback for realtime)
       // IMPORTANT: Only check for child-initiated calls, not parent-initiated ones
+      // Use a longer time window since we poll less frequently
       const pollForCalls = async () => {
-        const twoSecondsAgo = new Date(Date.now() - 2 * 1000).toISOString();
+        const thirtySecondsAgo = new Date(Date.now() - 30 * 1000).toISOString();
         const { data: newCalls, error: pollError } = await supabase
           .from("calls")
           .select("*")
           .eq("parent_id", user.id)
           .eq("caller_type", "child") // Only child-initiated calls
           .eq("status", "ringing")
-          .gte("created_at", twoSecondsAgo)
+          .gte("created_at", thirtySecondsAgo)
           .order("created_at", { ascending: false })
           .limit(1);
 
@@ -187,7 +202,7 @@ const ParentDashboard = () => {
                 createdAt: call.created_at,
               }
             );
-            await handleIncomingCall(call);
+            await handleIncomingCallNotification(call);
           }
         }
       };
@@ -195,8 +210,9 @@ const ParentDashboard = () => {
       // Check immediately
       await checkExistingCalls();
 
-      // Set up polling as a fallback (every 2 seconds)
-      pollInterval = setInterval(pollForCalls, 2000);
+      // Set up polling as a fallback (every 30 seconds to reduce database queries)
+      // Realtime subscriptions should handle most cases, this is just a safety net
+      pollInterval = setInterval(pollForCalls, 30000);
 
       // Subscribe to new calls from children
       // Listen to both INSERT and UPDATE events to catch calls that are reset to ringing
@@ -235,7 +251,7 @@ const ParentDashboard = () => {
               console.log(
                 "✅ [PARENT DASHBOARD] Call is for this parent, fetching child details..."
               );
-              await handleIncomingCall(call);
+              await handleIncomingCallNotification(call);
             } else {
               console.log(
                 "❌ [PARENT DASHBOARD] Call not for this parent or not ringing:",
@@ -322,7 +338,7 @@ const ParentDashboard = () => {
               console.log(
                 "Call status changed to ringing, fetching child details..."
               );
-              await handleIncomingCall(call);
+              await handleIncomingCallNotification(call);
             }
           }
         )
@@ -339,12 +355,19 @@ const ParentDashboard = () => {
         clearInterval(pollInterval);
       }
     };
-  }, [checkAuth, fetchChildren, location.pathname]);
+  }, [checkAuth, fetchChildren, location.pathname, handleIncomingCall]);
 
   // Keep ref in sync with state so subscription callbacks always have latest value
   useEffect(() => {
     incomingCallRef.current = incomingCall;
   }, [incomingCall]);
+
+  // Stop notifications when incoming call is cleared
+  useEffect(() => {
+    if (!incomingCall && incomingCallRef.current) {
+      stopIncomingCall(incomingCallRef.current.id);
+    }
+  }, [incomingCall, stopIncomingCall]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -366,6 +389,8 @@ const ParentDashboard = () => {
         childId: incomingCall.child_id,
         timestamp: new Date().toISOString(),
       });
+      // Stop incoming call notifications
+      stopIncomingCall(incomingCall.id);
       // Mark that we're answering to prevent onOpenChange from declining
       isAnsweringRef.current = true;
       const childId = incomingCall.child_id;
@@ -416,6 +441,8 @@ const ParentDashboard = () => {
           variant: "destructive",
         });
       }
+      // Stop incoming call notifications when declining
+      stopIncomingCall(incomingCall.id);
       setIncomingCall(null);
     }
   };

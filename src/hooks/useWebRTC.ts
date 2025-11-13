@@ -746,15 +746,10 @@ export const useWebRTC = (
             }
             processedCandidateIds.add(candidateId);
 
-            // Only log first few candidates to reduce console spam
+            // Only log first candidate to reduce console spam
             const currentCount = processedCandidateIds.size;
-            if (currentCount <= 3) {
-              console.log("🧊 [ICE CANDIDATE] New candidate:", {
-                type: candidateJson.type,
-                protocol: candidateJson.protocol,
-                address: candidateJson.address,
-                port: candidateJson.port,
-                candidate: candidateJson.candidate?.substring(0, 50) + "...",
+            if (currentCount === 1) {
+              console.log("🧊 [ICE CANDIDATE] ICE gathering started:", {
                 role: isChild ? "child" : "parent",
                 callId: activeCallId,
               });
@@ -803,15 +798,14 @@ export const useWebRTC = (
                     console.error(`❌ [ICE CANDIDATE] Database column ${candidateField} may not exist. Run fix_ice_candidates_schema.sql migration!`);
                   }
                 } else {
-                  // Only log first few and every 10th candidate to reduce spam
+                  // Only log first few and every 20th candidate to reduce spam
                   const candidateNum = updatedCandidates.length;
-                  if (candidateNum <= 3 || candidateNum % 10 === 0) {
+                  if (candidateNum <= 3 || candidateNum % 20 === 0) {
                     console.log(`✅ [ICE CANDIDATE] Candidate #${candidateNum} sent to ${candidateField}`);
                   }
                 }
-              } else {
-                console.log("⏭️ [ICE CANDIDATE] Candidate already exists, skipping");
               }
+              // Silently skip duplicates - no need to log
             } else {
               console.warn(`⚠️ [ICE CANDIDATE] Call ${activeCallId} not found in database`);
             }
@@ -1054,37 +1048,36 @@ export const useWebRTC = (
         const videoTracks = stream.getVideoTracks();
         const pc = peerConnectionRef.current;
 
-        // Only log if there are issues or if tracks unmute
+        // Only log if there are actual problems (not just normal states)
         const hasMutedAudio = audioTracks.some(t => t.muted);
         const hasMutedVideo = videoTracks.some(t => t.muted);
         const isPaused = video.paused;
         const iceState = pc?.iceConnectionState;
+        const connectionState = pc?.connectionState;
 
-        if (hasMutedAudio || hasMutedVideo || isPaused || iceState !== "connected") {
-          console.log("📊 [MONITOR] Periodic track check:", {
-            audioTracks: audioTracks.map(t => ({
-              enabled: t.enabled,
-              muted: t.muted,
-              readyState: t.readyState,
-            })),
-            videoTracks: videoTracks.map(t => ({
-              enabled: t.enabled,
-              muted: t.muted,
-              readyState: t.readyState,
-            })),
-            videoPaused: isPaused,
+        // Only log if there are persistent issues (not just during connection establishment)
+        // Skip logging if ICE is still establishing (new/checking) or if everything is connected
+        const isProblematic = (iceState === "failed" || iceState === "disconnected" || iceState === "closed") ||
+                              (connectionState === "failed" || connectionState === "disconnected" || connectionState === "closed");
+
+        if (isProblematic) {
+          // Only log actual problems, not normal connection states
+          console.warn("⚠️ [MONITOR] Connection issue detected:", {
             iceConnectionState: iceState,
-            connectionState: pc?.connectionState,
+            connectionState: connectionState,
+            videoPaused: isPaused,
+            hasMutedAudio: hasMutedAudio && iceState === "connected", // Only log if muted when connected
+            hasMutedVideo: hasMutedVideo && iceState === "connected", // Only log if muted when connected
           });
-
-          // If video is paused, try to play
-          if (isPaused) {
-            video.play().catch(err => {
-              console.error("❌ [MONITOR] Error playing paused video:", err);
-            });
-          }
         }
-      }, 2000); // Check every 2 seconds
+
+        // If video is paused, try to play (silently)
+        if (isPaused && iceState === "connected") {
+          video.play().catch(() => {
+            // Silently handle - video might not be ready yet
+          });
+        }
+      }, 5000); // Check every 5 seconds (reduced frequency)
 
       // Log stream info for debugging
       console.log("📹 [REMOTE STREAM] Remote stream in useEffect:", {
