@@ -11,13 +11,30 @@ export default defineConfig(({ mode }) => {
       name: "html-transform",
       transformIndexHtml(html: string, ctx) {
         // Get the base URL from environment variable
-        // Vercel provides VERCEL_URL for preview deployments
-        // For ngrok testing, set VITE_BASE_URL=https://your-ngrok-url.ngrok-free.app
-        // For production, it will use www.kidscallhome.com
-        // Priority: VITE_BASE_URL > VERCEL_URL > production domain > localhost
-        const baseUrl = process.env.VITE_BASE_URL || 
-                       (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ||
-                       (mode === "production" ? "https://www.kidscallhome.com" : "http://localhost:8080");
+        // Vercel provides VERCEL_URL for preview deployments, but we want to use
+        // the production domain when deployed to production
+        // Priority: VITE_BASE_URL > production domain (if production) > VERCEL_URL > localhost
+        let baseUrl = process.env.VITE_BASE_URL;
+        
+        if (!baseUrl) {
+          // Check if this is a Vercel production deployment
+          // VERCEL_ENV is "production" for production deployments
+          const isVercelProduction = process.env.VERCEL_ENV === "production";
+          
+          // In production mode OR Vercel production deployment, use production domain
+          if (mode === "production" || isVercelProduction) {
+            baseUrl = "https://www.kidscallhome.com";
+          } 
+          // For preview deployments, use VERCEL_URL
+          else if (process.env.VERCEL_URL) {
+            baseUrl = `https://${process.env.VERCEL_URL}`;
+          }
+          // Fallback to localhost for dev
+          else {
+            baseUrl = "http://localhost:8080";
+          }
+        }
+        
         return html.replace(/\{\{OG_IMAGE_URL\}\}/g, `${baseUrl}/og-image.png`);
       },
     };
