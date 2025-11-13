@@ -1,4 +1,17 @@
 {
+  "redirects": [
+    {
+      "source": "/(.*)",
+      "destination": "https://www.kidscallhome.com/$1",
+      "permanent": true,
+      "has": [
+        {
+          "type": "host",
+          "value": "kidscallhome.com"
+        }
+      ]
+    }
+  ],
   "headers": [
     {
       "source": "/og-image.png",
