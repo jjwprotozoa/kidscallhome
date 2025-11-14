@@ -268,22 +268,42 @@ export const useVideoCall = () => {
   }, [childId]);
 
   const initializeCall = async (isChildUser: boolean) => {
+    console.log("🚀 [INITIALIZE CALL] ===== INITIALIZE CALL ENTRY =====", {
+      isChildUser,
+      childId,
+      timestamp: new Date().toISOString(),
+    });
+    
     try {
       // Initialize WebRTC connection
+      console.log("🚀 [INITIALIZE CALL] Initializing WebRTC connection...");
       await initializeConnection();
 
       const pc = peerConnectionRef.current;
       if (!pc) {
         throw new Error("Failed to create peer connection");
       }
+      
+      console.log("🚀 [INITIALIZE CALL] WebRTC connection initialized:", {
+        signalingState: pc.signalingState,
+        senders: pc.getSenders().length,
+        tracks: pc.getSenders().map(s => s.track).filter(Boolean).length,
+      });
 
       // Set up call based on role
       let channel: any;
       if (isChildUser) {
+        console.log("🚀 [INITIALIZE CALL] Setting up child call flow...");
         channel = await handleChildCallFlow(pc);
       } else {
+        console.log("🚀 [INITIALIZE CALL] Setting up parent call flow...");
         channel = await handleParentCallFlow(pc);
       }
+      
+      console.log("🚀 [INITIALIZE CALL] Call flow setup complete:", {
+        hasChannel: !!channel,
+        isChildUser,
+      });
       
       // Store channel reference for cleanup
       if (channel) {
@@ -303,11 +323,25 @@ export const useVideoCall = () => {
   };
 
   const handleParentCallFlow = async (pc: RTCPeerConnection) => {
+    console.log("🚀 [PARENT CALL FLOW] ===== PARENT CALL FLOW ENTRY =====", {
+      childId,
+      timestamp: new Date().toISOString(),
+      signalingState: pc.signalingState,
+      senders: pc.getSenders().length,
+      tracks: pc.getSenders().map(s => s.track).filter(Boolean).length,
+    });
+    
     try {
       const {
         data: { user },
         error: authError,
       } = await supabase.auth.getUser();
+      
+      console.log("🚀 [PARENT CALL FLOW] Auth check complete:", {
+        hasUser: !!user,
+        userId: user?.id,
+        hasAuthError: !!authError,
+      });
       
       if (authError) {
         console.error("Auth error in parent call flow:", authError);
@@ -333,11 +367,18 @@ export const useVideoCall = () => {
         return null;
       }
 
+      console.log("🚀 [PARENT CALL FLOW] Calling handleParentCall...", {
+        childId,
+        userId: user.id,
+        timestamp: new Date().toISOString(),
+      });
+      
       const channel = await handleParentCall(
         pc,
         childId,
         user.id,
         (id: string) => {
+          console.log("🚀 [PARENT CALL FLOW] CallId set:", id);
           setCallId(id);
           // Set up termination listener after callId is set
           const terminationChannel = setupCallTerminationListener(id);
@@ -348,6 +389,11 @@ export const useVideoCall = () => {
         setIsConnecting,
         iceCandidatesQueue
       );
+      
+      console.log("🚀 [PARENT CALL FLOW] handleParentCall returned:", {
+        hasChannel: !!channel,
+        timestamp: new Date().toISOString(),
+      });
       
       return channel;
     } catch (error: unknown) {

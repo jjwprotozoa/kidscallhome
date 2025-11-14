@@ -67,8 +67,13 @@ export const useAudioNotifications = (options: UseAudioNotificationsOptions = {}
         clearInterval(vibrationIntervalRef.current);
         vibrationIntervalRef.current = null;
       }
+      // Stop vibration if supported (may fail if no user interaction yet)
       if ("vibrate" in navigator) {
-        navigator.vibrate(0); // Stop any ongoing vibration
+        try {
+          navigator.vibrate(0); // Stop any ongoing vibration
+        } catch (error) {
+          // Vibration requires user interaction - silently ignore in cleanup
+        }
       }
       // Remove event listeners
       resumeListenersRef.current.forEach(({ event, handler }) => {
@@ -122,6 +127,42 @@ export const useAudioNotifications = (options: UseAudioNotificationsOptions = {}
 
     return audioContextRef.current;
   }, []);
+
+  // Start vibration pattern (for mobile devices)
+  const startVibration = useCallback(() => {
+    if (!enabled || !("vibrate" in navigator)) {
+      return;
+    }
+
+    try {
+      // Vibration pattern: vibrate, pause, vibrate (like phone ringing)
+      const vibratePattern = () => {
+        if (isPlayingRef.current.ringtone && "vibrate" in navigator) {
+          try {
+            navigator.vibrate([200, 100, 200]);
+          } catch (error) {
+            // Vibration requires user interaction - silently ignore
+            // It will work once user has interacted with the page
+          }
+        }
+      };
+
+      // Start vibration immediately (may fail if no user interaction yet)
+      vibratePattern();
+
+      // Repeat vibration pattern every 2 seconds (matching ringtone pattern)
+      vibrationIntervalRef.current = setInterval(() => {
+        if (isPlayingRef.current.ringtone) {
+          vibratePattern();
+        }
+      }, 2000);
+
+      console.log("📳 [AUDIO] Vibration started");
+    } catch (error) {
+      // Vibration may fail if no user interaction yet - this is expected
+      console.debug("📳 [AUDIO] Vibration not available yet (requires user interaction)");
+    }
+  }, [enabled]);
 
   // Play ringtone (looping)
   const playRingtone = useCallback(async () => {
@@ -196,36 +237,6 @@ export const useAudioNotifications = (options: UseAudioNotificationsOptions = {}
     }
   }, [enabled, volume, ensureAudioContextReady, startVibration]);
 
-  // Start vibration pattern (for mobile devices)
-  const startVibration = useCallback(() => {
-    if (!enabled || !("vibrate" in navigator)) {
-      return;
-    }
-
-    try {
-      // Vibration pattern: vibrate, pause, vibrate (like phone ringing)
-      const vibratePattern = () => {
-        if (isPlayingRef.current.ringtone && "vibrate" in navigator) {
-          navigator.vibrate([200, 100, 200]);
-        }
-      };
-
-      // Start vibration immediately
-      vibratePattern();
-
-      // Repeat vibration pattern every 2 seconds (matching ringtone pattern)
-      vibrationIntervalRef.current = setInterval(() => {
-        if (isPlayingRef.current.ringtone) {
-          vibratePattern();
-        }
-      }, 2000);
-
-      console.log("📳 [AUDIO] Vibration started");
-    } catch (error) {
-      console.error("❌ [AUDIO] Error starting vibration:", error);
-    }
-  }, [enabled]);
-
   // Stop vibration
   const stopVibration = useCallback(() => {
     if (vibrationIntervalRef.current) {
@@ -233,7 +244,11 @@ export const useAudioNotifications = (options: UseAudioNotificationsOptions = {}
       vibrationIntervalRef.current = null;
     }
     if ("vibrate" in navigator) {
-      navigator.vibrate(0); // Stop any ongoing vibration
+      try {
+        navigator.vibrate(0); // Stop any ongoing vibration
+      } catch (error) {
+        // Vibration requires user interaction - silently ignore
+      }
     }
     console.log("📳 [AUDIO] Vibration stopped");
   }, []);

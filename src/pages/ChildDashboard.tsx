@@ -43,6 +43,8 @@ interface CallRecord {
 const ChildDashboard = () => {
   const [child, setChild] = useState<ChildSession | null>(null);
   const [incomingCall, setIncomingCall] = useState<IncomingCall | null>(null);
+  const [parentName, setParentName] = useState<string>("Mom/Dad");
+  const parentNameRef = useRef<string>("Mom/Dad"); // Ref to track latest parentName for subscription callbacks
   const incomingCallRef = useRef<IncomingCall | null>(null); // Ref to track latest incomingCall for subscription callbacks
   const channelRef = useRef<RealtimeChannel | null>(null);
   const isAnsweringRef = useRef(false); // Track if user is answering to prevent auto-decline
@@ -62,6 +64,47 @@ const ChildDashboard = () => {
     }
     const childData = JSON.parse(sessionData);
     setChild(childData);
+
+    // Fetch parent name
+    const fetchParentName = async () => {
+      try {
+        // First get the child's parent_id from the database
+        const { data: childRecord, error: childError } = await supabase
+          .from("children")
+          .select("parent_id")
+          .eq("id", childData.id)
+          .single();
+
+        if (childError || !childRecord) {
+          console.error("Error fetching child record:", childError);
+          return;
+        }
+
+        // Then fetch the parent's name
+        const { data: parentData, error: parentError } = await supabase
+          .from("parents")
+          .select("name")
+          .eq("id", childRecord.parent_id)
+          .maybeSingle();
+
+        if (parentError) {
+          console.error("Error fetching parent name:", parentError);
+          return;
+        }
+
+        if (parentData?.name) {
+          setParentName(parentData.name);
+          parentNameRef.current = parentData.name;
+        } else {
+          // Parent name not found, keep default "Mom/Dad"
+          console.warn("Parent name not found for parent_id:", childRecord.parent_id);
+        }
+      } catch (error) {
+        console.error("Error fetching parent name:", error);
+      }
+    };
+
+    fetchParentName();
 
     let lastCheckedCallId: string | null = null;
     let pollInterval: NodeJS.Timeout | null = null;
@@ -91,7 +134,7 @@ const ChildDashboard = () => {
         // Handle incoming call with notifications (push notification if tab inactive, ringtone if active)
         handleIncomingCall({
           callId: call.id,
-          callerName: "Mom/Dad",
+          callerName: parentNameRef.current,
           callerId: call.parent_id,
           url: `/call/${childData.id}?callId=${call.id}`,
         });
@@ -273,7 +316,7 @@ const ChildDashboard = () => {
         clearInterval(pollInterval);
       }
     };
-  }, [navigate, location.pathname, playRingtone]);
+  }, [navigate, location.pathname, handleIncomingCall, parentName]);
 
   // Keep ref in sync with state so subscription callbacks always have latest value
   useEffect(() => {
@@ -294,7 +337,7 @@ const ChildDashboard = () => {
 
   const handleCall = () => {
     if (child) {
-      console.log("📞 [CHILD DASHBOARD] Child clicked 'Call Mom/Dad' button, navigating to call page:", {
+      console.log("📞 [CHILD DASHBOARD] Child clicked 'Call' button, navigating to call page:", {
         childId: child.id,
         timestamp: new Date().toISOString()
       });
@@ -409,7 +452,7 @@ const ChildDashboard = () => {
                 <Video className="h-10 w-10 text-white" />
               </div>
               <div>
-                <h2 className="text-3xl font-bold mb-2">Call Mom/Dad</h2>
+                <h2 className="text-3xl font-bold mb-2">Call {parentName}</h2>
                 <p className="text-muted-foreground">Start a video call</p>
               </div>
             </div>
@@ -429,7 +472,7 @@ const ChildDashboard = () => {
               </div>
               <div>
                 <h2 className="text-3xl font-bold mb-2">Send Message</h2>
-                <p className="text-muted-foreground">Chat with Mom/Dad</p>
+                <p className="text-muted-foreground">Chat with {parentName}</p>
               </div>
             </div>
           </Card>
@@ -474,13 +517,13 @@ const ChildDashboard = () => {
               <div>
                 <AlertDialogTitle className="text-xl">Incoming Call</AlertDialogTitle>
                 <p className="text-base font-normal text-muted-foreground">
-                  Mom/Dad is calling...
+                  {parentName} is calling...
                 </p>
               </div>
             </div>
             <div className="pt-4">
               <AlertDialogDescription className="sr-only">
-                Incoming call from Mom/Dad
+                Incoming call from {parentName}
               </AlertDialogDescription>
               <div className="flex items-center justify-center gap-2 text-4xl animate-pulse">
                 <Phone className="h-12 w-12" />

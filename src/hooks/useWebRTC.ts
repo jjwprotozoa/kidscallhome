@@ -319,67 +319,102 @@ export const useWebRTC = (
         if (iceState === "connected" || iceState === "completed") {
           console.log("✅ [ICE STATE] ICE connection established - media should flow now!");
           
-          // When ICE is connected, check and ensure remote stream is playing
+          // CRITICAL FIX: When ICE connects, aggressively ensure remote stream is playing
+          // This is especially important for parent-to-child calls
           if (remoteStreamRef.current && remoteVideoRef.current) {
-            // Wait a bit for tracks to start receiving data
-            setTimeout(() => {
-              const stream = remoteStreamRef.current;
-              if (stream) {
-                const audioTracks = stream.getAudioTracks();
-                const videoTracks = stream.getVideoTracks();
-                
-                console.log("📊 [ICE STATE] Checking tracks after ICE connected:", {
-                  audioTracks: audioTracks.map(t => ({
-                    id: t.id,
-                    enabled: t.enabled,
-                    muted: t.muted,
-                    readyState: t.readyState,
-                  })),
-                  videoTracks: videoTracks.map(t => ({
-                    id: t.id,
-                    enabled: t.enabled,
-                    muted: t.muted,
-                    readyState: t.readyState,
-                  })),
-                });
+            const stream = remoteStreamRef.current;
+            const video = remoteVideoRef.current;
+            
+            // Ensure stream is set to video element
+            if (video.srcObject !== stream) {
+              console.log("🎬 [ICE STATE] Setting remote stream to video element");
+              video.srcObject = stream;
+            }
+            
+            // Check track states immediately
+            const audioTracks = stream.getAudioTracks();
+            const videoTracks = stream.getVideoTracks();
+            
+            console.log("📊 [ICE STATE] Tracks after ICE connected:", {
+              audioTracks: audioTracks.length,
+              videoTracks: videoTracks.length,
+              audioMuted: audioTracks.filter(t => t.muted).length,
+              videoMuted: videoTracks.filter(t => t.muted).length,
+              videoReadyState: video.readyState,
+              videoPaused: video.paused,
+            });
 
-                // If tracks are still muted, try to force unmute
-                audioTracks.forEach(track => {
-                  if (track.muted) {
-                    console.warn("⚠️ [ICE STATE] Audio track still muted after ICE connected - this may indicate no data");
-                  }
-                });
-                videoTracks.forEach(track => {
-                  if (track.muted) {
-                    console.warn("⚠️ [ICE STATE] Video track still muted after ICE connected - this may indicate no data");
-                  }
-                });
+            // Ensure all tracks are enabled
+            audioTracks.forEach(track => {
+              track.enabled = true;
+              if (track.muted) {
+                console.warn("⚠️ [ICE STATE] Audio track is muted after ICE connected");
+              }
+            });
+            videoTracks.forEach(track => {
+              track.enabled = true;
+              if (track.muted) {
+                console.warn("⚠️ [ICE STATE] Video track is muted after ICE connected");
+              }
+            });
 
-                // Ensure video is playing - but only if readyState >= 2 (have_current_data or higher)
-                if (remoteVideoRef.current) {
-                  const video = remoteVideoRef.current;
-                  // Wait for video to have enough data before playing
-                  if (video.readyState >= 2) {
-                    if (video.paused) {
-                      video.play().catch(err => {
-                        console.error("❌ [ICE STATE] Error playing video after ICE connected:", err);
-                      });
-                    }
-                  } else {
-                    // Wait for video to be ready
-                    const onReady = () => {
-                      if (video.readyState >= 2 && video.paused) {
-                        video.play().catch(err => {
-                          console.error("❌ [ICE STATE] Error playing video after ready:", err);
+            // CRITICAL: Try to play video immediately when ICE connects
+            // Don't wait for readyState - WebRTC streams can play even with low readyState
+            const attemptPlay = () => {
+              if (video && video.srcObject && video.paused) {
+                console.log("🎬 [ICE STATE] Attempting to play video after ICE connection");
+                video.play()
+                  .then(() => {
+                    console.log("✅ [ICE STATE] Video started playing after ICE connected");
+                  })
+                  .catch(err => {
+                    console.warn("⏳ [ICE STATE] Play failed, will retry:", err.name);
+                    // Retry after short delay
+                    setTimeout(() => {
+                      if (video && video.srcObject && video.paused) {
+                        video.play().catch(retryErr => {
+                          if (retryErr.name !== 'AbortError') {
+                            console.error("❌ [ICE STATE] Retry play failed:", retryErr);
+                          }
                         });
                       }
-                    };
-                    video.addEventListener('canplay', onReady, { once: true });
-                    video.addEventListener('loadeddata', onReady, { once: true });
-                  }
-                }
+                    }, 200);
+                  });
               }
-            }, 500);
+            };
+            
+            // Try immediately
+            attemptPlay();
+            
+            // Also set up listeners for when video becomes ready
+            const onReady = () => {
+              if (video.paused) {
+                attemptPlay();
+              }
+            };
+            video.addEventListener('canplay', onReady, { once: true });
+            video.addEventListener('loadeddata', onReady, { once: true });
+            video.addEventListener('canplaythrough', onReady, { once: true });
+            
+            // Also check after a short delay in case tracks unmute
+            setTimeout(() => {
+              const stillMutedAudio = stream.getAudioTracks().filter(t => t.muted).length;
+              const stillMutedVideo = stream.getVideoTracks().filter(t => t.muted).length;
+              
+              if (stillMutedAudio > 0 || stillMutedVideo > 0) {
+                console.error("❌ [ICE STATE] CRITICAL: Tracks still muted after ICE connected!", {
+                  mutedAudio: stillMutedAudio,
+                  mutedVideo: stillMutedVideo,
+                  totalAudio: audioTracks.length,
+                  totalVideo: videoTracks.length,
+                });
+              }
+              
+              // Try play again in case it failed before
+              if (video.paused) {
+                attemptPlay();
+              }
+            }, 1000);
           }
         } else if (iceState === "failed" || iceState === "disconnected" || iceState === "closed") {
           console.error("❌ [ICE STATE] ICE connection problem:", {
@@ -549,7 +584,21 @@ export const useWebRTC = (
                 console.log("✅ [REMOTE TRACK] Video is already playing");
               }
             } else {
-              console.warn("⚠️ [REMOTE TRACK] Video track unmuted but video element has no srcObject");
+              console.warn("⚠️ [REMOTE TRACK] Video track unmuted but video element has no srcObject - setting it now");
+              // Set srcObject if it's missing
+              if (remoteVideoRef.current && remoteStreamRef.current) {
+                remoteVideoRef.current.srcObject = remoteStreamRef.current;
+                // Try to play after setting
+                setTimeout(() => {
+                  if (remoteVideoRef.current && remoteVideoRef.current.paused) {
+                    remoteVideoRef.current.play().catch(err => {
+                      if (err.name !== 'AbortError') {
+                        console.error("❌ [REMOTE TRACK] Error playing after setting srcObject:", err);
+                      }
+                    });
+                  }
+                }, 100);
+              }
             }
           }
         };
@@ -615,32 +664,49 @@ export const useWebRTC = (
           if (currentStream) {
             currentStream.getAudioTracks().forEach((track) => {
               track.enabled = true;
+              // Force unmute if possible (though muted state is usually controlled by the sender)
+              if (track.muted && pc.iceConnectionState === "connected") {
+                console.warn("⚠️ [REMOTE TRACK] Audio track is muted even though ICE is connected - this may indicate no data");
+              }
               console.log("✅ [REMOTE TRACK] Enabled remote audio track:", {
                 id: track.id,
                 enabled: track.enabled,
                 muted: track.muted,
                 readyState: track.readyState,
+                iceConnectionState: pc.iceConnectionState,
               });
-              
-              // Check if track is muted (no data) - this is normal initially, will unmute when ICE connects
-              if (track.muted) {
-                console.warn("⚠️ [REMOTE TRACK] Audio track is muted (will unmute when ICE connects)");
-              }
             });
             currentStream.getVideoTracks().forEach((track) => {
               track.enabled = true;
+              // Force unmute if possible (though muted state is usually controlled by the sender)
+              if (track.muted && pc.iceConnectionState === "connected") {
+                console.warn("⚠️ [REMOTE TRACK] Video track is muted even though ICE is connected - this may indicate no data");
+              }
               console.log("✅ [REMOTE TRACK] Enabled remote video track:", {
                 id: track.id,
                 enabled: track.enabled,
                 muted: track.muted,
                 readyState: track.readyState,
+                iceConnectionState: pc.iceConnectionState,
               });
-              
-              // Check if track is muted (no data) - this is normal initially, will unmute when ICE connects
-              if (track.muted) {
-                console.warn("⚠️ [REMOTE TRACK] Video track is muted (will unmute when ICE connects)");
-              }
             });
+            
+            // CRITICAL: If ICE is already connected, tracks should unmute - check and log
+            if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") {
+              const mutedAudio = currentStream.getAudioTracks().filter(t => t.muted).length;
+              const mutedVideo = currentStream.getVideoTracks().filter(t => t.muted).length;
+              if (mutedAudio > 0 || mutedVideo > 0) {
+                console.error("❌ [REMOTE TRACK] CRITICAL: Tracks are muted even though ICE is connected!", {
+                  mutedAudioTracks: mutedAudio,
+                  mutedVideoTracks: mutedVideo,
+                  totalAudioTracks: currentStream.getAudioTracks().length,
+                  totalVideoTracks: currentStream.getVideoTracks().length,
+                  iceConnectionState: pc.iceConnectionState,
+                  connectionState: pc.connectionState,
+                  signalingState: pc.signalingState,
+                });
+              }
+            }
 
           console.log("Remote stream updated:", {
             id: currentStream.id,
@@ -649,10 +715,15 @@ export const useWebRTC = (
           });
 
           setRemoteStream(currentStream);
+          
+          // CRITICAL FIX: Ensure video element is set and playing when tracks are received
+          // This fixes the issue where call connects but no video/audio appears
           if (remoteVideoRef.current) {
-            // Only set srcObject if it's different to avoid interrupting any ongoing play
-            if (remoteVideoRef.current.srcObject !== currentStream) {
-              remoteVideoRef.current.srcObject = currentStream;
+            const video = remoteVideoRef.current;
+            const needsUpdate = video.srcObject !== currentStream;
+            
+            if (needsUpdate) {
+              video.srcObject = currentStream;
               console.log("✅ [REMOTE STREAM] Remote stream srcObject set", {
                 streamId: currentStream.id,
                 audioTracks: currentStream.getAudioTracks().length,
@@ -660,51 +731,83 @@ export const useWebRTC = (
                 iceConnectionState: pc.iceConnectionState,
                 connectionState: pc.connectionState,
               });
+            } else {
+              // Stream already set - just ensure it's still set (don't refresh)
+              console.log("✅ [REMOTE STREAM] Stream already set, ensuring playback", {
+                streamId: currentStream.id,
+                audioTracks: currentStream.getAudioTracks().length,
+                videoTracks: currentStream.getVideoTracks().length,
+              });
+            }
+            
+            // CRITICAL: Aggressively try to play - don't wait for tracks to unmute
+            // Tracks may be muted initially but will unmute when media flows
+            const attemptPlay = () => {
+              if (!video || !video.srcObject) {
+                console.warn("⚠️ [REMOTE STREAM] Video or srcObject not ready for play");
+                return;
+              }
               
-              // CRITICAL: Try to play immediately - don't wait for readyState
-              // For WebRTC streams, we can attempt play even if readyState is low
-              // The browser will buffer and play when ready
-              const attemptImmediatePlay = () => {
-                const video = remoteVideoRef.current;
-                if (!video || !video.srcObject) return;
-                
-                console.log("🎬 [REMOTE STREAM] Attempting immediate play after stream set", {
-                  readyState: video.readyState,
-                  paused: video.paused,
-                  muted: video.muted,
-                });
-                
-                // Try to play immediately
+              console.log("🎬 [REMOTE STREAM] Attempting to play video with tracks", {
+                readyState: video.readyState,
+                paused: video.paused,
+                muted: video.muted,
+                audioTracks: currentStream.getAudioTracks().length,
+                videoTracks: currentStream.getVideoTracks().length,
+                audioMuted: currentStream.getAudioTracks().some(t => t.muted),
+                videoMuted: currentStream.getVideoTracks().some(t => t.muted),
+                iceConnectionState: pc.iceConnectionState,
+              });
+              
+              // Try to play immediately - even if tracks are muted, they'll unmute when media flows
+              if (video.paused) {
                 video.play()
                   .then(() => {
-                    console.log("✅ [REMOTE STREAM] Video started playing immediately after stream set");
+                    console.log("✅ [REMOTE STREAM] Video started playing");
+                    // Verify tracks after play starts
+                    setTimeout(() => {
+                      const audioMuted = currentStream.getAudioTracks().filter(t => t.muted).length;
+                      const videoMuted = currentStream.getVideoTracks().filter(t => t.muted).length;
+                      if (audioMuted > 0 || videoMuted > 0) {
+                        console.warn("⚠️ [REMOTE STREAM] Some tracks still muted after play - they should unmute when media flows", {
+                          audioMuted,
+                          videoMuted,
+                          iceConnectionState: pc.iceConnectionState,
+                        });
+                      }
+                    }, 1000);
                   })
                   .catch((error) => {
-                    console.log("⏳ [REMOTE STREAM] Immediate play failed (will retry):", error.name);
-                    // Retry after a short delay - video might need time to initialize
+                    console.log("⏳ [REMOTE STREAM] Play failed, will retry:", error.name);
+                    // Retry after short delay
                     setTimeout(() => {
                       if (video && video.srcObject && video.paused) {
                         video.play().catch((retryError) => {
-                          console.log("⏳ [REMOTE STREAM] Retry play failed (will retry via playRemoteVideo):", retryError.name);
+                          if (retryError.name !== 'AbortError') {
+                            console.log("⏳ [REMOTE STREAM] Retry play failed:", retryError.name);
+                          }
                         });
                       }
-                    }, 100);
+                    }, 200);
                   });
-              };
-              
-              // Use requestAnimationFrame to ensure DOM is ready
-              requestAnimationFrame(() => {
-                attemptImmediatePlay();
-              });
-            } else {
-              console.log("Remote stream srcObject already set - ensuring video is playing");
-              // Even if srcObject is already set, make sure video is playing
-              if (remoteVideoRef.current.paused) {
-                remoteVideoRef.current.play().catch((error) => {
-                  console.log("⏳ [REMOTE STREAM] Play failed for existing stream:", error.name);
-                });
+              } else {
+                console.log("✅ [REMOTE STREAM] Video is already playing");
               }
-            }
+            };
+            
+            // Try immediately and also after a short delay to catch any timing issues
+            requestAnimationFrame(() => {
+              attemptPlay();
+            });
+            
+            // Also try after a delay in case tracks need time to initialize
+            setTimeout(() => {
+              if (video && video.srcObject && video.paused) {
+                attemptPlay();
+              }
+            }, 100);
+          } else {
+            console.warn("⚠️ [REMOTE STREAM] remoteVideoRef.current is null - video element not ready");
           }
         }
       };
@@ -950,13 +1053,22 @@ export const useWebRTC = (
         return;
       }
 
-      // CRITICAL FIX: Wait for readyState >= 2 before playing
-      // readyState values: 0=HAVE_NOTHING, 1=HAVE_METADATA, 2=HAVE_CURRENT_DATA, 3=HAVE_FUTURE_DATA, 4=HAVE_ENOUGH_DATA
-      // We need at least HAVE_CURRENT_DATA (2) to ensure media is actually flowing
-      if (video.readyState < 2) {
-        console.log("⏳ [VIDEO PLAY] Waiting for video readyState >= 2 (current:", video.readyState, ")");
+      // CRITICAL FIX: For WebRTC streams, readyState can be 0 initially but tracks may still be receiving data
+      // Check if tracks are unmuted (receiving data) even if readyState is low
+      const stream = video.srcObject as MediaStream | null;
+      const hasUnmutedTracks = stream && (
+        stream.getAudioTracks().some(t => !t.muted && t.readyState === 'live') ||
+        stream.getVideoTracks().some(t => !t.muted && t.readyState === 'live')
+      );
+      
+      if (video.readyState < 2 && !hasUnmutedTracks) {
+        console.log("⏳ [VIDEO PLAY] Waiting for video readyState >= 2 or unmuted tracks (current:", video.readyState, ")");
         const onReady = () => {
-          if (video.readyState >= 2) {
+          const nowHasUnmuted = stream && (
+            stream.getAudioTracks().some(t => !t.muted && t.readyState === 'live') ||
+            stream.getVideoTracks().some(t => !t.muted && t.readyState === 'live')
+          );
+          if (video.readyState >= 2 || nowHasUnmuted) {
             console.log("✅ [VIDEO PLAY] Video ready, readyState:", video.readyState, "- attempting play");
             if (video.paused) {
               video.play().catch((retryError) => {
@@ -968,7 +1080,30 @@ export const useWebRTC = (
         video.addEventListener('loadeddata', onReady, { once: true });
         video.addEventListener('canplay', onReady, { once: true });
         video.addEventListener('canplaythrough', onReady, { once: true });
+        
+        // Also check for track unmute events
+        if (stream) {
+          const checkTracks = () => {
+            const nowHasUnmuted = stream.getAudioTracks().some(t => !t.muted && t.readyState === 'live') ||
+                                 stream.getVideoTracks().some(t => !t.muted && t.readyState === 'live');
+            if (nowHasUnmuted && video.paused) {
+              console.log("✅ [VIDEO PLAY] Tracks unmuted, attempting play");
+              video.play().catch((retryError) => {
+                console.error("❌ [VIDEO PLAY] Play failed after track unmute:", retryError);
+              });
+            }
+          };
+          stream.getTracks().forEach(track => {
+            track.addEventListener('unmute', checkTracks, { once: true });
+          });
+        }
+        
         return;
+      }
+      
+      // If we have unmuted tracks, try to play even with low readyState
+      if (hasUnmutedTracks && video.readyState < 2) {
+        console.log("🎬 [VIDEO PLAY] Tracks are unmuted, attempting play despite low readyState:", video.readyState);
       }
 
       // Video is ready (readyState >= 2) - safe to play

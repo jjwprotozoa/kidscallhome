@@ -1,20 +1,26 @@
--- Check all RLS policies on the calls table
--- Run this in your Supabase SQL Editor to see all policies
+-- CHECK_CALLS_POLICIES.sql
+-- Run this to see the current calls table policies
+-- CRITICAL: Shows both USING and WITH CHECK clauses
 
 SELECT 
+    'Current Call Policies' as info,
     policyname,
     cmd as command,
-    qual as using_expression,
-    with_check as with_check_expression
+    roles::text as roles,
+    qual as using_clause,
+    with_check as with_check_clause,
+    CASE 
+        WHEN cmd = 'INSERT' AND with_check IS NULL THEN '❌ MISSING WITH CHECK!'
+        WHEN cmd = 'INSERT' AND with_check IS NOT NULL THEN '✅ Has WITH CHECK'
+        ELSE 'N/A'
+    END as insert_status
 FROM pg_policies
 WHERE tablename = 'calls'
-ORDER BY policyname;
-
--- Expected policies:
--- 1. "Parents can view calls for their children" (SELECT)
--- 2. "Parents can insert calls" (INSERT)
--- 3. "Parents can update calls" (UPDATE)
--- 4. "Children can view their own calls" (SELECT)
--- 5. "Children can insert calls they initiate" (INSERT) <- This one should verify parent_id
--- 6. "Children can update their own calls" (UPDATE)
-
+ORDER BY 
+  CASE 
+    WHEN policyname LIKE 'Children%' THEN 1
+    WHEN policyname LIKE 'Parents%' THEN 2
+    ELSE 3
+  END,
+  policyname,
+  cmd;

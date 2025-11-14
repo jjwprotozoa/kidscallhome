@@ -559,6 +559,7 @@ const handleIncomingCallFromParent = async (
   });
 
   // CRITICAL: Verify tracks are added before creating answer
+  // This MUST match parent's approach exactly for parent-to-child calls
   const senderTracks = pc.getSenders().map(s => s.track).filter(Boolean);
   console.log("📹 [CHILD HANDLER] Tracks in peer connection before answer:", {
     audioTracks: senderTracks.filter(t => t?.kind === "audio").length,
@@ -568,16 +569,43 @@ const handleIncomingCallFromParent = async (
     trackDetails: senderTracks.map(t => ({ kind: t.kind, id: t.id, enabled: t.enabled, muted: t.muted })),
   });
   
-  // Warn if no tracks are found - this will cause no video/audio
+  // CRITICAL GUARD: Fail if no tracks are found - this will cause no video/audio
+  // This prevents silent failures that break video/audio
   if (senderTracks.length === 0) {
-    console.error("❌ [CHILD HANDLER] NO TRACKS FOUND in peer connection! This will cause no video/audio.");
-    console.error("❌ [CHILD HANDLER] Make sure initializeConnection() was called and tracks were added.");
+    const errorMsg = "❌ [CHILD HANDLER] NO TRACKS FOUND in peer connection! This will cause no video/audio. Make sure initializeConnection() was called and tracks were added.";
+    console.error(errorMsg);
+    throw new Error("Cannot create answer: no media tracks found. Please ensure camera/microphone permissions are granted.");
+  }
+  
+  // Verify we have both audio and video tracks
+  const audioTracks = senderTracks.filter(t => t?.kind === "audio");
+  const videoTracks = senderTracks.filter(t => t?.kind === "video");
+  if (audioTracks.length === 0 && videoTracks.length === 0) {
+    const errorMsg = "❌ [CHILD HANDLER] No audio or video tracks found!";
+    console.error(errorMsg);
+    throw new Error("Cannot create answer: no media tracks available.");
   }
 
   console.log("✅ [CHILD HANDLER] Creating answer, current state:", pc.signalingState);
   const answer = await pc.createAnswer();
   console.log("✅ [CHILD HANDLER] Answer created, setting local description...");
   await pc.setLocalDescription(answer);
+  
+  // CRITICAL FIX: Verify answer SDP includes media tracks
+  const hasAudio = answer.sdp?.includes("m=audio");
+  const hasVideo = answer.sdp?.includes("m=video");
+  console.log("📋 [CHILD HANDLER] Answer SDP verification:", {
+    type: answer.type,
+    sdpLength: answer.sdp?.length,
+    hasAudio,
+    hasVideo,
+    sdpPreview: answer.sdp?.substring(0, 200),
+  });
+  
+  if (!hasAudio && !hasVideo) {
+    console.error("❌ [CHILD HANDLER] CRITICAL: Answer SDP has no media tracks! This will cause no video/audio.");
+    throw new Error("Answer SDP missing media tracks - ensure tracks are added before creating answer");
+  }
 
   console.log("✅ [CHILD HANDLER] Updating call with answer...", {
     callId: call.id,
@@ -869,19 +897,55 @@ const handleChildInitiatedCall = async (
   }
 
   // CRITICAL: Verify tracks are added before creating offer
+  // This MUST match parent-to-child flow exactly to ensure video/audio work
   const senderTracks = pc.getSenders().map(s => s.track).filter(Boolean);
   console.log("📹 [CHILD CALL] Tracks in peer connection before offer:", {
     audioTracks: senderTracks.filter(t => t?.kind === "audio").length,
     videoTracks: senderTracks.filter(t => t?.kind === "video").length,
     totalTracks: senderTracks.length,
+    senders: pc.getSenders().length,
+    trackDetails: senderTracks.map(t => ({ kind: t.kind, id: t.id, enabled: t.enabled, muted: t.muted })),
   });
+  
+  // CRITICAL GUARD: Fail if no tracks are found - this will cause no video/audio
+  // This prevents silent failures that break video/audio
+  if (senderTracks.length === 0) {
+    const errorMsg = "❌ [CHILD CALL] NO TRACKS FOUND in peer connection! This will cause no video/audio. Make sure initializeConnection() was called and tracks were added.";
+    console.error(errorMsg);
+    throw new Error("Cannot create offer: no media tracks found. Please ensure camera/microphone permissions are granted.");
+  }
+  
+  // Verify we have both audio and video tracks
+  const audioTracks = senderTracks.filter(t => t?.kind === "audio");
+  const videoTracks = senderTracks.filter(t => t?.kind === "video");
+  if (audioTracks.length === 0 && videoTracks.length === 0) {
+    const errorMsg = "❌ [CHILD CALL] No audio or video tracks found!";
+    console.error(errorMsg);
+    throw new Error("Cannot create offer: no media tracks available.");
+  }
 
   // Create and set offer with media constraints
+  // CRITICAL: Ensure offer includes media tracks by explicitly requesting them
   console.log("Creating offer, current signaling state:", pc.signalingState);
   const offer = await pc.createOffer({
     offerToReceiveAudio: true,
     offerToReceiveVideo: true,
   });
+  
+  // CRITICAL FIX: Verify SDP includes media tracks
+  const hasAudio = offer.sdp?.includes("m=audio");
+  const hasVideo = offer.sdp?.includes("m=video");
+  console.log("📋 [CHILD CALL] Offer SDP verification:", {
+    hasAudio,
+    hasVideo,
+    sdpLength: offer.sdp?.length,
+    sdpPreview: offer.sdp?.substring(0, 200),
+  });
+  
+  if (!hasAudio && !hasVideo) {
+    console.error("❌ [CHILD CALL] CRITICAL: Offer SDP has no media tracks! This will cause no video/audio.");
+    throw new Error("Offer SDP missing media tracks - ensure tracks are added before creating offer");
+  }
   console.log("Offer created, setting local description...");
   await pc.setLocalDescription(offer);
 

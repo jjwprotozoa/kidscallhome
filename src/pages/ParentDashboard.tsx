@@ -16,7 +16,19 @@ import { useIncomingCallNotifications } from "@/hooks/useIncomingCallNotificatio
 import { supabase } from "@/integrations/supabase/client";
 import { endCall as endCallUtil } from "@/utils/callEnding";
 import type { RealtimeChannel } from "@supabase/supabase-js";
-import { LogOut, MessageCircle, Phone, Plus, Video } from "lucide-react";
+import {
+  Copy,
+  Edit,
+  ExternalLink,
+  LogOut,
+  MessageCircle,
+  Phone,
+  Plus,
+  Printer,
+  QrCode,
+  Trash2,
+  Video,
+} from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
@@ -49,6 +61,12 @@ const ParentDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [showAddChild, setShowAddChild] = useState(false);
   const [incomingCall, setIncomingCall] = useState<IncomingCall | null>(null);
+  const [showCodeDialog, setShowCodeDialog] = useState<{ child: Child } | null>(
+    null
+  );
+  const [childToDelete, setChildToDelete] = useState<Child | null>(null);
+  const [childToEditCode, setChildToEditCode] = useState<Child | null>(null);
+  const [isUpdatingCode, setIsUpdatingCode] = useState(false);
   const incomingCallRef = useRef<IncomingCall | null>(null); // Ref to track latest incomingCall for subscription callbacks
   const channelRef = useRef<RealtimeChannel | null>(null);
   const isAnsweringRef = useRef(false); // Track if user is answering to prevent auto-decline
@@ -378,8 +396,166 @@ const ParentDashboard = () => {
     navigate(`/chat/${childId}`);
   };
 
+  const handleCopyCode = (code: string) => {
+    navigator.clipboard.writeText(code);
+    toast({
+      title: "Copied!",
+      description: "Login code copied to clipboard",
+    });
+  };
+
+  const handleCopyMagicLink = (child: Child) => {
+    const magicLink = `${window.location.origin}/child/login?code=${child.login_code}`;
+    navigator.clipboard.writeText(magicLink);
+    toast({
+      title: "Copied!",
+      description: "Magic link copied to clipboard",
+    });
+  };
+
+  const handlePrintCode = (child: Child) => {
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) return;
+
+    const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(
+      `${window.location.origin}/child/login?code=${child.login_code}`
+    )}`;
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Login Code - ${child.name}</title>
+          <style>
+            body {
+              font-family: Arial, sans-serif;
+              padding: 40px;
+              text-align: center;
+            }
+            .code-card {
+              border: 2px solid #333;
+              border-radius: 12px;
+              padding: 30px;
+              max-width: 400px;
+              margin: 0 auto;
+            }
+            .child-name {
+              font-size: 24px;
+              font-weight: bold;
+              margin-bottom: 20px;
+            }
+            .login-code {
+              font-size: 32px;
+              font-weight: bold;
+              font-family: monospace;
+              margin: 20px 0;
+              padding: 15px;
+              background: #f0f0f0;
+              border-radius: 8px;
+            }
+            .qr-code {
+              margin: 20px 0;
+            }
+            .instructions {
+              margin-top: 20px;
+              font-size: 14px;
+              color: #666;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="code-card">
+            <div class="child-name">${child.name}'s Login Code</div>
+            <div class="login-code">${child.login_code}</div>
+            <div class="qr-code">
+              <img src="${qrCodeUrl}" alt="QR Code" />
+            </div>
+            <div class="instructions">
+              <p>Scan the QR code or use the code above to log in</p>
+              <p>Visit: ${window.location.origin}/child/login</p>
+            </div>
+          </div>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    setTimeout(() => {
+      printWindow.print();
+    }, 250);
+  };
+
   const handleCall = (childId: string) => {
     navigate(`/call/${childId}`);
+  };
+
+  const handleDeleteChild = async () => {
+    if (!childToDelete) return;
+
+    try {
+      const { error } = await supabase
+        .from("children")
+        .delete()
+        .eq("id", childToDelete.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Child removed",
+        description: `${childToDelete.name} has been removed.`,
+      });
+
+      setChildToDelete(null);
+      fetchChildren();
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error occurred";
+      toast({
+        title: "Error removing child",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleUpdateLoginCode = async () => {
+    if (!childToEditCode) return;
+
+    setIsUpdatingCode(true);
+    try {
+      // Generate a new unique login code using the database function
+      const { data: newCode, error: rpcError } = await supabase.rpc(
+        "generate_unique_login_code"
+      );
+
+      if (rpcError) throw rpcError;
+      if (!newCode) throw new Error("Failed to generate new code");
+
+      // Update the child's login code
+      const { error: updateError } = await supabase
+        .from("children")
+        .update({ login_code: newCode })
+        .eq("id", childToEditCode.id);
+
+      if (updateError) throw updateError;
+
+      toast({
+        title: "Login code updated",
+        description: `${childToEditCode.name}'s new login code is: ${newCode}`,
+      });
+
+      setChildToEditCode(null);
+      fetchChildren();
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error occurred";
+      toast({
+        title: "Error updating login code",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      setIsUpdatingCode(false);
+    }
   };
 
   const handleAnswerCall = () => {
@@ -496,13 +672,62 @@ const ParentDashboard = () => {
               >
                 <div className="space-y-2">
                   <h3 className="text-xl font-bold">{child.name}</h3>
-                  <div className="bg-muted p-3 rounded-lg">
+                  <div className="bg-muted p-3 rounded-lg relative">
                     <p className="text-xs text-muted-foreground mb-1">
                       Login Code
                     </p>
-                    <p className="text-2xl font-mono font-bold tracking-wider">
-                      {child.login_code}
-                    </p>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-2xl font-mono font-bold tracking-wider flex-1">
+                        {child.login_code}
+                      </p>
+                      <Button
+                        onClick={() => setChildToEditCode(child)}
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        title="Generate new login code"
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 flex-wrap">
+                    <Button
+                      onClick={() => handleCopyCode(child.login_code)}
+                      variant="outline"
+                      size="sm"
+                      className="flex-1"
+                    >
+                      <Copy className="mr-2 h-4 w-4" />
+                      Copy Code
+                    </Button>
+                    <Button
+                      onClick={() => handleCopyMagicLink(child)}
+                      variant="outline"
+                      size="sm"
+                      className="flex-1"
+                    >
+                      <ExternalLink className="mr-2 h-4 w-4" />
+                      Copy Link
+                    </Button>
+                    <Button
+                      onClick={() => handlePrintCode(child)}
+                      variant="outline"
+                      size="sm"
+                      className="flex-1"
+                    >
+                      <Printer className="mr-2 h-4 w-4" />
+                      Print
+                    </Button>
+                    <Button
+                      onClick={() => setShowCodeDialog({ child })}
+                      variant="outline"
+                      size="sm"
+                      className="flex-1"
+                    >
+                      <QrCode className="mr-2 h-4 w-4" />
+                      View QR
+                    </Button>
                   </div>
                 </div>
 
@@ -523,6 +748,13 @@ const ParentDashboard = () => {
                     <MessageCircle className="mr-2 h-4 w-4" />
                     Chat
                   </Button>
+                  <Button
+                    onClick={() => setChildToDelete(child)}
+                    variant="destructive"
+                    size="icon"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
                 </div>
               </Card>
             ))}
@@ -535,6 +767,128 @@ const ParentDashboard = () => {
         onOpenChange={setShowAddChild}
         onChildAdded={fetchChildren}
       />
+
+      {/* Code View Dialog */}
+      {showCodeDialog && (
+        <AlertDialog
+          open={!!showCodeDialog}
+          onOpenChange={(open) => !open && setShowCodeDialog(null)}
+        >
+          <AlertDialogContent className="sm:max-w-md">
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                {showCodeDialog.child.name}'s Login Code
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                Share this code or QR code with your child to log in
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="bg-muted p-4 rounded-lg text-center">
+                <p className="text-xs text-muted-foreground mb-2">Login Code</p>
+                <p className="text-3xl font-mono font-bold">
+                  {showCodeDialog.child.login_code}
+                </p>
+              </div>
+              <div className="flex justify-center">
+                <img
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(
+                    `${window.location.origin}/child/login?code=${showCodeDialog.child.login_code}`
+                  )}`}
+                  alt="QR Code"
+                  className="border-2 border-muted rounded-lg"
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  onClick={() =>
+                    handleCopyCode(showCodeDialog.child.login_code)
+                  }
+                  variant="outline"
+                  className="flex-1"
+                >
+                  <Copy className="mr-2 h-4 w-4" />
+                  Copy Code
+                </Button>
+                <Button
+                  onClick={() => handleCopyMagicLink(showCodeDialog.child)}
+                  variant="outline"
+                  className="flex-1"
+                >
+                  <ExternalLink className="mr-2 h-4 w-4" />
+                  Copy Link
+                </Button>
+                <Button
+                  onClick={() => handlePrintCode(showCodeDialog.child)}
+                  variant="outline"
+                  className="flex-1"
+                >
+                  <Printer className="mr-2 h-4 w-4" />
+                  Print
+                </Button>
+              </div>
+            </div>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Close</AlertDialogCancel>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
+
+      {/* Edit Login Code Confirmation Dialog */}
+      <AlertDialog
+        open={!!childToEditCode}
+        onOpenChange={(open) => !open && setChildToEditCode(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Generate New Login Code</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to generate a new login code for{" "}
+              {childToEditCode?.name}? The current code (
+              {childToEditCode?.login_code}) will no longer work. Make sure to
+              share the new code with your child.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isUpdatingCode}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleUpdateLoginCode}
+              disabled={isUpdatingCode}
+            >
+              {isUpdatingCode ? "Generating..." : "Generate New Code"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete Child Confirmation Dialog */}
+      <AlertDialog
+        open={!!childToDelete}
+        onOpenChange={(open) => !open && setChildToDelete(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove Child</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to remove {childToDelete?.name}? This action
+              cannot be undone and will delete all associated data including
+              messages and call history.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteChild}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Incoming Call Dialog */}
       <AlertDialog

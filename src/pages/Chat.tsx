@@ -27,6 +27,7 @@ const Chat = () => {
   const [isChild, setIsChild] = useState(false);
   const [childData, setChildData] = useState<ChildSession | null>(null);
   const [loading, setLoading] = useState(false);
+  const [parentName, setParentName] = useState<string>("Mom/Dad");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -39,6 +40,34 @@ const Chat = () => {
       setChildData(data);
       fetchMessages(data.id);
       subscribeToMessages(data.id);
+      // Fetch parent name for child users - get parent_id from database
+      supabase
+        .from("children")
+        .select("parent_id")
+        .eq("id", data.id)
+        .single()
+        .then(({ data: childRecord, error: childError }) => {
+          if (childError || !childRecord) {
+            console.error("Error fetching child record:", childError);
+            return;
+          }
+          // Now fetch parent name
+          return supabase
+            .from("parents")
+            .select("name")
+            .eq("id", childRecord.parent_id)
+            .maybeSingle();
+        })
+        .then((result) => {
+          if (result?.data?.name) {
+            setParentName(result.data.name);
+          } else if (result?.error) {
+            console.error("Error fetching parent name:", result.error);
+          }
+        })
+        .catch((error) => {
+          console.error("Error fetching parent name:", error);
+        });
     } else if (childId) {
       setIsChild(false);
       fetchMessages(childId);
@@ -156,7 +185,7 @@ const Chat = () => {
             </div>
           )}
           <h1 className="text-xl font-bold text-white">
-            {isChild ? "Mom/Dad" : childData?.name}
+            {isChild ? parentName : childData?.name}
           </h1>
         </div>
       </div>
