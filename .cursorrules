@@ -60,6 +60,12 @@ Treat the following as **protected, high-risk** files and modules:
 
   - `src/hooks/useAudioNotifications.ts`
 
+- Dashboard incoming call subscriptions:
+
+  - `src/pages/ParentDashboard.tsx` (incoming call subscription setup)
+
+  - `src/pages/ChildDashboard.tsx` (incoming call subscription setup)
+
 - Data model (Supabase):
 
   - Any migrations or SQL defining:
@@ -101,6 +107,14 @@ By default, you MUST NOT:
 - Change behavior of:
 
   - `useVideoCall`, `useWebRTC`, `childCallHandler`, `callHandlers`, `callEnding`
+
+- Modify critical patterns:
+
+  - Navigation after call ends (must use route-based `isChild` state, not session checks)
+
+  - Incoming call subscription setup (must include filters and status callbacks)
+
+  - Answer creation when waiting for offer (must verify tracks and SDP)
 
 You may add or adjust **documentation and comments** in these files, but DO NOT change runtime behavior unless the user explicitly requests it (see 1.2).
 
@@ -249,3 +263,125 @@ When the user asks for refactors or cleanups:
     - Change which tables are used for calls.
 
 If in doubt, preserve existing behavior. The call engine is considered critical and working.
+
+## 5. Critical patterns that MUST be preserved
+
+The following patterns are **CRITICAL** and must NOT be modified without explicit user verification:
+
+### 5.1. Navigation after call ends
+
+**Location**: `src/hooks/useVideoCall.ts` - `endCall()` function and termination listener
+
+**Pattern**: Navigation MUST use route-based `isChild` state, NOT session checks
+
+**Why**: Session checks can fail if sessions are cleared during call, causing incorrect navigation
+
+**Code pattern**:
+
+```typescript
+// CORRECT: Use route-based isChild state
+if (isChild) {
+  navigate("/child/dashboard");
+} else {
+  navigate("/parent/dashboard");
+}
+
+// WRONG: Don't re-check sessions
+const isChildUser = !session && !!childSession;
+if (isChildUser) { ... }
+```
+
+**Protection**: If modifying navigation logic, you MUST verify it uses route-based state detection.
+
+### 5.2. Incoming call subscription setup
+
+**Location**:
+
+- `src/pages/ParentDashboard.tsx` - `setupSubscription()` function
+- `src/pages/ChildDashboard.tsx` - `setupSubscription()` function
+
+**Pattern**: Subscriptions MUST include:
+
+1. Database-level filters (`filter: parent_id=eq.${user.id}` or `child_id=eq.${childData.id}`)
+2. Subscription status callback with error handling
+3. Both INSERT and UPDATE event listeners
+
+**Why**: Filters ensure Supabase realtime only sends relevant events. Status callbacks detect subscription failures.
+
+**Code pattern**:
+
+```typescript
+channelRef.current = supabase
+  .channel("parent-incoming-calls")
+  .on(
+    "postgres_changes",
+    {
+      event: "INSERT",
+      schema: "public",
+      table: "calls",
+      filter: `parent_id=eq.${user.id}`, // REQUIRED: Database-level filter
+    },
+    handler
+  )
+  .subscribe((status) => {
+    // REQUIRED: Status callback with error handling
+    if (status === "SUBSCRIBED") {
+      console.log("Successfully subscribed");
+    } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+      // Handle retry
+    }
+  });
+```
+
+**Protection**: If modifying subscription setup, you MUST preserve filters and status callbacks.
+
+### 5.3. Answer creation with track verification
+
+**Location**: `src/utils/callHandlers.ts` - Parent handler when answering child-initiated calls
+
+**Pattern**: When creating an answer (especially when waiting for offer), MUST:
+
+1. Verify tracks exist before creating answer
+2. Verify answer SDP includes media tracks
+3. Match the pattern used in main answer path
+
+**Why**: Missing track verification causes silent failures where video/audio don't work
+
+**Code pattern**:
+
+```typescript
+// REQUIRED: Verify tracks before creating answer
+const senderTracks = pc
+  .getSenders()
+  .map((s) => s.track)
+  .filter(Boolean);
+if (senderTracks.length === 0) {
+  throw new Error("Cannot create answer: no media tracks found");
+}
+
+const answer = await pc.createAnswer();
+await pc.setLocalDescription(answer);
+
+// REQUIRED: Verify answer SDP includes media tracks
+const hasAudio = answer.sdp?.includes("m=audio");
+const hasVideo = answer.sdp?.includes("m=video");
+if (!hasAudio && !hasVideo) {
+  throw new Error("Answer SDP missing media tracks");
+}
+```
+
+**Protection**: If modifying answer creation logic, you MUST preserve track and SDP verification in ALL paths (main path and "waiting for offer" path).
+
+### 5.4. Modification protocol
+
+**BEFORE modifying any of the above patterns**, you MUST:
+
+1. **Ask the user explicitly**: "I need to modify [pattern name]. This is a critical pattern. Are you sure you want to change this?"
+
+2. **Explain the impact**: Describe what could break if the pattern is changed
+
+3. **Verify the change**: After modification, ensure the pattern still works correctly
+
+4. **Update this section**: If the pattern changes, update this documentation
+
+**Exception**: Only modify without asking if the user explicitly says "override the protection" or "it's okay to modify [specific pattern]".

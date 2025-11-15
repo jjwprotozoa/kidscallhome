@@ -319,12 +319,64 @@ export const handleParentCall = async (
                 checkState();
               });
 
+              // CRITICAL: Verify tracks are added before creating answer
+              // This MUST match the main answer path exactly
+              const senderTracks = pc
+                .getSenders()
+                .map((s) => s.track)
+                .filter(Boolean);
+              console.log(
+                "📹 [PARENT HANDLER] Tracks in peer connection before answer (waiting for offer):",
+                {
+                  audioTracks: senderTracks.filter((t) => t?.kind === "audio").length,
+                  videoTracks: senderTracks.filter((t) => t?.kind === "video").length,
+                  totalTracks: senderTracks.length,
+                  senders: pc.getSenders().length,
+                  trackDetails: senderTracks.map((t) => ({
+                    kind: t.kind,
+                    id: t.id,
+                    enabled: t.enabled,
+                    muted: t.muted,
+                  })),
+                }
+              );
+
+              // CRITICAL GUARD: Fail if no tracks are found
+              if (senderTracks.length === 0) {
+                const errorMsg =
+                  "❌ [PARENT HANDLER] NO TRACKS FOUND in peer connection! This will cause no video/audio. Make sure initializeConnection() was called and tracks were added.";
+                console.error(errorMsg);
+                throw new Error(
+                  "Cannot create answer: no media tracks found. Please ensure camera/microphone permissions are granted."
+                );
+              }
+
               const answer = await pc.createAnswer();
               
               // [KCH] Telemetry: Created answer (waiting for offer)
               console.log('[KCH]', 'parent', 'created answer', !!answer?.sdp);
               
               await pc.setLocalDescription(answer);
+
+              // CRITICAL FIX: Verify answer SDP includes media tracks
+              const hasAudio = answer.sdp?.includes("m=audio");
+              const hasVideo = answer.sdp?.includes("m=video");
+              console.log("📋 [PARENT HANDLER] Answer SDP verification (waiting for offer):", {
+                type: answer.type,
+                sdpLength: answer.sdp?.length,
+                hasAudio,
+                hasVideo,
+                sdpPreview: answer.sdp?.substring(0, 200),
+              });
+
+              if (!hasAudio && !hasVideo) {
+                console.error(
+                  "❌ [PARENT HANDLER] CRITICAL: Answer SDP has no media tracks! This will cause no video/audio."
+                );
+                throw new Error(
+                  "Answer SDP missing media tracks - ensure tracks are added before creating answer"
+                );
+              }
 
               // [KCH] Telemetry: Saving answer to Supabase (waiting for offer)
               console.log('[KCH]', 'parent', 'saving answer for call', incomingCall.id);

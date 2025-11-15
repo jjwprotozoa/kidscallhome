@@ -120,7 +120,7 @@ const ChildDashboard = () => {
         // This prevents showing notifications for calls the child initiated
         if (location.pathname.startsWith("/call/")) {
           console.log(
-            "📞 [CHILD DASHBOARD] User is on call page, not showing incoming call notification"
+            "≡ƒô₧ [CHILD DASHBOARD] User is on call page, not showing incoming call notification"
           );
           return;
         }
@@ -182,7 +182,7 @@ const ChildDashboard = () => {
           const call = newCalls[0];
           if (call.id !== lastCheckedCallId) {
             console.log(
-              "📞 [CHILD DASHBOARD] Polling found parent-initiated call:",
+              "≡ƒô₧ [CHILD DASHBOARD] Polling found parent-initiated call:",
               call.id
             );
             await handleIncomingCallNotification(call);
@@ -199,11 +199,6 @@ const ChildDashboard = () => {
 
       // Subscribe to new calls from parent
       // Listen to both INSERT and UPDATE events to catch calls that are reset to ringing
-      console.log("📡 [CHILD DASHBOARD] Setting up realtime subscription for incoming calls", {
-        childId: childData.id,
-        timestamp: new Date().toISOString(),
-      });
-      
       channelRef.current = supabase
         .channel("child-incoming-calls")
         .on(
@@ -212,25 +207,10 @@ const ChildDashboard = () => {
             event: "INSERT",
             schema: "public",
             table: "calls",
-            filter: `child_id=eq.${childData.id}`,
           },
           async (payload) => {
             const call = payload.new as CallRecord;
-            console.log("📞 [CHILD DASHBOARD] Received call INSERT event:", {
-              callId: call.id,
-              callerType: call.caller_type,
-              parentId: call.parent_id,
-              childId: call.child_id,
-              status: call.status,
-              currentChildId: childData.id,
-              matches:
-                call.caller_type === "parent" &&
-                call.child_id === childData.id &&
-                call.status === "ringing",
-              payloadKeys: Object.keys(payload),
-              hasNew: !!payload.new,
-              hasOld: !!payload.old,
-            });
+            console.log("Received call INSERT event:", call);
 
             // Verify this call is from a parent, for this child, and is ringing
             // IMPORTANT: Only show incoming call dialog for parent-initiated calls, not child-initiated ones
@@ -239,28 +219,19 @@ const ChildDashboard = () => {
               call.child_id === childData.id &&
               call.status === "ringing"
             ) {
-              console.log(
-                "✅ [CHILD DASHBOARD] Call is for this child, showing notification..."
-              );
+              console.log("Call is for this child, showing notification...");
               await handleIncomingCallNotification(call);
             } else {
-              console.log(
-                "❌ [CHILD DASHBOARD] Call not for this child or not ringing:",
-                {
-                  callerType: call.caller_type,
-                  callChildId: call.child_id,
-                  currentChildId: childData.id,
-                  status: call.status,
-                  reason:
-                    call.caller_type === "child"
-                      ? "Child-initiated call - not showing notification"
-                      : call.child_id !== childData.id
-                      ? "Call is for a different child"
-                      : call.status !== "ringing"
-                      ? "Call is not in ringing status"
-                      : "Not a ringing parent-initiated call",
-                }
-              );
+              console.log("Call not for this child or not ringing:", {
+                callerType: call.caller_type,
+                callChildId: call.child_id,
+                currentChildId: childData.id,
+                status: call.status,
+                reason:
+                  call.caller_type === "child"
+                    ? "Child-initiated call - not showing notification"
+                    : "Not a ringing parent-initiated call",
+              });
             }
           }
         )
@@ -270,27 +241,20 @@ const ChildDashboard = () => {
             event: "UPDATE",
             schema: "public",
             table: "calls",
-            filter: `child_id=eq.${childData.id}`,
           },
           async (payload) => {
             const call = payload.new as CallRecord;
             const oldCall = payload.old as CallRecord;
-            console.log("📞 [CHILD DASHBOARD] Received call UPDATE event:", {
-              callId: call.id,
-              callerType: call.caller_type,
-              parentId: call.parent_id,
-              childId: call.child_id,
-              status: call.status,
-              oldStatus: oldCall?.status,
-              currentChildId: childData.id,
-              timestamp: new Date().toISOString(),
+            console.log("Received call UPDATE event:", {
+              new: call,
+              old: oldCall,
             });
 
             // CRITICAL: Always ignore child-initiated calls - they should never show notifications
             // Child-initiated calls are handled by the call page, not the dashboard
             if (call.caller_type === "child") {
               console.log(
-                "📞 [CHILD DASHBOARD] Ignoring child-initiated call update:",
+                "≡ƒô₧ [CHILD DASHBOARD] Ignoring child-initiated call update:",
                 {
                   callId: call.id,
                   status: call.status,
@@ -305,7 +269,7 @@ const ChildDashboard = () => {
             // Don't process updates if user is on the call page
             if (location.pathname.startsWith("/call/")) {
               console.log(
-                "📞 [CHILD DASHBOARD] User is on call page, ignoring UPDATE event"
+                "≡ƒô₧ [CHILD DASHBOARD] User is on call page, ignoring UPDATE event"
               );
               return;
             }
@@ -340,13 +304,7 @@ const ChildDashboard = () => {
             }
           }
         )
-        .subscribe((status) => {
-          console.log("📡 [CHILD DASHBOARD] Realtime subscription status:", status, {
-            channel: "child-incoming-calls",
-            childId: childData.id,
-            timestamp: new Date().toISOString(),
-          });
-        });
+        .subscribe();
     };
 
     setupSubscription();
@@ -380,7 +338,7 @@ const ChildDashboard = () => {
 
   const handleCall = () => {
     if (child) {
-      console.log("📞 [CHILD DASHBOARD] Child clicked 'Call' button, navigating to call page:", {
+      console.log("≡ƒô₧ [CHILD DASHBOARD] Child clicked 'Call' button, navigating to call page:", {
         childId: child.id,
         timestamp: new Date().toISOString()
       });
@@ -396,7 +354,7 @@ const ChildDashboard = () => {
 
   const handleAnswerCall = () => {
     if (incomingCall && child) {
-      console.log("📞 [USER ACTION] Child answering call", {
+      console.log("≡ƒô₧ [USER ACTION] Child answering call", {
         callId: incomingCall.id,
         childId: child.id,
         timestamp: new Date().toISOString(),
@@ -412,7 +370,7 @@ const ChildDashboard = () => {
       // Reset the flag after navigation completes (longer delay to ensure navigation happened)
       setTimeout(() => {
         console.log(
-          "📞 [USER ACTION] Resetting isAnswering flag after navigation"
+          "≡ƒô₧ [USER ACTION] Resetting isAnswering flag after navigation"
         );
         isAnsweringRef.current = false;
       }, 2000); // Increased from 500ms to 2000ms to ensure navigation completed
@@ -421,7 +379,7 @@ const ChildDashboard = () => {
 
   const handleDeclineCall = async () => {
     if (incomingCall) {
-      console.log("🛑 [USER ACTION] Child declining call", {
+      console.log("≡ƒ¢æ [USER ACTION] Child declining call", {
         callId: incomingCall.id,
         isAnswering: isAnsweringRef.current,
         timestamp: new Date().toISOString(),
@@ -430,7 +388,7 @@ const ChildDashboard = () => {
       // Don't decline if we're in the process of answering
       if (isAnsweringRef.current) {
         console.log(
-          "⚠️ [USER ACTION] Prevented decline - call is being answered"
+          "ΓÜá∩╕Å [USER ACTION] Prevented decline - call is being answered"
         );
         return;
       }
@@ -443,7 +401,7 @@ const ChildDashboard = () => {
           reason: "declined",
         });
       } catch (error: unknown) {
-        console.error("❌ [USER ACTION] Error declining call:", error);
+        console.error("Γ¥î [USER ACTION] Error declining call:", error);
         const errorMessage =
           error instanceof Error ? error.message : "Unknown error";
         toast({
@@ -526,7 +484,7 @@ const ChildDashboard = () => {
       <AlertDialog
         open={!!incomingCall}
         onOpenChange={(open) => {
-          console.log("📞 [UI EVENT] Incoming call dialog open state changed", {
+          console.log("≡ƒô₧ [UI EVENT] Incoming call dialog open state changed", {
             open: open,
             hasIncomingCall: !!incomingCall,
             isAnswering: isAnsweringRef.current,
@@ -536,12 +494,12 @@ const ChildDashboard = () => {
           // Don't decline if user is answering (isAnsweringRef will be true)
           if (!open && incomingCall && !isAnsweringRef.current) {
             console.log(
-              "🛑 [UI EVENT] Dialog closed without answering - declining call"
+              "≡ƒ¢æ [UI EVENT] Dialog closed without answering - declining call"
             );
             handleDeclineCall();
           } else if (!open && isAnsweringRef.current) {
             console.log(
-              "✅ [UI EVENT] Dialog closed but call is being answered - not declining"
+              "Γ£à [UI EVENT] Dialog closed but call is being answered - not declining"
             );
           }
         }}
@@ -555,7 +513,7 @@ const ChildDashboard = () => {
                   backgroundColor: child?.avatar_color || "#3B82F6",
                 }}
               >
-                📞
+                ≡ƒô₧
               </div>
               <div>
                 <AlertDialogTitle className="text-xl">Incoming Call</AlertDialogTitle>
