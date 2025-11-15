@@ -34,11 +34,18 @@ export const useVideoCall = () => {
     if (isChildRoute) return true;
     // If on parent route, definitely a parent
     if (isParentRoute) return false;
-    // Fallback: check session synchronously (may not be perfect but better than false)
+    // Fallback: check session synchronously
+    // CRITICAL: Prioritize childSession - if it exists, user is likely a child
+    // The async check below will verify this properly, but for initial state:
+    // If childSession exists, assume child (will be corrected by async check if wrong)
     const childSession = localStorage.getItem("childSession");
-    const hasAuthSession =
-      document.cookie.includes("sb-") || localStorage.getItem("sb-");
-    return !hasAuthSession && !!childSession;
+    if (childSession) {
+      // Has childSession - assume child initially
+      // The async determineUserType() below will verify this properly
+      return true;
+    }
+    // No childSession - must be a parent (or not logged in, but that's handled elsewhere)
+    return false;
   });
 
   const [callId, setCallId] = useState<string | null>(null);

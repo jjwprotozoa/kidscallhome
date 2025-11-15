@@ -1,6 +1,7 @@
 // src/hooks/useCallEngine.ts
 // Call engine hook implementing state machine for parent/child calls
 
+import { initCallsRealtimeDebug } from "@/features/calls/dev/callsRealtimeDebug";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
@@ -70,6 +71,20 @@ export const useCallEngine = ({
     peerConnectionRef: webRTCPeerConnectionRef,
     playRemoteVideo,
   } = useWebRTC(callId, localVideoRef, remoteVideoRef, role === "child");
+
+  // NOTE: This hook optionally attaches a Supabase Realtime listener for the `calls` table
+  // in development. It is used only for debugging signaling issues and should not be
+  // enabled in production.
+  useEffect(() => {
+    // Dev-only realtime debug for calls table
+    if (
+      import.meta.env.DEV &&
+      import.meta.env.VITE_ENABLE_CALLS_REALTIME_DEBUG === "true"
+    ) {
+      const cleanup = initCallsRealtimeDebug();
+      return () => cleanup?.();
+    }
+  }, []);
 
   // Initialize WebRTC connection
   useEffect(() => {

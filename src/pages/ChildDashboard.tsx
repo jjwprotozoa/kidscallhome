@@ -346,6 +346,21 @@ const ChildDashboard = () => {
             childId: childData.id,
             timestamp: new Date().toISOString(),
           });
+          
+          // Verify subscription is actually subscribed
+          if (status === "SUBSCRIBED") {
+            console.log("✅ [CHILD DASHBOARD] Successfully subscribed to incoming calls");
+          } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+            console.error("❌ [CHILD DASHBOARD] Subscription failed:", status);
+            // Retry subscription after a delay
+            setTimeout(() => {
+              console.log("🔄 [CHILD DASHBOARD] Retrying subscription...");
+              if (channelRef.current) {
+                supabase.removeChannel(channelRef.current);
+              }
+              setupSubscription();
+            }, 2000);
+          }
         });
     };
 
