@@ -66,20 +66,86 @@ export const handleParentCall = async (
         "📞 [PARENT CALL] Existing call has no offer, creating one..."
       );
       const offer = await pc.createOffer();
+      
+      // [KCH] Telemetry: Created offer (existing call)
+      console.log('[KCH]', 'parent', 'created offer', !!offer?.sdp);
+      
       await pc.setLocalDescription(offer);
+
+      // [KCH] Telemetry: Saving offer to Supabase (existing call)
+      console.log('[KCH]', 'parent', 'saving offer for call', existingCall.id);
 
       await supabase
         .from("calls")
         .update({ offer: { type: offer.type, sdp: offer.sdp } as Json })
         .eq("id", existingCall.id);
-    } else if (existingCall.offer && pc.localDescription === null) {
-      // Offer exists but peer connection doesn't have it - set it
-      console.log(
-        "📞 [PARENT CALL] Setting local description from existing offer..."
-      );
-      const offerDesc =
-        existingCall.offer as unknown as RTCSessionDescriptionInit;
-      await pc.setLocalDescription(new RTCSessionDescription(offerDesc));
+    } else if (existingCall.offer) {
+      // Offer exists - check if we need to set it
+      const existingOffer = existingCall.offer as unknown as RTCSessionDescriptionInit;
+      
+      // Check current state of peer connection
+      const hasLocalDesc = pc.localDescription !== null;
+      const signalingState = pc.signalingState;
+      const hasTracks = pc.getSenders().length > 0;
+      
+      console.log("📞 [PARENT CALL] Checking existing offer:", {
+        hasLocalDescription: hasLocalDesc,
+        signalingState,
+        hasTracks,
+        offerType: existingOffer.type,
+        offerSdpLength: existingOffer.sdp?.length,
+      });
+      
+      // If peer connection already has tracks, it's been initialized and we shouldn't try to set
+      // the local description from an old offer - the connection is already in progress
+      if (hasTracks && hasLocalDesc) {
+        console.log(
+          "✅ [PARENT CALL] Peer connection already initialized with tracks and local description. " +
+          "Skipping setLocalDescription - connection is already in progress."
+        );
+      } else if (!hasLocalDesc && signalingState === "stable" && !hasTracks) {
+        // No local description set, connection is stable, and no tracks yet - safe to set it
+        console.log(
+          "📞 [PARENT CALL] Setting local description from existing offer..."
+        );
+        try {
+          await pc.setLocalDescription(new RTCSessionDescription(existingOffer));
+          console.log("✅ [PARENT CALL] Successfully set local description from existing offer");
+        } catch (error: unknown) {
+          const err = error as Error;
+          // If error is about SDP mismatch, the description was set elsewhere or connection state changed
+          if (err.message?.includes("does not match") || err.message?.includes("SDP") || err.message?.includes("InvalidModificationError")) {
+            console.warn(
+              "⚠️ [PARENT CALL] Could not set local description - already set with different SDP. " +
+              "This may indicate the connection was already initialized. Continuing without error..."
+            );
+            // Don't throw - continue with the call setup
+          } else {
+            // Re-throw other errors
+            console.error("❌ [PARENT CALL] Unexpected error setting local description:", err);
+            throw error;
+          }
+        }
+      } else if (hasLocalDesc) {
+        // Local description already exists - verify it matches
+        if (pc.localDescription.sdp !== existingOffer.sdp) {
+          console.warn(
+            "⚠️ [PARENT CALL] Local description already set but doesn't match existing offer. " +
+            `Current SDP length: ${pc.localDescription.sdp?.length}, Offer SDP length: ${existingOffer.sdp?.length}. ` +
+            "This may indicate a race condition. Skipping setLocalDescription and continuing."
+          );
+        } else {
+          console.log(
+            "✅ [PARENT CALL] Local description already matches existing offer"
+          );
+        }
+      } else {
+        // Signaling state is not stable or has tracks - connection is in progress
+        console.warn(
+          `⚠️ [PARENT CALL] Cannot set local description - signaling state is "${signalingState}", hasTracks: ${hasTracks}. ` +
+          "This may indicate the connection is already in progress. Skipping setLocalDescription."
+        );
+      }
     }
 
     // Set up listener for this existing call
@@ -160,8 +226,7 @@ export const handleParentCall = async (
             }
 
             // Add ICE candidates from child
-            const candidatesToProcess = (updatedCall.child_ice_candidates ||
-              updatedCall.ice_candidates) as unknown as
+            const candidatesToProcess = updatedCall.child_ice_candidates as unknown as
               | RTCIceCandidateInit[]
               | null;
 
@@ -255,7 +320,14 @@ export const handleParentCall = async (
               });
 
               const answer = await pc.createAnswer();
+              
+              // [KCH] Telemetry: Created answer (waiting for offer)
+              console.log('[KCH]', 'parent', 'created answer', !!answer?.sdp);
+              
               await pc.setLocalDescription(answer);
+
+              // [KCH] Telemetry: Saving answer to Supabase (waiting for offer)
+              console.log('[KCH]', 'parent', 'saving answer for call', incomingCall.id);
 
               await supabase
                 .from("calls")
@@ -349,6 +421,10 @@ export const handleParentCall = async (
       pc.signalingState
     );
     const answer = await pc.createAnswer();
+    
+    // [KCH] Telemetry: Created answer
+    console.log('[KCH]', 'parent', 'created answer', !!answer?.sdp);
+    
     console.log(
       "✅ [PARENT HANDLER] Answer created, setting local description..."
     );
@@ -378,6 +454,10 @@ export const handleParentCall = async (
       callId: incomingCall.id,
       answerType: answer.type,
     });
+    
+    // [KCH] Telemetry: Saving answer to Supabase
+    console.log('[KCH]', 'parent', 'saving answer for call', incomingCall.id);
+    
     const { error: updateError } = await supabase
       .from("calls")
       .update({
@@ -477,8 +557,7 @@ export const handleParentCall = async (
 
           // Add ICE candidates - CRITICAL for connection establishment
           // Parent reads child's candidates from child_ice_candidates field
-          const candidatesToProcess = (updatedCall.child_ice_candidates ||
-            updatedCall.ice_candidates) as unknown as
+          const candidatesToProcess = updatedCall.child_ice_candidates as unknown as
             | RTCIceCandidateInit[]
             | null;
 
@@ -486,8 +565,8 @@ export const handleParentCall = async (
             const queuedCount = iceCandidatesQueue.current.length;
             const processedCount = candidatesToProcess.length;
 
-            // Only log summary periodically to reduce console spam
-            if (processedCount > 0 && processedCount % 5 === 0) {
+            // Log first batch and then periodically
+            if (processedCount > 0 && (processedCount <= 5 || processedCount % 5 === 0)) {
               console.log(
                 "🧊 [PARENT HANDLER] Processing ICE candidates (from child):",
                 {
@@ -495,9 +574,7 @@ export const handleParentCall = async (
                   queued: queuedCount,
                   hasRemoteDescription: !!pc.remoteDescription,
                   iceConnectionState: pc.iceConnectionState,
-                  source: updatedCall.child_ice_candidates
-                    ? "child_ice_candidates"
-                    : "ice_candidates (legacy)",
+                  source: "child_ice_candidates",
                 }
               );
             }
@@ -621,6 +698,9 @@ export const handleParentCall = async (
       offerToReceiveAudio: true,
       offerToReceiveVideo: true,
     });
+    
+    // [KCH] Telemetry: Created offer
+    console.log('[KCH]', 'parent', 'created offer', !!offer?.sdp);
 
     // CRITICAL FIX: Verify SDP includes media tracks
     const hasAudio = offer.sdp?.includes("m=audio");
@@ -645,6 +725,9 @@ export const handleParentCall = async (
 
     const offerData = { type: offer.type, sdp: offer.sdp };
     console.log("Updating call with offer:", { callId: call.id, offerData });
+
+    // [KCH] Telemetry: Saving offer to Supabase
+    console.log('[KCH]', 'parent', 'saving offer for call', call.id);
 
     // Try update without select first to avoid potential issues (mirror child-to-parent approach)
     const { data: updateData, error: updateError } = await supabase
@@ -860,8 +943,7 @@ export const handleParentCall = async (
                 // CRITICAL: Process any existing ICE candidates from child immediately
                 // Child may have already sent candidates before parent's listener processed the answer
                 // Process candidates from the updatedCall payload
-                const existingCandidates = (updatedCall.child_ice_candidates ||
-                  updatedCall.ice_candidates) as unknown as
+                const existingCandidates = updatedCall.child_ice_candidates as unknown as
                   | RTCIceCandidateInit[]
                   | null;
                 if (

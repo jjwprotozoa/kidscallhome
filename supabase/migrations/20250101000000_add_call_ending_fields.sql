@@ -171,8 +171,7 @@ BEGIN
     UPDATE public.calls 
     SET 
       parent_ice_candidates = '[]'::jsonb,
-      child_ice_candidates = '[]'::jsonb,
-      ice_candidates = '[]'::jsonb
+      child_ice_candidates = '[]'::jsonb
     WHERE id = NEW.id;
     
     -- Optional: null out big blobs to save space (keep for debugging, but could be cleared)

@@ -15,7 +15,6 @@ export interface CallRecord {
   status: "ringing" | "active" | "ended";
   offer?: unknown;
   answer?: unknown;
-  ice_candidates?: unknown;
   parent_ice_candidates?: unknown;
   child_ice_candidates?: unknown;
   created_at: string;

@@ -29,11 +29,12 @@ export default defineConfig(({ mode }) => {
       // HTTPS disabled for now - use ngrok or similar for iOS testing
       // https: true, // Uncomment this if you set up proper certificates
       strictPort: false, // Allow port fallback if 8080 is taken
-      // Allow ngrok hosts for iPhone testing
+      // Allow ngrok and Cloudflare tunnel hosts for iPhone testing
       allowedHosts: [
         ".ngrok-free.app",
         ".ngrok.app",
         ".ngrok.io",
+        ".trycloudflare.com",
       ],
     },
     plugins: [

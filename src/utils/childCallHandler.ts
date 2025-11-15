@@ -73,28 +73,8 @@ export const handleChildCall = async (
     }
   }
 
-  // First, check if there's an existing call the child initiated
-  const { data: existingCall } = await supabase
-    .from("calls")
-    .select("*")
-    .eq("child_id", child.id)
-    .eq("parent_id", childData.parent_id)
-    .in("status", ["ringing", "active"])
-    .eq("caller_type", "child")
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (existingCall) {
-    return handleExistingCall(
-      pc,
-      existingCall,
-      setCallId,
-      setIsConnecting,
-      iceCandidatesQueue
-    );
-  }
-
+  // CRITICAL FIX: Check for incoming parent calls FIRST
+  // This ensures child answers parent's call instead of continuing an old child-initiated call
   // Check if there's an incoming call from parent
   // IMPORTANT: When child is INITIATING a call (not answering), only check for RINGING calls
   // We should NOT answer old ended calls when trying to make a new call
@@ -170,6 +150,30 @@ export const handleChildCall = async (
     }
   }
 
+  // Only check for existing child-initiated calls if no incoming parent call exists
+  // This prevents treating our own outgoing call as incoming
+  const { data: existingCall } = await supabase
+    .from("calls")
+    .select("*")
+    .eq("child_id", child.id)
+    .eq("parent_id", childData.parent_id)
+    .in("status", ["ringing", "active"])
+    .eq("caller_type", "child")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (existingCall) {
+    console.log("📞 [CHILD CALL] Found existing child-initiated call, continuing it:", existingCall.id);
+    return handleExistingCall(
+      pc,
+      existingCall,
+      setCallId,
+      setIsConnecting,
+      iceCandidatesQueue
+    );
+  }
+
   // CRITICAL: Only create new call if NO incoming parent call exists
   // This prevents creating a new call when we should be answering an existing one
   console.log("📞 [CHILD CALL] No existing or incoming call found - child initiating new call");
@@ -205,7 +209,6 @@ const handleExistingCall = async (
         ended_at: null, // Clear ended_at when resetting to ringing (constraint requires ended_at IS NULL for non-ended status)
         offer: null,
         answer: null,
-        ice_candidates: null,
         parent_ice_candidates: null,
         child_ice_candidates: null,
       })
@@ -218,7 +221,6 @@ const handleExistingCall = async (
       existingCall.status = "ringing";
       existingCall.offer = undefined;
       existingCall.answer = undefined;
-      existingCall.ice_candidates = undefined;
       wasReset = true;
     }
   }
@@ -466,7 +468,7 @@ const handleExistingCall = async (
 
           // Add ICE candidates - CRITICAL for connection establishment
           // Child reads parent's candidates from parent_ice_candidates field
-          const candidatesToProcess = (updatedCall.parent_ice_candidates || updatedCall.ice_candidates) as unknown as RTCIceCandidateInit[] | null;
+          const candidatesToProcess = updatedCall.parent_ice_candidates as unknown as RTCIceCandidateInit[] | null;
           
           if (candidatesToProcess && Array.isArray(candidatesToProcess)) {
             // Only log summary periodically (every 10th batch)
@@ -588,6 +590,10 @@ const handleIncomingCallFromParent = async (
 
   console.log("✅ [CHILD HANDLER] Creating answer, current state:", pc.signalingState);
   const answer = await pc.createAnswer();
+  
+  // [KCH] Telemetry: Created answer
+  console.log('[KCH]', 'child', 'created answer', !!answer?.sdp);
+  
   console.log("✅ [CHILD HANDLER] Answer created, setting local description...");
   await pc.setLocalDescription(answer);
   
@@ -611,6 +617,10 @@ const handleIncomingCallFromParent = async (
     callId: call.id,
     answerType: answer.type,
   });
+  
+  // [KCH] Telemetry: Saving answer to Supabase
+  console.log('[KCH]', 'child', 'saving answer for call', call.id);
+  
   const { error: updateError } = await supabase
     .from("calls")
     .update({
@@ -655,12 +665,12 @@ const handleIncomingCallFromParent = async (
     try {
       const { data: currentCall } = await supabase
         .from("calls")
-        .select("parent_ice_candidates, ice_candidates")
+        .select("parent_ice_candidates")
         .eq("id", call.id)
         .maybeSingle();
 
       if (currentCall) {
-        const existingCandidates = (currentCall.parent_ice_candidates || currentCall.ice_candidates) as unknown as RTCIceCandidateInit[] | null;
+        const existingCandidates = currentCall.parent_ice_candidates as unknown as RTCIceCandidateInit[] | null;
         if (existingCandidates && Array.isArray(existingCandidates) && existingCandidates.length > 0) {
           console.log("🧊 [CHILD HANDLER] Processing existing ICE candidates from parent (immediate):", {
             count: existingCandidates.length,
@@ -744,7 +754,7 @@ const handleIncomingCallFromParent = async (
 
           // Add ICE candidates - CRITICAL for connection establishment
           // Child reads parent's candidates from parent_ice_candidates field
-          const candidatesToProcess = (updatedCall.parent_ice_candidates || updatedCall.ice_candidates) as unknown as RTCIceCandidateInit[] | null;
+          const candidatesToProcess = updatedCall.parent_ice_candidates as unknown as RTCIceCandidateInit[] | null;
           
           if (candidatesToProcess && Array.isArray(candidatesToProcess)) {
             const queuedCount = iceCandidatesQueue.current.length;
@@ -932,6 +942,9 @@ const handleChildInitiatedCall = async (
     offerToReceiveVideo: true,
   });
   
+  // [KCH] Telemetry: Created offer
+  console.log('[KCH]', 'child', 'created offer', !!offer?.sdp);
+  
   // CRITICAL FIX: Verify SDP includes media tracks
   const hasAudio = offer.sdp?.includes("m=audio");
   const hasVideo = offer.sdp?.includes("m=video");
@@ -951,6 +964,9 @@ const handleChildInitiatedCall = async (
 
   const offerData = { type: offer.type, sdp: offer.sdp };
   console.log("Updating call with offer:", { callId: call.id, offerData });
+  
+  // [KCH] Telemetry: Saving offer to Supabase
+  console.log('[KCH]', 'child', 'saving offer for call', call.id);
   
   // Try update without select first to avoid potential issues
   const { data: updateData, error: updateError } = await supabase

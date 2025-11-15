@@ -23,6 +23,7 @@ interface ChildSession {
   id: string;
   name: string;
   avatar_color: string;
+  parent_id: string;
 }
 
 interface IncomingCall {

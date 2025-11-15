@@ -13,6 +13,7 @@ interface UseWebRTCReturn {
   remoteStream: MediaStream | null;
   isConnecting: boolean;
   setIsConnecting: (value: boolean) => void;
+  isConnected: boolean; // True only when ICE is connected/completed
   initializeConnection: () => Promise<void>;
   cleanup: (force?: boolean) => void;
   iceCandidatesQueue: React.MutableRefObject<RTCIceCandidateInit[]>;
@@ -28,6 +29,7 @@ export const useWebRTC = (
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const [isConnecting, setIsConnecting] = useState(true);
+  const [isConnected, setIsConnected] = useState(false); // Track actual ICE connection state
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const iceCandidatesQueue = useRef<RTCIceCandidateInit[]>([]);
@@ -108,6 +110,13 @@ export const useWebRTC = (
             readyState: t.readyState,
             settings: t.getSettings(),
           })),
+        });
+        
+        // [KCH] Telemetry: Log media tracks after getUserMedia
+        const role = isChild ? 'child' : 'parent';
+        console.log('[KCH]', role, 'media tracks', {
+          audio: stream.getAudioTracks().length,
+          video: stream.getVideoTracks().length,
         });
 
         // Verify tracks are actually working
@@ -204,6 +213,10 @@ export const useWebRTC = (
         const state = pc.connectionState;
         const iceState = pc.iceConnectionState;
         const signalingState = pc.signalingState;
+        
+        // [KCH] Telemetry: Connection state
+        const role = isChild ? 'child' : 'parent';
+        console.log('[KCH]', role, 'connectionState', state);
         
         console.log("🔵 [CONNECTION STATE] Peer connection state changed:", {
           connectionState: state,
@@ -302,6 +315,10 @@ export const useWebRTC = (
         const iceState = pc.iceConnectionState;
         const timeInState = Date.now() - iceStateStartTime;
         
+        // [KCH] Telemetry: ICE connection state
+        const role = isChild ? 'child' : 'parent';
+        console.log('[KCH]', role, 'iceConnectionState', iceState);
+        
         console.log("🧊 [ICE STATE] ICE connection state changed:", {
           iceConnectionState: iceState,
           connectionState: pc.connectionState,
@@ -318,6 +335,10 @@ export const useWebRTC = (
 
         if (iceState === "connected" || iceState === "completed") {
           console.log("✅ [ICE STATE] ICE connection established - media should flow now!");
+          
+          // CRITICAL: Mark as connected only when ICE is actually connected
+          setIsConnected(true);
+          setIsConnecting(false);
           
           // CRITICAL FIX: When ICE connects, aggressively ensure remote stream is playing
           // This is especially important for parent-to-child calls
@@ -424,6 +445,10 @@ export const useWebRTC = (
             timestamp: new Date().toISOString(),
           });
           
+          // Mark as disconnected
+          setIsConnected(false);
+          setIsConnecting(false);
+          
           // Auto-end call on ICE failure if callId exists
           // Only if the call row isn't ended yet
           const activeCallId = currentCallIdRef.current;
@@ -437,6 +462,9 @@ export const useWebRTC = (
             });
           }
         } else if (iceState === "checking") {
+          // Still connecting - don't mark as connected yet
+          setIsConnected(false);
+          setIsConnecting(true);
           console.log("⏳ [ICE STATE] ICE connection checking - waiting for connection (this is normal)...");
           
           // Warn if stuck in "checking" for too long - this might indicate ICE candidates aren't being processed correctly
@@ -470,6 +498,10 @@ export const useWebRTC = (
           }, ICE_STUCK_TIMEOUT);
         } else if (iceState === "new") {
           console.log("🆕 [ICE STATE] ICE connection new - connection starting (this is normal)...");
+          
+          // Still connecting - don't mark as connected yet
+          setIsConnected(false);
+          setIsConnecting(true);
           
           // Warn if stuck in "new" for too long - this might indicate ICE candidates aren't being exchanged
           setTimeout(() => {
@@ -851,16 +883,31 @@ export const useWebRTC = (
 
             // Only log first candidate to reduce console spam
             const currentCount = processedCandidateIds.size;
+            const role = isChild ? "child" : "parent";
             if (currentCount === 1) {
               console.log("🧊 [ICE CANDIDATE] ICE gathering started:", {
-                role: isChild ? "child" : "parent",
+                role,
                 callId: activeCallId,
+                isChild,
+                timestamp: new Date().toISOString(),
               });
             }
 
-            // Use role-specific field to prevent overwriting
+            // CRITICAL: Use role-specific field to prevent overwriting
             // Child writes to child_ice_candidates, parent writes to parent_ice_candidates
+            // This MUST match the role - if wrong, ICE candidates won't be exchanged correctly
             const candidateField = isChild ? "child_ice_candidates" : "parent_ice_candidates";
+            
+            // Verify role is correct (log first candidate only)
+            if (currentCount === 1) {
+              console.log("🔍 [ICE CANDIDATE] Role verification:", {
+                isChild,
+                role,
+                candidateField,
+                expectedField: isChild ? "child_ice_candidates" : "parent_ice_candidates",
+                matches: candidateField === (isChild ? "child_ice_candidates" : "parent_ice_candidates"),
+              });
+            }
             
             // Use a more atomic approach: read current, append, write back
             const { data: call, error: selectError } = await supabase
@@ -1243,6 +1290,7 @@ export const useWebRTC = (
     remoteStream,
     isConnecting,
     setIsConnecting,
+    isConnected, // Expose actual ICE connection state
     initializeConnection,
     cleanup,
     iceCandidatesQueue,

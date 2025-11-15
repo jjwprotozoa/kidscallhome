@@ -20,7 +20,25 @@ export const useVideoCall = () => {
   const { playRingtone, stopRingtone, playCallAnswered } = useAudioNotifications({ enabled: true, volume: 0.7 });
   const initializationRef = useRef(false);
 
-  const [isChild, setIsChild] = useState(false);
+  // CRITICAL FIX: Derive isChild synchronously from route/session BEFORE useWebRTC
+  // This ensures ICE candidates go to the correct database columns
+  // Check route path first (most reliable)
+  const isChildRoute = window.location.pathname.includes('/child/');
+  const isParentRoute = window.location.pathname.includes('/parent/');
+  
+  // Derive from route or fallback to session check
+  // Use useState with initial value derived synchronously
+  const [isChild] = useState(() => {
+    // If on child route, definitely a child
+    if (isChildRoute) return true;
+    // If on parent route, definitely a parent
+    if (isParentRoute) return false;
+    // Fallback: check session synchronously (may not be perfect but better than false)
+    const childSession = localStorage.getItem("childSession");
+    const hasAuthSession = document.cookie.includes('sb-') || localStorage.getItem('sb-');
+    return !hasAuthSession && !!childSession;
+  });
+  
   const [callId, setCallId] = useState<string | null>(null);
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
@@ -29,6 +47,15 @@ export const useVideoCall = () => {
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const callChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const terminationChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+
+  // CRITICAL: Log role to verify it's correct
+  console.log("🔍 [ROLE DETECTION] useVideoCall role:", {
+    isChild,
+    route: window.location.pathname,
+    isChildRoute,
+    isParentRoute,
+    timestamp: new Date().toISOString(),
+  });
 
   const {
     localStream,
@@ -40,6 +67,7 @@ export const useVideoCall = () => {
     iceCandidatesQueue,
     peerConnectionRef,
     playRemoteVideo,
+    isConnected, // Add connection state from useWebRTC
   } = useWebRTC(callId, localVideoRef, remoteVideoRef, isChild);
 
   // Track if we've already attempted to play to avoid multiple calls
@@ -81,7 +109,9 @@ export const useVideoCall = () => {
       const pc = peerConnectionRef.current;
       const iceState = pc?.iceConnectionState;
       const video = remoteVideoRef.current;
-      const callIsConnected = !isConnecting; // Call is connected when not connecting
+      // CRITICAL FIX: Only mark as connected when ICE is actually connected
+      // Don't rely on isConnecting flag alone - use actual ICE state
+      const callIsConnected = isConnected && !!remoteStream;
       
       console.log("🎬 [VIDEO PLAY] Attempting to play remote video:", {
         hasRemoteStream: !!remoteStream,
@@ -224,42 +254,62 @@ export const useVideoCall = () => {
       return;
     }
 
-    const childSession = localStorage.getItem("childSession");
-    const isChildUser = !!childSession;
-    setIsChild(isChildUser);
-
-    let isMounted = true;
-    initializationRef.current = true;
-
-    initializeCall(isChildUser).catch((error) => {
-      if (isMounted) {
-        console.error("Call initialization error:", error);
-        initializationRef.current = false; // Allow retry on error
-        const errorMessage =
-          error instanceof Error ? error.message : "Unknown error occurred";
-        
-        // Only show error toast, don't navigate away
-        // Navigation should only happen in specific error handlers
-        toast({
-          title: "Connection Error",
-          description: errorMessage,
-          variant: "destructive",
+    // CRITICAL: Check auth session FIRST - parents have auth session, children don't
+    // If user has auth session, they are a parent (even if childSession exists)
+    // NOTE: isChild is now derived synchronously above, but we still need to determine it
+    // for initializeCall - use the same logic
+    const determineUserType = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      const childSession = localStorage.getItem("childSession");
+      // Parent if has auth session (even if childSession exists)
+      // Child if has childSession but NO auth session
+      const isChildUser = !session && !!childSession;
+      // isChild is already set synchronously above, but verify it matches
+      if (isChildUser !== isChild) {
+        console.warn("⚠️ [ROLE DETECTION] Role mismatch detected:", {
+          isChildState: isChild,
+          isChildUser,
+          route: window.location.pathname,
         });
-        
-        // Don't cleanup on initialization errors - let user retry
-        // Cleanup should only happen when call ends or component unmounts
-        // For child users, don't navigate on initialization errors
-        // They should stay on the call page to retry
-        // Only navigate if it's a critical session error (handled in handleChildCallFlow)
-        if (!isChildUser) {
-          // For parent users, errors are handled in handleParentCallFlow
-          // Don't navigate here either - let them stay on the page
-        }
       }
+      return isChildUser;
+    };
+
+    determineUserType().then((isChildUser) => {
+      let isMounted = true;
+      initializationRef.current = true;
+
+      initializeCall(isChildUser).catch((error) => {
+        if (isMounted) {
+          console.error("Call initialization error:", error);
+          initializationRef.current = false; // Allow retry on error
+          const errorMessage =
+            error instanceof Error ? error.message : "Unknown error occurred";
+          
+          // Only show error toast, don't navigate away
+          // Navigation should only happen in specific error handlers
+          toast({
+            title: "Connection Error",
+            description: errorMessage,
+            variant: "destructive",
+          });
+          
+          // Don't cleanup on initialization errors - let user retry
+          // Cleanup should only happen when call ends or component unmounts
+          // For child users, don't navigate on initialization errors
+          // They should stay on the call page to retry
+          // Only navigate if it's a critical session error (handled in handleChildCallFlow)
+          if (!isChildUser) {
+            // For parent users, errors are handled in handleParentCallFlow
+            // Don't navigate here either - let them stay on the page
+          }
+        }
+      });
+    }).catch((error) => {
+      console.error("Error determining user type:", error);
     });
 
     return () => {
-      isMounted = false;
       // Don't reset initializationRef here - let it persist for the call duration
       // Only cleanup if component is actually unmounting (not just re-rendering)
       // The cleanup will happen when the call ends or component unmounts
@@ -417,16 +467,47 @@ export const useVideoCall = () => {
 
   const handleChildCallFlow = async (pc: RTCPeerConnection) => {
     try {
+      // Check if we're answering an incoming call (has callId in URL)
+      const urlCallId = searchParams.get("callId");
+      const isAnsweringCall = !!urlCallId;
+      
       const childSession = localStorage.getItem("childSession");
       if (!childSession) {
-        navigate("/child/login");
-        return;
+        // If answering a call but no session, try to get child ID from URL
+        if (isAnsweringCall && childId) {
+          console.warn("⚠️ [CHILD CALL FLOW] No child session but answering call - attempting to continue with childId from URL");
+          // Don't navigate away - let the call handler try to work with the callId
+          // The call handler might be able to find the call and continue
+        } else {
+          console.error("❌ [CHILD CALL FLOW] No child session and not answering call - redirecting to login");
+          navigate("/child/login");
+          return;
+        }
       }
 
-      const child: ChildSession = JSON.parse(childSession);
+      const child: ChildSession = JSON.parse(childSession || "{}");
+      
+      // If we don't have a valid child object but we're answering a call, try to continue
+      if (!child.id && isAnsweringCall && childId) {
+        console.warn("⚠️ [CHILD CALL FLOW] Invalid child session but answering call - using childId from URL");
+        // Create a minimal child object from URL param
+        (child as any).id = childId;
+      }
+      
+      if (!child.id) {
+        console.error("❌ [CHILD CALL FLOW] No valid child ID found");
+        if (!isAnsweringCall) {
+          navigate("/child/login");
+          return;
+        } else {
+          // If answering call, try to continue anyway
+          console.warn("⚠️ [CHILD CALL FLOW] Continuing call without valid child ID");
+        }
+      }
 
       // Verify child exists in database and get parent_id
       // Only check once at initialization, don't re-check during call
+      // CRITICAL: When answering a call, don't navigate away even if verification fails
       const { data: childData, error: childError } = await supabase
         .from("children")
         .select("parent_id")
@@ -435,9 +516,9 @@ export const useVideoCall = () => {
 
       if (childError || !childData) {
         console.error("Child not found in database:", childError);
-        // Only navigate if this is during initialization, not during an active call
-        // If callId exists, we're in the middle of a call - don't navigate away
-        if (!callId) {
+        // CRITICAL: Don't navigate away if we're answering an incoming call
+        // The call handler can work with just the callId
+        if (!callId && !isAnsweringCall) {
           localStorage.removeItem("childSession");
           toast({
             title: "Session expired",
@@ -447,26 +528,67 @@ export const useVideoCall = () => {
           navigate("/child/login");
           return;
         } else {
-          // If call is active, just log the error but don't navigate
+          // If call is active or we're answering, just log the error but don't navigate
           // Use cached parent_id from child session if available
-          console.warn("Child verification failed during active call, using cached data...");
+          console.warn("⚠️ [CHILD CALL FLOW] Child verification failed but continuing call", {
+            isAnsweringCall,
+            hasCallId: !!callId,
+            reason: "Call is active or answering - don't navigate away",
+          });
           // Continue with call using child data we already have
         }
       }
 
-      // Use childData if available, otherwise throw error (parent_id should always be in database)
-      const parentId = childData?.parent_id;
+      // Use childData if available, otherwise try to get parent_id from child session or throw error
+      let parentId = childData?.parent_id;
+      
+      // If parent_id not in database response, try to get it from child session (for backward compatibility)
+      if (!parentId && (child as any).parent_id) {
+        parentId = (child as any).parent_id;
+        console.warn("⚠️ [CHILD CALL FLOW] Using parent_id from child session cache");
+      }
+      
       if (!parentId) {
-        throw new Error("Unable to determine parent ID for call. Please log in again.");
+        console.error("❌ [CHILD CALL FLOW] Unable to determine parent ID", {
+          hasChildData: !!childData,
+          hasChildSession: !!child,
+          childId: child.id,
+        });
+        // Don't navigate away if we're answering a call - let the call handler deal with it
+        if (!urlCallId) {
+          throw new Error("Unable to determine parent ID for call. Please log in again.");
+        } else {
+          // If answering a call, try to continue - the call handler might have the parent_id
+          console.warn("⚠️ [CHILD CALL FLOW] Continuing call without parent_id - call handler may have it");
+        }
       }
 
-      // Check if there's a specific callId in URL params (when answering incoming call)
-      const urlCallId = searchParams.get("callId");
+      // If we don't have parentId but we're answering a call, try to get it from the call record
+      if (!parentId && urlCallId) {
+        console.log("⚠️ [CHILD CALL FLOW] No parentId but answering call - fetching from call record");
+        try {
+          const { data: callData } = await supabase
+            .from("calls")
+            .select("parent_id")
+            .eq("id", urlCallId)
+            .maybeSingle();
+          
+          if (callData?.parent_id) {
+            parentId = callData.parent_id;
+            console.log("✅ [CHILD CALL FLOW] Got parentId from call record:", parentId);
+          }
+        } catch (err) {
+          console.warn("⚠️ [CHILD CALL FLOW] Could not fetch parentId from call record:", err);
+        }
+      }
+      
+      // If still no parentId, use a placeholder (call handler might not need it when answering)
+      const parentIdForCall = parentId || "unknown";
       
       const channel = await handleChildCall(
         pc,
         child,
-        { parent_id: parentId },
+        { parent_id: parentIdForCall },
         (id: string) => {
           setCallId(id);
           // Set up termination listener after callId is set
@@ -488,15 +610,33 @@ export const useVideoCall = () => {
       // Check if it's a schema cache error
       const isSchemaError = errorMessage.includes("Database schema cache");
       
+      // Check if we're answering an incoming call (has callId in URL)
+      const urlCallId = searchParams.get("callId");
+      const isAnsweringCall = !!urlCallId;
+      
+      console.error("❌ [CHILD CALL FLOW] Error in handleChildCallFlow:", {
+        errorMessage,
+        isAnsweringCall,
+        urlCallId,
+        hasChildSession: !!localStorage.getItem("childSession"),
+      });
+      
       toast({
-        title: isSchemaError ? "Database Schema Error" : "Error",
+        title: isSchemaError ? "Database Schema Error" : "Connection Error",
         description: isSchemaError
           ? "The database schema cache needs to be refreshed. Please contact support or try refreshing the page."
+          : isAnsweringCall
+          ? "Failed to connect to call. Please try again."
           : errorMessage,
         variant: "destructive",
       });
       setIsConnecting(false);
-      navigate("/child/dashboard");
+      
+      // If answering a call, don't navigate away - let user stay on call page to retry
+      // Only navigate if it's not an incoming call answer
+      if (!isAnsweringCall) {
+        navigate("/child/dashboard");
+      }
       throw error;
     }
   };
@@ -542,9 +682,12 @@ export const useVideoCall = () => {
             const updatedCall = payload.new as {
               id: string;
               status: string;
+              ended_at?: string | null;
+              ended_by?: string | null;
             };
             const oldCall = payload.old as {
               status?: string;
+              ended_at?: string | null;
             } | null;
             
             // Only log if status actually changed (reduce console spam)
@@ -575,6 +718,17 @@ export const useVideoCall = () => {
             // 2. We have a previous state (oldCall is not undefined)
             // 3. Previous state was NOT terminal (wasTerminal === false)
             // 4. This is the current call we're handling
+            console.log("🔍 [TERMINATION LISTENER] Checking termination conditions:", {
+              isTerminal,
+              hasOldCall: oldCall !== undefined,
+              wasTerminal,
+              callIdMatch: updatedCall.id === currentCallId,
+              oldStatus: oldCall?.status,
+              newStatus: updatedCall.status,
+              oldEndedAt: oldCall?.ended_at,
+              newEndedAt: updatedCall.ended_at,
+            });
+            
             if (
               isTerminal && 
               oldCall !== undefined && // Must have previous state
@@ -627,13 +781,29 @@ export const useVideoCall = () => {
                 terminationChannelRef.current = null;
               }
               
+              // Determine if user is child or parent
+              // CRITICAL: Check auth session FIRST - parents have auth session, children don't
+              const { data: { session } } = await supabase.auth.getSession();
               const childSession = localStorage.getItem("childSession");
-              const isChildUser = !!childSession;
+              // Parent if has auth session (even if childSession exists)
+              // Child if has childSession but NO auth session
+              const isChildUser = !session && !!childSession;
+              
+              console.log("🔍 [USER TYPE DETECTION] Termination listener - determining user type:", {
+                hasAuthSession: !!session,
+                hasChildSession: !!childSession,
+                isChildUser,
+                userId: session?.user?.id || null,
+                timestamp: new Date().toISOString(),
+              });
               
               if (isChildUser) {
                 navigate("/child/dashboard");
-              } else {
+              } else if (session) {
                 navigate("/parent/dashboard");
+              } else {
+                // No session at all - redirect to login
+                navigate("/");
               }
             }
           } catch (error) {
@@ -649,11 +819,26 @@ export const useVideoCall = () => {
 
   const callStartTimeRef = useRef<number | null>(null);
 
-  // Track when call becomes active
+  // CRITICAL FIX: Only mark call as started when ICE is actually connected
+  // Don't mark as "connected" just because answer was received
   useEffect(() => {
-    if (!isConnecting && callId && !callStartTimeRef.current) {
+    if (isConnected && remoteStream && callId && !callStartTimeRef.current) {
       callStartTimeRef.current = Date.now();
-      console.log("📞 [CALL LIFECYCLE] Call started (connection established)", {
+      console.log("📞 [CALL LIFECYCLE] Call started (ICE connected)", {
+        callId,
+        timestamp: new Date().toISOString(),
+        iceState: peerConnectionRef.current?.iceConnectionState,
+        connectionState: peerConnectionRef.current?.connectionState,
+      });
+    }
+  }, [isConnected, remoteStream, callId, peerConnectionRef]);
+
+  // Track when call becomes active (DEPRECATED - use isConnected check above instead)
+  // Keep for backwards compatibility but prefer isConnected check
+  useEffect(() => {
+    if (!isConnecting && callId && !callStartTimeRef.current && !isConnected) {
+      // Only log if not already logged by isConnected check
+      console.log("📞 [CALL LIFECYCLE] Call signaling complete (waiting for ICE)", {
         callId: callId,
         timestamp: new Date().toISOString(),
       });
@@ -684,10 +869,23 @@ export const useVideoCall = () => {
       });
     }
 
-    // Determine if user is child by checking for child session
+    // Determine if user is child or parent
+    // CRITICAL: Check auth session FIRST - parents have auth session, children don't
+    const { data: { session } } = await supabase.auth.getSession();
     const childSession = localStorage.getItem("childSession");
-    const isChildUser = !!childSession;
+    // Parent if has auth session (even if childSession exists)
+    // Child if has childSession but NO auth session
+    const isChildUser = !session && !!childSession;
     const by = isChildUser ? 'child' : 'parent';
+    
+    console.log("🔍 [USER TYPE DETECTION] End call - determining user type:", {
+      hasAuthSession: !!session,
+      hasChildSession: !!childSession,
+      isChildUser,
+      by,
+      userId: session?.user?.id || null,
+      timestamp: new Date().toISOString(),
+    });
 
     // Order matters: write the terminal state FIRST, then cleanup
     // If cleanup crashes, the remote still gets the signal

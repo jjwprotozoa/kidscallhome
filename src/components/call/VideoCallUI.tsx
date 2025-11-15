@@ -14,6 +14,7 @@ interface VideoCallUIProps {
   onToggleMute: () => void;
   onToggleVideo: () => void;
   onEndCall: () => void;
+  peerConnection?: RTCPeerConnection | null;
 }
 
 export const VideoCallUI = ({
@@ -26,12 +27,13 @@ export const VideoCallUI = ({
   onToggleMute,
   onToggleVideo,
   onEndCall,
+  peerConnection,
 }: VideoCallUIProps) => {
   const [videoState, setVideoState] = useState<'waiting' | 'loading' | 'playing' | 'error'>('waiting');
   const playAttemptedRef = useRef(false);
-  const retryCountRef = useRef(0);
 
-  // CRITICAL FIX: Monitor and fix video playback issues
+  // CRITICAL FIX: Use video element events instead of polling
+  // This makes the UI responsive and eliminates "stuck on loading" issues
   useEffect(() => {
     if (!remoteStream || !remoteVideoRef.current) {
       setVideoState('waiting');
@@ -39,128 +41,59 @@ export const VideoCallUI = ({
     }
 
     const video = remoteVideoRef.current;
-    const maxRetries = 20; // Try for up to 10 seconds
     
     // CRITICAL: Ensure srcObject is set correctly
     if (video.srcObject !== remoteStream) {
       console.log("🎬 [VIDEO UI] Setting remote stream to video element");
       video.srcObject = remoteStream;
-      // Reset the video element to ensure clean state
-      video.load();
     }
 
-    setVideoState('loading');
-
-    // Function to check and fix video state
-    const checkAndFixVideo = () => {
-      const tracks = remoteStream.getTracks();
-      const hasActiveTracks = tracks.some(t => t.readyState === 'live' && t.enabled);
-      
-      console.log("🔍 [VIDEO UI] Checking video state:", {
-        readyState: video.readyState,
-        paused: video.paused,
-        currentTime: video.currentTime,
-        hasActiveTracks,
-        tracks: tracks.map(t => ({
-          kind: t.kind,
-          enabled: t.enabled,
-          muted: t.muted,
-          readyState: t.readyState
-        }))
-      });
-
-      // Fix 1: If video thinks it's playing but readyState is 0, pause and replay
-      if (!video.paused && video.readyState === 0 && retryCountRef.current < maxRetries) {
-        console.log("⚠️ [VIDEO UI] Video claims to be playing but has no data, resetting...");
-        video.pause();
-        video.load();
-        setTimeout(() => {
-          video.play().catch(e => console.log("Retry play error:", e));
-        }, 100);
-        retryCountRef.current++;
-        return;
-      }
-
-      // Fix 2: Re-set srcObject if tracks are active but video isn't working
-      if (hasActiveTracks && video.readyState === 0 && video.srcObject === remoteStream) {
-        console.log("🔧 [VIDEO UI] Re-setting srcObject to force stream refresh");
-        video.srcObject = null;
-        setTimeout(() => {
-          video.srcObject = remoteStream;
-          video.load();
-          video.play().catch(e => console.log("Play after reset error:", e));
-        }, 50);
-        retryCountRef.current++;
-        return;
-      }
-
-      // Fix 3: Try to play if paused
-      if (video.paused && hasActiveTracks) {
-        attemptPlay();
-      }
-
-      // Success check
-      if (!video.paused && video.readyState >= 2) {
-        setVideoState('playing');
-        retryCountRef.current = 0;
-        console.log("✅ [VIDEO UI] Video is playing successfully!");
-      }
+    // Use ref to track state for interval callback and avoid stale closures
+    const currentStateRef = { current: videoState };
+    const updateStateRef = (newState: typeof videoState) => {
+      currentStateRef.current = newState;
+      setVideoState(newState);
     };
+    
+    // Start in loading state - will transition to playing via events
+    updateStateRef('loading');
 
     // Function to attempt play with proper error handling
     const attemptPlay = async () => {
       if (!video.paused) return;
       
       try {
-        console.log("🎬 [VIDEO UI] Attempting to play video (readyState:", video.readyState, ")");
-        
-        // Set muted to true temporarily if autoplay fails
-        const originalMuted = video.muted;
-        
+        console.log("🎬 [VIDEO UI] Attempting to play video");
         await video.play();
-        
-        // If play succeeds and was originally unmuted, unmute again
-        if (!originalMuted && video.muted) {
-          video.muted = false;
-        }
-        
         console.log("✅ [VIDEO UI] Video started playing");
         playAttemptedRef.current = true;
-        setVideoState('playing');
+        updateStateRef('playing');
       } catch (error: any) {
-        console.error("❌ [VIDEO UI] Play error:", error.name, error.message);
+        console.log("⏳ [VIDEO UI] Play error:", error.name);
         
         if (error.name === 'NotAllowedError') {
           // Try playing muted
-          console.log("🔇 [VIDEO UI] Trying to play muted due to autoplay policy");
           video.muted = true;
           try {
             await video.play();
             console.log("✅ [VIDEO UI] Playing muted - click to unmute");
-            setVideoState('playing');
+            updateStateRef('playing');
           } catch (mutedError) {
-            console.error("❌ [VIDEO UI] Even muted play failed:", mutedError);
-            setVideoState('error');
+          console.error("❌ [VIDEO UI] Even muted play failed:", mutedError);
+          updateStateRef('error');
           }
         } else if (error.name === 'NotSupportedError') {
           console.error("❌ [VIDEO UI] Media format not supported");
-          setVideoState('error');
-        } else if (error.name !== 'AbortError') {
-          // Retry for other errors
-          setTimeout(checkAndFixVideo, 500);
+          updateStateRef('error');
         }
+        // Don't retry on other errors - let events handle it
       }
     };
 
-    // Initial attempt
-    checkAndFixVideo();
-
-    // Set up interval to monitor and fix issues
-    const checkInterval = setInterval(checkAndFixVideo, 500);
-
-    // Event listeners for video state changes
-    const handleCanPlay = () => {
-      console.log("📹 [VIDEO UI] Video can play");
+    // Event listeners - these drive the state, not polling
+    const handleLoadedMetadata = () => {
+      console.log("📹 [VIDEO UI] Video metadata loaded");
+      updateStateRef('loading');
       attemptPlay();
     };
 
@@ -169,40 +102,98 @@ export const VideoCallUI = ({
       attemptPlay();
     };
 
+    const handleCanPlay = () => {
+      console.log("📹 [VIDEO UI] Video can play");
+      attemptPlay();
+    };
+    
     const handlePlaying = () => {
       console.log("✅ [VIDEO UI] Video 'playing' event fired");
-      setVideoState('playing');
+      updateStateRef('playing');
+      playAttemptedRef.current = true;
+    };
+    
+    // Also check on canplaythrough - video is ready to play smoothly
+    const handleCanPlayThrough = () => {
+      console.log("📹 [VIDEO UI] Video can play through");
+      if (!video.paused) {
+        updateStateRef('playing');
+      }
     };
 
     const handleWaiting = () => {
       console.log("⏳ [VIDEO UI] Video 'waiting' event - buffering");
-      setVideoState('loading');
+      // Only set to loading if actually paused (not just buffering)
+      if (video.paused && currentStateRef.current !== 'error') {
+        updateStateRef('loading');
+      }
+    };
+
+    const handlePause = () => {
+      console.log("⏸️ [VIDEO UI] Video paused");
+      // Don't change state on pause - might be user action or buffering
     };
 
     const handleError = (e: Event) => {
       const videoEl = e.target as HTMLVideoElement;
       console.error("❌ [VIDEO UI] Video error:", videoEl.error);
-      setVideoState('error');
+      updateStateRef('error');
     };
 
-    video.addEventListener('canplay', handleCanPlay);
+    // Bind to video element events - these are the source of truth
+    video.addEventListener('loadedmetadata', handleLoadedMetadata);
     video.addEventListener('loadeddata', handleLoadedData);
+    video.addEventListener('canplay', handleCanPlay);
+    video.addEventListener('canplaythrough', handleCanPlayThrough);
     video.addEventListener('playing', handlePlaying);
     video.addEventListener('waiting', handleWaiting);
+    video.addEventListener('pause', handlePause);
     video.addEventListener('error', handleError);
 
-    // Monitor track state changes
+    // Monitor track unmute events - when tracks unmute, ICE is connected
+    // CRITICAL: For WebRTC, tracks can unmute (media flowing) even if readyState is 0
+    // So we should mark as "playing" when tracks unmute AND video is not paused
     const tracks = remoteStream.getTracks();
     const trackHandlers = new Map();
     
+    // Helper to check if we should mark as playing
+    const checkShouldBePlaying = () => {
+      const hasUnmutedTracks = tracks.some(t => !t.muted && t.readyState === 'live');
+      const isVideoPlaying = !video.paused;
+      
+      // If tracks are unmuted and video is playing (even if readyState is 0), mark as playing
+      if (hasUnmutedTracks && isVideoPlaying) {
+        console.log("✅ [VIDEO UI] Tracks unmuted and video playing - marking as playing");
+        updateStateRef('playing');
+        return true;
+      }
+      return false;
+    };
+    
     tracks.forEach(track => {
       const handleUnmute = () => {
-        console.log("✅ [VIDEO UI] Track unmuted:", track.kind);
-        checkAndFixVideo();
+        console.log("✅ [VIDEO UI] Track unmuted:", track.kind, "- ICE connected, media flowing");
+        // When track unmutes, ICE connection is established - try to play immediately
+        if (video.paused) {
+          attemptPlay();
+        } else {
+          // Video is already playing - check if we should mark as playing
+          // This handles the case where video.play() succeeded but readyState is still 0
+          setTimeout(() => {
+            checkShouldBePlaying();
+          }, 100);
+        }
       };
       
       const handleMute = () => {
         console.log("⚠️ [VIDEO UI] Track muted:", track.kind);
+        // Don't change state - might be temporary during ICE negotiation
+        // Only change to loading if ALL tracks are muted
+        const allMuted = tracks.every(t => t.muted);
+        if (allMuted && currentStateRef.current === 'playing') {
+          console.log("⚠️ [VIDEO UI] All tracks muted, setting to loading");
+          updateStateRef('loading');
+        }
       };
       
       const handleEnded = () => {
@@ -215,13 +206,33 @@ export const VideoCallUI = ({
       
       trackHandlers.set(track, { handleUnmute, handleMute, handleEnded });
     });
+    
+    // Also check periodically if video is playing but state is still loading
+    // This handles edge cases where events don't fire
+    const checkInterval = setInterval(() => {
+      // Check if video is actually playing (not paused) and has unmuted tracks
+      // but state is still loading
+      if (!video.paused) {
+        const hasUnmutedTracks = tracks.some(t => !t.muted && t.readyState === 'live');
+        if (hasUnmutedTracks && currentStateRef.current === 'loading') {
+          console.log("✅ [VIDEO UI] Video playing with unmuted tracks - updating state");
+          updateStateRef('playing');
+        }
+      }
+    }, 500);
+
+    // Initial play attempt
+    attemptPlay();
 
     return () => {
       clearInterval(checkInterval);
-      video.removeEventListener('canplay', handleCanPlay);
+      video.removeEventListener('loadedmetadata', handleLoadedMetadata);
       video.removeEventListener('loadeddata', handleLoadedData);
+      video.removeEventListener('canplay', handleCanPlay);
+      video.removeEventListener('canplaythrough', handleCanPlayThrough);
       video.removeEventListener('playing', handlePlaying);
       video.removeEventListener('waiting', handleWaiting);
+      video.removeEventListener('pause', handlePause);
       video.removeEventListener('error', handleError);
       
       // Clean up track listeners
@@ -267,18 +278,23 @@ export const VideoCallUI = ({
 
   // Determine what message to show
   const getStatusMessage = () => {
+    // If no remote stream, show connecting/waiting
     if (!remoteStream) {
       return isConnecting ? "Connecting..." : "Waiting for other person...";
     }
+    
+    // Always show local preview if available (should be pre-warmed)
+    // Remote video state is handled separately
     
     if (videoState === 'error') {
       return "Video error - click to retry";
     }
     
     if (videoState === 'loading') {
-      return "Loading video...";
+      return "Connecting to other side...";
     }
     
+    // If video is paused but we have a stream, might need user interaction
     if (remoteVideoRef.current?.paused && videoState !== 'playing') {
       return "Click to start video";
     }

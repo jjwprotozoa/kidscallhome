@@ -112,6 +112,14 @@ const ParentDashboard = () => {
   }, [toast]);
 
   useEffect(() => {
+    // Clear childSession if it exists - parents should not have childSession
+    // This prevents routing issues where parent might be treated as child
+    const childSession = localStorage.getItem("childSession");
+    if (childSession) {
+      console.log("🧹 [PARENT DASHBOARD] Clearing childSession for parent user");
+      localStorage.removeItem("childSession");
+    }
+    
     checkAuth();
     fetchChildren();
 
@@ -234,6 +242,11 @@ const ParentDashboard = () => {
 
       // Subscribe to new calls from children
       // Listen to both INSERT and UPDATE events to catch calls that are reset to ringing
+      console.log("📡 [PARENT DASHBOARD] Setting up realtime subscription for incoming calls", {
+        userId: user.id,
+        timestamp: new Date().toISOString(),
+      });
+      
       channelRef.current = supabase
         .channel("parent-incoming-calls")
         .on(
@@ -257,6 +270,9 @@ const ParentDashboard = () => {
                 call.caller_type === "child" &&
                 call.parent_id === user.id &&
                 call.status === "ringing",
+              payloadKeys: Object.keys(payload),
+              hasNew: !!payload.new,
+              hasOld: !!payload.old,
             });
 
             // Verify this call is from a child, for this parent, and is ringing
@@ -297,13 +313,20 @@ const ParentDashboard = () => {
             event: "UPDATE",
             schema: "public",
             table: "calls",
+            filter: `parent_id=eq.${user.id}`,
           },
           async (payload) => {
             const call = payload.new as CallRecord;
             const oldCall = payload.old as CallRecord;
-            console.log("Received call UPDATE event:", {
-              new: call,
-              old: oldCall,
+            console.log("📞 [PARENT DASHBOARD] Received call UPDATE event:", {
+              callId: call.id,
+              callerType: call.caller_type,
+              parentId: call.parent_id,
+              childId: call.child_id,
+              status: call.status,
+              oldStatus: oldCall?.status,
+              currentUserId: user.id,
+              timestamp: new Date().toISOString(),
             });
 
             // CRITICAL: Always ignore parent-initiated calls - they should never show notifications
@@ -360,7 +383,13 @@ const ParentDashboard = () => {
             }
           }
         )
-        .subscribe();
+        .subscribe((status) => {
+          console.log("📡 [PARENT DASHBOARD] Realtime subscription status:", status, {
+            channel: "parent-incoming-calls",
+            userId: user.id,
+            timestamp: new Date().toISOString(),
+          });
+        });
     };
 
     setupSubscription();
