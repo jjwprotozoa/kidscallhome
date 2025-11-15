@@ -29,7 +29,7 @@ const ChildLogin = () => {
     try {
       const { data, error } = await supabase
         .from("children")
-        .select("id, name, avatar_color")
+        .select("id, name, avatar_color, parent_id")
         .eq("login_code", code.toUpperCase())
         .single();
 
