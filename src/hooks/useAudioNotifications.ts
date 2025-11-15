@@ -2,6 +2,7 @@
 // Audio notification management for calls (ringtones, call ended sounds, etc.)
 
 import { useRef, useEffect, useCallback } from "react";
+import { callLog } from "@/features/calls/utils/callLogger";
 
 export type SoundType = "ringtone" | "call-ended" | "call-answered";
 
@@ -27,9 +28,9 @@ export const useAudioNotifications = (options: UseAudioNotificationsOptions = {}
     try {
       const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
       audioContextRef.current = new AudioContextClass();
-      console.log("🔊 [AUDIO] AudioContext created, state:", audioContextRef.current.state);
+      callLog.debug("AUDIO", "AudioContext created", { state: audioContextRef.current.state });
     } catch (error) {
-      console.error("❌ [AUDIO] Failed to create AudioContext:", error);
+      callLog.error("AUDIO", "Failed to create AudioContext", error);
     }
 
     // Resume audio context on user interaction (required by browser autoplay policy)
@@ -37,9 +38,9 @@ export const useAudioNotifications = (options: UseAudioNotificationsOptions = {}
       if (audioContextRef.current && audioContextRef.current.state === "suspended") {
         try {
           await audioContextRef.current.resume();
-          console.log("🔊 [AUDIO] AudioContext resumed via user interaction");
+          callLog.debug("AUDIO", "AudioContext resumed via user interaction");
         } catch (error) {
-          console.error("❌ [AUDIO] Failed to resume AudioContext:", error);
+          callLog.error("AUDIO", "Failed to resume AudioContext", error);
         }
       }
     };
@@ -81,7 +82,7 @@ export const useAudioNotifications = (options: UseAudioNotificationsOptions = {}
       });
       resumeListenersRef.current = [];
       if (audioContextRef.current) {
-        audioContextRef.current.close().catch(console.error);
+        audioContextRef.current.close().catch((err) => callLog.error("AUDIO", "Error closing AudioContext", err));
         audioContextRef.current = null;
       }
     };
@@ -93,9 +94,9 @@ export const useAudioNotifications = (options: UseAudioNotificationsOptions = {}
       try {
         const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
         audioContextRef.current = new AudioContextClass();
-        console.log("🔊 [AUDIO] AudioContext created, initial state:", audioContextRef.current.state);
+        callLog.debug("AUDIO", "AudioContext created", { initialState: audioContextRef.current.state });
       } catch (error) {
-        console.error("❌ [AUDIO] Failed to create AudioContext:", error);
+        callLog.error("AUDIO", "Failed to create AudioContext", error);
         return null;
       }
     }
@@ -103,23 +104,23 @@ export const useAudioNotifications = (options: UseAudioNotificationsOptions = {}
     // Resume if suspended - try multiple times if needed
     if (audioContextRef.current.state === "suspended") {
       try {
-        console.log("🔊 [AUDIO] AudioContext is suspended, attempting to resume...");
+        callLog.debug("AUDIO", "AudioContext is suspended, attempting to resume");
         await audioContextRef.current.resume();
-        console.log("🔊 [AUDIO] AudioContext resumed successfully, state:", audioContextRef.current.state);
+        callLog.debug("AUDIO", "AudioContext resumed successfully", { state: audioContextRef.current.state });
       } catch (error) {
-        console.error("❌ [AUDIO] Failed to resume AudioContext:", error);
+        callLog.error("AUDIO", "Failed to resume AudioContext", error);
         // Try one more time after a short delay
         try {
           await new Promise(resolve => setTimeout(resolve, 100));
           if (audioContextRef.current.state === "suspended") {
             await audioContextRef.current.resume();
-            console.log("🔊 [AUDIO] AudioContext resumed on retry, state:", audioContextRef.current.state);
+            callLog.debug("AUDIO", "AudioContext resumed on retry", { state: audioContextRef.current.state });
           }
         } catch (retryError) {
-          console.error("❌ [AUDIO] Failed to resume AudioContext on retry:", retryError);
+          callLog.error("AUDIO", "Failed to resume AudioContext on retry", retryError);
           // If resume fails, the AudioContext might need user interaction
           // Log a helpful message
-          console.warn("⚠️ [AUDIO] AudioContext requires user interaction. Ringtone may not play until user interacts with page.");
+          callLog.warn("AUDIO", "AudioContext requires user interaction. Ringtone may not play until user interacts with page.");
           return null;
         }
       }
@@ -157,34 +158,34 @@ export const useAudioNotifications = (options: UseAudioNotificationsOptions = {}
         }
       }, 2000);
 
-      console.log("📳 [AUDIO] Vibration started");
+      callLog.debug("AUDIO", "Vibration started");
     } catch (error) {
       // Vibration may fail if no user interaction yet - this is expected
-      console.debug("📳 [AUDIO] Vibration not available yet (requires user interaction)");
+      callLog.debug("AUDIO", "Vibration not available yet (requires user interaction)");
     }
   }, [enabled]);
 
   // Play ringtone (looping)
   const playRingtone = useCallback(async () => {
     if (!enabled) {
-      console.log("🔔 [AUDIO] Audio notifications disabled");
+      callLog.debug("AUDIO", "Audio notifications disabled");
       return;
     }
     
     if (isPlayingRef.current.ringtone) {
-      console.log("🔔 [AUDIO] Ringtone already playing");
+      callLog.debug("AUDIO", "Ringtone already playing");
       return;
     }
 
     const audioContext = await ensureAudioContextReady();
     if (!audioContext) {
-      console.error("❌ [AUDIO] Cannot play ringtone - AudioContext not available");
+      callLog.error("AUDIO", "Cannot play ringtone - AudioContext not available");
       return;
     }
 
     try {
       isPlayingRef.current.ringtone = true;
-      console.log("🔔 [AUDIO] Ringtone started, AudioContext state:", audioContext.state);
+      callLog.debug("AUDIO", "Ringtone started", { audioContextState: audioContext.state });
 
       const playTone = () => {
         if (!isPlayingRef.current.ringtone || !audioContextRef.current) return;
@@ -208,7 +209,7 @@ export const useAudioNotifications = (options: UseAudioNotificationsOptions = {}
           oscillator.start(now);
           oscillator.stop(now + 0.25);
         } catch (error) {
-          console.error("❌ [AUDIO] Error playing tone:", error);
+          callLog.error("AUDIO", "Error playing tone", error);
         }
       };
 
@@ -232,7 +233,7 @@ export const useAudioNotifications = (options: UseAudioNotificationsOptions = {}
       }, 2000); // Repeat pattern every 2 seconds
       
     } catch (error) {
-      console.error("❌ [AUDIO] Error playing ringtone:", error);
+      callLog.error("AUDIO", "Error playing ringtone", error);
       isPlayingRef.current.ringtone = false;
     }
   }, [enabled, volume, ensureAudioContextReady, startVibration]);
@@ -250,7 +251,7 @@ export const useAudioNotifications = (options: UseAudioNotificationsOptions = {}
         // Vibration requires user interaction - silently ignore
       }
     }
-    console.log("📳 [AUDIO] Vibration stopped");
+    callLog.debug("AUDIO", "Vibration stopped");
   }, []);
 
   // Stop ringtone
@@ -262,7 +263,7 @@ export const useAudioNotifications = (options: UseAudioNotificationsOptions = {}
         ringtoneIntervalRef.current = null;
       }
       stopVibration();
-      console.log("🔇 [AUDIO] Ringtone stopped");
+      callLog.debug("AUDIO", "Ringtone stopped");
     }
   }, [stopVibration]);
 
@@ -291,9 +292,9 @@ export const useAudioNotifications = (options: UseAudioNotificationsOptions = {}
       oscillator.start(now);
       oscillator.stop(now + 0.2);
       
-      console.log("🔔 [AUDIO] Call ended sound played");
+      callLog.debug("AUDIO", "Call ended sound played");
     } catch (error) {
-      console.error("❌ [AUDIO] Error playing call ended sound:", error);
+      callLog.error("AUDIO", "Error playing call ended sound", error);
     }
   }, [enabled, volume, ensureAudioContextReady]);
 
@@ -325,9 +326,9 @@ export const useAudioNotifications = (options: UseAudioNotificationsOptions = {}
         osc.stop(startTime + 0.15);
       });
       
-      console.log("🔔 [AUDIO] Call answered sound played");
+      callLog.debug("AUDIO", "Call answered sound played");
     } catch (error) {
-      console.error("❌ [AUDIO] Error playing call answered sound:", error);
+      callLog.error("AUDIO", "Error playing call answered sound", error);
     }
   }, [enabled, volume, ensureAudioContextReady]);
 

@@ -3,6 +3,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { CallControls } from "./CallControls";
+import { callLog } from "@/features/calls/utils/callLogger";
 
 interface VideoCallUIProps {
   localVideoRef: React.RefObject<HTMLVideoElement>;
@@ -44,7 +45,7 @@ export const VideoCallUI = ({
     
     // CRITICAL: Ensure srcObject is set correctly
     if (video.srcObject !== remoteStream) {
-      console.log("🎬 [VIDEO UI] Setting remote stream to video element");
+      callLog.debug("VIDEO", "Setting remote stream to video element");
       video.srcObject = remoteStream;
     }
 
@@ -63,27 +64,27 @@ export const VideoCallUI = ({
       if (!video.paused) return;
       
       try {
-        console.log("🎬 [VIDEO UI] Attempting to play video");
+        callLog.debug("VIDEO", "Attempting to play video");
         await video.play();
-        console.log("✅ [VIDEO UI] Video started playing");
+        callLog.debug("VIDEO", "Video started playing");
         playAttemptedRef.current = true;
         updateStateRef('playing');
       } catch (error: any) {
-        console.log("⏳ [VIDEO UI] Play error:", error.name);
+        callLog.debug("VIDEO", "Play error", { errorName: error.name });
         
         if (error.name === 'NotAllowedError') {
           // Try playing muted
           video.muted = true;
           try {
             await video.play();
-            console.log("✅ [VIDEO UI] Playing muted - click to unmute");
+            callLog.debug("VIDEO", "Playing muted - click to unmute");
             updateStateRef('playing');
           } catch (mutedError) {
-          console.error("❌ [VIDEO UI] Even muted play failed:", mutedError);
+          callLog.error("VIDEO", "Even muted play failed", mutedError);
           updateStateRef('error');
           }
         } else if (error.name === 'NotSupportedError') {
-          console.error("❌ [VIDEO UI] Media format not supported");
+          callLog.error("VIDEO", "Media format not supported");
           updateStateRef('error');
         }
         // Don't retry on other errors - let events handle it
@@ -92,37 +93,37 @@ export const VideoCallUI = ({
 
     // Event listeners - these drive the state, not polling
     const handleLoadedMetadata = () => {
-      console.log("📹 [VIDEO UI] Video metadata loaded");
+      callLog.debug("VIDEO", "Video metadata loaded");
       updateStateRef('loading');
       attemptPlay();
     };
 
     const handleLoadedData = () => {
-      console.log("📹 [VIDEO UI] Video data loaded");
+      callLog.debug("VIDEO", "Video data loaded");
       attemptPlay();
     };
 
     const handleCanPlay = () => {
-      console.log("📹 [VIDEO UI] Video can play");
+      callLog.debug("VIDEO", "Video can play");
       attemptPlay();
     };
     
     const handlePlaying = () => {
-      console.log("✅ [VIDEO UI] Video 'playing' event fired");
+      callLog.debug("VIDEO", "Video 'playing' event fired");
       updateStateRef('playing');
       playAttemptedRef.current = true;
     };
     
     // Also check on canplaythrough - video is ready to play smoothly
     const handleCanPlayThrough = () => {
-      console.log("📹 [VIDEO UI] Video can play through");
+      callLog.debug("VIDEO", "Video can play through");
       if (!video.paused) {
         updateStateRef('playing');
       }
     };
 
     const handleWaiting = () => {
-      console.log("⏳ [VIDEO UI] Video 'waiting' event - buffering");
+      callLog.debug("VIDEO", "Video 'waiting' event - buffering");
       // Only set to loading if actually paused (not just buffering)
       if (video.paused && currentStateRef.current !== 'error') {
         updateStateRef('loading');
@@ -130,13 +131,13 @@ export const VideoCallUI = ({
     };
 
     const handlePause = () => {
-      console.log("⏸️ [VIDEO UI] Video paused");
+      callLog.debug("VIDEO", "Video paused");
       // Don't change state on pause - might be user action or buffering
     };
 
     const handleError = (e: Event) => {
       const videoEl = e.target as HTMLVideoElement;
-      console.error("❌ [VIDEO UI] Video error:", videoEl.error);
+      callLog.error("VIDEO", "Video error", videoEl.error);
       updateStateRef('error');
     };
 
@@ -163,7 +164,7 @@ export const VideoCallUI = ({
       
       // If tracks are unmuted and video is playing (even if readyState is 0), mark as playing
       if (hasUnmutedTracks && isVideoPlaying) {
-        console.log("✅ [VIDEO UI] Tracks unmuted and video playing - marking as playing");
+        callLog.debug("VIDEO", "Tracks unmuted and video playing - marking as playing");
         updateStateRef('playing');
         return true;
       }
@@ -172,7 +173,7 @@ export const VideoCallUI = ({
     
     tracks.forEach(track => {
       const handleUnmute = () => {
-        console.log("✅ [VIDEO UI] Track unmuted:", track.kind, "- ICE connected, media flowing");
+        callLog.debug("VIDEO", "Track unmuted - ICE connected, media flowing", { kind: track.kind });
         // When track unmutes, ICE connection is established - try to play immediately
         if (video.paused) {
           attemptPlay();
@@ -186,18 +187,18 @@ export const VideoCallUI = ({
       };
       
       const handleMute = () => {
-        console.log("⚠️ [VIDEO UI] Track muted:", track.kind);
+        callLog.debug("VIDEO", "Track muted", { kind: track.kind });
         // Don't change state - might be temporary during ICE negotiation
         // Only change to loading if ALL tracks are muted
         const allMuted = tracks.every(t => t.muted);
         if (allMuted && currentStateRef.current === 'playing') {
-          console.log("⚠️ [VIDEO UI] All tracks muted, setting to loading");
+          callLog.debug("VIDEO", "All tracks muted, setting to loading");
           updateStateRef('loading');
         }
       };
       
       const handleEnded = () => {
-        console.log("🔚 [VIDEO UI] Track ended:", track.kind);
+        callLog.debug("VIDEO", "Track ended", { kind: track.kind });
       };
       
       track.addEventListener('unmute', handleUnmute);
@@ -215,7 +216,7 @@ export const VideoCallUI = ({
       if (!video.paused) {
         const hasUnmutedTracks = tracks.some(t => !t.muted && t.readyState === 'live');
         if (hasUnmutedTracks && currentStateRef.current === 'loading') {
-          console.log("✅ [VIDEO UI] Video playing with unmuted tracks - updating state");
+          callLog.debug("VIDEO", "Video playing with unmuted tracks - updating state");
           updateStateRef('playing');
         }
       }
@@ -248,7 +249,7 @@ export const VideoCallUI = ({
     if (!remoteVideoRef.current || !remoteVideoRef.current.srcObject) return;
     
     const video = remoteVideoRef.current;
-    console.log("👆 [VIDEO UI] User clicked video area", {
+    callLog.debug("VIDEO", "User clicked video area", {
       paused: video.paused,
       muted: video.muted,
       readyState: video.readyState
@@ -257,21 +258,21 @@ export const VideoCallUI = ({
     // If video is muted, unmute it
     if (video.muted) {
       video.muted = false;
-      console.log("🔊 [VIDEO UI] Video unmuted by user click");
+      callLog.debug("VIDEO", "Video unmuted by user click");
     }
     
     // If video is paused, try to play
     if (video.paused) {
       video.play()
         .then(() => {
-          console.log("✅ [VIDEO UI] Video started playing after click");
+          callLog.debug("VIDEO", "Video started playing after click");
           setVideoState('playing');
         })
         .catch((error) => {
-          console.error("❌ [VIDEO UI] Click play failed:", error);
+          callLog.error("VIDEO", "Click play failed", error);
           // Try muted as fallback
           video.muted = true;
-          video.play().catch(e => console.error("Muted play also failed:", e));
+          video.play().catch(e => callLog.error("VIDEO", "Muted play also failed", e));
         });
     }
   };

@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useIncomingCallNotifications } from "@/hooks/useIncomingCallNotifications";
+import { callLog } from "@/features/calls/utils/callLogger";
 
 interface ChildSession {
   id: string;
@@ -77,7 +78,7 @@ const ChildDashboard = () => {
           .single();
 
         if (childError || !childRecord) {
-          console.error("Error fetching child record:", childError);
+          callLog.error("DATA", "Error fetching child record", childError);
           return;
         }
 
@@ -89,7 +90,7 @@ const ChildDashboard = () => {
           .maybeSingle();
 
         if (parentError) {
-          console.error("Error fetching parent name:", parentError);
+          callLog.error("DATA", "Error fetching parent name", parentError);
           return;
         }
 
@@ -98,10 +99,10 @@ const ChildDashboard = () => {
           parentNameRef.current = parentData.name;
         } else {
           // Parent name not found, keep default "Mom/Dad"
-          console.warn("Parent name not found for parent_id:", childRecord.parent_id);
+          callLog.warn("DATA", "Parent name not found", { parentId: childRecord.parent_id });
         }
       } catch (error) {
-        console.error("Error fetching parent name:", error);
+        callLog.error("DATA", "Error fetching parent name", error);
       }
     };
 
@@ -119,15 +120,13 @@ const ChildDashboard = () => {
         // IMPORTANT: Don't show incoming call notification if user is already on the call page
         // This prevents showing notifications for calls the child initiated
         if (location.pathname.startsWith("/call/")) {
-          console.log(
-            "📞 [CHILD DASHBOARD] User is on call page, not showing incoming call notification"
-          );
+          callLog.debug("DASHBOARD", "User is on call page, not showing incoming call notification");
           return;
         }
 
         lastCheckedCallId = call.id;
 
-        console.log("Setting incoming call from parent:", call.id);
+        callLog.debug("DASHBOARD", "Setting incoming call from parent", { callId: call.id });
         setIncomingCall({
           id: call.id,
           parent_id: call.parent_id,
@@ -181,10 +180,7 @@ const ChildDashboard = () => {
         if (newCalls && newCalls.length > 0) {
           const call = newCalls[0];
           if (call.id !== lastCheckedCallId) {
-            console.log(
-              "📞 [CHILD DASHBOARD] Polling found parent-initiated call:",
-              call.id
-            );
+            callLog.debug("DASHBOARD", "Polling found parent-initiated call", { callId: call.id });
             await handleIncomingCallNotification(call);
           }
         }
@@ -210,7 +206,7 @@ const ChildDashboard = () => {
           },
           async (payload) => {
             const call = payload.new as CallRecord;
-            console.log("Received call INSERT event:", call);
+            callLog.debug("DASHBOARD", "Received call INSERT event", { callId: call.id, callerType: call.caller_type, status: call.status });
 
             // Verify this call is from a parent, for this child, and is ringing
             // IMPORTANT: Only show incoming call dialog for parent-initiated calls, not child-initiated ones
@@ -219,10 +215,10 @@ const ChildDashboard = () => {
               call.child_id === childData.id &&
               call.status === "ringing"
             ) {
-              console.log("Call is for this child, showing notification...");
+              callLog.debug("DASHBOARD", "Call is for this child, showing notification");
               await handleIncomingCallNotification(call);
             } else {
-              console.log("Call not for this child or not ringing:", {
+              callLog.debug("DASHBOARD", "Call not for this child or not ringing", {
                 callerType: call.caller_type,
                 callChildId: call.child_id,
                 currentChildId: childData.id,
@@ -245,32 +241,28 @@ const ChildDashboard = () => {
           async (payload) => {
             const call = payload.new as CallRecord;
             const oldCall = payload.old as CallRecord;
-            console.log("Received call UPDATE event:", {
-              new: call,
-              old: oldCall,
+            callLog.debug("DASHBOARD", "Received call UPDATE event", {
+              callId: call.id,
+              newStatus: call.status,
+              oldStatus: oldCall?.status,
             });
 
             // CRITICAL: Always ignore child-initiated calls - they should never show notifications
             // Child-initiated calls are handled by the call page, not the dashboard
             if (call.caller_type === "child") {
-              console.log(
-                "📞 [CHILD DASHBOARD] Ignoring child-initiated call update:",
-                {
-                  callId: call.id,
-                  status: call.status,
-                  oldStatus: oldCall?.status,
-                  reason:
-                    "Child-initiated calls should not show notifications - handled by call page",
-                }
-              );
+              callLog.debug("DASHBOARD", "Ignoring child-initiated call update", {
+                callId: call.id,
+                status: call.status,
+                oldStatus: oldCall?.status,
+                reason:
+                  "Child-initiated calls should not show notifications - handled by call page",
+              });
               return; // Early return - don't process child-initiated calls at all
             }
 
             // Don't process updates if user is on the call page
             if (location.pathname.startsWith("/call/")) {
-              console.log(
-                "📞 [CHILD DASHBOARD] User is on call page, ignoring UPDATE event"
-              );
+              callLog.debug("DASHBOARD", "User is on call page, ignoring UPDATE event");
               return;
             }
 
@@ -281,9 +273,7 @@ const ChildDashboard = () => {
               incomingCallRef.current.id === call.id
             ) {
               if (call.status === "active" || call.status === "ended") {
-                console.log(
-                  "Call was answered or ended, clearing incoming call notification"
-                );
+                callLog.debug("DASHBOARD", "Call was answered or ended, clearing incoming call notification");
                 setIncomingCall(null);
                 incomingCallRef.current = null;
               }
@@ -297,9 +287,7 @@ const ChildDashboard = () => {
               call.status === "ringing" &&
               oldCall.status !== "ringing"
             ) {
-              console.log(
-                "Call status changed to ringing, showing notification..."
-              );
+              callLog.debug("DASHBOARD", "Call status changed to ringing, showing notification");
               await handleIncomingCallNotification(call);
             }
           }
@@ -338,9 +326,8 @@ const ChildDashboard = () => {
 
   const handleCall = () => {
     if (child) {
-      console.log("📞 [CHILD DASHBOARD] Child clicked 'Call' button, navigating to call page:", {
+      callLog.debug("DASHBOARD", "Child clicked 'Call' button, navigating to call page", {
         childId: child.id,
-        timestamp: new Date().toISOString()
       });
       navigate(`/call/${child.id}`);
     }
@@ -354,10 +341,9 @@ const ChildDashboard = () => {
 
   const handleAnswerCall = () => {
     if (incomingCall && child) {
-      console.log("📞 [USER ACTION] Child answering call", {
+      callLog.debug("DASHBOARD", "Child answering call", {
         callId: incomingCall.id,
         childId: child.id,
-        timestamp: new Date().toISOString(),
       });
       // Stop incoming call notifications
       stopIncomingCall(incomingCall.id);
@@ -369,9 +355,7 @@ const ChildDashboard = () => {
       navigate(`/call/${child.id}?callId=${callId}`);
       // Reset the flag after navigation completes (longer delay to ensure navigation happened)
       setTimeout(() => {
-        console.log(
-          "📞 [USER ACTION] Resetting isAnswering flag after navigation"
-        );
+        callLog.debug("DASHBOARD", "Resetting isAnswering flag after navigation");
         isAnsweringRef.current = false;
       }, 2000); // Increased from 500ms to 2000ms to ensure navigation completed
     }
@@ -379,17 +363,14 @@ const ChildDashboard = () => {
 
   const handleDeclineCall = async () => {
     if (incomingCall) {
-      console.log("🛑 [USER ACTION] Child declining call", {
+      callLog.debug("DASHBOARD", "Child declining call", {
         callId: incomingCall.id,
         isAnswering: isAnsweringRef.current,
-        timestamp: new Date().toISOString(),
       });
 
       // Don't decline if we're in the process of answering
       if (isAnsweringRef.current) {
-        console.log(
-          "⚠️ [USER ACTION] Prevented decline - call is being answered"
-        );
+        callLog.debug("DASHBOARD", "Prevented decline - call is being answered");
         return;
       }
 
@@ -401,7 +382,7 @@ const ChildDashboard = () => {
           reason: "declined",
         });
       } catch (error: unknown) {
-        console.error("❌ [USER ACTION] Error declining call:", error);
+        callLog.error("DASHBOARD", "Error declining call", error);
         const errorMessage =
           error instanceof Error ? error.message : "Unknown error";
         toast({
@@ -484,23 +465,18 @@ const ChildDashboard = () => {
       <AlertDialog
         open={!!incomingCall}
         onOpenChange={(open) => {
-          console.log("📞 [UI EVENT] Incoming call dialog open state changed", {
+          callLog.debug("DASHBOARD", "Incoming call dialog open state changed", {
             open: open,
             hasIncomingCall: !!incomingCall,
             isAnswering: isAnsweringRef.current,
-            timestamp: new Date().toISOString(),
           });
           // Only decline if dialog is being closed AND user didn't click Answer
           // Don't decline if user is answering (isAnsweringRef will be true)
           if (!open && incomingCall && !isAnsweringRef.current) {
-            console.log(
-              "🛑 [UI EVENT] Dialog closed without answering - declining call"
-            );
+            callLog.debug("DASHBOARD", "Dialog closed without answering - declining call");
             handleDeclineCall();
           } else if (!open && isAnsweringRef.current) {
-            console.log(
-              "✅ [UI EVENT] Dialog closed but call is being answered - not declining"
-            );
+            callLog.debug("DASHBOARD", "Dialog closed but call is being answered - not declining");
           }
         }}
       >

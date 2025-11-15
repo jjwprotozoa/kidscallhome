@@ -9,6 +9,7 @@ import { useNavigate } from "react-router-dom";
 import { useTabVisibility } from "./useTabVisibility";
 import { usePushNotifications } from "./usePushNotifications";
 import { useAudioNotifications } from "./useAudioNotifications";
+import { callLog } from "@/features/calls/utils/callLogger";
 
 interface IncomingCallData {
   callId: string;
@@ -41,7 +42,7 @@ export const useIncomingCallNotifications = (
   // Handle notification click - this is a user gesture, so we can play audio
   useEffect(() => {
     onNotificationClick((data: { callId: string; url?: string }) => {
-      console.log("🔔 [CALL NOTIFICATIONS] Notification clicked, starting ringtone", data);
+      callLog.debug("NOTIFICATIONS", "Notification clicked, starting ringtone", data);
       
       // Close the notification
       closeNotification("incoming-call");
@@ -54,7 +55,7 @@ export const useIncomingCallNotifications = (
       // Start ringing immediately (notification click = user gesture)
       if (data.callId === activeCallRef.current) {
         playRingtone().catch((error) => {
-          console.error("❌ [CALL NOTIFICATIONS] Failed to play ringtone after notification click:", error);
+          callLog.error("NOTIFICATIONS", "Failed to play ringtone after notification click", error);
         });
       }
     });
@@ -68,7 +69,7 @@ export const useIncomingCallNotifications = (
       activeCallRef.current = callData.callId;
       notificationShownRef.current = false;
 
-      console.log("📞 [CALL NOTIFICATIONS] Handling incoming call:", {
+      callLog.debug("NOTIFICATIONS", "Handling incoming call", {
         callId: callData.callId,
         isVisible,
         hasBeenVisible,
@@ -76,13 +77,13 @@ export const useIncomingCallNotifications = (
 
       // If tab is visible and has been visible (user has interacted), play ringtone immediately
       if (isVisible && hasBeenVisible) {
-        console.log("🔔 [CALL NOTIFICATIONS] Tab is active, playing ringtone immediately");
+        callLog.debug("NOTIFICATIONS", "Tab is active, playing ringtone immediately");
         playRingtone().catch((error) => {
-          console.error("❌ [CALL NOTIFICATIONS] Failed to play ringtone:", error);
+          callLog.error("NOTIFICATIONS", "Failed to play ringtone", error);
         });
       } else {
         // Tab is not visible or hasn't been interacted with - show push notification
-        console.log("🔔 [CALL NOTIFICATIONS] Tab is not active, showing push notification");
+        callLog.debug("NOTIFICATIONS", "Tab is not active, showing push notification");
 
         // Request notification permission if needed
         if (!hasPermission) {
@@ -120,9 +121,9 @@ export const useIncomingCallNotifications = (
       // Tab just became visible - check if we should start ringing
       // Only if notification was shown (meaning we didn't ring before)
       if (notificationShownRef.current) {
-        console.log("🔔 [CALL NOTIFICATIONS] Tab became visible, starting ringtone");
+        callLog.debug("NOTIFICATIONS", "Tab became visible, starting ringtone");
         playRingtone().catch((error) => {
-          console.error("❌ [CALL NOTIFICATIONS] Failed to play ringtone when tab became visible:", error);
+          callLog.error("NOTIFICATIONS", "Failed to play ringtone when tab became visible", error);
         });
       }
     }
@@ -132,7 +133,7 @@ export const useIncomingCallNotifications = (
   const stopIncomingCall = useCallback(
     async (callId: string) => {
       if (activeCallRef.current === callId) {
-        console.log("🔇 [CALL NOTIFICATIONS] Stopping incoming call notifications:", callId);
+        callLog.debug("NOTIFICATIONS", "Stopping incoming call notifications", { callId });
         stopRingtone();
         await closeNotification("incoming-call");
         activeCallRef.current = null;
