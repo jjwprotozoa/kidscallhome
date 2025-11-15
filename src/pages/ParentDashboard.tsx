@@ -425,6 +425,14 @@ const ParentDashboard = () => {
     navigate(`/chat/${childId}`);
   };
 
+  // Helper function to get the base URL based on environment
+  const getBaseUrl = () => {
+    const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    return isDevelopment 
+      ? 'http://localhost:8080'
+      : 'https://www.kidscallhome.com';
+  };
+
   const handleCopyCode = (code: string) => {
     navigator.clipboard.writeText(code);
     toast({
@@ -434,7 +442,7 @@ const ParentDashboard = () => {
   };
 
   const handleCopyMagicLink = (child: Child) => {
-    const magicLink = `${window.location.origin}/child/login?code=${child.login_code}`;
+    const magicLink = `${getBaseUrl()}/child/login?code=${child.login_code}`;
     navigator.clipboard.writeText(magicLink);
     toast({
       title: "Copied!",
@@ -446,9 +454,9 @@ const ParentDashboard = () => {
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
 
-    const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(
-      `${window.location.origin}/child/login?code=${child.login_code}`
-    )}`;
+    const baseUrl = getBaseUrl();
+    const loginUrl = `${baseUrl}/child/login?code=${child.login_code}`;
+    const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(loginUrl)}`;
 
     printWindow.document.write(`
       <!DOCTYPE html>
@@ -501,7 +509,7 @@ const ParentDashboard = () => {
             </div>
             <div class="instructions">
               <p>Scan the QR code or use the code above to log in</p>
-              <p>Visit: ${window.location.origin}/child/login</p>
+              <p>Visit: ${baseUrl}/child/login</p>
             </div>
           </div>
         </body>
@@ -822,7 +830,7 @@ const ParentDashboard = () => {
               <div className="flex justify-center">
                 <img
                   src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(
-                    `${window.location.origin}/child/login?code=${showCodeDialog.child.login_code}`
+                    `${getBaseUrl()}/child/login?code=${showCodeDialog.child.login_code}`
                   )}`}
                   alt="QR Code"
                   className="border-2 border-muted rounded-lg"
