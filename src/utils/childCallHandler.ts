@@ -1114,6 +1114,17 @@ const handleChildInitiatedCall = async (
   });
   setCallId(call.id);
 
+  // CRITICAL FIX: Wait for callId to propagate to useWebRTC before creating offer
+  // This ensures ICE candidates can be written to the database immediately
+  // React state updates are async, so we need to wait a tick for the ref to update
+  await new Promise<void>((resolve) => {
+    // Use requestAnimationFrame to wait for React to process the state update
+    requestAnimationFrame(() => {
+      // Additional small delay to ensure useWebRTC's useEffect has run
+      setTimeout(resolve, 10);
+    });
+  });
+
   // Check peer connection state before creating offer
   if (pc.signalingState === "closed") {
     throw new Error("Peer connection is closed. Please try again.");

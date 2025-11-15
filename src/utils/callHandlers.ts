@@ -564,6 +564,53 @@ export const handleParentCall = async (
       iceCandidatesQueue.current = [];
     }
 
+    // CRITICAL FIX: Read existing ICE candidates from child immediately after answering
+    // Child may have already sent candidates before parent answered
+    // This ensures we don't miss candidates that were written before the realtime listener was set up
+    try {
+      const { data: callData } = await supabase
+        .from("calls")
+        .select("child_ice_candidates")
+        .eq("id", incomingCall.id)
+        .single();
+
+      const existingCandidates =
+        (callData?.child_ice_candidates as RTCIceCandidateInit[]) || [];
+
+      if (existingCandidates.length > 0) {
+        console.log(
+          `✅ [PARENT HANDLER] Processing ${existingCandidates.length} existing ICE candidates from child (read from DB)`
+        );
+        for (const candidate of existingCandidates) {
+          try {
+            if (!candidate.candidate) continue;
+            if (pc.remoteDescription) {
+              await pc.addIceCandidate(new RTCIceCandidate(candidate));
+            } else {
+              iceCandidatesQueue.current.push(candidate);
+            }
+          } catch (err) {
+            const error = err as Error;
+            if (
+              !error.message?.includes("duplicate") &&
+              !error.message?.includes("already")
+            ) {
+              console.error(
+                "❌ [PARENT HANDLER] Error adding existing ICE candidate:",
+                error.message
+              );
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error(
+        "❌ [PARENT HANDLER] Error reading existing ICE candidates:",
+        error
+      );
+      // Don't throw - continue with call setup
+    }
+
     setIsConnecting(false);
     console.log(
       "✅ [PARENT HANDLER] Call connected! Parent answered child's call."
