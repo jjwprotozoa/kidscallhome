@@ -1,0 +1,239 @@
+# KidsCallHome – Call Engine Protection Rules
+
+You are working in the KidsCallHome repository.
+
+The WebRTC call engine (call connection, video, and audio) is currently STABLE and MUST NOT be changed accidentally.
+
+The golden working commit is:
+
+- Commit: b6c35a4
+
+- Branch: feature/audio-notifications
+
+- Tag (if present): calls-stable-b6c35a4
+
+Your priorities:
+
+1. Do NOT break the working call engine.
+
+2. Only touch call-related core files when the user explicitly asks you to.
+
+3. Keep the implementation well-documented so humans can understand and extend it safely.
+
+## 1. Protected call engine scope
+
+Treat the following as **protected, high-risk** files and modules:
+
+- WebRTC / call hooks and core:
+
+  - `src/features/calls/hooks/useVideoCall.ts`
+
+  - `src/features/calls/core/useWebRTC.ts`
+
+  - `src/features/calls/utils/childCallHandler.ts`
+
+  - `src/features/calls/utils/callHandlers.ts`
+
+  - `src/features/calls/utils/callEnding.ts`
+
+- Call UI:
+
+  - `src/features/calls/components/VideoCallUI.tsx`
+
+  - Any `ParentCallScreen` / `ChildCallScreen` that directly uses `useVideoCall`
+
+- Call notifications:
+
+  - `src/features/calls/hooks/useIncomingCallNotifications.ts`
+
+  - `src/features/calls/hooks/useAudioNotifications.ts`
+
+- Data model (Supabase):
+
+  - Any migrations or SQL defining:
+
+    - `public.calls`
+
+    - `public.parent_ice_candidates`
+
+    - `public.child_ice_candidates`
+
+- Call documentation:
+
+  - `docs/webrtc-calls-overview.md`
+
+  - `CALLS_TEST_PLAN.md` (if present)
+
+  - Any other call-engine docs in `docs/` or `src/features/calls/`
+
+### 1.1. When you MAY NOT modify protected call engine code
+
+By default, you MUST NOT:
+
+- Change logic related to:
+
+  - Role detection (`parent` vs `child`)
+
+  - Offer/answer creation and setting local/remote descriptions
+
+  - ICE candidate writing/reading
+
+  - Call state transitions (`ringing`, `in_call`, `ended`, etc.)
+
+  - Media acquisition (`getUserMedia`) and track management
+
+- Rename or remove:
+
+  - `calls`, `parent_ice_candidates`, `child_ice_candidates` tables
+
+- Change behavior of:
+
+  - `useVideoCall`, `useWebRTC`, `childCallHandler`, `callHandlers`, `callEnding`
+
+You may add or adjust **documentation and comments** in these files, but DO NOT change runtime behavior unless the user explicitly requests it (see 1.2).
+
+### 1.2. When you MAY modify protected call engine code
+
+Only modify protected call engine code if the user clearly says they want to change it.
+
+Examples of explicit permission:
+
+- "Change the call engine so that …"
+
+- "Override the call engine protection and update WebRTC to support X."
+
+- "It's okay to modify useVideoCall / useWebRTC for this new behavior."
+
+If the user's request is ambiguous (e.g. "simplify things" or "clean up the code") you MUST:
+
+- Prefer changes **outside** the protected call engine, or
+
+- Ask the user to explicitly confirm that the call engine may be modified.
+
+When modifying call engine code:
+
+- Keep the current working behavior (parent ↔ child calls with video/audio) unless the user specifically wants different behavior.
+
+- Preserve the parent→child and child→parent flows and ICE/role wiring.
+
+- After changes, update the call documentation as described in section 3.
+
+## 2. Logging and debug rules for calls
+
+The call engine should be quiet by default but debuggable.
+
+- Prefer using a dedicated logger (e.g. `callLogger` or `callLog`) instead of raw `console.log`.
+
+- Raw `console.log` inside call engine files should be avoided or downgraded to the logger.
+
+- Always keep real error logs:
+
+  - `getUserMedia` failures
+
+  - `setLocalDescription` / `setRemoteDescription` failures
+
+  - `addIceCandidate` failures
+
+  - Supabase errors creating/updating call/ICE rows
+
+If you need more debug output for development:
+
+- Use a flag-based approach (e.g. `CALL_DEBUG` via localStorage or env var) and keep verbose logs behind that flag.
+
+- Do NOT add permanent noisy logging to the call engine without gating it behind such a flag.
+
+## 3. Documentation requirements for the call engine
+
+Whenever you TOUCH any protected call engine file (even for small changes), you MUST:
+
+1. Update or create a detailed architecture doc (if not already present) such as:
+
+   - `docs/webrtc-calls-overview.md`
+
+2. Ensure the doc clearly covers:
+
+   - Data model:
+
+     - Columns and purpose of `public.calls`
+
+     - Purpose and usage pattern of `parent_ice_candidates` and `child_ice_candidates`
+
+   - Flow descriptions:
+
+     - Parent → Child call flow:
+
+       - How a call row is created
+
+       - Where the offer is stored
+
+       - How the child finds and answers the call
+
+       - How ICE candidates are exchanged
+
+     - Child → Parent call flow (mirrored)
+
+   - Client modules:
+
+     - Role of `useVideoCall`
+
+     - Role of `useWebRTC`
+
+     - What `childCallHandler` and `callHandlers` do
+
+     - What `callEnding` does
+
+   - State model:
+
+     - Call states (`idle`, `calling`, `incoming`, `connecting`, `in_call`, `ended`, etc.)
+
+     - How UI uses these states
+
+3. Keep or update a **test checklist** in `CALLS_TEST_PLAN.md` (or the main doc) that at least includes:
+
+   - Parent → Child call happy path
+
+   - Child → Parent call happy path
+
+   - Hangup from parent
+
+   - Hangup from child
+
+   - Behavior on browser refresh or reconnect
+
+The documentation should be written so that a new engineer can understand:
+
+- How calls work end-to-end
+
+- Where to change behavior safely
+
+- How to manually test the flows
+
+## 4. Safe refactor / cleanup rules
+
+When the user asks for refactors or cleanups:
+
+- Prefer refactoring code AROUND the call engine:
+
+  - UI layout, styling, routing wrappers, unrelated components
+
+  - Non-call-related Supabase queries or features
+
+- For call engine files:
+
+  - You may:
+
+    - Improve comments
+
+    - Rename variables for clarity (without changing logic)
+
+    - Replace `console.log` with the shared `callLogger` pattern
+
+  - You MUST NOT:
+
+    - Change function signatures of public APIs (e.g. `useVideoCall` hook shape) unless the user explicitly requests it.
+
+    - Change how roles map to ICE tables.
+
+    - Change which tables are used for calls.
+
+If in doubt, preserve existing behavior. The call engine is considered critical and working.
