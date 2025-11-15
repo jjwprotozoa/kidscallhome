@@ -34,27 +34,31 @@ Treat the following as **protected, high-risk** files and modules:
 
 - WebRTC / call hooks and core:
 
-  - `src/features/calls/hooks/useVideoCall.ts`
+  - `src/hooks/useVideoCall.ts`
 
-  - `src/features/calls/core/useWebRTC.ts`
+  - `src/hooks/useWebRTC.ts`
 
-  - `src/features/calls/utils/childCallHandler.ts`
+  - `src/hooks/useCallEngine.ts`
 
-  - `src/features/calls/utils/callHandlers.ts`
+  - `src/utils/childCallHandler.ts`
 
-  - `src/features/calls/utils/callEnding.ts`
+  - `src/utils/callHandlers.ts`
+
+  - `src/utils/callEnding.ts`
 
 - Call UI:
 
-  - `src/features/calls/components/VideoCallUI.tsx`
+  - `src/components/call/VideoCallUI.tsx`
 
-  - Any `ParentCallScreen` / `ChildCallScreen` that directly uses `useVideoCall`
+  - `src/pages/ParentCallScreen.tsx`
+
+  - `src/pages/ChildCallScreen.tsx`
 
 - Call notifications:
 
-  - `src/features/calls/hooks/useIncomingCallNotifications.ts`
+  - `src/hooks/useIncomingCallNotifications.ts`
 
-  - `src/features/calls/hooks/useAudioNotifications.ts`
+  - `src/hooks/useAudioNotifications.ts`
 
 - Data model (Supabase):
 

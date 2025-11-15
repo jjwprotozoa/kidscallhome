@@ -1004,22 +1004,49 @@ export const useVideoCall = () => {
     }
 
     // Determine if user is child or parent
-    // CRITICAL: Check auth session FIRST - parents have auth session, children don't
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    const childSession = localStorage.getItem("childSession");
-    // Parent if has auth session (even if childSession exists)
-    // Child if has childSession but NO auth session
-    const isChildUser = !session && !!childSession;
+    // CRITICAL: Check route path FIRST (most reliable), then fallback to session
+    const isChildRoute = window.location.pathname.includes("/child/");
+    const isParentRoute = window.location.pathname.includes("/parent/");
+    
+    // Use route path if available, otherwise check sessions
+    let isChildUser: boolean;
+    if (isChildRoute) {
+      isChildUser = true;
+    } else if (isParentRoute) {
+      isChildUser = false;
+    } else {
+      // Fallback: Check auth session FIRST - parents have auth session, children don't
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const childSession = localStorage.getItem("childSession");
+      // Parent if has auth session (even if childSession exists)
+      // Child if has childSession but NO auth session
+      isChildUser = !session && !!childSession;
+    }
+    
     const by = isChildUser ? "child" : "parent";
 
+    // Get session info for logging (only if we used fallback method)
+    let sessionInfo: { hasAuthSession: boolean; hasChildSession: boolean; userId: string | null } | null = null;
+    if (!isChildRoute && !isParentRoute) {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const childSession = localStorage.getItem("childSession");
+      sessionInfo = {
+        hasAuthSession: !!session,
+        hasChildSession: !!childSession,
+        userId: session?.user?.id || null,
+      };
+    }
+
     callLog.debug("ROLE", "End call - determining user type", {
-      hasAuthSession: !!session,
-      hasChildSession: !!childSession,
+      isChildRoute,
+      isParentRoute,
+      ...(sessionInfo || {}),
       isChildUser,
       by,
-      userId: session?.user?.id || null,
       timestamp: new Date().toISOString(),
     });
 
