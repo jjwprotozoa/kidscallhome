@@ -203,6 +203,7 @@ const ChildDashboard = () => {
             event: "INSERT",
             schema: "public",
             table: "calls",
+            filter: `child_id=eq.${childData.id}`,
           },
           async (payload) => {
             const call = payload.new as CallRecord;
@@ -237,6 +238,7 @@ const ChildDashboard = () => {
             event: "UPDATE",
             schema: "public",
             table: "calls",
+            filter: `child_id=eq.${childData.id}`,
           },
           async (payload) => {
             const call = payload.new as CallRecord;
@@ -292,7 +294,14 @@ const ChildDashboard = () => {
             }
           }
         )
-        .subscribe();
+        .subscribe((status) => {
+          callLog.debug("DASHBOARD", "Realtime subscription status", {
+            status,
+            channel: "child-incoming-calls",
+            childId: childData.id,
+            timestamp: new Date().toISOString(),
+          });
+        });
     };
 
     setupSubscription();
