@@ -3,16 +3,20 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Video, MessageCircle, LogOut } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 interface ChildSession {
   id: string;
   name: string;
   avatar_color: string;
+  parent_id: string;
 }
 
 const ChildDashboard = () => {
   const [child, setChild] = useState<ChildSession | null>(null);
   const navigate = useNavigate();
+  const { toast } = useToast();
 
   useEffect(() => {
     const sessionData = localStorage.getItem("childSession");
@@ -28,9 +32,30 @@ const ChildDashboard = () => {
     navigate("/child/login");
   };
 
-  const handleCall = () => {
-    if (child) {
+  const handleCall = async () => {
+    if (!child) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from("calls")
+        .insert({
+          child_id: child.id,
+          parent_id: child.parent_id,
+          caller_type: "child",
+          status: "ringing",
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
       navigate(`/call/${child.id}`);
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: "Failed to start call",
+        variant: "destructive",
+      });
     }
   };
 

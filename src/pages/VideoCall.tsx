@@ -78,22 +78,23 @@ const VideoCall = () => {
         }
       };
 
-      // Handle ICE candidates
+      // Handle ICE candidates - store in appropriate field based on role
       pc.onicecandidate = async (event) => {
         if (event.candidate && callId) {
+          const field = isChildUser ? 'child_ice_candidates' : 'parent_ice_candidates';
           const { data: call } = await supabase
             .from("calls")
-            .select("ice_candidates")
+            .select(field)
             .eq("id", callId)
-            .single();
+            .maybeSingle();
 
           if (call) {
-            const candidates = (call.ice_candidates as any[]) || [];
+            const candidates = (call[field] as any[]) || [];
             candidates.push(event.candidate.toJSON());
 
             await supabase
               .from("calls")
-              .update({ ice_candidates: candidates })
+              .update({ [field]: candidates })
               .eq("id", callId);
           }
         }
@@ -144,7 +145,7 @@ const VideoCall = () => {
         .update({ offer: { type: offer.type, sdp: offer.sdp } })
         .eq("id", call.id);
 
-      // Listen for answer
+      // Listen for answer and child ICE candidates
       const channel = supabase
         .channel(`call:${call.id}`)
         .on(
@@ -157,6 +158,13 @@ const VideoCall = () => {
           },
           async (payload) => {
             const updatedCall = payload.new as any;
+            
+            // Handle call being ended or declined
+            if (updatedCall.status === 'ended') {
+              cleanup();
+              navigate('/parent/dashboard');
+              return;
+            }
             
             if (updatedCall.answer && pc.remoteDescription === null) {
               const answerDesc = updatedCall.answer as any;
@@ -172,10 +180,13 @@ const VideoCall = () => {
               setIsConnecting(false);
             }
 
-            // Add ICE candidates
-            if (updatedCall.ice_candidates) {
-              const candidates = updatedCall.ice_candidates as RTCIceCandidateInit[];
-              for (const candidate of candidates) {
+            // Add child ICE candidates
+            if (updatedCall.child_ice_candidates) {
+              const candidates = updatedCall.child_ice_candidates as RTCIceCandidateInit[];
+              const currentCount = iceCandidatesQueue.current.length;
+              const newCandidates = candidates.slice(currentCount);
+              
+              for (const candidate of newCandidates) {
                 if (pc.remoteDescription) {
                   await pc.addIceCandidate(new RTCIceCandidate(candidate));
                 } else {
@@ -202,20 +213,20 @@ const VideoCall = () => {
 
       const child: ChildSession = JSON.parse(childSession);
 
-      // Find active call
+      // Find active call (either incoming or outgoing)
       const { data: call } = await supabase
         .from("calls")
         .select("*")
         .eq("child_id", child.id)
-        .eq("status", "ringing")
+        .in("status", ["ringing", "active"])
         .order("created_at", { ascending: false })
         .limit(1)
-        .single();
+        .maybeSingle();
 
       if (!call) {
         toast({
           title: "No Call Found",
-          description: "No incoming call",
+          description: "No active call",
           variant: "destructive",
         });
         navigate("/child/dashboard");
@@ -245,7 +256,7 @@ const VideoCall = () => {
 
       setIsConnecting(false);
 
-      // Listen for ICE candidates from parent
+      // Listen for parent ICE candidates and call status
       const channel = supabase
         .channel(`call:${call.id}`)
         .on(
@@ -259,10 +270,21 @@ const VideoCall = () => {
           async (payload) => {
             const updatedCall = payload.new as any;
             
-            if (updatedCall.ice_candidates) {
-              const candidates = updatedCall.ice_candidates as RTCIceCandidateInit[];
+            // Handle call being ended or declined
+            if (updatedCall.status === 'ended') {
+              cleanup();
+              navigate('/child/dashboard');
+              return;
+            }
+            
+            if (updatedCall.parent_ice_candidates) {
+              const candidates = updatedCall.parent_ice_candidates as RTCIceCandidateInit[];
               for (const candidate of candidates) {
-                await pc.addIceCandidate(new RTCIceCandidate(candidate));
+                try {
+                  await pc.addIceCandidate(new RTCIceCandidate(candidate));
+                } catch (error) {
+                  console.error('Error adding ICE candidate:', error);
+                }
               }
             }
           }
@@ -334,6 +356,17 @@ const VideoCall = () => {
               <p className="text-white text-2xl">
                 {isConnecting ? "Connecting..." : "Waiting for other person..."}
               </p>
+              {isConnecting && (
+                <Button
+                  onClick={endCall}
+                  variant="destructive"
+                  size="lg"
+                  className="mt-4"
+                >
+                  <PhoneOff className="mr-2 h-5 w-5" />
+                  Decline Call
+                </Button>
+              )}
             </div>
           </div>
         )}
