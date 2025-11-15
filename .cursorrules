@@ -1,4 +1,8 @@
 # KidsCallHome – Call Engine Protection Rules
+# 
+# This file is automatically loaded by Cursor for every new chat session.
+# Located at: .cursorrules (workspace root)
+# All rules below apply to every AI chat in this workspace.
 
 You are working in the KidsCallHome repository.
 
