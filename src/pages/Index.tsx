@@ -1,7 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Heart, Users, MessageCircle } from "lucide-react";
+import { Users, MessageCircle } from "lucide-react";
 
 const Index = () => {
   const navigate = useNavigate();
@@ -10,9 +10,13 @@ const Index = () => {
     <div className="min-h-screen bg-gradient-to-b from-primary/10 to-background">
       <div className="container mx-auto px-4 py-16">
         <div className="text-center space-y-6 mb-16">
-          <Heart className="h-20 w-20 text-primary mx-auto" />
+          <img 
+            src="/icon-192x192.png" 
+            alt="Kids Call Home" 
+            className="h-20 w-20 mx-auto"
+          />
           <h1 className="text-5xl md:text-6xl font-bold text-primary">
-            FamilyConnect
+            Kids Call Home
           </h1>
           <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
             Stay connected with your family through simple video calls and messaging
