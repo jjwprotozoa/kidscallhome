@@ -1004,22 +1004,20 @@ export const useVideoCall = () => {
     }
 
     // Determine if user is child or parent
-    // CRITICAL: Use the isChild state that was set at hook initialization (most reliable)
-    // This was determined from route path or session at the start of the hook
-    const isChildUser = isChild;
-    const by = isChildUser ? "child" : "parent";
-
-    // Get session info for logging
+    // CRITICAL: Check auth session FIRST - parents have auth session, children don't
     const {
       data: { session },
     } = await supabase.auth.getSession();
     const childSession = localStorage.getItem("childSession");
+    // Parent if has auth session (even if childSession exists)
+    // Child if has childSession but NO auth session
+    const isChildUser = !session && !!childSession;
+    const by = isChildUser ? "child" : "parent";
 
     callLog.debug("ROLE", "End call - determining user type", {
-      isChildState: isChild,
-      isChildUser,
       hasAuthSession: !!session,
       hasChildSession: !!childSession,
+      isChildUser,
       by,
       userId: session?.user?.id || null,
       timestamp: new Date().toISOString(),
