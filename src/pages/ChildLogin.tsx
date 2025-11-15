@@ -1,7 +1,7 @@
 // src/pages/ChildLogin.tsx
 // Purpose: Kid-friendly login page with visual color/animal selection and number keypad
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -51,8 +51,9 @@ const ChildLogin = () => {
   const [childData, setChildData] = useState<{ id: string; name: string; avatar_color: string } | null>(null);
   const navigate = useNavigate();
   const { toast } = useToast();
+  const hasProcessedCode = useRef(false);
 
-  const handleLoginWithCode = async (code: string) => {
+  const handleLoginWithCode = useCallback(async (code: string) => {
     setLoading(true);
     try {
       const { data, error } = await supabase
@@ -61,7 +62,20 @@ const ChildLogin = () => {
         .eq("login_code", code)
         .single();
 
-      if (error || !data) {
+      if (error) {
+        console.error("Login code query error:", error);
+        toast({
+          title: "Error",
+          description: error.message || "Failed to verify login code. Please try again.",
+          variant: "destructive",
+        });
+        setNumber("");
+        setStep("select");
+        hasProcessedCode.current = false; // Reset so user can try again
+        return;
+      }
+
+      if (!data) {
         toast({
           title: "Code not found",
           description: "Please check your code and try again",
@@ -69,6 +83,7 @@ const ChildLogin = () => {
         });
         setNumber("");
         setStep("select");
+        hasProcessedCode.current = false; // Reset so user can try again
         return;
       }
 
@@ -79,39 +94,49 @@ const ChildLogin = () => {
         navigate("/child/dashboard");
       }, 2000);
     } catch (error: any) {
+      console.error("Login error:", error);
       toast({
         title: "Error",
-        description: error.message,
+        description: error.message || "An unexpected error occurred",
         variant: "destructive",
       });
       setStep("select");
+      hasProcessedCode.current = false; // Reset so user can try again
     } finally {
       setLoading(false);
     }
-  };
+  }, [navigate, toast]);
 
   // Handle magic link with code parameter
   useEffect(() => {
     const codeParam = searchParams.get("code");
-    if (codeParam) {
+    if (codeParam && !hasProcessedCode.current) {
+      hasProcessedCode.current = true;
       // Decode the code parameter in case it was URL-encoded
       const decodedCode = decodeURIComponent(codeParam);
       const [option, num] = decodedCode.split("-");
       if (option && num) {
+        // Set UI state for visual feedback (but don't show number screen)
         setSelectedOption(option);
         setNumber(num);
         // Determine if it's a color or animal
         const isColor = colors.some((c) => c.name === option);
         setCodeType(isColor ? "color" : "animal");
-        setStep("number");
-        // Auto-login if code is provided
-        setTimeout(() => {
-          handleLoginWithCode(decodedCode);
-        }, 500);
+        // Set loading state immediately and attempt login right away
+        setLoading(true);
+        // Auto-login immediately when code is provided via URL
+        handleLoginWithCode(decodedCode);
+      } else {
+        // If code format is invalid, show error
+        toast({
+          title: "Invalid code format",
+          description: "Code should be in format: animal-number or color-number (e.g., fish-34)",
+          variant: "destructive",
+        });
+        hasProcessedCode.current = false; // Reset so user can try again
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams]);
+  }, [searchParams, handleLoginWithCode, toast]);
 
   const handleOptionSelect = (option: string, type: "color" | "animal") => {
     setSelectedOption(option);
@@ -189,6 +214,23 @@ const ChildLogin = () => {
       setLoading(false);
     }
   };
+
+  // Loading screen when auto-logging in via URL code
+  if (loading && searchParams.get("code") && step === "select") {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-primary/5 p-4">
+        <Card className="w-full max-w-md p-8 space-y-6 text-center">
+          <div className="space-y-4">
+            <div className="flex justify-center">
+              <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+            </div>
+            <h1 className="text-2xl font-bold text-primary">Logging you in...</h1>
+            <p className="text-muted-foreground">Please wait a moment</p>
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
   // Success animation screen
   if (step === "success" && childData) {
