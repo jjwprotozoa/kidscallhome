@@ -328,7 +328,7 @@ export const useCallEngine = ({
   useEffect(() => {
     if (state === "ended") {
       const timeout = setTimeout(() => {
-        const homePath = role === "parent" ? "/parent" : "/child";
+        const homePath = role === "parent" ? "/parent/children" : "/child/parents";
         navigate(homePath);
       }, 2000); // Give time for cleanup
 

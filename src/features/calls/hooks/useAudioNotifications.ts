@@ -255,14 +255,23 @@ export const useAudioNotifications = (options: UseAudioNotificationsOptions = {}
 
   // Stop ringtone
   const stopRingtone = useCallback(() => {
-    if (isPlayingRef.current.ringtone) {
-      isPlayingRef.current.ringtone = false;
-      if (ringtoneIntervalRef.current) {
-        clearInterval(ringtoneIntervalRef.current);
-        ringtoneIntervalRef.current = null;
-      }
-      stopVibration();
+    // CRITICAL: Always stop, even if flag says it's not playing
+    // This handles race conditions where interval callback might be executing
+    const wasPlaying = isPlayingRef.current.ringtone;
+    isPlayingRef.current.ringtone = false;
+    
+    if (ringtoneIntervalRef.current) {
+      clearInterval(ringtoneIntervalRef.current);
+      ringtoneIntervalRef.current = null;
+    }
+    
+    stopVibration();
+    
+    if (wasPlaying) {
       console.log("🔇 [AUDIO] Ringtone stopped");
+    } else {
+      // Log even if wasn't playing to help debug
+      console.log("🔇 [AUDIO] stopRingtone called (was not playing)");
     }
   }, [stopVibration]);
 

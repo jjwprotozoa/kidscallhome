@@ -15,6 +15,7 @@ const VideoCall = () => {
     toggleMute,
     toggleVideo,
     endCall,
+    callStartTime,
   } = useVideoCall();
 
   return (
@@ -28,6 +29,7 @@ const VideoCall = () => {
       onToggleMute={toggleMute}
       onToggleVideo={toggleVideo}
       onEndCall={endCall}
+      callStartTime={callStartTime}
     />
   );
 };

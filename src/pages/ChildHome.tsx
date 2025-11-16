@@ -1,14 +1,14 @@
 // src/pages/ChildHome.tsx
 // Child Home / Dashboard page
 
-import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import Navigation from "@/components/Navigation";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { supabase } from "@/integrations/supabase/client";
-import { Users } from "lucide-react";
+import { usePresence } from "@/features/presence/usePresence";
 import { useToast } from "@/hooks/use-toast";
-import Navigation from "@/components/Navigation";
+import { Users } from "lucide-react";
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 interface ChildSession {
   id: string;
@@ -32,11 +32,34 @@ const ChildHome = () => {
     setChild(childData);
   }, [navigate]);
 
+  // Track child's online presence
+  usePresence({
+    userId: child?.id || "",
+    userType: "child",
+    name: child?.name,
+    enabled: !!child,
+  });
 
+  // CLS: Reserve space for loading state to match final layout structure
   if (!child) {
     return (
-      <div className="min-h-[100dvh] bg-background flex items-center justify-center">
-        <div>Loading...</div>
+      <div className="min-h-[100dvh] bg-background">
+        <Navigation />
+        <div className="p-4">
+          <div className="max-w-4xl mx-auto">
+            <div className="mb-8 mt-8">
+              <div className="h-9 w-48 bg-muted rounded animate-pulse mb-2" />
+              <div className="h-6 w-64 bg-muted rounded animate-pulse" />
+            </div>
+            <Card className="p-6 min-h-[176px]">
+              <div className="space-y-4">
+                <div className="h-6 w-32 bg-muted rounded animate-pulse" />
+                <div className="h-10 w-full bg-muted rounded animate-pulse" />
+                <div className="h-10 w-full bg-muted rounded animate-pulse" />
+              </div>
+            </Card>
+          </div>
+        </div>
       </div>
     );
   }
@@ -53,7 +76,7 @@ const ChildHome = () => {
             </p>
           </div>
 
-          <Card className="p-6">
+          <Card className="p-6 min-h-[176px]">
             <div className="space-y-4">
               <h2 className="text-xl font-semibold">Quick Actions</h2>
               <Button
@@ -81,4 +104,3 @@ const ChildHome = () => {
 };
 
 export default ChildHome;
-

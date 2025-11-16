@@ -9,7 +9,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Phone } from "lucide-react";
 
 const ParentCallScreen = () => {
   const { childId } = useParams<{ childId: string }>();
@@ -55,7 +54,8 @@ const ParentCallScreen = () => {
     remoteVideoRef,
   });
 
-  const handleStartCall = () => {
+  // Automatically start call when component mounts (no extra "Start Call" step)
+  useEffect(() => {
     if (callEngine.state === "idle" && parentId && childId) {
       callEngine.startOutgoingCall(childId).catch((error) => {
         console.error("Failed to start call:", error);
@@ -66,7 +66,7 @@ const ParentCallScreen = () => {
         });
       });
     }
-  };
+  }, [callEngine.state, parentId, childId, callEngine]);
 
   // Handle ended state redirect
   useEffect(() => {
@@ -79,23 +79,6 @@ const ParentCallScreen = () => {
     return (
       <div className="min-h-[100dvh] bg-background flex items-center justify-center">
         <div>Loading...</div>
-      </div>
-    );
-  }
-
-  // Show call UI based on state
-  if (callEngine.state === "idle") {
-    return (
-      <div className="min-h-[100dvh] bg-background flex items-center justify-center">
-        <Card className="p-8">
-          <div className="text-center space-y-4">
-            <h2 className="text-2xl font-semibold">Call {childName}</h2>
-            <Button onClick={handleStartCall} size="lg">
-              <Phone className="mr-2 h-5 w-5" />
-              Start Call
-            </Button>
-          </div>
-        </Card>
       </div>
     );
   }

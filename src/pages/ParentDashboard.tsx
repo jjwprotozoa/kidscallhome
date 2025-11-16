@@ -1,4 +1,5 @@
 import AddChildDialog from "@/components/AddChildDialog";
+import Navigation from "@/components/Navigation";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -11,11 +12,18 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { useToast } from "@/hooks/use-toast";
 import { useIncomingCallNotifications } from "@/features/calls/hooks/useIncomingCallNotifications";
-import { useMissedBadgeForChild, useUnreadBadgeForChild } from "@/stores/badgeStore";
-import { supabase } from "@/integrations/supabase/client";
 import { endCall as endCallUtil } from "@/features/calls/utils/callEnding";
+import { HelpBubble } from "@/features/onboarding/HelpBubble";
+import { OnboardingTour } from "@/features/onboarding/OnboardingTour";
+import { StatusIndicator } from "@/features/presence/StatusIndicator";
+import { useChildrenPresence } from "@/features/presence/useChildrenPresence";
+import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
+import {
+  useMissedBadgeForChild,
+  useUnreadBadgeForChild,
+} from "@/stores/badgeStore";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import {
   Copy,
@@ -28,12 +36,10 @@ import {
   QrCode,
   Trash2,
   Video,
+  X,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import Navigation from "@/components/Navigation";
-import { OnboardingTour } from "@/features/onboarding/OnboardingTour";
-import { HelpBubble } from "@/features/onboarding/HelpBubble";
 
 interface Child {
   id: string;
@@ -59,10 +65,17 @@ interface CallRecord {
   ended_at?: string | null;
 }
 
+// CLS: Badges reserve space with invisible class when count is 0 to prevent button width changes
 // Component for Call button with missed call badge
-const ChildCallButton = ({ childId, onCall }: { childId: string; onCall: () => void }) => {
+const ChildCallButton = ({
+  childId,
+  onCall,
+}: {
+  childId: string;
+  onCall: () => void;
+}) => {
   const missedCallCount = useMissedBadgeForChild(childId);
-  
+
   return (
     <Button
       onClick={onCall}
@@ -72,19 +85,28 @@ const ChildCallButton = ({ childId, onCall }: { childId: string; onCall: () => v
     >
       <Video className="mr-2 h-4 w-4" />
       Call
-      {missedCallCount > 0 && (
-        <span className="ml-2 bg-destructive text-destructive-foreground text-xs font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
-          {missedCallCount > 99 ? "99+" : missedCallCount}
-        </span>
-      )}
+      {/* CLS: Reserve space for badge to prevent layout shift */}
+      <span
+        className={`ml-2 bg-destructive text-destructive-foreground text-xs font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 ${
+          missedCallCount === 0 ? "invisible" : ""
+        }`}
+      >
+        {missedCallCount > 99 ? "99+" : missedCallCount}
+      </span>
     </Button>
   );
 };
 
 // Component for Chat button with unread message badge
-const ChildChatButton = ({ childId, onChat }: { childId: string; onChat: () => void }) => {
+const ChildChatButton = ({
+  childId,
+  onChat,
+}: {
+  childId: string;
+  onChat: () => void;
+}) => {
   const unreadMessageCount = useUnreadBadgeForChild(childId);
-  
+
   return (
     <Button
       onClick={onChat}
@@ -94,11 +116,14 @@ const ChildChatButton = ({ childId, onChat }: { childId: string; onChat: () => v
     >
       <MessageCircle className="mr-2 h-4 w-4" />
       Chat
-      {unreadMessageCount > 0 && (
-        <span className="ml-2 bg-destructive text-destructive-foreground text-xs font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
-          {unreadMessageCount > 99 ? "99+" : unreadMessageCount}
-        </span>
-      )}
+      {/* CLS: Reserve space for badge to prevent layout shift */}
+      <span
+        className={`ml-2 bg-destructive text-destructive-foreground text-xs font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 ${
+          unreadMessageCount === 0 ? "invisible" : ""
+        }`}
+      >
+        {unreadMessageCount > 99 ? "99+" : unreadMessageCount}
+      </span>
     </Button>
   );
 };
@@ -114,6 +139,7 @@ const ParentDashboard = () => {
   const [childToDelete, setChildToDelete] = useState<Child | null>(null);
   const [childToEditCode, setChildToEditCode] = useState<Child | null>(null);
   const [isUpdatingCode, setIsUpdatingCode] = useState(false);
+  const [printViewChild, setPrintViewChild] = useState<Child | null>(null);
   const incomingCallRef = useRef<IncomingCall | null>(null); // Ref to track latest incomingCall for subscription callbacks
   const channelRef = useRef<RealtimeChannel | null>(null);
   const isAnsweringRef = useRef(false); // Track if user is answering to prevent auto-decline
@@ -126,6 +152,27 @@ const ParentDashboard = () => {
       volume: 0.7,
     }
   );
+  const handleIncomingCallRef = useRef(handleIncomingCall); // Ref to track latest handleIncomingCall for subscription callbacks
+
+  // Track children's online presence
+  // Memoize childIds to prevent unnecessary re-subscriptions
+  const childIds = useMemo(() => children.map((child) => child.id), [children]);
+  const { isChildOnline } = useChildrenPresence({
+    childIds,
+    enabled: children.length > 0,
+    // Optional: Uncomment to enable status change notifications
+    // onStatusChange: (childId, isOnline) => {
+    //   const child = children.find((c) => c.id === childId);
+    //   if (child) {
+    //     toast({
+    //       title: isOnline ? `${child.name} is online` : `${child.name} went offline`,
+    //       description: isOnline
+    //         ? "They're available for calls"
+    //         : "They're no longer available",
+    //     });
+    //   }
+    // },
+  });
 
   const checkAuth = useCallback(async () => {
     const {
@@ -163,10 +210,12 @@ const ParentDashboard = () => {
     // This prevents routing issues where parent might be treated as child
     const childSession = localStorage.getItem("childSession");
     if (childSession) {
-      console.log("🧹 [PARENT DASHBOARD] Clearing childSession for parent user");
+      console.log(
+        "🧹 [PARENT DASHBOARD] Clearing childSession for parent user"
+      );
       localStorage.removeItem("childSession");
     }
-    
+
     checkAuth();
     fetchChildren();
 
@@ -187,9 +236,6 @@ const ParentDashboard = () => {
         // IMPORTANT: Don't show incoming call notification if user is already on the call page
         // This prevents showing notifications for calls the parent initiated
         if (location.pathname.startsWith("/call/")) {
-          console.log(
-            "📞 [PARENT DASHBOARD] User is on call page, not showing incoming call notification"
-          );
           return;
         }
 
@@ -202,7 +248,9 @@ const ParentDashboard = () => {
           .single();
 
         if (childData) {
-          console.log("Setting incoming call:", childData.name);
+          if (import.meta.env.DEV) {
+            console.log("📞 [PARENT DASHBOARD] Incoming call:", childData.name);
+          }
           setIncomingCall({
             id: call.id,
             child_id: call.child_id,
@@ -210,7 +258,7 @@ const ParentDashboard = () => {
             child_avatar_color: childData.avatar_color,
           });
           // Handle incoming call with notifications (push notification if tab inactive, ringtone if active)
-          handleIncomingCall({
+          handleIncomingCallRef.current({
             callId: call.id,
             callerName: childData.name,
             callerId: call.child_id,
@@ -225,7 +273,9 @@ const ParentDashboard = () => {
       // Check calls created in the last 2 minutes to catch calls that might have been created
       // while the dashboard was loading or subscription was setting up
       const checkExistingCalls = async () => {
-        const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+        const twoMinutesAgo = new Date(
+          Date.now() - 2 * 60 * 1000
+        ).toISOString();
         const { data: existingCalls } = await supabase
           .from("calls")
           .select("*")
@@ -239,10 +289,6 @@ const ParentDashboard = () => {
         if (existingCalls && existingCalls.length > 0) {
           const call = existingCalls[0];
           if (call.id !== lastCheckedCallId) {
-            console.log(
-              "📞 [PARENT DASHBOARD] Initial check found child-initiated call:",
-              call.id
-            );
             await handleIncomingCallNotification(call);
           }
         }
@@ -271,10 +317,6 @@ const ParentDashboard = () => {
         if (newCalls && newCalls.length > 0) {
           const call = newCalls[0];
           if (call.id !== lastCheckedCallId) {
-            console.log(
-              "📞 [PARENT DASHBOARD] Polling found child-initiated call:",
-              call.id
-            );
             await handleIncomingCallNotification(call);
           }
         }
@@ -289,11 +331,7 @@ const ParentDashboard = () => {
 
       // Subscribe to new calls from children
       // Listen to both INSERT and UPDATE events to catch calls that are reset to ringing
-      console.log("📡 [PARENT DASHBOARD] Setting up realtime subscription for incoming calls", {
-        userId: user.id,
-        timestamp: new Date().toISOString(),
-      });
-      
+
       channelRef.current = supabase
         .channel("parent-incoming-calls")
         .on(
@@ -306,21 +344,6 @@ const ParentDashboard = () => {
           },
           async (payload) => {
             const call = payload.new as CallRecord;
-            console.log("📞 [PARENT DASHBOARD] Received call INSERT event:", {
-              callId: call.id,
-              callerType: call.caller_type,
-              parentId: call.parent_id,
-              childId: call.child_id,
-              status: call.status,
-              currentUserId: user.id,
-              matches:
-                call.caller_type === "child" &&
-                call.parent_id === user.id &&
-                call.status === "ringing",
-              payloadKeys: Object.keys(payload),
-              hasNew: !!payload.new,
-              hasOld: !!payload.old,
-            });
 
             // Verify this call is from a child, for this parent, and is ringing
             // IMPORTANT: Only show incoming call dialog for child-initiated calls, not parent-initiated ones
@@ -329,28 +352,7 @@ const ParentDashboard = () => {
               call.parent_id === user.id &&
               call.status === "ringing"
             ) {
-              console.log(
-                "✅ [PARENT DASHBOARD] Call is for this parent, fetching child details..."
-              );
               await handleIncomingCallNotification(call);
-            } else {
-              console.log(
-                "❌ [PARENT DASHBOARD] Call not for this parent or not ringing:",
-                {
-                  callerType: call.caller_type,
-                  callParentId: call.parent_id,
-                  currentUserId: user.id,
-                  status: call.status,
-                  reason:
-                    call.caller_type === "parent"
-                      ? "Parent-initiated call - not showing notification"
-                      : call.parent_id !== user.id
-                      ? "Call is for a different parent"
-                      : call.status !== "ringing"
-                      ? "Call is not in ringing status"
-                      : "Not a ringing child-initiated call",
-                }
-              );
             }
           }
         )
@@ -365,38 +367,15 @@ const ParentDashboard = () => {
           async (payload) => {
             const call = payload.new as CallRecord;
             const oldCall = payload.old as CallRecord;
-            console.log("📞 [PARENT DASHBOARD] Received call UPDATE event:", {
-              callId: call.id,
-              callerType: call.caller_type,
-              parentId: call.parent_id,
-              childId: call.child_id,
-              status: call.status,
-              oldStatus: oldCall?.status,
-              currentUserId: user.id,
-              timestamp: new Date().toISOString(),
-            });
 
             // CRITICAL: Always ignore parent-initiated calls - they should never show notifications
             // Parent-initiated calls are handled by the call page, not the dashboard
             if (call.caller_type === "parent") {
-              console.log(
-                "📞 [PARENT DASHBOARD] Ignoring parent-initiated call update:",
-                {
-                  callId: call.id,
-                  status: call.status,
-                  oldStatus: oldCall?.status,
-                  reason:
-                    "Parent-initiated calls should not show notifications - handled by call page",
-                }
-              );
               return; // Early return - don't process parent-initiated calls at all
             }
 
             // Don't process updates if user is on the call page
             if (location.pathname.startsWith("/call/")) {
-              console.log(
-                "📞 [PARENT DASHBOARD] User is on call page, ignoring UPDATE event"
-              );
               return;
             }
 
@@ -407,9 +386,6 @@ const ParentDashboard = () => {
               incomingCallRef.current.id === call.id
             ) {
               if (call.status === "active" || call.status === "ended") {
-                console.log(
-                  "Call was answered or ended, clearing incoming call notification"
-                );
                 setIncomingCall(null);
                 incomingCallRef.current = null;
               }
@@ -423,20 +399,18 @@ const ParentDashboard = () => {
               call.status === "ringing" &&
               oldCall.status !== "ringing"
             ) {
-              console.log(
-                "Call status changed to ringing, fetching child details..."
-              );
               await handleIncomingCallNotification(call);
             }
           }
         )
-        .subscribe((status) => {
-          console.log("📡 [PARENT DASHBOARD] Realtime subscription status:", {
-            status,
-            channel: "parent-incoming-calls",
-            userId: user.id,
-            timestamp: new Date().toISOString(),
-          });
+        .subscribe((status, err) => {
+          if (err) {
+            console.error(
+              "❌ [PARENT DASHBOARD] Realtime subscription error:",
+              err
+            );
+          }
+          // Silent subscription success - only log errors
         });
     };
 
@@ -450,12 +424,16 @@ const ParentDashboard = () => {
         clearInterval(pollInterval);
       }
     };
-  }, [checkAuth, fetchChildren, location.pathname, handleIncomingCall]);
+  }, [checkAuth, fetchChildren, location.pathname]);
 
-  // Keep ref in sync with state so subscription callbacks always have latest value
+  // Keep refs in sync with state/hooks so subscription callbacks always have latest values
   useEffect(() => {
     incomingCallRef.current = incomingCall;
   }, [incomingCall]);
+
+  useEffect(() => {
+    handleIncomingCallRef.current = handleIncomingCall;
+  }, [handleIncomingCall]);
 
   // Stop notifications when incoming call is cleared
   useEffect(() => {
@@ -463,7 +441,6 @@ const ParentDashboard = () => {
       stopIncomingCall(incomingCallRef.current.id);
     }
   }, [incomingCall, stopIncomingCall]);
-
 
   const handleChat = (childId: string) => {
     navigate(`/chat/${childId}`);
@@ -487,74 +464,13 @@ const ParentDashboard = () => {
   };
 
   const handlePrintCode = (child: Child) => {
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) return;
+    // Always show print view in a modal (works on all devices)
+    setPrintViewChild(child);
+  };
 
-    const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(
-      `${window.location.origin}/child/login?code=${child.login_code}`
-    )}`;
-
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Login Code - ${child.name}</title>
-          <style>
-            body {
-              font-family: Arial, sans-serif;
-              padding: 40px;
-              text-align: center;
-            }
-            .code-card {
-              border: 2px solid #333;
-              border-radius: 12px;
-              padding: 30px;
-              max-width: 400px;
-              margin: 0 auto;
-            }
-            .child-name {
-              font-size: 24px;
-              font-weight: bold;
-              margin-bottom: 20px;
-            }
-            .login-code {
-              font-size: 32px;
-              font-weight: bold;
-              font-family: monospace;
-              margin: 20px 0;
-              padding: 15px;
-              background: #f0f0f0;
-              border-radius: 8px;
-            }
-            .qr-code {
-              margin: 20px 0;
-            }
-            .instructions {
-              margin-top: 20px;
-              font-size: 14px;
-              color: #666;
-            }
-          </style>
-        </head>
-        <body>
-          <div class="code-card">
-            <div class="child-name">${child.name}'s Login Code</div>
-            <div class="login-code">${child.login_code}</div>
-            <div class="qr-code">
-              <img src="${qrCodeUrl}" alt="QR Code" />
-            </div>
-            <div class="instructions">
-              <p>Scan the QR code or use the code above to log in</p>
-              <p>Visit: ${window.location.origin}/child/login</p>
-            </div>
-          </div>
-        </body>
-      </html>
-    `);
-    printWindow.document.close();
-    setTimeout(() => {
-      printWindow.print();
-    }, 250);
+  const handlePrintFromModal = () => {
+    if (!printViewChild) return;
+    window.print();
   };
 
   const handleCall = (childId: string) => {
@@ -633,11 +549,6 @@ const ParentDashboard = () => {
 
   const handleAnswerCall = () => {
     if (incomingCall) {
-      console.log("📞 [USER ACTION] Parent answering call", {
-        callId: incomingCall.id,
-        childId: incomingCall.child_id,
-        timestamp: new Date().toISOString(),
-      });
       // Stop incoming call notifications
       stopIncomingCall(incomingCall.id);
       // Mark that we're answering to prevent onOpenChange from declining
@@ -645,12 +556,10 @@ const ParentDashboard = () => {
       const childId = incomingCall.child_id;
       const callId = incomingCall.id;
       setIncomingCall(null);
-      navigate(`/call/${childId}`);
+      // CRITICAL: Include callId in URL so useVideoCall can detect it's an incoming call immediately
+      navigate(`/call/${childId}?callId=${callId}`);
       // Reset the flag after navigation completes (longer delay to ensure navigation happened)
       setTimeout(() => {
-        console.log(
-          "📞 [USER ACTION] Resetting isAnswering flag after navigation"
-        );
         isAnsweringRef.current = false;
       }, 2000); // Increased from 500ms to 2000ms to ensure navigation completed
     }
@@ -658,18 +567,8 @@ const ParentDashboard = () => {
 
   const handleDeclineCall = async () => {
     if (incomingCall) {
-      console.log("🛑 [USER ACTION] Parent declining call", {
-        callId: incomingCall.id,
-        childId: incomingCall.child_id,
-        isAnswering: isAnsweringRef.current,
-        timestamp: new Date().toISOString(),
-      });
-
       // Don't decline if we're in the process of answering
       if (isAnsweringRef.current) {
-        console.log(
-          "⚠️ [USER ACTION] Prevented decline - call is being answered"
-        );
         return;
       }
 
@@ -696,10 +595,39 @@ const ParentDashboard = () => {
     }
   };
 
+  // CLS: Reserve space for loading state to match final layout structure
   if (loading) {
     return (
-      <div className="min-h-[100dvh] flex items-center justify-center bg-background">
-        <p>Loading...</p>
+      <div className="min-h-[100dvh] bg-background">
+        <Navigation />
+        <div className="p-4">
+          <div className="max-w-4xl mx-auto space-y-6">
+            <div className="mt-8">
+              <div className="h-9 w-48 bg-muted rounded animate-pulse mb-2" />
+              <div className="h-6 w-96 bg-muted rounded animate-pulse" />
+            </div>
+            <div className="h-12 w-full bg-muted rounded animate-pulse" />
+            <div className="grid gap-4 md:grid-cols-2">
+              {[1, 2].map((i) => (
+                <Card key={i} className="p-6 space-y-4 min-h-[220px]">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-4">
+                      <div className="w-12 h-12 rounded-full bg-muted animate-pulse" />
+                      <div className="space-y-2">
+                        <div className="h-6 w-32 bg-muted rounded animate-pulse" />
+                        <div className="h-4 w-24 bg-muted rounded animate-pulse" />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <div className="h-10 flex-1 bg-muted rounded animate-pulse" />
+                    <div className="h-10 flex-1 bg-muted rounded animate-pulse" />
+                  </div>
+                </Card>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -716,7 +644,7 @@ const ParentDashboard = () => {
             <p className="text-muted-foreground mt-2">
               Manage your children's profiles, login codes, and settings
             </p>
-            </div>
+          </div>
 
           <Button
             onClick={() => setShowAddChild(true)}
@@ -728,7 +656,7 @@ const ParentDashboard = () => {
           </Button>
 
           {children.length === 0 ? (
-            <Card className="p-12 text-center">
+            <Card className="p-12 text-center min-h-[220px]">
               <p className="text-muted-foreground mb-4">
                 You haven't added any children yet.
               </p>
@@ -738,291 +666,377 @@ const ParentDashboard = () => {
             </Card>
           ) : (
             <div className="grid gap-4 md:grid-cols-2">
-            {children.map((child, index) => (
-              <Card
-                key={child.id}
-                className="p-6 space-y-4"
-                style={{
-                  borderLeft: `4px solid ${child.avatar_color}`,
-                }}
-                data-tour={index === 0 ? "parent-status-indicator" : undefined}
-              >
-                <div className="space-y-2">
-                  <h3 className="text-xl font-bold">{child.name}</h3>
-                  <div className="bg-muted p-3 rounded-lg relative">
-                    <p className="text-xs text-muted-foreground mb-1">
-                      Login Code
-                    </p>
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-2xl font-mono font-bold tracking-wider flex-1">
-                        {child.login_code}
+              {children.map((child, index) => (
+                <Card
+                  key={child.id}
+                  className="p-6 space-y-4 min-h-[220px]"
+                  style={{
+                    borderLeft: `4px solid ${child.avatar_color}`,
+                  }}
+                  data-tour={
+                    index === 0 ? "parent-status-indicator" : undefined
+                  }
+                >
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-xl font-bold">{child.name}</h3>
+                      <StatusIndicator
+                        isOnline={isChildOnline(child.id)}
+                        size="md"
+                        showPulse={isChildOnline(child.id)}
+                      />
+                    </div>
+                    <div className="bg-muted p-3 rounded-lg relative">
+                      <p className="text-xs text-muted-foreground mb-1">
+                        Login Code
                       </p>
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-2xl font-mono font-bold tracking-wider flex-1">
+                          {child.login_code}
+                        </p>
+                        <Button
+                          onClick={() => setChildToEditCode(child)}
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          title="Generate new login code"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="flex gap-2 flex-wrap">
                       <Button
-                        onClick={() => setChildToEditCode(child)}
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        title="Generate new login code"
+                        onClick={() => handleCopyCode(child.login_code)}
+                        variant="outline"
+                        size="sm"
+                        className="flex-1"
                       >
-                        <Edit className="h-4 w-4" />
+                        <Copy className="mr-2 h-4 w-4" />
+                        Copy Code
+                      </Button>
+                      <Button
+                        onClick={() => handleCopyMagicLink(child)}
+                        variant="outline"
+                        size="sm"
+                        className="flex-1"
+                      >
+                        <ExternalLink className="mr-2 h-4 w-4" />
+                        Copy Link
+                      </Button>
+                      <Button
+                        onClick={() => handlePrintCode(child)}
+                        variant="outline"
+                        size="sm"
+                        className="flex-1"
+                      >
+                        <Printer className="mr-2 h-4 w-4" />
+                        Print
+                      </Button>
+                      <Button
+                        onClick={() => setShowCodeDialog({ child })}
+                        variant="outline"
+                        size="sm"
+                        className="flex-1"
+                      >
+                        <QrCode className="mr-2 h-4 w-4" />
+                        View QR
                       </Button>
                     </div>
                   </div>
-                  <div className="flex gap-2 flex-wrap">
+
+                  <div className="flex gap-2">
+                    <ChildCallButton
+                      childId={child.id}
+                      onCall={() => handleCall(child.id)}
+                    />
+                    <ChildChatButton
+                      childId={child.id}
+                      onChat={() => handleChat(child.id)}
+                    />
                     <Button
-                      onClick={() => handleCopyCode(child.login_code)}
-                      variant="outline"
-                      size="sm"
-                      className="flex-1"
+                      onClick={() => setChildToDelete(child)}
+                      variant="destructive"
+                      size="icon"
                     >
-                      <Copy className="mr-2 h-4 w-4" />
-                      Copy Code
-                    </Button>
-                    <Button
-                      onClick={() => handleCopyMagicLink(child)}
-                      variant="outline"
-                      size="sm"
-                      className="flex-1"
-                    >
-                      <ExternalLink className="mr-2 h-4 w-4" />
-                      Copy Link
-                    </Button>
-                    <Button
-                      onClick={() => handlePrintCode(child)}
-                      variant="outline"
-                      size="sm"
-                      className="flex-1"
-                    >
-                      <Printer className="mr-2 h-4 w-4" />
-                      Print
-                    </Button>
-                    <Button
-                      onClick={() => setShowCodeDialog({ child })}
-                      variant="outline"
-                      size="sm"
-                      className="flex-1"
-                    >
-                      <QrCode className="mr-2 h-4 w-4" />
-                      View QR
+                      <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
-                </div>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
 
-                <div className="flex gap-2">
-                  <ChildCallButton childId={child.id} onCall={() => handleCall(child.id)} />
-                  <ChildChatButton childId={child.id} onChat={() => handleChat(child.id)} />
+        <AddChildDialog
+          open={showAddChild}
+          onOpenChange={setShowAddChild}
+          onChildAdded={fetchChildren}
+        />
+
+        {/* Code View Dialog */}
+        {showCodeDialog && (
+          <AlertDialog
+            open={!!showCodeDialog}
+            onOpenChange={(open) => !open && setShowCodeDialog(null)}
+          >
+            <AlertDialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-md">
+              <button
+                onClick={() => setShowCodeDialog(null)}
+                className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none"
+              >
+                <X className="h-4 w-4" />
+                <span className="sr-only">Close</span>
+              </button>
+              <AlertDialogHeader>
+                <AlertDialogTitle className="text-lg sm:text-xl">
+                  {showCodeDialog.child.name}'s Login Code
+                </AlertDialogTitle>
+                <AlertDialogDescription className="text-sm">
+                  Share this code or QR code with your child to log in
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="bg-muted p-3 sm:p-4 rounded-lg text-center">
+                  <p className="text-xs text-muted-foreground mb-2">
+                    Login Code
+                  </p>
+                  <p className="text-2xl sm:text-3xl font-mono font-bold break-all">
+                    {showCodeDialog.child.login_code}
+                  </p>
+                </div>
+                <div className="flex justify-center">
+                  <img
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
+                      `${window.location.origin}/child/login?code=${showCodeDialog.child.login_code}`
+                    )}`}
+                    alt="QR Code"
+                    className="border-2 border-muted rounded-lg w-[200px] h-[200px] sm:w-[250px] sm:h-[250px] object-contain"
+                  />
+                </div>
+                <div className="flex flex-col sm:flex-row gap-2">
                   <Button
-                    onClick={() => setChildToDelete(child)}
-                    variant="destructive"
-                    size="icon"
+                    onClick={() =>
+                      handleCopyCode(showCodeDialog.child.login_code)
+                    }
+                    variant="outline"
+                    className="flex-1 w-full sm:w-auto"
                   >
-                    <Trash2 className="h-4 w-4" />
+                    <Copy className="mr-2 h-4 w-4" />
+                    Copy Code
+                  </Button>
+                  <Button
+                    onClick={() => handleCopyMagicLink(showCodeDialog.child)}
+                    variant="outline"
+                    className="flex-1 w-full sm:w-auto"
+                  >
+                    <ExternalLink className="mr-2 h-4 w-4" />
+                    Copy Link
+                  </Button>
+                  <Button
+                    onClick={() => handlePrintCode(showCodeDialog.child)}
+                    variant="outline"
+                    className="flex-1 w-full sm:w-auto"
+                  >
+                    <Printer className="mr-2 h-4 w-4" />
+                    Print
                   </Button>
                 </div>
-              </Card>
-            ))}
-          </div>
+              </div>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Close</AlertDialogCancel>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         )}
-      </div>
 
-      <AddChildDialog
-        open={showAddChild}
-        onOpenChange={setShowAddChild}
-        onChildAdded={fetchChildren}
-      />
-
-      {/* Code View Dialog */}
-      {showCodeDialog && (
+        {/* Edit Login Code Confirmation Dialog */}
         <AlertDialog
-          open={!!showCodeDialog}
-          onOpenChange={(open) => !open && setShowCodeDialog(null)}
+          open={!!childToEditCode}
+          onOpenChange={(open) => !open && setChildToEditCode(null)}
         >
-          <AlertDialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-md">
+          <AlertDialogContent>
+            <button
+              onClick={() => setChildToEditCode(null)}
+              className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none"
+              disabled={isUpdatingCode}
+            >
+              <X className="h-4 w-4" />
+              <span className="sr-only">Close</span>
+            </button>
             <AlertDialogHeader>
-              <AlertDialogTitle className="text-lg sm:text-xl">
-                {showCodeDialog.child.name}'s Login Code
-              </AlertDialogTitle>
-              <AlertDialogDescription className="text-sm">
-                Share this code or QR code with your child to log in
+              <AlertDialogTitle>Generate New Login Code</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to generate a new login code for{" "}
+                {childToEditCode?.name}? The current code (
+                {childToEditCode?.login_code}) will no longer work. Make sure to
+                share the new code with your child.
               </AlertDialogDescription>
             </AlertDialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="bg-muted p-3 sm:p-4 rounded-lg text-center">
-                <p className="text-xs text-muted-foreground mb-2">Login Code</p>
-                <p className="text-2xl sm:text-3xl font-mono font-bold break-all">
-                  {showCodeDialog.child.login_code}
-                </p>
-              </div>
-              <div className="flex justify-center">
-                <img
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
-                    `${window.location.origin}/child/login?code=${showCodeDialog.child.login_code}`
-                  )}`}
-                  alt="QR Code"
-                  className="border-2 border-muted rounded-lg w-[200px] h-[200px] sm:w-[250px] sm:h-[250px] object-contain"
-                />
-              </div>
-              <div className="flex flex-col sm:flex-row gap-2">
-                <Button
-                  onClick={() =>
-                    handleCopyCode(showCodeDialog.child.login_code)
-                  }
-                  variant="outline"
-                  className="flex-1 w-full sm:w-auto"
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={isUpdatingCode}>
+                Cancel
+              </AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleUpdateLoginCode}
+                disabled={isUpdatingCode}
+              >
+                {isUpdatingCode ? "Generating..." : "Generate New Code"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Delete Child Confirmation Dialog */}
+        <AlertDialog
+          open={!!childToDelete}
+          onOpenChange={(open) => !open && setChildToDelete(null)}
+        >
+          <AlertDialogContent>
+            <button
+              onClick={() => setChildToDelete(null)}
+              className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none"
+            >
+              <X className="h-4 w-4" />
+              <span className="sr-only">Close</span>
+            </button>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Remove Child</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to remove {childToDelete?.name}? This
+                action cannot be undone and will delete all associated data
+                including messages and call history.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleDeleteChild}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                Remove
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Incoming Call Dialog */}
+        <AlertDialog
+          open={!!incomingCall}
+          onOpenChange={(open) => {
+            // Only decline if dialog is being closed AND user didn't click Answer
+            // Don't decline if user is answering (isAnsweringRef will be true)
+            if (!open && incomingCall && !isAnsweringRef.current) {
+              handleDeclineCall();
+            }
+          }}
+        >
+          <AlertDialogContent className="sm:max-w-md">
+            <AlertDialogHeader>
+              <div className="flex items-center gap-3 mb-2">
+                <div
+                  className="w-12 h-12 rounded-full flex items-center justify-center text-2xl font-bold text-white"
+                  style={{
+                    backgroundColor:
+                      incomingCall?.child_avatar_color || "#3B82F6",
+                  }}
                 >
-                  <Copy className="mr-2 h-4 w-4" />
-                  Copy Code
-                </Button>
+                  {incomingCall?.child_name[0]}
+                </div>
+                <div>
+                  <AlertDialogTitle className="text-xl">
+                    Incoming Call
+                  </AlertDialogTitle>
+                  <p className="text-base font-normal text-muted-foreground">
+                    {incomingCall?.child_name} is calling...
+                  </p>
+                </div>
+              </div>
+              <div className="pt-4">
+                <AlertDialogDescription className="sr-only">
+                  Incoming call from {incomingCall?.child_name}
+                </AlertDialogDescription>
+                <div className="flex items-center justify-center gap-2 text-4xl animate-pulse">
+                  <Phone className="h-12 w-12" />
+                </div>
+              </div>
+            </AlertDialogHeader>
+            <AlertDialogFooter className="sm:justify-center gap-2">
+              <AlertDialogCancel
+                onClick={handleDeclineCall}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                Decline
+              </AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleAnswerCall}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                Answer
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Print View Modal (Mobile) */}
+        {printViewChild && (
+          <AlertDialog
+            open={!!printViewChild}
+            onOpenChange={(open) => !open && setPrintViewChild(null)}
+          >
+            <AlertDialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-md print:hidden">
+              <button
+                onClick={() => setPrintViewChild(null)}
+                className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none print:hidden"
+              >
+                <X className="h-4 w-4" />
+                <span className="sr-only">Close</span>
+              </button>
+              <AlertDialogHeader>
+                <AlertDialogTitle className="text-lg sm:text-xl">
+                  {printViewChild.name}'s Login Code
+                </AlertDialogTitle>
+                <AlertDialogDescription className="text-sm">
+                  Print or share this code with your child
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="bg-muted p-3 sm:p-4 rounded-lg text-center print:border-2 print:border-gray-800">
+                  <p className="text-xs text-muted-foreground mb-2 print:text-gray-600">
+                    Login Code
+                  </p>
+                  <p className="text-2xl sm:text-3xl font-mono font-bold break-all print:text-3xl">
+                    {printViewChild.login_code}
+                  </p>
+                </div>
+                <div className="flex justify-center print:my-4">
+                  <img
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(
+                      `${window.location.origin}/child/login?code=${printViewChild.login_code}`
+                    )}`}
+                    alt="QR Code"
+                    className="border-2 border-muted rounded-lg w-[250px] h-[250px] sm:w-[300px] sm:h-[300px] object-contain print:border-gray-800"
+                  />
+                </div>
+                <div className="instructions print:mt-4 print:text-sm print:text-gray-600">
+                  <p>Scan the QR code or use the code above to log in</p>
+                  <p>Visit: {window.location.origin}/child/login</p>
+                </div>
+              </div>
+              <AlertDialogFooter className="print:hidden">
                 <Button
-                  onClick={() => handleCopyMagicLink(showCodeDialog.child)}
-                  variant="outline"
-                  className="flex-1 w-full sm:w-auto"
-                >
-                  <ExternalLink className="mr-2 h-4 w-4" />
-                  Copy Link
-                </Button>
-                <Button
-                  onClick={() => handlePrintCode(showCodeDialog.child)}
-                  variant="outline"
-                  className="flex-1 w-full sm:w-auto"
+                  onClick={handlePrintFromModal}
+                  variant="default"
+                  className="flex-1"
                 >
                   <Printer className="mr-2 h-4 w-4" />
                   Print
                 </Button>
-              </div>
-            </div>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Close</AlertDialogCancel>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      )}
-
-      {/* Edit Login Code Confirmation Dialog */}
-      <AlertDialog
-        open={!!childToEditCode}
-        onOpenChange={(open) => !open && setChildToEditCode(null)}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Generate New Login Code</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to generate a new login code for{" "}
-              {childToEditCode?.name}? The current code (
-              {childToEditCode?.login_code}) will no longer work. Make sure to
-              share the new code with your child.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isUpdatingCode}>
-              Cancel
-            </AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleUpdateLoginCode}
-              disabled={isUpdatingCode}
-            >
-              {isUpdatingCode ? "Generating..." : "Generate New Code"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* Delete Child Confirmation Dialog */}
-      <AlertDialog
-        open={!!childToDelete}
-        onOpenChange={(open) => !open && setChildToDelete(null)}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Remove Child</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to remove {childToDelete?.name}? This action
-              cannot be undone and will delete all associated data including
-              messages and call history.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDeleteChild}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              Remove
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* Incoming Call Dialog */}
-      <AlertDialog
-        open={!!incomingCall}
-        onOpenChange={(open) => {
-          console.log("📞 [UI EVENT] Incoming call dialog open state changed", {
-            open: open,
-            hasIncomingCall: !!incomingCall,
-            isAnswering: isAnsweringRef.current,
-            timestamp: new Date().toISOString(),
-          });
-          // Only decline if dialog is being closed AND user didn't click Answer
-          // Don't decline if user is answering (isAnsweringRef will be true)
-          if (!open && incomingCall && !isAnsweringRef.current) {
-            console.log(
-              "🛑 [UI EVENT] Dialog closed without answering - declining call"
-            );
-            handleDeclineCall();
-          } else if (!open && isAnsweringRef.current) {
-            console.log(
-              "✅ [UI EVENT] Dialog closed but call is being answered - not declining"
-            );
-          }
-        }}
-      >
-        <AlertDialogContent className="sm:max-w-md">
-          <AlertDialogHeader>
-            <div className="flex items-center gap-3 mb-2">
-              <div
-                className="w-12 h-12 rounded-full flex items-center justify-center text-2xl font-bold text-white"
-                style={{
-                  backgroundColor:
-                    incomingCall?.child_avatar_color || "#3B82F6",
-                }}
-              >
-                {incomingCall?.child_name[0]}
-              </div>
-              <div>
-                <AlertDialogTitle className="text-xl">
-                  Incoming Call
-                </AlertDialogTitle>
-                <p className="text-base font-normal text-muted-foreground">
-                  {incomingCall?.child_name} is calling...
-                </p>
-              </div>
-            </div>
-            <div className="pt-4">
-              <AlertDialogDescription className="sr-only">
-                Incoming call from {incomingCall?.child_name}
-              </AlertDialogDescription>
-              <div className="flex items-center justify-center gap-2 text-4xl animate-pulse">
-                <Phone className="h-12 w-12" />
-              </div>
-            </div>
-          </AlertDialogHeader>
-          <AlertDialogFooter className="sm:justify-center gap-2">
-            <AlertDialogCancel
-              onClick={handleDeclineCall}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              Decline
-            </AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleAnswerCall}
-              className="bg-green-600 hover:bg-green-700"
-            >
-              Answer
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+                <AlertDialogCancel>Close</AlertDialogCancel>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        )}
       </div>
     </div>
   );

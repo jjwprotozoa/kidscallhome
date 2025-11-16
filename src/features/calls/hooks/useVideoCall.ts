@@ -19,6 +19,7 @@ export const useVideoCall = () => {
   const { toast } = useToast();
   const { playRingtone, stopRingtone, playCallAnswered } = useAudioNotifications({ enabled: true, volume: 0.7 });
   const initializationRef = useRef(false);
+  const terminationListenerSetupRef = useRef<string | null>(null);
 
   // CRITICAL FIX: Derive isChild synchronously from route/session BEFORE useWebRTC
   // This ensures ICE candidates go to the correct database columns
@@ -671,7 +672,7 @@ export const useVideoCall = () => {
       // If answering a call, don't navigate away - let user stay on call page to retry
       // Only navigate if it's not an incoming call answer
       if (!isAnsweringCall) {
-        navigate("/child/dashboard");
+        navigate("/child/parents");
       }
       throw error;
     }
@@ -738,9 +739,21 @@ export const useVideoCall = () => {
               });
             }
             
+            // CRITICAL: Check if status changed to "active" - this means call was answered
+            // Stop ringtone immediately when call becomes active
+            if (
+              updatedCall.status === "active" &&
+              oldCall?.status !== "active" &&
+              updatedCall.id === currentCallId
+            ) {
+              console.log("✅ [CALL LIFECYCLE] Call status changed to active - stopping ringtone immediately");
+              stopRingtone();
+              setIsConnecting(false);
+              // Don't return - continue to check for terminal state below
+            }
+            
             // Check for terminal state: status === 'ended' OR ended_at != null
             // Only trigger if status changed TO terminal (not if it was already ended)
-            // Don't trigger on status changes to "active" (that means call was answered)
             // CRITICAL: Only process if this is the current call we're handling
             const isTerminal = isCallTerminal(updatedCall);
             
@@ -748,7 +761,7 @@ export const useVideoCall = () => {
             // If oldCall is undefined, we can't be sure this is a new termination
             // This prevents false positives when the listener first subscribes
             const wasTerminal = oldCall ? isCallTerminal(oldCall) : null; // null means unknown, not false
-            
+
             // Only process if:
             // 1. Call is now terminal
             // 2. We have a previous state (oldCall is not undefined)
@@ -764,7 +777,6 @@ export const useVideoCall = () => {
               oldEndedAt: oldCall?.ended_at,
               newEndedAt: updatedCall.ended_at,
             });
-            
             if (
               isTerminal && 
               oldCall !== undefined && // Must have previous state
@@ -805,6 +817,12 @@ export const useVideoCall = () => {
                 description: "The other person ended the call",
                 variant: "default",
               });
+              
+              // Stop ringtone if playing (CRITICAL: Must stop before cleanup)
+              stopRingtone();
+              
+              // Reset connecting state to prevent ringtone from restarting
+              setIsConnecting(false);
               
               // Cleanup immediately - don't wait for ICE state
               cleanupWebRTC();
@@ -867,13 +885,17 @@ export const useVideoCall = () => {
     return terminationChannel;
   };
 
+
   const callStartTimeRef = useRef<number | null>(null);
+  const [callStartTime, setCallStartTime] = useState<number | null>(null);
 
   // CRITICAL FIX: Only mark call as started when ICE is actually connected
   // Don't mark as "connected" just because answer was received
   useEffect(() => {
     if (isConnected && remoteStream && callId && !callStartTimeRef.current) {
-      callStartTimeRef.current = Date.now();
+      const startTime = Date.now();
+      callStartTimeRef.current = startTime;
+      setCallStartTime(startTime); // Update state so UI can react
       console.log("📞 [CALL LIFECYCLE] Call started (ICE connected)", {
         callId,
         timestamp: new Date().toISOString(),
@@ -882,6 +904,14 @@ export const useVideoCall = () => {
       });
     }
   }, [isConnected, remoteStream, callId, peerConnectionRef]);
+
+  // Reset call start time when call ends
+  useEffect(() => {
+    if (!callId || !remoteStream) {
+      callStartTimeRef.current = null;
+      setCallStartTime(null);
+    }
+  }, [callId, remoteStream]);
 
   // Track when call becomes active (DEPRECATED - use isConnected check above instead)
   // Keep for backwards compatibility but prefer isConnected check
@@ -920,20 +950,16 @@ export const useVideoCall = () => {
     }
 
     // Determine if user is child or parent
-    // CRITICAL: Check auth session FIRST - parents have auth session, children don't
-    const { data: { session } } = await supabase.auth.getSession();
-    const childSession = localStorage.getItem("childSession");
-    // Parent if has auth session (even if childSession exists)
-    // Child if has childSession but NO auth session
-    const isChildUser = !session && !!childSession;
+    // CRITICAL: Use the isChild state that was determined at initialization
+    // This ensures consistency with the call flow and avoids recalculating
+    const isChildUser = isChild;
     const by = isChildUser ? 'child' : 'parent';
     
     console.log("🔍 [USER TYPE DETECTION] End call - determining user type:", {
-      hasAuthSession: !!session,
-      hasChildSession: !!childSession,
       isChildUser,
+      isChildState: isChild,
       by,
-      userId: session?.user?.id || null,
+      route: window.location.pathname,
       timestamp: new Date().toISOString(),
     });
 
@@ -950,9 +976,13 @@ export const useVideoCall = () => {
 
     // Reset call start time
     callStartTimeRef.current = null;
+    setCallStartTime(null);
     
-    // Stop ringtone if playing
+    // CRITICAL: Stop ringtone IMMEDIATELY when ending call
+    // Call multiple times to ensure it stops (handles race conditions)
     stopRingtone();
+    setTimeout(() => stopRingtone(), 0); // Ensure it stops even if interval callback is executing
+    setIsConnecting(false); // Also reset connecting state to prevent ringtone from restarting
     
     // Clean up all resources (force cleanup on explicit hangup)
     // Pass true to force cleanup even if ICE is still establishing
@@ -986,6 +1016,7 @@ export const useVideoCall = () => {
     toggleMute,
     toggleVideo,
     endCall,
+    callStartTime,
   };
 };
 

@@ -81,12 +81,14 @@ export function useBadgeRealtime() {
         }
       )
       .subscribe((status, err) => {
-        console.log("📡 [BADGE REALTIME] Messages subscription status:", status);
-        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
-          console.error("❌ [BADGE REALTIME] Messages subscription failed:", err);
-          // Supabase will auto-reconnect, but we can trigger a reconciliation if needed
-          // For now, rely on Supabase's built-in reconnection
+        // Only log errors, not normal status changes
+        if (err) {
+          console.error("❌ [BADGE REALTIME] Messages subscription error:", err);
+        } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+          // Log errors even if err is undefined but status indicates failure
+          console.error("❌ [BADGE REALTIME] Messages subscription failed:", status);
         }
+        // CLOSED is normal cleanup, don't log as error
       });
 
     // Calls subscription
@@ -174,12 +176,14 @@ export function useBadgeRealtime() {
         }
       )
       .subscribe((status, err) => {
-        console.log("📡 [BADGE REALTIME] Calls subscription status:", status);
-        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
-          console.error("❌ [BADGE REALTIME] Calls subscription failed:", err);
-          // Supabase will auto-reconnect, but we can trigger a reconciliation if needed
-          // For now, rely on Supabase's built-in reconnection
+        // Only log errors, not normal status changes
+        if (err) {
+          console.error("❌ [BADGE REALTIME] Calls subscription error:", err);
+        } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+          // Log errors even if err is undefined but status indicates failure
+          console.error("❌ [BADGE REALTIME] Calls subscription failed:", status);
         }
+        // CLOSED is normal cleanup, don't log as error
       });
 
     return () => {

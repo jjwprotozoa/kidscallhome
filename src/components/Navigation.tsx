@@ -16,8 +16,24 @@ const Navigation = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   
-  // Check localStorage synchronously first for immediate render
+  // Check route path first (most reliable indicator)
   const getInitialUserType = (): "parent" | "child" | null => {
+    const pathname = location.pathname;
+    // If on child route, definitely a child
+    if (pathname.includes('/child/')) return "child";
+    // If on parent route, likely a parent (but verify with auth session)
+    if (pathname.includes('/parent/')) return null; // Will check auth session
+    
+    // For other routes, check sessions
+    // CRITICAL: Check auth session FIRST - parents have auth session, children don't
+    // This prevents parents from being misidentified as children due to stale childSession
+    const hasAuthSession = document.cookie.includes('sb-') || localStorage.getItem('sb-');
+    if (hasAuthSession) {
+      // Has auth session = parent (even if childSession exists)
+      return "parent";
+    }
+    
+    // No auth session - check if we have childSession
     const childSession = localStorage.getItem("childSession");
     if (childSession) {
       try {
@@ -39,20 +55,62 @@ const Navigation = () => {
 
   useEffect(() => {
     const checkUserType = async () => {
-      // If we already detected child from localStorage, we're done
-      if (userType === "child") {
-        return;
+      const pathname = location.pathname;
+      
+      // Route-based detection (most reliable)
+      if (pathname.includes('/child/')) {
+        // On child route - verify childSession exists
+        const childSession = localStorage.getItem("childSession");
+        if (childSession) {
+          try {
+            JSON.parse(childSession);
+            setUserType("child");
+            return;
+          } catch {
+            // Invalid JSON - fall through to check auth
+          }
+        }
+      }
+      
+      if (pathname.includes('/parent/')) {
+        // On parent route - check auth session
+        try {
+          const {
+            data: { session },
+          } = await supabase.auth.getSession();
+          if (session) {
+            setUserType("parent");
+            return;
+          }
+        } catch (error) {
+          console.error("Error checking parent session:", error);
+        }
       }
 
-      // Check if parent session exists
+      // For other routes (like /call/), check auth session FIRST
+      // CRITICAL: Always check auth session FIRST - parents have auth session, children don't
+      // This prevents parents from being misidentified as children due to stale childSession
       try {
         const {
           data: { session },
         } = await supabase.auth.getSession();
         if (session) {
+          // Has auth session = parent (even if childSession exists)
           setUserType("parent");
         } else {
-          setUserType(null);
+          // No auth session - check if we have childSession
+          const childSession = localStorage.getItem("childSession");
+          if (childSession) {
+            try {
+              JSON.parse(childSession);
+              setUserType("child");
+            } catch {
+              // Invalid JSON
+              setUserType(null);
+            }
+          } else {
+            setUserType(null);
+          }
         }
       } catch (error) {
         console.error("Error checking parent session:", error);
@@ -61,7 +119,7 @@ const Navigation = () => {
     };
 
     checkUserType();
-  }, [location.pathname, userType]);
+  }, [location.pathname]);
 
   const handleLogout = async () => {
     if (userType === "child") {
@@ -99,9 +157,10 @@ const Navigation = () => {
         : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
     );
 
-  // Badge component for showing counts on icons (positioned relative to icon)
+  // CLS: Badge component - always reserve space to prevent layout shift
+  // Badges are absolutely positioned so they don't affect layout, but we ensure consistent rendering
   const Badge = ({ count }: { count: number }) => {
-    if (count === 0) return null;
+    if (count === 0) return null; // Absolute positioning means no layout shift
     return (
       <span className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground text-xs font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 border-2 border-background">
         {count > 99 ? "99+" : count}

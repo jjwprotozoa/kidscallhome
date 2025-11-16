@@ -2,6 +2,7 @@
 // Video call UI layout component
 
 import { useEffect, useRef, useState } from "react";
+import { Info } from "lucide-react";
 import { CallControls } from "./CallControls";
 
 interface VideoCallUIProps {
@@ -15,6 +16,7 @@ interface VideoCallUIProps {
   onToggleVideo: () => void;
   onEndCall: () => void;
   peerConnection?: RTCPeerConnection | null;
+  callStartTime?: number | null;
 }
 
 export const VideoCallUI = ({
@@ -28,9 +30,46 @@ export const VideoCallUI = ({
   onToggleVideo,
   onEndCall,
   peerConnection,
+  callStartTime,
 }: VideoCallUIProps) => {
   const [videoState, setVideoState] = useState<'waiting' | 'loading' | 'playing' | 'error'>('waiting');
+  const [showDebugInfo, setShowDebugInfo] = useState(false);
+  const [callDuration, setCallDuration] = useState<string>('');
   const playAttemptedRef = useRef(false);
+
+  // Format duration as MM:SS or HH:MM:SS
+  const formatDuration = (milliseconds: number): string => {
+    const totalSeconds = Math.floor(milliseconds / 1000);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+
+    if (hours > 0) {
+      return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    }
+    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  };
+
+  // Update call duration timer
+  useEffect(() => {
+    if (!callStartTime) {
+      setCallDuration('');
+      return;
+    }
+
+    const updateDuration = () => {
+      const duration = Date.now() - callStartTime;
+      setCallDuration(formatDuration(duration));
+    };
+
+    // Update immediately
+    updateDuration();
+
+    // Update every second
+    const interval = setInterval(updateDuration, 1000);
+
+    return () => clearInterval(interval);
+  }, [callStartTime]);
 
   // CRITICAL FIX: Use video element events instead of polling
   // This makes the UI responsive and eliminates "stuck on loading" issues
@@ -346,9 +385,35 @@ export const VideoCallUI = ({
           </div>
         )}
 
-        {/* Debug info (remove in production) */}
+        {/* Call duration timer */}
+        {callStartTime && callDuration && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 bg-black/60 text-white px-4 py-2 rounded-full text-sm font-mono">
+            {callDuration}
+          </div>
+        )}
+
+        {/* Info button - toggle debug info */}
         {process.env.NODE_ENV === 'development' && remoteStream && (
-          <div className="absolute top-20 left-4 bg-black/50 text-white text-xs p-2 rounded">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowDebugInfo(!showDebugInfo);
+            }}
+            className="absolute top-4 left-4 z-10 bg-black/50 hover:bg-black/70 text-white p-2 rounded-full transition-colors"
+            title="Toggle debug info"
+            aria-label="Toggle debug info"
+          >
+            <Info className="h-5 w-5" />
+          </button>
+        )}
+
+        {/* Debug info - hidden by default, shown when info button is clicked */}
+        {process.env.NODE_ENV === 'development' && remoteStream && showDebugInfo && (
+          <div 
+            className="absolute top-16 left-4 bg-black/80 text-white text-xs p-3 rounded-lg shadow-lg z-10"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="font-semibold mb-2 pb-2 border-b border-white/20">Debug Info</div>
             <div>State: {videoState}</div>
             <div>ReadyState: {remoteVideoRef.current?.readyState ?? 'N/A'}</div>
             <div>Paused: {remoteVideoRef.current?.paused ? 'Yes' : 'No'}</div>

@@ -1,3 +1,4 @@
+// CLS: Image uses aspect-square wrapper to reserve space and prevent layout shift on load
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -10,11 +11,16 @@ const Index = () => {
     <div className="min-h-[100dvh] bg-gradient-to-b from-primary/10 to-background">
       <div className="container mx-auto px-4 py-16">
         <div className="text-center space-y-6 mb-16">
-          <img 
-            src="/icon-192x192.png" 
-            alt="Kids Call Home" 
-            className="h-20 w-20 mx-auto"
-          />
+          {/* CLS: Reserve space with aspect-square wrapper to prevent layout shift */}
+          <div className="aspect-square w-20 mx-auto">
+            <img 
+              src="/icon-192x192.png" 
+              alt="Kids Call Home" 
+              className="w-full h-full object-contain"
+              width="192"
+              height="192"
+            />
+          </div>
           <h1 className="text-5xl md:text-6xl font-bold text-primary">
             Kids Call Home
           </h1>

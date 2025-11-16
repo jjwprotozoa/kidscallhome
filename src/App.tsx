@@ -22,6 +22,9 @@ import VideoCall from "./pages/VideoCall";
 import Chat from "./pages/Chat";
 import { useBadgeInitialization } from "@/hooks/useBadgeInitialization";
 import { useBadgeRealtime } from "@/hooks/useBadgeRealtime";
+import { GlobalIncomingCall } from "@/components/GlobalIncomingCall";
+import { GlobalMessageNotifications } from "@/components/GlobalMessageNotifications";
+import { GlobalPresenceTracker } from "@/components/GlobalPresenceTracker";
 
 const queryClient = new QueryClient();
 
@@ -39,7 +42,15 @@ const App = () => (
       <Toaster />
       <Sonner />
       <SafeAreaLayout>
-        <BrowserRouter>
+        <BrowserRouter
+          future={{
+            v7_startTransition: true,
+            v7_relativeSplatPath: true,
+          }}
+        >
+          <GlobalIncomingCall />
+          <GlobalMessageNotifications />
+          <GlobalPresenceTracker />
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/parent/auth" element={<ParentAuth />} />

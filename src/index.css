@@ -144,6 +144,8 @@ All colors MUST be HSL.
     @apply bg-background text-foreground;
   }
 
+  /* CLS: If custom web fonts are added, use font-display: swap to prevent layout shift */
+
   /* Ensure browser-native prompts (install banners, rating prompts) are visible */
   /* These are rendered by the browser and shouldn't be affected by our styles */
   html {
@@ -159,5 +161,49 @@ All colors MUST be HSL.
     /* Use system colors for browser chrome when possible */
     --browser-chrome-bg: #ffffff;
     --browser-chrome-text: #000000;
+  }
+}
+
+/* Print styles for login code print view */
+@media print {
+  /* Hide navigation and other UI elements when printing */
+  nav,
+  header,
+  footer,
+  button,
+  .print\\:hidden {
+    display: none !important;
+  }
+  
+  /* Ensure print content is visible */
+  body {
+    background: white !important;
+    color: black !important;
+  }
+  
+  /* Print-friendly spacing */
+  .print\\:my-4 {
+    margin-top: 1rem;
+    margin-bottom: 1rem;
+  }
+  
+  .print\\:text-3xl {
+    font-size: 1.875rem;
+  }
+  
+  .print\\:text-sm {
+    font-size: 0.875rem;
+  }
+  
+  .print\\:text-gray-600 {
+    color: #4b5563;
+  }
+  
+  .print\\:border-gray-800 {
+    border-color: #1f2937;
+  }
+  
+  .print\\:mt-4 {
+    margin-top: 1rem;
   }
 }
