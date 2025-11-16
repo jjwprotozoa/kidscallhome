@@ -1,4 +1,4 @@
-// src/components/call/CallControls.tsx
+// src/features/calls/components/CallControls.tsx
 // Call control buttons component
 
 import { Button } from "@/components/ui/button";

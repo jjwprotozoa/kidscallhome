@@ -1,4 +1,4 @@
-// src/types/call.ts
+// src/features/calls/types/call.ts
 // Types and interfaces for video call functionality
 
 export interface ChildSession {

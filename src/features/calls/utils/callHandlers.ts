@@ -1,10 +1,10 @@
-// src/utils/callHandlers.ts
+// src/features/calls/utils/callHandlers.ts
 // Call handling logic for parent and child roles
 
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
-import type { CallRecord } from "@/types/call";
-import { isCallTerminal } from "@/utils/callEnding";
+import type { CallRecord } from "../types/call";
+import { isCallTerminal } from "./callEnding";
 
 export const handleParentCall = async (
   pc: RTCPeerConnection,
@@ -12,20 +12,85 @@ export const handleParentCall = async (
   userId: string,
   setCallId: (id: string) => void,
   setIsConnecting: (value: boolean) => void,
-  iceCandidatesQueue: React.MutableRefObject<RTCIceCandidateInit[]>
+  iceCandidatesQueue: React.MutableRefObject<RTCIceCandidateInit[]>,
+  specificCallId?: string | null
 ) => {
+  // If a specific callId is provided (e.g., from URL param when answering), use that first
+  let specificCall: CallRecord | null = null;
+  if (specificCallId) {
+    console.log("📞 [PARENT CALL] Looking for specific call:", specificCallId);
+    const { data: specificCallData, error: specificCallError } = await supabase
+      .from("calls")
+      .select("*")
+      .eq("id", specificCallId)
+      .eq("parent_id", userId)
+      .maybeSingle();
+
+    if (specificCallError) {
+      console.error("Error fetching specific call:", specificCallError);
+    }
+
+    if (specificCallData) {
+      specificCall = specificCallData as CallRecord;
+      console.log("📞 [PARENT CALL] Found specific call:", {
+        id: specificCall.id,
+        caller_type: specificCall.caller_type,
+        status: specificCall.status,
+        hasOffer: !!specificCall.offer,
+      });
+
+      // If it's an incoming call from child with an offer, ANSWER IT
+      if (specificCall.caller_type === "child" && specificCall.offer) {
+        // Only answer if status is ringing or active (not ended)
+        if (
+          specificCall.status === "ringing" ||
+          specificCall.status === "active"
+        ) {
+          console.log(
+            "📞 [PARENT CALL] Answering incoming call from child (status:",
+            specificCall.status + ", hasOffer: true)"
+          );
+          // Use this as the incoming call - skip existing call check
+          setCallId(specificCall.id);
+          // Continue to incoming call handling below (after existing call check)
+        } else {
+          console.log(
+            "📞 [PARENT CALL] Specific call is ended (status:",
+            specificCall.status + "), cannot answer."
+          );
+          specificCall = null; // Don't use this call
+        }
+      }
+      // If it's a parent-initiated call, handle it normally (continue to existing call check)
+      else if (
+        specificCall.caller_type === "parent" &&
+        (specificCall.status === "ringing" || specificCall.status === "active")
+      ) {
+        console.log("📞 [PARENT CALL] Using existing parent-initiated call");
+        // This will be handled by the existing call check below
+        // Set specificCall to null so existing call check runs
+        specificCall = null;
+      }
+    }
+  }
+
   // First, check if there's an existing call the parent initiated
   // This prevents treating our own outgoing call as incoming
-  const { data: existingCall } = await supabase
-    .from("calls")
-    .select("*")
-    .eq("child_id", childId)
-    .eq("parent_id", userId)
-    .in("status", ["ringing", "active"])
-    .eq("caller_type", "parent")
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  // Skip this check if we already found a specific incoming call from child
+  let existingCall = null;
+  if (!specificCall || specificCall.caller_type !== "child") {
+    const { data: existingCallData } = await supabase
+      .from("calls")
+      .select("*")
+      .eq("child_id", childId)
+      .eq("parent_id", userId)
+      .in("status", ["ringing", "active"])
+      .eq("caller_type", "parent")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    existingCall = existingCallData;
+  }
 
   if (existingCall) {
     // Parent is continuing an existing call they initiated
@@ -266,16 +331,22 @@ export const handleParentCall = async (
   }
 
   // Check if there's an incoming call from child
-  const { data: incomingCall } = await supabase
-    .from("calls")
-    .select("*")
-    .eq("child_id", childId)
-    .eq("parent_id", userId)
-    .eq("status", "ringing")
-    .eq("caller_type", "child")
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  // Use specificCall if we found one, otherwise query for incoming calls
+  let incomingCall = specificCall && specificCall.caller_type === "child" ? specificCall : null;
+  
+  if (!incomingCall) {
+    const { data: incomingCallData } = await supabase
+      .from("calls")
+      .select("*")
+      .eq("child_id", childId)
+      .eq("parent_id", userId)
+      .eq("status", "ringing")
+      .eq("caller_type", "child")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    incomingCall = incomingCallData as CallRecord | null;
+  }
 
   if (incomingCall) {
     // Answer incoming call from child
@@ -319,7 +390,11 @@ export const handleParentCall = async (
                 checkState();
               });
 
-              const answer = await pc.createAnswer();
+              // CRITICAL: Ensure answer includes media tracks by explicitly requesting them
+              const answer = await pc.createAnswer({
+                offerToReceiveAudio: true,
+                offerToReceiveVideo: true,
+              });
               
               // [KCH] Telemetry: Created answer (waiting for offer)
               console.log('[KCH]', 'parent', 'created answer', !!answer?.sdp);
@@ -420,7 +495,11 @@ export const handleParentCall = async (
       "✅ [PARENT HANDLER] Creating answer, current state:",
       pc.signalingState
     );
-    const answer = await pc.createAnswer();
+    // CRITICAL: Ensure answer includes media tracks by explicitly requesting them
+    const answer = await pc.createAnswer({
+      offerToReceiveAudio: true,
+      offerToReceiveVideo: true,
+    });
     
     // [KCH] Telemetry: Created answer
     console.log('[KCH]', 'parent', 'created answer', !!answer?.sdp);
@@ -507,6 +586,72 @@ export const handleParentCall = async (
     console.log(
       "✅ [PARENT HANDLER] Call connected! Parent answered child's call."
     );
+
+    // CRITICAL: Process any existing ICE candidates from child immediately
+    // Child may have already sent candidates before parent's listener was set up
+    // Process in background but await properly to ensure candidates are added
+    (async () => {
+      try {
+        const { data: currentCall } = await supabase
+          .from("calls")
+          .select("child_ice_candidates")
+          .eq("id", incomingCall.id)
+          .maybeSingle();
+
+        if (currentCall) {
+          const existingCandidates =
+            currentCall.child_ice_candidates as unknown as
+              | RTCIceCandidateInit[]
+              | null;
+          if (
+            existingCandidates &&
+            Array.isArray(existingCandidates) &&
+            existingCandidates.length > 0
+          ) {
+            console.log(
+              "🧊 [PARENT HANDLER] Processing existing ICE candidates from child (immediate):",
+              {
+                count: existingCandidates.length,
+                hasRemoteDescription: !!pc.remoteDescription,
+                iceConnectionState: pc.iceConnectionState,
+              }
+            );
+
+            for (const candidate of existingCandidates) {
+              try {
+                if (!candidate.candidate) continue;
+                if (pc.remoteDescription) {
+                  // CRITICAL: Await to ensure candidate is added properly
+                  await pc.addIceCandidate(new RTCIceCandidate(candidate));
+                } else {
+                  iceCandidatesQueue.current.push(candidate);
+                }
+              } catch (err) {
+                const error = err as Error;
+                if (
+                  !error.message?.includes("duplicate") &&
+                  !error.message?.includes("already")
+                ) {
+                  console.error(
+                    "❌ [PARENT HANDLER] Error adding existing ICE candidate:",
+                    error.message
+                  );
+                }
+              }
+            }
+            console.log(
+              "✅ [PARENT HANDLER] Finished processing existing ICE candidates from child"
+            );
+          }
+        }
+      } catch (error) {
+        console.error(
+          "❌ [PARENT HANDLER] Error fetching existing ICE candidates:",
+          error
+        );
+        // Don't throw - connection might still work
+      }
+    })(); // IIFE - runs in background without blocking
 
     // Listen for ICE candidates from child
     const channel = supabase

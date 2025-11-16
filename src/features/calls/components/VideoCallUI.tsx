@@ -1,4 +1,4 @@
-// src/components/call/VideoCallUI.tsx
+// src/features/calls/components/VideoCallUI.tsx
 // Video call UI layout component
 
 import { useEffect, useRef, useState } from "react";

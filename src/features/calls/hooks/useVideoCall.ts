@@ -1,16 +1,16 @@
-// src/hooks/useVideoCall.ts
+// src/features/calls/hooks/useVideoCall.ts
 // Video call orchestration hook that manages call initialization and lifecycle
 
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
-import { useAudioNotifications } from "@/hooks/useAudioNotifications";
+import { useAudioNotifications } from "./useAudioNotifications";
 import { supabase } from "@/integrations/supabase/client";
 import { useWebRTC } from "./useWebRTC";
-import { handleParentCall } from "@/utils/callHandlers";
-import { handleChildCall } from "@/utils/childCallHandler";
-import { endCall as endCallUtil, isCallTerminal } from "@/utils/callEnding";
-import type { ChildSession } from "@/types/call";
+import { handleParentCall } from "../utils/callHandlers";
+import { handleChildCall } from "../utils/childCallHandler";
+import { endCall as endCallUtil, isCallTerminal } from "../utils/callEnding";
+import type { ChildSession } from "../types/call";
 
 export const useVideoCall = () => {
   const { childId } = useParams();
@@ -33,8 +33,20 @@ export const useVideoCall = () => {
     if (isChildRoute) return true;
     // If on parent route, definitely a parent
     if (isParentRoute) return false;
-    // Fallback: check session synchronously (may not be perfect but better than false)
+    // For call pages: check if we have childSession - if so, prioritize it
+    // This handles the case where child answers a call (route is /call/{childId})
     const childSession = localStorage.getItem("childSession");
+    if (childSession) {
+      // If we have childSession, check if we're on a call page
+      // Call pages for children are /call/{childId} - if childId matches, it's a child
+      const callPageMatch = window.location.pathname.match(/^\/call\/([^/?]+)/);
+      if (callPageMatch) {
+        // We're on a call page - if we have childSession, treat as child
+        // This is more reliable than checking auth session which might be stale
+        return true;
+      }
+    }
+    // Fallback: check session synchronously
     const hasAuthSession = document.cookie.includes('sb-') || localStorage.getItem('sb-');
     return !hasAuthSession && !!childSession;
   });
@@ -261,7 +273,25 @@ export const useVideoCall = () => {
     const determineUserType = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       const childSession = localStorage.getItem("childSession");
-      // Parent if has auth session (even if childSession exists)
+      
+      // CRITICAL: If we have childSession and we're on a call page, prioritize childSession
+      // This handles the case where child answers a call - auth session might be stale
+      const callPageMatch = window.location.pathname.match(/^\/call\/([^/?]+)/);
+      if (childSession && callPageMatch) {
+        // We're on a call page with childSession - definitely a child
+        const isChildUser = true;
+        if (isChildUser !== isChild) {
+          console.warn("⚠️ [ROLE DETECTION] Role mismatch detected (correcting to child):", {
+            isChildState: isChild,
+            isChildUser,
+            route: window.location.pathname,
+            reason: "childSession exists and on call page",
+          });
+        }
+        return isChildUser;
+      }
+      
+      // Standard logic: Parent if has auth session (even if childSession exists)
       // Child if has childSession but NO auth session
       const isChildUser = !session && !!childSession;
       // isChild is already set synchronously above, but verify it matches
@@ -270,6 +300,8 @@ export const useVideoCall = () => {
           isChildState: isChild,
           isChildUser,
           route: window.location.pathname,
+          hasSession: !!session,
+          hasChildSession: !!childSession,
         });
       }
       return isChildUser;
@@ -423,6 +455,9 @@ export const useVideoCall = () => {
         timestamp: new Date().toISOString(),
       });
       
+      // Check if we're answering an incoming call (has callId in URL)
+      const urlCallId = searchParams.get("callId");
+      
       const channel = await handleParentCall(
         pc,
         childId,
@@ -437,7 +472,8 @@ export const useVideoCall = () => {
           }
         },
         setIsConnecting,
-        iceCandidatesQueue
+        iceCandidatesQueue,
+        urlCallId // Pass the callId from URL if present
       );
       
       console.log("🚀 [PARENT CALL FLOW] handleParentCall returned:", {
@@ -782,17 +818,31 @@ export const useVideoCall = () => {
               }
               
               // Determine if user is child or parent
-              // CRITICAL: Check auth session FIRST - parents have auth session, children don't
+              // CRITICAL: Prioritize childSession if it exists (same logic as role detection)
+              // This handles cases where child might have stale auth session cookies
               const { data: { session } } = await supabase.auth.getSession();
               const childSession = localStorage.getItem("childSession");
-              // Parent if has auth session (even if childSession exists)
-              // Child if has childSession but NO auth session
-              const isChildUser = !session && !!childSession;
+              
+              // If we have childSession and we're on a call page, prioritize childSession
+              // This matches the role detection logic in initializeCall
+              const callPageMatch = window.location.pathname.match(/^\/call\/([^/?]+)/);
+              let isChildUser = false;
+              
+              if (childSession && callPageMatch) {
+                // We're on a call page with childSession - definitely a child
+                isChildUser = true;
+              } else {
+                // Standard logic: Parent if has auth session (even if childSession exists)
+                // Child if has childSession but NO auth session
+                isChildUser = !session && !!childSession;
+              }
               
               console.log("🔍 [USER TYPE DETECTION] Termination listener - determining user type:", {
                 hasAuthSession: !!session,
                 hasChildSession: !!childSession,
                 isChildUser,
+                route: window.location.pathname,
+                isCallPage: !!callPageMatch,
                 userId: session?.user?.id || null,
                 timestamp: new Date().toISOString(),
               });

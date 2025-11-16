@@ -1,8 +1,8 @@
 // src/pages/VideoCall.tsx
 // Main video call page component - orchestrates video call UI and logic
 
-import { VideoCallUI } from "@/components/call/VideoCallUI";
-import { useVideoCall } from "@/hooks/useVideoCall";
+import { VideoCallUI } from "@/features/calls/components/VideoCallUI";
+import { useVideoCall } from "@/features/calls/hooks/useVideoCall";
 
 const VideoCall = () => {
   const {

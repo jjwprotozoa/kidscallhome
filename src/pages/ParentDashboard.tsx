@@ -12,9 +12,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { useIncomingCallNotifications } from "@/hooks/useIncomingCallNotifications";
+import { useIncomingCallNotifications } from "@/features/calls/hooks/useIncomingCallNotifications";
 import { supabase } from "@/integrations/supabase/client";
-import { endCall as endCallUtil } from "@/utils/callEnding";
+import { endCall as endCallUtil } from "@/features/calls/utils/callEnding";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import {
   Copy,
@@ -175,22 +175,27 @@ const ParentDashboard = () => {
       };
 
       // Check for existing ringing calls from children (in case subscription missed them)
-      // Only show calls created in the last 30 seconds to avoid showing stale calls
+      // Check calls created in the last 2 minutes to catch calls that might have been created
+      // while the dashboard was loading or subscription was setting up
       const checkExistingCalls = async () => {
-        const thirtySecondsAgo = new Date(Date.now() - 30 * 1000).toISOString();
+        const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
         const { data: existingCalls } = await supabase
           .from("calls")
           .select("*")
           .eq("parent_id", user.id)
           .eq("caller_type", "child")
           .eq("status", "ringing")
-          .gte("created_at", thirtySecondsAgo)
+          .gte("created_at", twoMinutesAgo)
           .order("created_at", { ascending: false })
           .limit(1);
 
         if (existingCalls && existingCalls.length > 0) {
           const call = existingCalls[0];
           if (call.id !== lastCheckedCallId) {
+            console.log(
+              "📞 [PARENT DASHBOARD] Initial check found child-initiated call:",
+              call.id
+            );
             await handleIncomingCallNotification(call);
           }
         }
@@ -198,16 +203,16 @@ const ParentDashboard = () => {
 
       // Polling function to check for new calls (fallback for realtime)
       // IMPORTANT: Only check for child-initiated calls, not parent-initiated ones
-      // Use a longer time window since we poll less frequently
+      // Use a 1-minute window since we poll every 10 seconds
       const pollForCalls = async () => {
-        const thirtySecondsAgo = new Date(Date.now() - 30 * 1000).toISOString();
+        const oneMinuteAgo = new Date(Date.now() - 60 * 1000).toISOString();
         const { data: newCalls, error: pollError } = await supabase
           .from("calls")
           .select("*")
           .eq("parent_id", user.id)
           .eq("caller_type", "child") // Only child-initiated calls
           .eq("status", "ringing")
-          .gte("created_at", thirtySecondsAgo)
+          .gte("created_at", oneMinuteAgo)
           .order("created_at", { ascending: false })
           .limit(1);
 
@@ -221,12 +226,7 @@ const ParentDashboard = () => {
           if (call.id !== lastCheckedCallId) {
             console.log(
               "📞 [PARENT DASHBOARD] Polling found child-initiated call:",
-              {
-                callId: call.id,
-                childId: call.child_id,
-                status: call.status,
-                createdAt: call.created_at,
-              }
+              call.id
             );
             await handleIncomingCallNotification(call);
           }
@@ -236,9 +236,9 @@ const ParentDashboard = () => {
       // Check immediately
       await checkExistingCalls();
 
-      // Set up polling as a fallback (every 30 seconds to reduce database queries)
+      // Set up polling as a fallback (every 10 seconds to catch calls faster)
       // Realtime subscriptions should handle most cases, this is just a safety net
-      pollInterval = setInterval(pollForCalls, 30000);
+      pollInterval = setInterval(pollForCalls, 10000);
 
       // Subscribe to new calls from children
       // Listen to both INSERT and UPDATE events to catch calls that are reset to ringing
@@ -384,7 +384,8 @@ const ParentDashboard = () => {
           }
         )
         .subscribe((status) => {
-          console.log("📡 [PARENT DASHBOARD] Realtime subscription status:", status, {
+          console.log("📡 [PARENT DASHBOARD] Realtime subscription status:", {
+            status,
             channel: "parent-incoming-calls",
             userId: user.id,
             timestamp: new Date().toISOString(),

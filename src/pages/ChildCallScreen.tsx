@@ -3,8 +3,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { VideoCallUI } from "@/components/call/VideoCallUI";
-import { useCallEngine } from "@/hooks/useCallEngine";
+import { VideoCallUI } from "@/features/calls/components/VideoCallUI";
+import { useCallEngine } from "@/features/calls/hooks/useCallEngine";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";

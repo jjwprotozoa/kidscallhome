@@ -1,4 +1,4 @@
-// src/hooks/useIncomingCallNotifications.ts
+// src/features/calls/hooks/useIncomingCallNotifications.ts
 // Combined hook for handling incoming call notifications with WhatsApp Web-like behavior
 // - Shows push notification when tab is not in focus
 // - Plays ringtone/vibration when tab is active or after notification click
@@ -6,8 +6,8 @@
 
 import { useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { useTabVisibility } from "./useTabVisibility";
-import { usePushNotifications } from "./usePushNotifications";
+import { useTabVisibility } from "@/hooks/useTabVisibility";
+import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { useAudioNotifications } from "./useAudioNotifications";
 
 interface IncomingCallData {

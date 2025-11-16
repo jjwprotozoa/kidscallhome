@@ -1,16 +1,22 @@
-// src/hooks/useCallEngine.ts
+// src/features/calls/hooks/useCallEngine.ts
 // Call engine hook implementing state machine for parent/child calls
 
-import { useEffect, useRef, useState, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
-import { useWebRTC } from "./useWebRTC";
 import { useToast } from "@/hooks/use-toast";
-import { endCall as endCallUtil, isCallTerminal } from "@/utils/callEnding";
+import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
+import { endCall as endCallUtil, isCallTerminal } from "../utils/callEnding";
 import type { RealtimeChannel } from "@supabase/supabase-js";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useWebRTC } from "./useWebRTC";
 
-export type CallState = "idle" | "calling" | "incoming" | "connecting" | "in_call" | "ended";
+export type CallState =
+  | "idle"
+  | "calling"
+  | "incoming"
+  | "connecting"
+  | "in_call"
+  | "ended";
 
 export interface UseCallEngineOptions {
   role: "parent" | "child";
@@ -46,7 +52,7 @@ export const useCallEngine = ({
   const [callId, setCallId] = useState<string | null>(null);
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
-  
+
   const navigate = useNavigate();
   const { toast } = useToast();
   const callChannelRef = useRef<RealtimeChannel | null>(null);
@@ -104,9 +110,10 @@ export const useCallEngine = ({
           event: "INSERT",
           schema: "public",
           table: "calls",
-          filter: role === "parent" 
-            ? `parent_id=eq.${localProfileId}`
-            : `child_id=eq.${localProfileId}`,
+          filter:
+            role === "parent"
+              ? `parent_id=eq.${localProfileId}`
+              : `child_id=eq.${localProfileId}`,
         },
         async (payload) => {
           const call = payload.new as {
@@ -165,11 +172,16 @@ export const useCallEngine = ({
             updatedCall.answer &&
             updatedCall.status === "in_call"
           ) {
-            console.log("📞 [CALL ENGINE] Answer received, setting remote description");
+            console.log(
+              "📞 [CALL ENGINE] Answer received, setting remote description"
+            );
             if (pc && pc.remoteDescription === null) {
-              const answerDesc = updatedCall.answer as unknown as RTCSessionDescriptionInit;
-              await pc.setRemoteDescription(new RTCSessionDescription(answerDesc));
-              
+              const answerDesc =
+                updatedCall.answer as unknown as RTCSessionDescriptionInit;
+              await pc.setRemoteDescription(
+                new RTCSessionDescription(answerDesc)
+              );
+
               // Process queued ICE candidates
               for (const candidate of iceCandidatesQueue.current) {
                 try {
@@ -180,7 +192,10 @@ export const useCallEngine = ({
                     !error.message?.includes("duplicate") &&
                     !error.message?.includes("already")
                   ) {
-                    console.error("Error adding queued ICE candidate:", error.message);
+                    console.error(
+                      "Error adding queued ICE candidate:",
+                      error.message
+                    );
                   }
                 }
               }
@@ -190,8 +205,11 @@ export const useCallEngine = ({
 
           // Handle call rejection/missed
           if (
-            (state === "calling" || state === "incoming" || state === "connecting") &&
-            (updatedCall.status === "rejected" || updatedCall.status === "missed")
+            (state === "calling" ||
+              state === "incoming" ||
+              state === "connecting") &&
+            (updatedCall.status === "rejected" ||
+              updatedCall.status === "missed")
           ) {
             console.log("📞 [CALL ENGINE] Call rejected or missed");
             setState("ended");
@@ -199,7 +217,11 @@ export const useCallEngine = ({
           }
 
           // Handle call ended
-          if (isCallTerminal(updatedCall) && oldCall && !isCallTerminal(oldCall)) {
+          if (
+            isCallTerminal(updatedCall) &&
+            oldCall &&
+            !isCallTerminal(oldCall)
+          ) {
             console.log("📞 [CALL ENGINE] Call ended by remote party");
             setState("ended");
             cleanupWebRTC();
@@ -212,19 +234,23 @@ export const useCallEngine = ({
           // Transition to in_call when connection is established
           if (
             updatedCall.status === "in_call" &&
-            (state === "calling" || state === "incoming" || state === "connecting")
+            (state === "calling" ||
+              state === "incoming" ||
+              state === "connecting")
           ) {
             if (pc) {
               const checkConnection = () => {
                 const iceState = pc.iceConnectionState;
                 const connState = pc.connectionState;
-                
+
                 if (
                   (iceState === "connected" || iceState === "completed") &&
                   connState === "connected" &&
                   remoteStream
                 ) {
-                  console.log("📞 [CALL ENGINE] Connection established, transitioning to in_call");
+                  console.log(
+                    "📞 [CALL ENGINE] Connection established, transitioning to in_call"
+                  );
                   setState("in_call");
                   setIsConnecting(false);
                 }
@@ -238,8 +264,14 @@ export const useCallEngine = ({
               pc.addEventListener("connectionstatechange", checkConnection);
 
               return () => {
-                pc.removeEventListener("iceconnectionstatechange", checkConnection);
-                pc.removeEventListener("connectionstatechange", checkConnection);
+                pc.removeEventListener(
+                  "iceconnectionstatechange",
+                  checkConnection
+                );
+                pc.removeEventListener(
+                  "connectionstatechange",
+                  checkConnection
+                );
               };
             }
           }
@@ -272,7 +304,9 @@ export const useCallEngine = ({
         remoteStream &&
         state === "calling"
       ) {
-        console.log("📞 [CALL ENGINE] WebRTC connected, transitioning to in_call");
+        console.log(
+          "📞 [CALL ENGINE] WebRTC connected, transitioning to in_call"
+        );
         setState("in_call");
         setIsConnecting(false);
       }
@@ -282,7 +316,10 @@ export const useCallEngine = ({
     pc.addEventListener("connectionstatechange", handleConnectionChange);
 
     return () => {
-      pc.removeEventListener("iceconnectionstatechange", handleConnectionChange);
+      pc.removeEventListener(
+        "iceconnectionstatechange",
+        handleConnectionChange
+      );
       pc.removeEventListener("connectionstatechange", handleConnectionChange);
     };
   }, [state, remoteStream, setIsConnecting, webRTCPeerConnectionRef]);
@@ -331,7 +368,15 @@ export const useCallEngine = ({
 
         const { data: call, error } = await supabase
           .from("calls")
-          .insert(callData)
+          .insert(
+            callData as {
+              parent_id: string;
+              child_id: string;
+              caller_type: "parent" | "child";
+              status: string;
+              offer: Json;
+            }
+          )
           .select()
           .single();
 
@@ -345,8 +390,10 @@ export const useCallEngine = ({
         pc.onicecandidate = async (event) => {
           if (event.candidate && call.id) {
             const candidateField =
-              role === "parent" ? "parent_ice_candidates" : "child_ice_candidates";
-            
+              role === "parent"
+                ? "parent_ice_candidates"
+                : "child_ice_candidates";
+
             const { data: currentCall } = await supabase
               .from("calls")
               .select(candidateField)
@@ -355,7 +402,10 @@ export const useCallEngine = ({
 
             const existingCandidates =
               (currentCall?.[candidateField] as RTCIceCandidateInit[]) || [];
-            const updatedCandidates = [...existingCandidates, event.candidate.toJSON()];
+            const updatedCandidates = [
+              ...existingCandidates,
+              event.candidate.toJSON(),
+            ];
 
             await supabase
               .from("calls")
@@ -384,12 +434,17 @@ export const useCallEngine = ({
 
               if (updatedCall.answer && updatedCall.status === "in_call") {
                 if (!pc) return;
-                const answerDesc = updatedCall.answer as unknown as RTCSessionDescriptionInit;
-                await pc.setRemoteDescription(new RTCSessionDescription(answerDesc));
+                const answerDesc =
+                  updatedCall.answer as unknown as RTCSessionDescriptionInit;
+                await pc.setRemoteDescription(
+                  new RTCSessionDescription(answerDesc)
+                );
 
                 // Process remote ICE candidates
                 const remoteCandidateField =
-                  role === "parent" ? "child_ice_candidates" : "parent_ice_candidates";
+                  role === "parent"
+                    ? "child_ice_candidates"
+                    : "parent_ice_candidates";
                 const { data: callData } = await supabase
                   .from("calls")
                   .select(remoteCandidateField)
@@ -397,7 +452,8 @@ export const useCallEngine = ({
                   .single();
 
                 const remoteCandidates =
-                  (callData?.[remoteCandidateField] as RTCIceCandidateInit[]) || [];
+                  (callData?.[remoteCandidateField] as RTCIceCandidateInit[]) ||
+                  [];
                 if (pc) {
                   for (const candidate of remoteCandidates) {
                     try {
@@ -408,7 +464,10 @@ export const useCallEngine = ({
                         !error.message?.includes("duplicate") &&
                         !error.message?.includes("already")
                       ) {
-                        console.error("Error adding remote ICE candidate:", error.message);
+                        console.error(
+                          "Error adding remote ICE candidate:",
+                          error.message
+                        );
                       }
                     }
                   }
@@ -423,7 +482,8 @@ export const useCallEngine = ({
         console.error("Error starting outgoing call:", error);
         toast({
           title: "Call Failed",
-          description: error instanceof Error ? error.message : "Failed to start call",
+          description:
+            error instanceof Error ? error.message : "Failed to start call",
           variant: "destructive",
         });
         setState("idle");
@@ -452,7 +512,9 @@ export const useCallEngine = ({
 
         // Ensure local stream is ready (should already be pre-warmed)
         if (!localStream) {
-          console.log("📞 [CALL ENGINE] Local stream not ready, initializing now...");
+          console.log(
+            "📞 [CALL ENGINE] Local stream not ready, initializing now..."
+          );
           await initializeConnection();
         }
 
@@ -498,8 +560,10 @@ export const useCallEngine = ({
           pc.onicecandidate = async (event) => {
             if (event.candidate && incomingCallId) {
               const candidateField =
-                role === "parent" ? "parent_ice_candidates" : "child_ice_candidates";
-              
+                role === "parent"
+                  ? "parent_ice_candidates"
+                  : "child_ice_candidates";
+
               const { data: currentCall } = await supabase
                 .from("calls")
                 .select(candidateField)
@@ -508,7 +572,10 @@ export const useCallEngine = ({
 
               const existingCandidates =
                 (currentCall?.[candidateField] as RTCIceCandidateInit[]) || [];
-              const updatedCandidates = [...existingCandidates, event.candidate.toJSON()];
+              const updatedCandidates = [
+                ...existingCandidates,
+                event.candidate.toJSON(),
+              ];
 
               await supabase
                 .from("calls")
@@ -521,7 +588,8 @@ export const useCallEngine = ({
         // Process remote ICE candidates
         const remoteCandidateField =
           role === "parent" ? "child_ice_candidates" : "parent_ice_candidates";
-        const remoteCandidates = (call[remoteCandidateField] as RTCIceCandidateInit[]) || [];
+        const remoteCandidates =
+          (call[remoteCandidateField] as RTCIceCandidateInit[]) || [];
         for (const candidate of remoteCandidates) {
           try {
             await pc.addIceCandidate(new RTCIceCandidate(candidate));
@@ -531,7 +599,10 @@ export const useCallEngine = ({
               !error.message?.includes("duplicate") &&
               !error.message?.includes("already")
             ) {
-              console.error("Error adding remote ICE candidate:", error.message);
+              console.error(
+                "Error adding remote ICE candidate:",
+                error.message
+              );
             }
           }
         }
@@ -539,14 +610,23 @@ export const useCallEngine = ({
         console.error("Error accepting call:", error);
         toast({
           title: "Call Failed",
-          description: error instanceof Error ? error.message : "Failed to accept call",
+          description:
+            error instanceof Error ? error.message : "Failed to accept call",
           variant: "destructive",
         });
         setState("idle");
         setIsConnecting(false);
       }
     },
-    [state, localStream, initializeConnection, role, setIsConnecting, toast, webRTCPeerConnectionRef]
+    [
+      state,
+      localStream,
+      initializeConnection,
+      role,
+      setIsConnecting,
+      toast,
+      webRTCPeerConnectionRef,
+    ]
   );
 
   const rejectIncomingCall = useCallback(
@@ -642,4 +722,3 @@ export const useCallEngine = ({
     toggleVideo,
   };
 };
-

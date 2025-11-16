@@ -1,4 +1,4 @@
-// src/hooks/useAudioNotifications.ts
+// src/features/calls/hooks/useAudioNotifications.ts
 // Audio notification management for calls (ringtones, call ended sounds, etc.)
 
 import { useRef, useEffect, useCallback } from "react";

@@ -1,10 +1,10 @@
-// src/hooks/useWebRTC.ts
+// src/features/calls/hooks/useWebRTC.ts
 // WebRTC peer connection management hook
 
 import { useRef, useState, useCallback, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
-import { endCall as endCallUtil } from "@/utils/callEnding";
+import { endCall as endCallUtil } from "../utils/callEnding";
 
 interface UseWebRTCReturn {
   peerConnection: RTCPeerConnection | null;
