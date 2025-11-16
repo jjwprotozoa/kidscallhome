@@ -4,11 +4,22 @@ Quick sanity check for safe-area behavior across devices.
 
 ## Device Testing Checklist
 
+**Code Verification (2025-01-XX):** ✅ All safe-area code patterns verified
+**Manual Testing Required:**
 - [ ] Header/nav not under Dynamic Island on iPhone 15 Pro Max (portrait & landscape)
 - [ ] Call controls not overlapping home indicator
 - [ ] Bottom CTA buttons are clickable and visible on notched devices
 - [ ] No content clipped on Android with hole-punch displays
 - [ ] No unintended scrollbars or double padding at top/bottom on non-notch devices
+
+**Testing Instructions:**
+1. Open app in browser dev tools
+2. Set device to iPhone 15 Pro Max (portrait & landscape)
+3. Verify nav bar respects Dynamic Island area
+4. Verify call controls don't overlap home indicator
+5. Switch to Android device with hole-punch (e.g., Samsung Galaxy S10+)
+6. Verify no content clipping
+7. Test on non-notch device to ensure no double padding
 
 ## Core Requirements
 
@@ -42,6 +53,7 @@ Quick sanity check for safe-area behavior across devices.
 ## Last Updated
 
 - **2025-01-XX**: Initial checklist created
+- **2025-01-XX**: Code verification complete - all safe-area patterns confirmed in codebase
 
 ---
 
