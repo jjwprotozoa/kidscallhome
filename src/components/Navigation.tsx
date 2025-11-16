@@ -114,20 +114,20 @@ const Navigation = () => {
       <nav className="border-b bg-background safe-area-top">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-4" data-tour="parent-menu">
               <NavLink to="/parent" className={navLinkClassName}>
                 <Home className="h-4 w-4" />
                 <span>Home</span>
               </NavLink>
               <NavLink to="/parent/dashboard" className={navLinkClassName}>
-                <div className="relative">
+                <div className="relative flex items-center justify-center">
                   <LayoutDashboard className="h-4 w-4" />
                   <Badge count={missedCallCount} />
                 </div>
                 <span>Dashboard</span>
               </NavLink>
               <NavLink to="/parent/children" className={navLinkClassName}>
-                <div className="relative">
+                <div className="relative flex items-center justify-center">
                   <Users className="h-4 w-4" />
                   <Badge count={unreadMessageCount} />
                 </div>
@@ -149,20 +149,20 @@ const Navigation = () => {
       <nav className="border-b bg-background safe-area-top">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-4" data-tour="child-help">
               <NavLink to="/child" className={navLinkClassName}>
                 <Home className="h-4 w-4" />
                 <span>Home</span>
               </NavLink>
               <NavLink to="/child/dashboard" className={navLinkClassName}>
-                <div className="relative">
+                <div className="relative flex items-center justify-center">
                   <LayoutDashboard className="h-4 w-4" />
                   <Badge count={missedCallCount} />
                 </div>
                 <span>Dashboard</span>
               </NavLink>
               <NavLink to="/child/parents" className={navLinkClassName}>
-                <div className="relative">
+                <div className="relative flex items-center justify-center">
                   <Users className="h-4 w-4" />
                   <Badge count={unreadMessageCount} />
                 </div>

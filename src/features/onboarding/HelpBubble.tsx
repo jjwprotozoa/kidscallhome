@@ -1,0 +1,52 @@
+// src/features/onboarding/HelpBubble.tsx
+// Persistent help bubble that allows re-running the tour
+
+import { Button } from "@/components/ui/button";
+import { HelpCircle } from "lucide-react";
+import { useOnboardingTour } from "./useOnboardingTour";
+import { Role } from "./onboardingConfig";
+
+interface HelpBubbleProps {
+  role: Role;
+  pageKey: string;
+}
+
+const STORAGE_PREFIX = "kch_tour_";
+
+function getStorageKey(role: Role, pageKey: string): string {
+  return `${STORAGE_PREFIX}${role}_${pageKey}_done`;
+}
+
+export function HelpBubble({ role, pageKey }: HelpBubbleProps) {
+  const { isRunning } = useOnboardingTour({ role, pageKey });
+
+  const handleClick = () => {
+    // Clear the completion flag
+    const key = getStorageKey(role, pageKey);
+    localStorage.removeItem(key);
+    
+    // Dispatch custom event to trigger tour restart
+    window.dispatchEvent(new CustomEvent("onboarding:restart", { 
+      detail: { role, pageKey } 
+    }));
+  };
+
+  // Hide help bubble when tour is running
+  if (isRunning) {
+    return null;
+  }
+
+  return (
+    <Button
+      onClick={handleClick}
+      className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 h-12 w-12 rounded-full shadow-lg z-50"
+      size="icon"
+      variant="default"
+      aria-label="Show help tour"
+      title="Show me around"
+    >
+      <HelpCircle className="h-5 w-5" />
+    </Button>
+  );
+}
+

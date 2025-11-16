@@ -32,6 +32,8 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import Navigation from "@/components/Navigation";
+import { OnboardingTour } from "@/features/onboarding/OnboardingTour";
+import { HelpBubble } from "@/features/onboarding/HelpBubble";
 
 interface Child {
   id: string;
@@ -66,6 +68,7 @@ const ChildCallButton = ({ childId, onCall }: { childId: string; onCall: () => v
       onClick={onCall}
       className="flex-1 relative"
       variant="secondary"
+      data-tour="parent-call-button"
     >
       <Video className="mr-2 h-4 w-4" />
       Call
@@ -87,6 +90,7 @@ const ChildChatButton = ({ childId, onChat }: { childId: string; onChat: () => v
       onClick={onChat}
       className="flex-1 relative"
       variant="default"
+      data-tour="parent-messages"
     >
       <MessageCircle className="mr-2 h-4 w-4" />
       Chat
@@ -703,6 +707,8 @@ const ParentDashboard = () => {
   return (
     <div className="min-h-screen bg-background">
       <Navigation />
+      <OnboardingTour role="parent" pageKey="parent_dashboard" />
+      <HelpBubble role="parent" pageKey="parent_dashboard" />
       <div className="p-4">
         <div className="max-w-4xl mx-auto space-y-6">
           <div className="mt-8">
@@ -732,13 +738,14 @@ const ParentDashboard = () => {
             </Card>
           ) : (
             <div className="grid gap-4 md:grid-cols-2">
-            {children.map((child) => (
+            {children.map((child, index) => (
               <Card
                 key={child.id}
                 className="p-6 space-y-4"
                 style={{
                   borderLeft: `4px solid ${child.avatar_color}`,
                 }}
+                data-tour={index === 0 ? "parent-status-indicator" : undefined}
               >
                 <div className="space-y-2">
                   <h3 className="text-xl font-bold">{child.name}</h3>
@@ -830,38 +837,38 @@ const ParentDashboard = () => {
           open={!!showCodeDialog}
           onOpenChange={(open) => !open && setShowCodeDialog(null)}
         >
-          <AlertDialogContent className="sm:max-w-md">
+          <AlertDialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-md">
             <AlertDialogHeader>
-              <AlertDialogTitle>
+              <AlertDialogTitle className="text-lg sm:text-xl">
                 {showCodeDialog.child.name}'s Login Code
               </AlertDialogTitle>
-              <AlertDialogDescription>
+              <AlertDialogDescription className="text-sm">
                 Share this code or QR code with your child to log in
               </AlertDialogDescription>
             </AlertDialogHeader>
             <div className="space-y-4 py-4">
-              <div className="bg-muted p-4 rounded-lg text-center">
+              <div className="bg-muted p-3 sm:p-4 rounded-lg text-center">
                 <p className="text-xs text-muted-foreground mb-2">Login Code</p>
-                <p className="text-3xl font-mono font-bold">
+                <p className="text-2xl sm:text-3xl font-mono font-bold break-all">
                   {showCodeDialog.child.login_code}
                 </p>
               </div>
               <div className="flex justify-center">
                 <img
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
                     `${window.location.origin}/child/login?code=${showCodeDialog.child.login_code}`
                   )}`}
                   alt="QR Code"
-                  className="border-2 border-muted rounded-lg"
+                  className="border-2 border-muted rounded-lg w-[200px] h-[200px] sm:w-[250px] sm:h-[250px] object-contain"
                 />
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-col sm:flex-row gap-2">
                 <Button
                   onClick={() =>
                     handleCopyCode(showCodeDialog.child.login_code)
                   }
                   variant="outline"
-                  className="flex-1"
+                  className="flex-1 w-full sm:w-auto"
                 >
                   <Copy className="mr-2 h-4 w-4" />
                   Copy Code
@@ -869,7 +876,7 @@ const ParentDashboard = () => {
                 <Button
                   onClick={() => handleCopyMagicLink(showCodeDialog.child)}
                   variant="outline"
-                  className="flex-1"
+                  className="flex-1 w-full sm:w-auto"
                 >
                   <ExternalLink className="mr-2 h-4 w-4" />
                   Copy Link
@@ -877,7 +884,7 @@ const ParentDashboard = () => {
                 <Button
                   onClick={() => handlePrintCode(showCodeDialog.child)}
                   variant="outline"
-                  className="flex-1"
+                  className="flex-1 w-full sm:w-auto"
                 >
                   <Printer className="mr-2 h-4 w-4" />
                   Print

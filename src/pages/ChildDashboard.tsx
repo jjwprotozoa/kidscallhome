@@ -20,6 +20,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useIncomingCallNotifications } from "@/features/calls/hooks/useIncomingCallNotifications";
 import Navigation from "@/components/Navigation";
 import { useMissedBadgeForChild, useUnreadBadgeForChild } from "@/stores/badgeStore";
+import { OnboardingTour } from "@/features/onboarding/OnboardingTour";
+import { HelpBubble } from "@/features/onboarding/HelpBubble";
 
 interface ChildSession {
   id: string;
@@ -467,6 +469,8 @@ const ChildDashboard = () => {
   return (
     <div className="min-h-screen bg-primary/5">
       <Navigation />
+      <OnboardingTour role="child" pageKey="child_dashboard" />
+      <HelpBubble role="child" pageKey="child_dashboard" />
       <div className="p-4">
         <div className="max-w-2xl mx-auto space-y-6">
           <div className="mt-8">
@@ -501,6 +505,7 @@ const ChildDashboard = () => {
             className="p-8 cursor-pointer hover:shadow-lg transition-all border-4 relative"
             style={{ borderColor: child.avatar_color }}
             onClick={handleCall}
+            data-tour="child-answer-button"
           >
             {missedCallCount > 0 && (
               <span className="absolute top-4 right-4 bg-destructive text-destructive-foreground text-xs font-bold rounded-full min-w-[24px] h-6 flex items-center justify-center px-2 border-2 border-background">
@@ -525,6 +530,7 @@ const ChildDashboard = () => {
             className="p-8 cursor-pointer hover:shadow-lg transition-all border-4 relative"
             style={{ borderColor: child.avatar_color }}
             onClick={handleChat}
+            data-tour="child-messages"
           >
             {unreadMessageCount > 0 && (
               <span className="absolute top-4 right-4 bg-destructive text-destructive-foreground text-xs font-bold rounded-full min-w-[24px] h-6 flex items-center justify-center px-2 border-2 border-background">
