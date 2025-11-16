@@ -29,17 +29,20 @@ const Chat = () => {
   const [loading, setLoading] = useState(false);
   const [parentName, setParentName] = useState<string>("Mom/Dad");
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const navigate = useNavigate();
   const { toast } = useToast();
 
   useEffect(() => {
     const childSession = localStorage.getItem("childSession");
+    let targetChildId: string | null = null;
+    
     if (childSession) {
       const data = JSON.parse(childSession);
       setIsChild(true);
       setChildData(data);
+      targetChildId = data.id;
       fetchMessages(data.id);
-      subscribeToMessages(data.id);
       // Fetch parent name for child users - get parent_id from database
       supabase
         .from("children")
@@ -70,17 +73,148 @@ const Chat = () => {
         });
     } else if (childId) {
       setIsChild(false);
+      targetChildId = childId;
       fetchMessages(childId);
-      subscribeToMessages(childId);
       fetchChildData(childId);
     } else {
       navigate("/");
+      return;
+    }
+
+    // Set up realtime subscription
+    if (targetChildId) {
+      console.log("📡 [CHAT] Setting up realtime subscription for messages", {
+        childId: targetChildId,
+        isChild,
+        timestamp: new Date().toISOString(),
+      });
+
+      const channelName = `messages-${targetChildId}`;
+      console.log("📡 [CHAT] Creating realtime channel:", {
+        channelName,
+        targetChildId,
+        filter: `child_id=eq.${targetChildId}`,
+        isChild,
+      });
+
+      channelRef.current = supabase
+        .channel(channelName)
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "messages",
+            filter: `child_id=eq.${targetChildId}`,
+          },
+          (payload) => {
+            console.log("📨 [CHAT] Received new message via realtime:", {
+              messageId: payload.new.id,
+              senderType: payload.new.sender_type,
+              childId: payload.new.child_id,
+              filterChildId: targetChildId,
+              matches: payload.new.child_id === targetChildId,
+              timestamp: new Date().toISOString(),
+            });
+            
+            // Double-check the message matches our filter (should always be true, but safety check)
+            if (payload.new.child_id === targetChildId) {
+              setMessages((current) => {
+                // Check for duplicates (shouldn't happen, but safety check)
+                const exists = current.some((m) => m.id === payload.new.id);
+                if (exists) {
+                  console.warn("⚠️ [CHAT] Duplicate message detected, ignoring:", payload.new.id);
+                  return current;
+                }
+                return [...current, payload.new as Message];
+              });
+            } else {
+              console.warn("⚠️ [CHAT] Received message for different child_id, ignoring:", {
+                received: payload.new.child_id,
+                expected: targetChildId,
+              });
+            }
+          }
+        )
+        .subscribe((status, err) => {
+          console.log("📡 [CHAT] Realtime subscription status:", {
+            status,
+            channel: channelName,
+            childId: targetChildId,
+            isChild,
+            error: err,
+            timestamp: new Date().toISOString(),
+          });
+          
+          if (status === "SUBSCRIBED") {
+            console.log("✅ [CHAT] Successfully subscribed to messages");
+            console.log("✅ [CHAT] Will receive INSERT events for child_id:", targetChildId);
+          } else if (status === "CHANNEL_ERROR") {
+            console.error("❌ [CHAT] Realtime subscription error:", err);
+            console.error("❌ [CHAT] This usually means:");
+            console.error("   1. RLS policies are blocking SELECT access");
+            console.error("   2. Realtime is not enabled for messages table");
+            console.error("   3. WebSocket connection failed");
+            console.error("❌ [CHAT] Falling back to polling (checking every 3 seconds)");
+          } else if (status === "TIMED_OUT") {
+            console.warn("⚠️ [CHAT] Realtime subscription timed out - using polling fallback");
+          } else if (status === "CLOSED") {
+            console.warn("⚠️ [CHAT] Realtime subscription closed - using polling fallback");
+          } else {
+            console.log("ℹ️ [CHAT] Realtime subscription status:", status);
+          }
+        });
+
+      return () => {
+        if (channelRef.current) {
+          console.log("🧹 [CHAT] Cleaning up realtime subscription");
+          supabase.removeChannel(channelRef.current);
+          channelRef.current = null;
+        }
+      };
     }
   }, [childId, navigate]);
 
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Fallback polling for messages (in case realtime fails)
+  useEffect(() => {
+    if (!childData) return;
+    
+    const targetChildId = isChild ? childData.id : childId;
+    if (!targetChildId) return;
+
+    // Poll every 3 seconds as fallback if realtime isn't working
+    const pollInterval = setInterval(async () => {
+      try {
+        const { data, error } = await supabase
+          .from("messages")
+          .select("*")
+          .eq("child_id", targetChildId)
+          .order("created_at", { ascending: true });
+
+        if (!error && data) {
+          setMessages((current) => {
+            // Only update if we have new messages (check by comparing IDs)
+            const currentIds = new Set(current.map((m) => m.id));
+            const newMessages = data.filter((m) => !currentIds.has(m.id));
+            
+            if (newMessages.length > 0) {
+              console.log("📨 [CHAT] Polling found new messages:", newMessages.length);
+              return [...current, ...newMessages] as Message[];
+            }
+            return current;
+          });
+        }
+      } catch (error) {
+        console.error("❌ [CHAT] Polling error:", error);
+      }
+    }, 3000); // Poll every 3 seconds
+
+    return () => clearInterval(pollInterval);
+  }, [childData, childId, isChild]);
 
   const fetchChildData = async (id: string) => {
     const { data } = await supabase
@@ -110,27 +244,6 @@ const Chat = () => {
     setMessages((data as Message[]) || []);
   };
 
-  const subscribeToMessages = (id: string) => {
-    const channel = supabase
-      .channel("messages")
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "messages",
-          filter: `child_id=eq.${id}`,
-        },
-        (payload) => {
-          setMessages((current) => [...current, payload.new as Message]);
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  };
 
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
