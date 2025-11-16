@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { useIncomingCallNotifications } from "@/features/calls/hooks/useIncomingCallNotifications";
+import { useMissedBadgeForChild, useUnreadBadgeForChild } from "@/stores/badgeStore";
 import { supabase } from "@/integrations/supabase/client";
 import { endCall as endCallUtil } from "@/features/calls/utils/callEnding";
 import type { RealtimeChannel } from "@supabase/supabase-js";
@@ -55,6 +56,48 @@ interface CallRecord {
   created_at: string;
   ended_at?: string | null;
 }
+
+// Component for Call button with missed call badge
+const ChildCallButton = ({ childId, onCall }: { childId: string; onCall: () => void }) => {
+  const missedCallCount = useMissedBadgeForChild(childId);
+  
+  return (
+    <Button
+      onClick={onCall}
+      className="flex-1 relative"
+      variant="secondary"
+    >
+      <Video className="mr-2 h-4 w-4" />
+      Call
+      {missedCallCount > 0 && (
+        <span className="ml-2 bg-destructive text-destructive-foreground text-xs font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+          {missedCallCount > 99 ? "99+" : missedCallCount}
+        </span>
+      )}
+    </Button>
+  );
+};
+
+// Component for Chat button with unread message badge
+const ChildChatButton = ({ childId, onChat }: { childId: string; onChat: () => void }) => {
+  const unreadMessageCount = useUnreadBadgeForChild(childId);
+  
+  return (
+    <Button
+      onClick={onChat}
+      className="flex-1 relative"
+      variant="default"
+    >
+      <MessageCircle className="mr-2 h-4 w-4" />
+      Chat
+      {unreadMessageCount > 0 && (
+        <span className="ml-2 bg-destructive text-destructive-foreground text-xs font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+          {unreadMessageCount > 99 ? "99+" : unreadMessageCount}
+        </span>
+      )}
+    </Button>
+  );
+};
 
 const ParentDashboard = () => {
   const [children, setChildren] = useState<Child[]>([]);
@@ -759,22 +802,8 @@ const ParentDashboard = () => {
                 </div>
 
                 <div className="flex gap-2">
-                  <Button
-                    onClick={() => handleCall(child.id)}
-                    className="flex-1"
-                    variant="secondary"
-                  >
-                    <Video className="mr-2 h-4 w-4" />
-                    Call
-                  </Button>
-                  <Button
-                    onClick={() => handleChat(child.id)}
-                    className="flex-1"
-                    variant="default"
-                  >
-                    <MessageCircle className="mr-2 h-4 w-4" />
-                    Chat
-                  </Button>
+                  <ChildCallButton childId={child.id} onCall={() => handleCall(child.id)} />
+                  <ChildChatButton childId={child.id} onChat={() => handleChat(child.id)} />
                   <Button
                     onClick={() => setChildToDelete(child)}
                     variant="destructive"

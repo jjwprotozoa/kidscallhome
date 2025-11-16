@@ -17,12 +17,22 @@ import ChildParentsList from "./pages/ChildParentsList";
 import ChildCallScreen from "./pages/ChildCallScreen";
 import VideoCall from "./pages/VideoCall";
 import Chat from "./pages/Chat";
+import { useBadgeInitialization } from "@/hooks/useBadgeInitialization";
+import { useBadgeRealtime } from "@/hooks/useBadgeRealtime";
 
 const queryClient = new QueryClient();
+
+// Badge initialization component (runs once per session)
+const BadgeProvider = () => {
+  useBadgeInitialization(); // One-time initial snapshot
+  useBadgeRealtime(); // Realtime subscriptions
+  return null;
+};
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
+      <BadgeProvider />
       <Toaster />
       <Sonner />
       <BrowserRouter>

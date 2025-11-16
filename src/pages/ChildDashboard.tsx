@@ -19,6 +19,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useIncomingCallNotifications } from "@/features/calls/hooks/useIncomingCallNotifications";
 import Navigation from "@/components/Navigation";
+import { useMissedBadgeForChild, useUnreadBadgeForChild } from "@/stores/badgeStore";
 
 interface ChildSession {
   id: string;
@@ -48,6 +49,10 @@ const ChildDashboard = () => {
   const [parentName, setParentName] = useState<string>("Parent");
   const [selectedParentId, setSelectedParentId] = useState<string | null>(null);
   const parentNameRef = useRef<string>("Parent"); // Ref to track latest parentName for subscription callbacks
+  
+  // Get badge counts from store (derived, no DB reads)
+  const missedCallCount = useMissedBadgeForChild(child?.id || null);
+  const unreadMessageCount = useUnreadBadgeForChild(child?.id || null);
   const incomingCallRef = useRef<IncomingCall | null>(null); // Ref to track latest incomingCall for subscription callbacks
   const channelRef = useRef<RealtimeChannel | null>(null);
   const isAnsweringRef = useRef(false); // Track if user is answering to prevent auto-decline
@@ -493,10 +498,15 @@ const ChildDashboard = () => {
         ) : (
           <div className="grid gap-4">
           <Card
-            className="p-8 cursor-pointer hover:shadow-lg transition-all border-4"
+            className="p-8 cursor-pointer hover:shadow-lg transition-all border-4 relative"
             style={{ borderColor: child.avatar_color }}
             onClick={handleCall}
           >
+            {missedCallCount > 0 && (
+              <span className="absolute top-4 right-4 bg-destructive text-destructive-foreground text-xs font-bold rounded-full min-w-[24px] h-6 flex items-center justify-center px-2 border-2 border-background">
+                {missedCallCount > 99 ? "99+" : missedCallCount}
+              </span>
+            )}
             <div className="flex items-center gap-6">
               <div
                 className="w-20 h-20 rounded-full flex items-center justify-center"
@@ -512,10 +522,15 @@ const ChildDashboard = () => {
           </Card>
 
           <Card
-            className="p-8 cursor-pointer hover:shadow-lg transition-all border-4"
+            className="p-8 cursor-pointer hover:shadow-lg transition-all border-4 relative"
             style={{ borderColor: child.avatar_color }}
             onClick={handleChat}
           >
+            {unreadMessageCount > 0 && (
+              <span className="absolute top-4 right-4 bg-destructive text-destructive-foreground text-xs font-bold rounded-full min-w-[24px] h-6 flex items-center justify-center px-2 border-2 border-background">
+                {unreadMessageCount > 99 ? "99+" : unreadMessageCount}
+              </span>
+            )}
             <div className="flex items-center gap-6">
               <div
                 className="w-20 h-20 rounded-full flex items-center justify-center"

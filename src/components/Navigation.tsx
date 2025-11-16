@@ -6,9 +6,10 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { NavLink } from "@/components/NavLink";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
-import { Home, LayoutDashboard, Users, LogOut } from "lucide-react";
+import { Home, LayoutDashboard, Users, LogOut, MessageSquare, PhoneMissed } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { useTotalUnreadBadge, useTotalMissedBadge, useBadgeStore } from "@/stores/badgeStore";
 
 const Navigation = () => {
   const location = useLocation();
@@ -31,6 +32,10 @@ const Navigation = () => {
 
   const [userType, setUserType] = useState<"parent" | "child" | null>(getInitialUserType);
   const [loading, setLoading] = useState(false);
+  
+  // Get badge counts from store (derived, no DB reads)
+  const unreadMessageCount = useTotalUnreadBadge();
+  const missedCallCount = useTotalMissedBadge();
 
   useEffect(() => {
     const checkUserType = async () => {
@@ -61,10 +66,14 @@ const Navigation = () => {
   const handleLogout = async () => {
     if (userType === "child") {
       localStorage.removeItem("childSession");
+      // Reset badge store on logout
+      useBadgeStore.getState().reset();
       toast({ title: "Logged out" });
       navigate("/child/login");
     } else if (userType === "parent") {
       await supabase.auth.signOut();
+      // Reset badge store on logout
+      useBadgeStore.getState().reset();
       toast({ title: "Logged out" });
       navigate("/parent/auth");
     }
@@ -84,15 +93,25 @@ const Navigation = () => {
 
   const navLinkClassName = ({ isActive }: { isActive: boolean }) =>
     cn(
-      "flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors",
+      "flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors relative",
       isActive
         ? "bg-primary text-primary-foreground"
         : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
     );
 
+  // Badge component for showing counts on icons (positioned relative to icon)
+  const Badge = ({ count }: { count: number }) => {
+    if (count === 0) return null;
+    return (
+      <span className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground text-xs font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 border-2 border-background">
+        {count > 99 ? "99+" : count}
+      </span>
+    );
+  };
+
   if (userType === "parent") {
     return (
-      <nav className="border-b bg-background">
+      <nav className="border-b bg-background safe-area-top">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-4">
@@ -101,11 +120,17 @@ const Navigation = () => {
                 <span>Home</span>
               </NavLink>
               <NavLink to="/parent/dashboard" className={navLinkClassName}>
-                <LayoutDashboard className="h-4 w-4" />
+                <div className="relative">
+                  <LayoutDashboard className="h-4 w-4" />
+                  <Badge count={missedCallCount} />
+                </div>
                 <span>Dashboard</span>
               </NavLink>
               <NavLink to="/parent/children" className={navLinkClassName}>
-                <Users className="h-4 w-4" />
+                <div className="relative">
+                  <Users className="h-4 w-4" />
+                  <Badge count={unreadMessageCount} />
+                </div>
                 <span>Children</span>
               </NavLink>
             </div>
@@ -121,7 +146,7 @@ const Navigation = () => {
 
   if (userType === "child") {
     return (
-      <nav className="border-b bg-background">
+      <nav className="border-b bg-background safe-area-top">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-4">
@@ -130,11 +155,17 @@ const Navigation = () => {
                 <span>Home</span>
               </NavLink>
               <NavLink to="/child/dashboard" className={navLinkClassName}>
-                <LayoutDashboard className="h-4 w-4" />
+                <div className="relative">
+                  <LayoutDashboard className="h-4 w-4" />
+                  <Badge count={missedCallCount} />
+                </div>
                 <span>Dashboard</span>
               </NavLink>
               <NavLink to="/child/parents" className={navLinkClassName}>
-                <Users className="h-4 w-4" />
+                <div className="relative">
+                  <Users className="h-4 w-4" />
+                  <Badge count={unreadMessageCount} />
+                </div>
                 <span>Parents</span>
               </NavLink>
             </div>
