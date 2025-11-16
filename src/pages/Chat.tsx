@@ -296,7 +296,7 @@ const Chat = () => {
         sender_id_matches_auth_uid: isChild ? "N/A (anon)" : (senderId === authUid),
       });
 
-      const { error } = await supabase.from("messages").insert(payload);
+      const { data, error } = await supabase.from("messages").insert(payload).select().single();
 
       if (error) {
         console.error("❌ [MESSAGE INSERT] Error:", {
@@ -309,7 +309,31 @@ const Chat = () => {
         throw error;
       }
 
-      console.log("✅ [MESSAGE INSERT] Success");
+      console.log("✅ [MESSAGE INSERT] Success", { messageId: data?.id });
+
+      // Optimistic update: Add message to local state immediately
+      // This ensures the message appears right away, even if realtime is slow
+      // The realtime subscription will handle duplicates (we check for duplicates in the subscription handler)
+      if (data) {
+        const newMessage: Message = {
+          id: data.id,
+          sender_type: data.sender_type as "parent" | "child",
+          content: data.content,
+          created_at: data.created_at,
+        };
+        
+        setMessages((current) => {
+          // Check for duplicates (shouldn't happen, but safety check)
+          const exists = current.some((m) => m.id === newMessage.id);
+          if (exists) {
+            console.log("ℹ️ [MESSAGE INSERT] Message already in state (realtime beat us), skipping optimistic update");
+            return current;
+          }
+          console.log("✅ [MESSAGE INSERT] Adding message to local state (optimistic update)");
+          return [...current, newMessage];
+        });
+      }
+
       setNewMessage("");
     } catch (error: any) {
       console.error("❌ [MESSAGE INSERT] Exception:", error);
