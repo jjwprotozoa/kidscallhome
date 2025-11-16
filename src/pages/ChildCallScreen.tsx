@@ -76,7 +76,7 @@ const ChildCallScreen = () => {
 
   if (!childId || !parentId) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="min-h-[100dvh] bg-background flex items-center justify-center">
         <div>Loading...</div>
       </div>
     );
@@ -85,7 +85,7 @@ const ChildCallScreen = () => {
   // Show call UI based on state
   if (callEngine.state === "idle") {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="min-h-[100dvh] bg-background flex items-center justify-center">
         <Card className="p-8">
           <div className="text-center space-y-4">
             <h2 className="text-2xl font-semibold">Call {parentName}</h2>
@@ -101,7 +101,7 @@ const ChildCallScreen = () => {
 
   if (callEngine.state === "calling") {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="min-h-[100dvh] bg-background flex items-center justify-center">
         <Card className="p-8">
           <div className="text-center space-y-4">
             <h2 className="text-2xl font-semibold">Calling {parentName}...</h2>
@@ -114,7 +114,7 @@ const ChildCallScreen = () => {
 
   if (callEngine.state === "incoming") {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="min-h-[100dvh] bg-background flex items-center justify-center">
         <Card className="p-8">
           <div className="text-center space-y-4">
             <h2 className="text-2xl font-semibold">Incoming Call</h2>

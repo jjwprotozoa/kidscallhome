@@ -57,7 +57,7 @@ const ChildLogin = () => {
     try {
       const { data, error } = await supabase
         .from("children")
-        .select("id, name, avatar_color")
+        .select("id, name, avatar_color, parent_id")
         .eq("login_code", code)
         .single();
 
@@ -93,11 +93,11 @@ const ChildLogin = () => {
   // Handle magic link with code parameter
   useEffect(() => {
     const codeParam = searchParams.get("code");
-    if (codeParam) {
+    if (codeParam && codeParam.trim() !== "") {
       // Decode the code parameter in case it was URL-encoded
-      const decodedCode = decodeURIComponent(codeParam);
+      const decodedCode = decodeURIComponent(codeParam.trim());
       const [option, num] = decodedCode.split("-");
-      if (option && num) {
+      if (option && num && option.length > 0 && num.length > 0) {
         setSelectedOption(option);
         setNumber(num);
         // Determine if it's a color or animal
@@ -108,6 +108,13 @@ const ChildLogin = () => {
         setTimeout(() => {
           handleLoginWithCode(decodedCode);
         }, 500);
+      } else {
+        // Invalid code format - show error
+        toast({
+          title: "Invalid login code",
+          description: "The login code format is incorrect. Please check and try again.",
+          variant: "destructive",
+        });
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -153,7 +160,7 @@ const ChildLogin = () => {
     try {
       const { data, error } = await supabase
         .from("children")
-        .select("id, name, avatar_color")
+        .select("id, name, avatar_color, parent_id")
         .eq("login_code", loginCode)
         .single();
 
@@ -193,7 +200,7 @@ const ChildLogin = () => {
   // Success animation screen
   if (step === "success" && childData) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-primary/5 p-4">
+      <div className="min-h-[100dvh] flex items-center justify-center bg-primary/5 p-4">
         <Card className="w-full max-w-md p-8 space-y-6 text-center">
           <div className="space-y-4 animate-bounce">
             <div className="flex justify-center">
@@ -225,7 +232,7 @@ const ChildLogin = () => {
       : animals.find((a) => a.name === selectedOption);
 
     return (
-      <div className="min-h-screen flex items-center justify-center bg-primary/5 p-4">
+      <div className="min-h-[100dvh] flex items-center justify-center bg-primary/5 p-4">
         <Card className="w-full max-w-md p-8 space-y-6">
           <div className="text-center space-y-4">
             <Button
@@ -308,7 +315,7 @@ const ChildLogin = () => {
 
   // Initial selection screen
   return (
-    <div className="min-h-screen flex items-center justify-center bg-primary/5 p-4">
+    <div className="min-h-[100dvh] flex items-center justify-center bg-primary/5 p-4">
       <Card className="w-full max-w-2xl p-8 space-y-6">
         <div className="text-center space-y-4">
           <Smile className="h-20 w-20 text-primary mx-auto" />

@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { useIncomingCallNotifications } from "@/features/calls/hooks/useIncomingCallNotifications";
+import { useMissedBadgeForChild, useUnreadBadgeForChild } from "@/stores/badgeStore";
 import { supabase } from "@/integrations/supabase/client";
 import { endCall as endCallUtil } from "@/features/calls/utils/callEnding";
 import type { RealtimeChannel } from "@supabase/supabase-js";
@@ -20,7 +21,6 @@ import {
   Copy,
   Edit,
   ExternalLink,
-  LogOut,
   MessageCircle,
   Phone,
   Plus,
@@ -31,6 +31,9 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import Navigation from "@/components/Navigation";
+import { OnboardingTour } from "@/features/onboarding/OnboardingTour";
+import { HelpBubble } from "@/features/onboarding/HelpBubble";
 
 interface Child {
   id: string;
@@ -55,6 +58,50 @@ interface CallRecord {
   created_at: string;
   ended_at?: string | null;
 }
+
+// Component for Call button with missed call badge
+const ChildCallButton = ({ childId, onCall }: { childId: string; onCall: () => void }) => {
+  const missedCallCount = useMissedBadgeForChild(childId);
+  
+  return (
+    <Button
+      onClick={onCall}
+      className="flex-1 relative"
+      variant="secondary"
+      data-tour="parent-call-button"
+    >
+      <Video className="mr-2 h-4 w-4" />
+      Call
+      {missedCallCount > 0 && (
+        <span className="ml-2 bg-destructive text-destructive-foreground text-xs font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+          {missedCallCount > 99 ? "99+" : missedCallCount}
+        </span>
+      )}
+    </Button>
+  );
+};
+
+// Component for Chat button with unread message badge
+const ChildChatButton = ({ childId, onChat }: { childId: string; onChat: () => void }) => {
+  const unreadMessageCount = useUnreadBadgeForChild(childId);
+  
+  return (
+    <Button
+      onClick={onChat}
+      className="flex-1 relative"
+      variant="default"
+      data-tour="parent-messages"
+    >
+      <MessageCircle className="mr-2 h-4 w-4" />
+      Chat
+      {unreadMessageCount > 0 && (
+        <span className="ml-2 bg-destructive text-destructive-foreground text-xs font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+          {unreadMessageCount > 99 ? "99+" : unreadMessageCount}
+        </span>
+      )}
+    </Button>
+  );
+};
 
 const ParentDashboard = () => {
   const [children, setChildren] = useState<Child[]>([]);
@@ -417,10 +464,6 @@ const ParentDashboard = () => {
     }
   }, [incomingCall, stopIncomingCall]);
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    navigate("/parent/auth");
-  };
 
   const handleChat = (childId: string) => {
     navigate(`/chat/${childId}`);
@@ -655,50 +698,54 @@ const ParentDashboard = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="min-h-[100dvh] flex items-center justify-center bg-background">
         <p>Loading...</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background p-4">
-      <div className="max-w-4xl mx-auto space-y-6">
-        <div className="flex justify-between items-center">
-          <h1 className="text-3xl font-bold">My Children</h1>
-          <Button onClick={handleLogout} variant="outline">
-            <LogOut className="mr-2 h-4 w-4" />
-            Logout
+    <div className="min-h-[100dvh] bg-background">
+      <Navigation />
+      <OnboardingTour role="parent" pageKey="parent_dashboard" />
+      <HelpBubble role="parent" pageKey="parent_dashboard" />
+      <div className="p-4">
+        <div className="max-w-4xl mx-auto space-y-6">
+          <div className="mt-8">
+            <h1 className="text-3xl font-bold">My Children</h1>
+            <p className="text-muted-foreground mt-2">
+              Manage your children's profiles, login codes, and settings
+            </p>
+            </div>
+
+          <Button
+            onClick={() => setShowAddChild(true)}
+            className="w-full"
+            size="lg"
+          >
+            <Plus className="mr-2 h-5 w-5" />
+            Add Child
           </Button>
-        </div>
 
-        <Button
-          onClick={() => setShowAddChild(true)}
-          className="w-full"
-          size="lg"
-        >
-          <Plus className="mr-2 h-5 w-5" />
-          Add Child
-        </Button>
-
-        {children.length === 0 ? (
-          <Card className="p-12 text-center">
-            <p className="text-muted-foreground mb-4">
-              You haven't added any children yet.
-            </p>
-            <p className="text-sm text-muted-foreground">
-              Click "Add Child" above to create a profile and login code.
-            </p>
-          </Card>
-        ) : (
-          <div className="grid gap-4 md:grid-cols-2">
-            {children.map((child) => (
+          {children.length === 0 ? (
+            <Card className="p-12 text-center">
+              <p className="text-muted-foreground mb-4">
+                You haven't added any children yet.
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Click "Add Child" above to create a profile and login code.
+              </p>
+            </Card>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2">
+            {children.map((child, index) => (
               <Card
                 key={child.id}
                 className="p-6 space-y-4"
                 style={{
                   borderLeft: `4px solid ${child.avatar_color}`,
                 }}
+                data-tour={index === 0 ? "parent-status-indicator" : undefined}
               >
                 <div className="space-y-2">
                   <h3 className="text-xl font-bold">{child.name}</h3>
@@ -762,22 +809,8 @@ const ParentDashboard = () => {
                 </div>
 
                 <div className="flex gap-2">
-                  <Button
-                    onClick={() => handleCall(child.id)}
-                    className="flex-1"
-                    variant="secondary"
-                  >
-                    <Video className="mr-2 h-4 w-4" />
-                    Call
-                  </Button>
-                  <Button
-                    onClick={() => handleChat(child.id)}
-                    className="flex-1"
-                    variant="default"
-                  >
-                    <MessageCircle className="mr-2 h-4 w-4" />
-                    Chat
-                  </Button>
+                  <ChildCallButton childId={child.id} onCall={() => handleCall(child.id)} />
+                  <ChildChatButton childId={child.id} onChat={() => handleChat(child.id)} />
                   <Button
                     onClick={() => setChildToDelete(child)}
                     variant="destructive"
@@ -804,38 +837,38 @@ const ParentDashboard = () => {
           open={!!showCodeDialog}
           onOpenChange={(open) => !open && setShowCodeDialog(null)}
         >
-          <AlertDialogContent className="sm:max-w-md">
+          <AlertDialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-md">
             <AlertDialogHeader>
-              <AlertDialogTitle>
+              <AlertDialogTitle className="text-lg sm:text-xl">
                 {showCodeDialog.child.name}'s Login Code
               </AlertDialogTitle>
-              <AlertDialogDescription>
+              <AlertDialogDescription className="text-sm">
                 Share this code or QR code with your child to log in
               </AlertDialogDescription>
             </AlertDialogHeader>
             <div className="space-y-4 py-4">
-              <div className="bg-muted p-4 rounded-lg text-center">
+              <div className="bg-muted p-3 sm:p-4 rounded-lg text-center">
                 <p className="text-xs text-muted-foreground mb-2">Login Code</p>
-                <p className="text-3xl font-mono font-bold">
+                <p className="text-2xl sm:text-3xl font-mono font-bold break-all">
                   {showCodeDialog.child.login_code}
                 </p>
               </div>
               <div className="flex justify-center">
                 <img
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
                     `${window.location.origin}/child/login?code=${showCodeDialog.child.login_code}`
                   )}`}
                   alt="QR Code"
-                  className="border-2 border-muted rounded-lg"
+                  className="border-2 border-muted rounded-lg w-[200px] h-[200px] sm:w-[250px] sm:h-[250px] object-contain"
                 />
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-col sm:flex-row gap-2">
                 <Button
                   onClick={() =>
                     handleCopyCode(showCodeDialog.child.login_code)
                   }
                   variant="outline"
-                  className="flex-1"
+                  className="flex-1 w-full sm:w-auto"
                 >
                   <Copy className="mr-2 h-4 w-4" />
                   Copy Code
@@ -843,7 +876,7 @@ const ParentDashboard = () => {
                 <Button
                   onClick={() => handleCopyMagicLink(showCodeDialog.child)}
                   variant="outline"
-                  className="flex-1"
+                  className="flex-1 w-full sm:w-auto"
                 >
                   <ExternalLink className="mr-2 h-4 w-4" />
                   Copy Link
@@ -851,7 +884,7 @@ const ParentDashboard = () => {
                 <Button
                   onClick={() => handlePrintCode(showCodeDialog.child)}
                   variant="outline"
-                  className="flex-1"
+                  className="flex-1 w-full sm:w-auto"
                 >
                   <Printer className="mr-2 h-4 w-4" />
                   Print
@@ -990,6 +1023,7 @@ const ParentDashboard = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      </div>
     </div>
   );
 };

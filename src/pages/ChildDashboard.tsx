@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Video, MessageCircle, LogOut, Phone } from "lucide-react";
+import { Video, MessageCircle, Phone } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { endCall as endCallUtil } from "@/features/calls/utils/callEnding";
 import type { RealtimeChannel } from "@supabase/supabase-js";
@@ -18,6 +18,10 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useIncomingCallNotifications } from "@/features/calls/hooks/useIncomingCallNotifications";
+import Navigation from "@/components/Navigation";
+import { useMissedBadgeForChild, useUnreadBadgeForChild } from "@/stores/badgeStore";
+import { OnboardingTour } from "@/features/onboarding/OnboardingTour";
+import { HelpBubble } from "@/features/onboarding/HelpBubble";
 
 interface ChildSession {
   id: string;
@@ -44,8 +48,13 @@ interface CallRecord {
 const ChildDashboard = () => {
   const [child, setChild] = useState<ChildSession | null>(null);
   const [incomingCall, setIncomingCall] = useState<IncomingCall | null>(null);
-  const [parentName, setParentName] = useState<string>("Mom/Dad");
-  const parentNameRef = useRef<string>("Mom/Dad"); // Ref to track latest parentName for subscription callbacks
+  const [parentName, setParentName] = useState<string>("Parent");
+  const [selectedParentId, setSelectedParentId] = useState<string | null>(null);
+  const parentNameRef = useRef<string>("Parent"); // Ref to track latest parentName for subscription callbacks
+  
+  // Get badge counts from store (derived, no DB reads)
+  const missedCallCount = useMissedBadgeForChild(child?.id || null);
+  const unreadMessageCount = useUnreadBadgeForChild(child?.id || null);
   const incomingCallRef = useRef<IncomingCall | null>(null); // Ref to track latest incomingCall for subscription callbacks
   const channelRef = useRef<RealtimeChannel | null>(null);
   const isAnsweringRef = useRef(false); // Track if user is answering to prevent auto-decline
@@ -66,26 +75,41 @@ const ChildDashboard = () => {
     const childData = JSON.parse(sessionData);
     setChild(childData);
 
+    // Check if a parent was selected from the parents list
+    const storedParentId = localStorage.getItem("selectedParentId");
+    if (storedParentId) {
+      setSelectedParentId(storedParentId);
+    }
+
     // Fetch parent name
     const fetchParentName = async () => {
       try {
-        // First get the child's parent_id from the database
-        const { data: childRecord, error: childError } = await supabase
-          .from("children")
-          .select("parent_id")
-          .eq("id", childData.id)
-          .single();
+        // Use selected parent ID if available, otherwise use child's parent_id
+        let parentIdToFetch: string;
+        
+        if (storedParentId) {
+          parentIdToFetch = storedParentId;
+        } else {
+          // First get the child's parent_id from the database
+          const { data: childRecord, error: childError } = await supabase
+            .from("children")
+            .select("parent_id")
+            .eq("id", childData.id)
+            .single();
 
-        if (childError || !childRecord) {
-          console.error("Error fetching child record:", childError);
-          return;
+          if (childError || !childRecord) {
+            console.error("Error fetching child record:", childError);
+            return;
+          }
+          parentIdToFetch = childRecord.parent_id;
+          setSelectedParentId(parentIdToFetch);
         }
 
         // Then fetch the parent's name
         const { data: parentData, error: parentError } = await supabase
           .from("parents")
           .select("name")
-          .eq("id", childRecord.parent_id)
+          .eq("id", parentIdToFetch)
           .maybeSingle();
 
         if (parentError) {
@@ -97,8 +121,10 @@ const ChildDashboard = () => {
           setParentName(parentData.name);
           parentNameRef.current = parentData.name;
         } else {
-          // Parent name not found, keep default "Mom/Dad"
-          console.warn("Parent name not found for parent_id:", childRecord.parent_id);
+          // Parent name not found, use default
+          console.warn("Parent name not found for parent_id:", parentIdToFetch);
+          setParentName("Parent");
+          parentNameRef.current = "Parent";
         }
       } catch (error) {
         console.error("Error fetching parent name:", error);
@@ -350,24 +376,27 @@ const ChildDashboard = () => {
     }
   }, [incomingCall, stopIncomingCall]);
 
-  const handleLogout = () => {
-    localStorage.removeItem("childSession");
-    navigate("/child/login");
-  };
 
   const handleCall = () => {
-    if (child) {
+    if (child && selectedParentId) {
       console.log("📞 [CHILD DASHBOARD] Child clicked 'Call' button, navigating to call page:", {
         childId: child.id,
+        parentId: selectedParentId,
         timestamp: new Date().toISOString()
       });
-      navigate(`/call/${child.id}`);
+      navigate(`/child/call/${selectedParentId}`);
+    } else if (!selectedParentId) {
+      // If no parent selected, navigate to parents list
+      navigate("/child/parents");
     }
   };
 
   const handleChat = () => {
-    if (child) {
+    if (child && selectedParentId) {
       navigate(`/chat/${child.id}`);
+    } else if (!selectedParentId) {
+      // If no parent selected, navigate to parents list
+      navigate("/child/parents");
     }
   };
 
@@ -438,32 +467,51 @@ const ChildDashboard = () => {
   if (!child) return null;
 
   return (
-    <div className="min-h-screen bg-primary/5 p-4">
-      <div className="max-w-2xl mx-auto space-y-6">
-        <div className="flex justify-between items-center">
-          <div className="flex items-center gap-4">
-            <div
-              className="w-16 h-16 rounded-full flex items-center justify-center text-3xl font-bold text-white"
-              style={{ backgroundColor: child.avatar_color }}
-            >
-              {child.name[0]}
-            </div>
-            <div>
-              <h1 className="text-3xl font-bold">Hi {child.name}!</h1>
-              <p className="text-muted-foreground">Ready to connect?</p>
+    <div className="min-h-[100dvh] bg-primary/5">
+      <Navigation />
+      <OnboardingTour role="child" pageKey="child_dashboard" />
+      <HelpBubble role="child" pageKey="child_dashboard" />
+      <div className="p-4">
+        <div className="max-w-2xl mx-auto space-y-6">
+          <div className="mt-8">
+            <div className="flex items-center gap-4">
+              <div
+                className="w-16 h-16 rounded-full flex items-center justify-center text-3xl font-bold text-white"
+                style={{ backgroundColor: child.avatar_color }}
+              >
+                {child.name[0]}
+              </div>
+              <div>
+                <h1 className="text-3xl font-bold">Hi {child.name}!</h1>
+                <p className="text-muted-foreground">
+                  {selectedParentId ? `Ready to connect with ${parentName}?` : "Select a parent to contact"}
+                </p>
+              </div>
             </div>
           </div>
-          <Button onClick={handleLogout} variant="outline" size="sm">
-            <LogOut className="h-4 w-4" />
-          </Button>
-        </div>
 
-        <div className="grid gap-4">
+        {!selectedParentId ? (
+          <Card className="p-6 text-center">
+            <p className="text-muted-foreground mb-4">
+              Please select a parent first
+            </p>
+            <Button onClick={() => navigate("/child/parents")} size="lg">
+              Select Parent
+            </Button>
+          </Card>
+        ) : (
+          <div className="grid gap-4">
           <Card
-            className="p-8 cursor-pointer hover:shadow-lg transition-all border-4"
+            className="p-8 cursor-pointer hover:shadow-lg transition-all border-4 relative"
             style={{ borderColor: child.avatar_color }}
             onClick={handleCall}
+            data-tour="child-answer-button"
           >
+            {missedCallCount > 0 && (
+              <span className="absolute top-4 right-4 bg-destructive text-destructive-foreground text-xs font-bold rounded-full min-w-[24px] h-6 flex items-center justify-center px-2 border-2 border-background">
+                {missedCallCount > 99 ? "99+" : missedCallCount}
+              </span>
+            )}
             <div className="flex items-center gap-6">
               <div
                 className="w-20 h-20 rounded-full flex items-center justify-center"
@@ -479,10 +527,16 @@ const ChildDashboard = () => {
           </Card>
 
           <Card
-            className="p-8 cursor-pointer hover:shadow-lg transition-all border-4"
+            className="p-8 cursor-pointer hover:shadow-lg transition-all border-4 relative"
             style={{ borderColor: child.avatar_color }}
             onClick={handleChat}
+            data-tour="child-messages"
           >
+            {unreadMessageCount > 0 && (
+              <span className="absolute top-4 right-4 bg-destructive text-destructive-foreground text-xs font-bold rounded-full min-w-[24px] h-6 flex items-center justify-center px-2 border-2 border-background">
+                {unreadMessageCount > 99 ? "99+" : unreadMessageCount}
+              </span>
+            )}
             <div className="flex items-center gap-6">
               <div
                 className="w-20 h-20 rounded-full flex items-center justify-center"
@@ -496,6 +550,8 @@ const ChildDashboard = () => {
               </div>
             </div>
           </Card>
+        </div>
+        )}
         </div>
       </div>
 

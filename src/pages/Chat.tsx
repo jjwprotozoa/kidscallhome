@@ -1,17 +1,19 @@
 import { useEffect, useState, useRef } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, Send } from "lucide-react";
+import { useBadgeStore } from "@/stores/badgeStore";
 
 interface Message {
   id: string;
   sender_type: "parent" | "child";
   content: string;
   created_at: string;
+  read_at?: string | null;
 }
 
 interface ChildSession {
@@ -178,6 +180,75 @@ const Chat = () => {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Mark messages as read when chat is viewed
+  useEffect(() => {
+    if (!childData) return;
+
+    const markMessagesAsRead = async () => {
+      try {
+        const childSession = localStorage.getItem("childSession");
+        const isChild = !!childSession;
+        const targetChildId = isChild ? childData.id : childId;
+
+        if (!targetChildId) return;
+
+        // Get all unread messages for this conversation
+        let query = supabase
+          .from("messages")
+          .select("id")
+          .eq("child_id", targetChildId)
+          .is("read_at", null);
+
+        if (isChild) {
+          // Child: mark parent messages as read
+          query = query.eq("sender_type", "parent");
+        } else {
+          // Parent: mark child messages as read
+          query = query.eq("sender_type", "child");
+        }
+
+        const { data: unreadMessages, error: fetchError } = await query;
+
+        if (fetchError) {
+          console.error("Error fetching unread messages:", fetchError);
+          return;
+        }
+
+        if (!unreadMessages || unreadMessages.length === 0) return;
+
+        const unreadMessageIds = unreadMessages.map((msg) => msg.id);
+
+        // Mark messages as read immediately
+        const { error } = await supabase
+          .from("messages")
+          .update({ read_at: new Date().toISOString() })
+          .in("id", unreadMessageIds);
+
+        if (error) {
+          console.error("Error marking messages as read:", error);
+        } else {
+          console.log(`✅ Marked ${unreadMessageIds.length} messages as read`);
+          // Update local state to reflect read status immediately
+          setMessages((prev) =>
+            prev.map((msg) =>
+              unreadMessageIds.includes(msg.id)
+                ? { ...msg, read_at: new Date().toISOString() }
+                : msg
+            )
+          );
+          
+          // Update badge store (no DB read needed)
+          useBadgeStore.getState().clearUnreadForChild(targetChildId);
+        }
+      } catch (error) {
+        console.error("Error in markMessagesAsRead:", error);
+      }
+    };
+
+    // Mark messages as read immediately when chat page loads
+    markMessagesAsRead();
+  }, [childData, childId]); // Run when childData or childId changes (page loads)
 
   // Fallback polling for messages (in case realtime fails)
   useEffect(() => {
@@ -356,7 +427,7 @@ const Chat = () => {
   };
 
   return (
-    <div className="h-screen flex flex-col bg-background">
+    <div className="min-h-[100dvh] flex flex-col bg-background">
       <div className="bg-primary p-4 flex items-center gap-4">
         <Button onClick={goBack} variant="ghost" size="sm" className="text-white">
           <ArrowLeft className="h-5 w-5" />

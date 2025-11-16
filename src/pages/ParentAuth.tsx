@@ -3,7 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Heart, LogIn, UserPlus } from "lucide-react";
+import { LogIn, UserPlus } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -57,13 +57,17 @@ const ParentAuth = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4">
+    <div className="min-h-[100dvh] flex items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md p-8 space-y-6">
         <div className="text-center space-y-2">
           <div className="flex justify-center">
-            <Heart className="h-12 w-12 text-primary" />
+            <img 
+              src="/icon-192x192.png" 
+              alt="Kids Call Home" 
+              className="h-12 w-12"
+            />
           </div>
-          <h1 className="text-3xl font-bold">FamilyConnect</h1>
+          <h1 className="text-3xl font-bold">Kids Call Home</h1>
           <p className="text-muted-foreground">
             {isLogin ? "Welcome back, parent!" : "Create your parent account"}
           </p>
