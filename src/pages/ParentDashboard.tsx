@@ -20,7 +20,6 @@ import {
   Copy,
   Edit,
   ExternalLink,
-  LogOut,
   MessageCircle,
   Phone,
   Plus,
@@ -31,6 +30,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import Navigation from "@/components/Navigation";
 
 interface Child {
   id: string;
@@ -417,10 +417,6 @@ const ParentDashboard = () => {
     }
   }, [incomingCall, stopIncomingCall]);
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    navigate("/parent/auth");
-  };
 
   const handleChat = (childId: string) => {
     navigate(`/chat/${childId}`);
@@ -662,36 +658,37 @@ const ParentDashboard = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background p-4">
-      <div className="max-w-4xl mx-auto space-y-6">
-        <div className="flex justify-between items-center">
-          <h1 className="text-3xl font-bold">My Children</h1>
-          <Button onClick={handleLogout} variant="outline">
-            <LogOut className="mr-2 h-4 w-4" />
-            Logout
+    <div className="min-h-screen bg-background">
+      <Navigation />
+      <div className="p-4">
+        <div className="max-w-4xl mx-auto space-y-6">
+          <div className="mt-8">
+            <h1 className="text-3xl font-bold">My Children</h1>
+            <p className="text-muted-foreground mt-2">
+              Manage your children's profiles, login codes, and settings
+            </p>
+            </div>
+
+          <Button
+            onClick={() => setShowAddChild(true)}
+            className="w-full"
+            size="lg"
+          >
+            <Plus className="mr-2 h-5 w-5" />
+            Add Child
           </Button>
-        </div>
 
-        <Button
-          onClick={() => setShowAddChild(true)}
-          className="w-full"
-          size="lg"
-        >
-          <Plus className="mr-2 h-5 w-5" />
-          Add Child
-        </Button>
-
-        {children.length === 0 ? (
-          <Card className="p-12 text-center">
-            <p className="text-muted-foreground mb-4">
-              You haven't added any children yet.
-            </p>
-            <p className="text-sm text-muted-foreground">
-              Click "Add Child" above to create a profile and login code.
-            </p>
-          </Card>
-        ) : (
-          <div className="grid gap-4 md:grid-cols-2">
+          {children.length === 0 ? (
+            <Card className="p-12 text-center">
+              <p className="text-muted-foreground mb-4">
+                You haven't added any children yet.
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Click "Add Child" above to create a profile and login code.
+              </p>
+            </Card>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2">
             {children.map((child) => (
               <Card
                 key={child.id}
@@ -990,6 +987,7 @@ const ParentDashboard = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      </div>
     </div>
   );
 };
