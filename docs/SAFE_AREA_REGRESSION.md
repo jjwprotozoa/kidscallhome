@@ -6,6 +6,7 @@ Quick sanity check for safe-area behavior across devices.
 
 **Code Verification (2025-01-XX):** ✅ All safe-area code patterns verified
 **Manual Testing Required:**
+
 - [ ] Header/nav not under Dynamic Island on iPhone 15 Pro Max (portrait & landscape)
 - [ ] Call controls not overlapping home indicator
 - [ ] Bottom CTA buttons are clickable and visible on notched devices
@@ -13,6 +14,7 @@ Quick sanity check for safe-area behavior across devices.
 - [ ] No unintended scrollbars or double padding at top/bottom on non-notch devices
 
 **Testing Instructions:**
+
 1. Open app in browser dev tools
 2. Set device to iPhone 15 Pro Max (portrait & landscape)
 3. Verify nav bar respects Dynamic Island area
