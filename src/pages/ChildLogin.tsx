@@ -93,11 +93,11 @@ const ChildLogin = () => {
   // Handle magic link with code parameter
   useEffect(() => {
     const codeParam = searchParams.get("code");
-    if (codeParam) {
+    if (codeParam && codeParam.trim() !== "") {
       // Decode the code parameter in case it was URL-encoded
-      const decodedCode = decodeURIComponent(codeParam);
+      const decodedCode = decodeURIComponent(codeParam.trim());
       const [option, num] = decodedCode.split("-");
-      if (option && num) {
+      if (option && num && option.length > 0 && num.length > 0) {
         setSelectedOption(option);
         setNumber(num);
         // Determine if it's a color or animal
@@ -108,6 +108,13 @@ const ChildLogin = () => {
         setTimeout(() => {
           handleLoginWithCode(decodedCode);
         }, 500);
+      } else {
+        // Invalid code format - show error
+        toast({
+          title: "Invalid login code",
+          description: "The login code format is incorrect. Please check and try again.",
+          variant: "destructive",
+        });
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

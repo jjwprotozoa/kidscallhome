@@ -6,6 +6,18 @@
 @layer utilities {
   .safe-area-top {
     padding-top: env(safe-area-inset-top, 0px);
+    position: relative;
+  }
+  
+  .safe-area-top::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: env(safe-area-inset-top, 0px);
+    background-color: hsl(var(--background));
+    z-index: -1;
   }
   
   .pt-safe {
@@ -123,5 +135,22 @@ All colors MUST be HSL.
 
   body {
     @apply bg-background text-foreground;
+  }
+
+  /* Ensure browser-native prompts (install banners, rating prompts) are visible */
+  /* These are rendered by the browser and shouldn't be affected by our styles */
+  html {
+    /* Prevent any CSS from interfering with browser chrome */
+    color-scheme: light;
+  }
+}
+
+/* Prevent interference with browser-native UI elements */
+@layer utilities {
+  /* Ensure native browser prompts aren't hidden or styled incorrectly */
+  :root {
+    /* Use system colors for browser chrome when possible */
+    --browser-chrome-bg: #ffffff;
+    --browser-chrome-text: #000000;
   }
 }
