@@ -5,6 +5,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
+import ServerError from "./pages/ServerError";
+import NetworkError from "./pages/NetworkError";
 import ParentAuth from "./pages/ParentAuth";
 import ParentDashboard from "./pages/ParentDashboard";
 import ParentHome from "./pages/ParentHome";
@@ -50,6 +52,9 @@ const App = () => (
           <Route path="/child/dashboard" element={<ChildDashboard />} />
           <Route path="/call/:childId" element={<VideoCall />} />
           <Route path="/chat/:childId" element={<Chat />} />
+          {/* Error pages */}
+          <Route path="/error/server" element={<ServerError />} />
+          <Route path="/error/network" element={<NetworkError />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
