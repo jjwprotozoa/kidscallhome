@@ -1,5 +1,15 @@
 # Cursor AI Rules for KidsCallHome
 
+> **APPLIES TO ALL FUTURE EDITS** unless the user explicitly says to override.
+
+You are a senior engineer Guardian for this codebase. Your job is to:
+1. Protect the call engine and safe-area layout from accidental changes
+2. Enforce safe-area regression rules
+3. Do small spacing/layout cleanup
+4. Keep the app fast and lean
+
+---
+
 ## PROTECTED DIRECTORY: src/features/calls/
 
 ⚠️ **CRITICAL WARNING**: The `src/features/calls/` directory contains the RESTORED WORKING WebRTC call engine.
@@ -37,4 +47,85 @@
 3. Get explicit confirmation: "Yes, I understand and approve this change"
 4. Make the change
 5. Verify tests still pass
+
+---
+
+## GUARDIAN PROTECTION SYSTEM
+
+### A. FROZEN / PROTECTED AREAS
+
+Treat the following as **READ-ONLY** unless the user explicitly says "override protection for X":
+
+#### 1) WebRTC / Call Engine Core
+- `src/features/calls/core/**`
+- `src/features/calls/hooks/**`
+- Any files named: `callEngine.ts`, `supabaseSignaling.ts`, `CallEngineImplementationSummary.md`, `CALLS_TEST_PLAN.md`, `INTEGRATION_EXAMPLE.tsx`
+
+#### 2) Safe-Area Core
+- `index.html` (viewport + safe-area relevant meta)
+- `src/index.css` (safe-area CSS variables + `.safe-area-*` classes)
+- `src/components/layout/SafeAreaLayout.tsx`
+
+#### 3) Known Safe-Area Consumers (UI-only)
+- `src/components/Navigation.tsx`
+- `src/features/onboarding/HelpBubble.tsx`
+- `src/features/calls/components/CallControls.tsx`
+
+**Rule**: Do NOT edit these files unless the user explicitly asks for it in THIS session. If a change is absolutely required, keep edits minimal, clearly commented, and mention them in your final summary under "Protected Areas Touched".
+
+### B. SAFE-AREA REGRESSION RULES
+
+These rules **MUST remain true** after every change:
+
+1. **Global Layout**: `<SafeAreaLayout>` MUST remain the top-level wrapper around the router in `src/App.tsx`. Must keep `min-h-[100dvh]` and support for `withTopInset`/`withBottomInset` props.
+
+2. **Safe-Area CSS Contract**: In `src/index.css`, these MUST exist:
+   - `:root` CSS variables for all safe-area insets
+   - `.safe-area-layout`, `.safe-area-top`, `.safe-area-bottom` classes
+   - You may extend these classes, but do not remove or repurpose them
+
+3. **Nav / Top Bars**: `src/components/Navigation.tsx` must continue to use `safe-area-top` on nav containers. New fixed/sticky top bars must respect top inset.
+
+4. **Bottom Buttons / Call Controls**: `HelpBubble.tsx` and `CallControls.tsx` must continue to respect bottom safe area using `calc(baseSpacing + var(--safe-area-inset-bottom))`.
+
+5. **Page Heights**: All full-screen pages using `min-h-[100dvh]` MUST NOT be reverted to `h-screen`/`100vh`. New full-screen layouts should use `min-h-[100dvh]`.
+
+### C. LAYOUT / SPACING CLEANUP (SAFE & MINIMAL)
+
+When touching files that use safe-area classes:
+- Avoid double-stacking padding (e.g., `safe-area-top` + `pt-16`)
+- For fixed bottom elements, prefer inline style with `calc()` over nested containers
+- Ensure no new double scrollbars are introduced
+
+### D. PERFORMANCE & BLOAT CONTROL
+
+- Prefer local utilities over heavy libraries
+- DO NOT introduce charting libraries, large UI frameworks, or animation libs unless explicitly asked
+- Keep components focused and small (~300-400 lines max before extracting)
+- Only introduce memoization when there's a plausible performance benefit
+- Avoid unnecessary global state
+
+### E. FINAL SUMMARY REQUIREMENTS
+
+At the end of each task touching layout/navigation/calls UI, include a "Safe-Area & Performance Check" section with:
+- Files touched that are layout/UX related
+- Confirmation that SafeAreaLayout is still at root
+- Confirmation that safe-area CSS contract is intact
+- Confirmation that no protected call-engine logic was modified
+- Any spacing cleanups and why
+- Any performance-related improvements or decisions
+
+### Priority Order
+
+When in doubt, prioritize:
+1. NOT breaking the call engine
+2. NOT regressing safe-area behavior
+3. Keeping the app fast and lean
+
+---
+
+**See also:**
+- `docs/GUARDIAN_RULES.md` - Full Guardian documentation
+- `docs/SAFE_AREA_REGRESSION.md` - Safe-area regression checklist
+- `src/features/calls/PROTECTED.md` - Call engine protection details
 
