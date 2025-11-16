@@ -27,6 +27,7 @@ const Chat = () => {
   const [isChild, setIsChild] = useState(false);
   const [childData, setChildData] = useState<ChildSession | null>(null);
   const [loading, setLoading] = useState(false);
+  const [parentName, setParentName] = useState<string>("Mom/Dad");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -39,6 +40,34 @@ const Chat = () => {
       setChildData(data);
       fetchMessages(data.id);
       subscribeToMessages(data.id);
+      // Fetch parent name for child users - get parent_id from database
+      supabase
+        .from("children")
+        .select("parent_id")
+        .eq("id", data.id)
+        .single()
+        .then(({ data: childRecord, error: childError }) => {
+          if (childError || !childRecord) {
+            console.error("Error fetching child record:", childError);
+            return;
+          }
+          // Now fetch parent name
+          return supabase
+            .from("parents")
+            .select("name")
+            .eq("id", childRecord.parent_id)
+            .maybeSingle();
+        })
+        .then((result) => {
+          if (result?.data?.name) {
+            setParentName(result.data.name);
+          } else if (result?.error) {
+            console.error("Error fetching parent name:", result.error);
+          }
+        })
+        .catch((error) => {
+          console.error("Error fetching parent name:", error);
+        });
     } else if (childId) {
       setIsChild(false);
       fetchMessages(childId);
@@ -110,21 +139,70 @@ const Chat = () => {
     setLoading(true);
     try {
       const targetChildId = isChild ? childData.id : childId;
-      const senderId = isChild ? childData.id : (await supabase.auth.getUser()).data.user?.id;
+      
+      // Get sender_id - for parents, must be auth.uid()
+      let senderId: string | undefined;
+      let authUid: string | undefined;
+      
+      if (isChild) {
+        senderId = childData.id;
+        authUid = undefined; // Children are anonymous
+      } else {
+        const { data: { user }, error: authError } = await supabase.auth.getUser();
+        if (authError || !user) {
+          throw new Error("Not authenticated. Please log in again.");
+        }
+        senderId = user.id;
+        authUid = user.id; // For parents, sender_id must equal auth.uid()
+      }
 
-      const { error } = await supabase.from("messages").insert({
+      // Validate all required fields
+      if (!senderId) {
+        throw new Error("Missing sender_id");
+      }
+      if (!targetChildId) {
+        throw new Error("Missing child_id");
+      }
+
+      // Build payload matching RLS requirements
+      const payload = {
         child_id: targetChildId,
         sender_id: senderId,
         sender_type: isChild ? "child" : "parent",
         content: newMessage.trim(),
+      };
+
+      // DEBUG: Log payload to console
+      console.log("📤 [MESSAGE INSERT] Payload:", {
+        child_id: payload.child_id,
+        sender_id: payload.sender_id,
+        sender_type: payload.sender_type,
+        content_length: payload.content.length,
+        isChild,
+        auth_uid: authUid,
+        sender_id_matches_auth_uid: isChild ? "N/A (anon)" : (senderId === authUid),
       });
 
-      if (error) throw error;
+      const { error } = await supabase.from("messages").insert(payload);
+
+      if (error) {
+        console.error("❌ [MESSAGE INSERT] Error:", {
+          message: error.message,
+          code: error.code,
+          details: error.details,
+          hint: error.hint,
+          payload,
+        });
+        throw error;
+      }
+
+      console.log("✅ [MESSAGE INSERT] Success");
       setNewMessage("");
     } catch (error: any) {
+      console.error("❌ [MESSAGE INSERT] Exception:", error);
       toast({
         title: "Error sending message",
-        description: error.message,
+        description: error.message || "Failed to send message",
         variant: "destructive",
       });
     } finally {
@@ -156,7 +234,7 @@ const Chat = () => {
             </div>
           )}
           <h1 className="text-xl font-bold text-white">
-            {isChild ? "Mom/Dad" : childData?.name}
+            {isChild ? parentName : childData?.name}
           </h1>
         </div>
       </div>

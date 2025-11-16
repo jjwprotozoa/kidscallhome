@@ -7,8 +7,14 @@ import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import ParentAuth from "./pages/ParentAuth";
 import ParentDashboard from "./pages/ParentDashboard";
+import ParentHome from "./pages/ParentHome";
+import ParentChildrenList from "./pages/ParentChildrenList";
+import ParentCallScreen from "./pages/ParentCallScreen";
 import ChildLogin from "./pages/ChildLogin";
 import ChildDashboard from "./pages/ChildDashboard";
+import ChildHome from "./pages/ChildHome";
+import ChildParentsList from "./pages/ChildParentsList";
+import ChildCallScreen from "./pages/ChildCallScreen";
 import VideoCall from "./pages/VideoCall";
 import Chat from "./pages/Chat";
 
@@ -23,8 +29,14 @@ const App = () => (
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/parent/auth" element={<ParentAuth />} />
+          <Route path="/parent" element={<ParentHome />} />
+          <Route path="/parent/children" element={<ParentChildrenList />} />
+          <Route path="/parent/call/:childId" element={<ParentCallScreen />} />
           <Route path="/parent/dashboard" element={<ParentDashboard />} />
           <Route path="/child/login" element={<ChildLogin />} />
+          <Route path="/child" element={<ChildHome />} />
+          <Route path="/child/parents" element={<ChildParentsList />} />
+          <Route path="/child/call/:parentId" element={<ChildCallScreen />} />
           <Route path="/child/dashboard" element={<ChildDashboard />} />
           <Route path="/call/:childId" element={<VideoCall />} />
           <Route path="/chat/:childId" element={<Chat />} />

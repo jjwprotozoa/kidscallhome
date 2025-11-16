@@ -1,0 +1,40 @@
+# Cursor AI Rules for KidsCallHome
+
+## PROTECTED DIRECTORY: src/features/calls/
+
+⚠️ **CRITICAL WARNING**: The `src/features/calls/` directory contains the RESTORED WORKING WebRTC call engine.
+
+### Protection Rules:
+1. **DO NOT** modify files in `src/features/calls/` without explicit user confirmation
+2. **DO NOT** refactor, simplify, or "improve" code in this directory
+3. **DO NOT** change the public API of hooks/utils in this directory
+4. **ALWAYS** ask the user TWICE before making changes:
+   - First: Explain what change is needed and why
+   - Second: Get explicit confirmation before proceeding
+
+### Before Making Changes:
+1. Read `src/features/calls/PROTECTED.md` for full protection details
+2. Read `src/features/calls/README.md` to understand the architecture
+3. Verify the change is absolutely necessary
+4. Get explicit user confirmation
+5. Test thoroughly after changes
+
+### Allowed Changes (with double verification):
+- Bug fixes that are clearly broken (with user confirmation)
+- Security fixes (with user confirmation)
+- Performance fixes that don't change behavior (with user confirmation)
+
+### Prohibited Changes:
+- Refactoring for "clean code"
+- Simplifying logic
+- Changing API shapes
+- Adding new features without explicit request
+- Style-only changes
+
+### If User Requests Changes:
+1. Show a diff preview
+2. Explain the impact
+3. Get explicit confirmation: "Yes, I understand and approve this change"
+4. Make the change
+5. Verify tests still pass
+
