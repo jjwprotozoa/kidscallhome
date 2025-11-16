@@ -28,7 +28,7 @@ const ParentHome = () => {
 
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-[100dvh] bg-background">
       <Navigation />
       <div className="p-4">
         <div className="max-w-4xl mx-auto">

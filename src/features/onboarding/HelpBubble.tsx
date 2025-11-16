@@ -39,7 +39,10 @@ export function HelpBubble({ role, pageKey }: HelpBubbleProps) {
   return (
     <Button
       onClick={handleClick}
-      className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 h-12 w-12 rounded-full shadow-lg z-50"
+      className="fixed right-4 sm:right-6 h-12 w-12 rounded-full shadow-lg z-50 safe-area-bottom"
+      style={{ 
+        bottom: "calc(1rem + var(--safe-area-inset-bottom))",
+      }}
       size="icon"
       variant="default"
       aria-label="Show help tour"

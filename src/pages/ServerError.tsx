@@ -13,7 +13,7 @@ const ServerError = () => {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-destructive/5 via-background to-secondary/5 p-4">
+    <div className="flex min-h-[100dvh] items-center justify-center bg-gradient-to-br from-destructive/5 via-background to-secondary/5 p-4">
       <div className="text-center space-y-8 max-w-md w-full">
         {/* Animated 500 with alert icon */}
         <div className="relative">

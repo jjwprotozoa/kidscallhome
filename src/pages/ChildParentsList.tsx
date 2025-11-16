@@ -330,7 +330,7 @@ const ChildParentsList = () => {
 
   if (loading || !child) {
     return (
-      <div className="min-h-screen bg-background">
+      <div className="min-h-[100dvh] bg-background">
         <Navigation />
         <div className="p-4 flex items-center justify-center">
           <div>Loading...</div>
@@ -340,7 +340,7 @@ const ChildParentsList = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-[100dvh] bg-background">
       <Navigation />
       <div className="p-4">
         <div className="max-w-4xl mx-auto">

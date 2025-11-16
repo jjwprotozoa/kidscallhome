@@ -38,7 +38,7 @@ const ErrorPage = ({
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-primary/5 via-background to-secondary/5 p-4">
+    <div className="flex min-h-[100dvh] items-center justify-center bg-gradient-to-br from-primary/5 via-background to-secondary/5 p-4">
       <div className="text-center space-y-8 max-w-md w-full">
         {/* Animated error code */}
         <div className="relative">

@@ -467,7 +467,7 @@ const ChildDashboard = () => {
   if (!child) return null;
 
   return (
-    <div className="min-h-screen bg-primary/5">
+    <div className="min-h-[100dvh] bg-primary/5">
       <Navigation />
       <OnboardingTour role="child" pageKey="child_dashboard" />
       <HelpBubble role="child" pageKey="child_dashboard" />

@@ -126,14 +126,14 @@ const ParentChildrenList = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background p-4 flex items-center justify-center">
+      <div className="min-h-[100dvh] bg-background p-4 flex items-center justify-center">
         <div>Loading...</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-[100dvh] bg-background">
       <Navigation />
       <div className="p-4">
         <div className="max-w-4xl mx-auto">

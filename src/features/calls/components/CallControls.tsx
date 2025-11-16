@@ -20,7 +20,10 @@ export const CallControls = ({
   onEndCall,
 }: CallControlsProps) => {
   return (
-    <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex gap-4">
+    <div 
+      className="absolute left-1/2 -translate-x-1/2 flex gap-4"
+      style={{ bottom: "calc(2rem + var(--safe-area-inset-bottom))" }}
+    >
       <Button
         onClick={onToggleMute}
         size="lg"

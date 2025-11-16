@@ -427,7 +427,7 @@ const Chat = () => {
   };
 
   return (
-    <div className="h-screen flex flex-col bg-background">
+    <div className="min-h-[100dvh] flex flex-col bg-background">
       <div className="bg-primary p-4 flex items-center gap-4">
         <Button onClick={goBack} variant="ghost" size="sm" className="text-white">
           <ArrowLeft className="h-5 w-5" />

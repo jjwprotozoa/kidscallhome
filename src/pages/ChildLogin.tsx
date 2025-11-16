@@ -200,7 +200,7 @@ const ChildLogin = () => {
   // Success animation screen
   if (step === "success" && childData) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-primary/5 p-4">
+      <div className="min-h-[100dvh] flex items-center justify-center bg-primary/5 p-4">
         <Card className="w-full max-w-md p-8 space-y-6 text-center">
           <div className="space-y-4 animate-bounce">
             <div className="flex justify-center">
@@ -232,7 +232,7 @@ const ChildLogin = () => {
       : animals.find((a) => a.name === selectedOption);
 
     return (
-      <div className="min-h-screen flex items-center justify-center bg-primary/5 p-4">
+      <div className="min-h-[100dvh] flex items-center justify-center bg-primary/5 p-4">
         <Card className="w-full max-w-md p-8 space-y-6">
           <div className="text-center space-y-4">
             <Button
@@ -315,7 +315,7 @@ const ChildLogin = () => {
 
   // Initial selection screen
   return (
-    <div className="min-h-screen flex items-center justify-center bg-primary/5 p-4">
+    <div className="min-h-[100dvh] flex items-center justify-center bg-primary/5 p-4">
       <Card className="w-full max-w-2xl p-8 space-y-6">
         <div className="text-center space-y-4">
           <Smile className="h-20 w-20 text-primary mx-auto" />
