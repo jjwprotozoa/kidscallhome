@@ -345,8 +345,17 @@ const ChildDashboard = () => {
   }, [incomingCall, stopIncomingCall]);
 
 
-  const handleCall = () => {
+  const handleCall = async () => {
     if (child && selectedParentId) {
+      // Acknowledge missed calls from parent when clicking call button
+      // This clears the badge immediately and syncs to all devices
+      try {
+        const { acknowledgeMissedCalls } = await import("@/utils/acknowledgeMissedCalls");
+        await acknowledgeMissedCalls(child.id, "parent");
+      } catch (error) {
+        // Log error but don't block navigation
+        console.error("Error acknowledging missed calls:", error);
+      }
       // Navigate directly to call page (no extra "Start Call" step)
       navigate(`/call/${child.id}`);
     } else if (!selectedParentId) {

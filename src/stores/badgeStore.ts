@@ -1,7 +1,9 @@
 // src/stores/badgeStore.ts
 // Badge store driven by events, not queries - zero ongoing DB reads
+// Persists to local storage for instant UI feedback after page refresh
 
 import { create } from "zustand";
+import { loadBadgeState, saveBadgeState, clearBadgeState, markBadgesCleared } from "@/utils/badgeStorage";
 
 type BadgeState = {
   unreadMessagesByChild: Record<string, number>;
@@ -24,62 +26,110 @@ type BadgeState = {
   reset: () => void;
 };
 
-export const useBadgeStore = create<BadgeState>((set) => ({
-  unreadMessagesByChild: {},
-  missedCallsByChild: {},
+// Load initial state from local storage
+const initialState = loadBadgeState();
 
-  setInitialUnread: (map) => set({ unreadMessagesByChild: map }),
-  setInitialMissed: (map) => set({ missedCallsByChild: map }),
+export const useBadgeStore = create<BadgeState>((set, get) => ({
+  unreadMessagesByChild: initialState.unreadMessagesByChild,
+  missedCallsByChild: initialState.missedCallsByChild,
+
+  setInitialUnread: (map) => {
+    set({ unreadMessagesByChild: map });
+    // Persist to local storage
+    saveBadgeState(get().unreadMessagesByChild, get().missedCallsByChild);
+  },
+  
+  setInitialMissed: (map) => {
+    set({ missedCallsByChild: map });
+    // Persist to local storage
+    saveBadgeState(get().unreadMessagesByChild, get().missedCallsByChild);
+  },
 
   incrementUnread: (childId) =>
-    set((state) => ({
-      unreadMessagesByChild: {
-        ...state.unreadMessagesByChild,
-        [childId]: (state.unreadMessagesByChild[childId] ?? 0) + 1,
-      },
-    })),
+    set((state) => {
+      const newState = {
+        unreadMessagesByChild: {
+          ...state.unreadMessagesByChild,
+          [childId]: (state.unreadMessagesByChild[childId] ?? 0) + 1,
+        },
+      };
+      // Persist to local storage
+      saveBadgeState(newState.unreadMessagesByChild, state.missedCallsByChild);
+      return newState;
+    }),
 
   decrementUnread: (childId, count = 1) =>
-    set((state) => ({
-      unreadMessagesByChild: {
-        ...state.unreadMessagesByChild,
-        [childId]: Math.max(0, (state.unreadMessagesByChild[childId] ?? 0) - count),
-      },
-    })),
+    set((state) => {
+      const newState = {
+        unreadMessagesByChild: {
+          ...state.unreadMessagesByChild,
+          [childId]: Math.max(0, (state.unreadMessagesByChild[childId] ?? 0) - count),
+        },
+      };
+      // Persist to local storage
+      saveBadgeState(newState.unreadMessagesByChild, state.missedCallsByChild);
+      return newState;
+    }),
 
   clearUnreadForChild: (childId) =>
-    set((state) => ({
-      unreadMessagesByChild: {
-        ...state.unreadMessagesByChild,
-        [childId]: 0,
-      },
-    })),
+    set((state) => {
+      const newState = {
+        unreadMessagesByChild: {
+          ...state.unreadMessagesByChild,
+          [childId]: 0,
+        },
+      };
+      // Persist to local storage immediately and mark as cleared
+      saveBadgeState(newState.unreadMessagesByChild, state.missedCallsByChild);
+      markBadgesCleared(childId, "messages");
+      return newState;
+    }),
 
   incrementMissed: (childId) =>
-    set((state) => ({
-      missedCallsByChild: {
-        ...state.missedCallsByChild,
-        [childId]: (state.missedCallsByChild[childId] ?? 0) + 1,
-      },
-    })),
+    set((state) => {
+      const newState = {
+        missedCallsByChild: {
+          ...state.missedCallsByChild,
+          [childId]: (state.missedCallsByChild[childId] ?? 0) + 1,
+        },
+      };
+      // Persist to local storage
+      saveBadgeState(state.unreadMessagesByChild, newState.missedCallsByChild);
+      return newState;
+    }),
 
   decrementMissed: (childId, count = 1) =>
-    set((state) => ({
-      missedCallsByChild: {
-        ...state.missedCallsByChild,
-        [childId]: Math.max(0, (state.missedCallsByChild[childId] ?? 0) - count),
-      },
-    })),
+    set((state) => {
+      const newState = {
+        missedCallsByChild: {
+          ...state.missedCallsByChild,
+          [childId]: Math.max(0, (state.missedCallsByChild[childId] ?? 0) - count),
+        },
+      };
+      // Persist to local storage
+      saveBadgeState(state.unreadMessagesByChild, newState.missedCallsByChild);
+      return newState;
+    }),
 
   clearMissedForChild: (childId) =>
-    set((state) => ({
-      missedCallsByChild: {
-        ...state.missedCallsByChild,
-        [childId]: 0,
-      },
-    })),
+    set((state) => {
+      const newState = {
+        missedCallsByChild: {
+          ...state.missedCallsByChild,
+          [childId]: 0,
+        },
+      };
+      // Persist to local storage immediately and mark as cleared
+      saveBadgeState(state.unreadMessagesByChild, newState.missedCallsByChild);
+      markBadgesCleared(childId, "calls");
+      return newState;
+    }),
 
-  reset: () => set({ unreadMessagesByChild: {}, missedCallsByChild: {} }),
+  reset: () => {
+    set({ unreadMessagesByChild: {}, missedCallsByChild: {} });
+    // Clear local storage on logout
+    clearBadgeState();
+  },
 }));
 
 // Selectors for total counts (derived from store, no DB reads)

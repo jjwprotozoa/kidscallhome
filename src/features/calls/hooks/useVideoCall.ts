@@ -267,6 +267,27 @@ export const useVideoCall = () => {
       return;
     }
 
+    // Acknowledge missed calls when call page loads
+    // This ensures missed calls are marked as read when user navigates to call page
+    const acknowledgeMissedCallsOnLoad = async () => {
+      if (!childId) return;
+      
+      try {
+        const childSession = localStorage.getItem("childSession");
+        const isChildUser = !!childSession;
+        const callerType = isChildUser ? "parent" : "child";
+        
+        const { acknowledgeMissedCalls } = await import("@/utils/acknowledgeMissedCalls");
+        await acknowledgeMissedCalls(childId, callerType);
+      } catch (error) {
+        // Log error but don't block call initialization
+        console.error("Error acknowledging missed calls on call page load:", error);
+      }
+    };
+    
+    // Acknowledge missed calls asynchronously (don't block call initialization)
+    acknowledgeMissedCallsOnLoad();
+
     // CRITICAL: Check auth session FIRST - parents have auth session, children don't
     // If user has auth session, they are a parent (even if childSession exists)
     // NOTE: isChild is now derived synchronously above, but we still need to determine it

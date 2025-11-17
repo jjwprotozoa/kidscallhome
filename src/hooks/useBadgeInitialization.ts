@@ -4,6 +4,7 @@
 import { useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useBadgeStore } from "@/stores/badgeStore";
+import { loadBadgeState, getLastClearedTimestamp } from "@/utils/badgeStorage";
 
 export function useBadgeInitialization() {
   useEffect(() => {
@@ -11,6 +12,16 @@ export function useBadgeInitialization() {
 
     const fetchInitialBadges = async () => {
       try {
+        // Load cached badge state from local storage first for instant UI
+        // This prevents badges from reappearing after refresh
+        const cachedState = loadBadgeState();
+        if (mounted && (Object.keys(cachedState.unreadMessagesByChild).length > 0 || 
+                        Object.keys(cachedState.missedCallsByChild).length > 0)) {
+          console.log("📦 [BADGE INIT] Loading cached badge state from local storage");
+          useBadgeStore.getState().setInitialUnread(cachedState.unreadMessagesByChild);
+          useBadgeStore.getState().setInitialMissed(cachedState.missedCallsByChild);
+        }
+
         const childSession = localStorage.getItem("childSession");
         const isChild = !!childSession;
 
@@ -19,32 +30,56 @@ export function useBadgeInitialization() {
           const childData = JSON.parse(childSession);
           const childId = childData.id;
 
-          // Fetch unread messages from parent
-          const { data: unreadMessages, error: msgError } = await supabase
+          // Get last cleared timestamps - only count NEW messages/calls
+          const lastClearedMessages = getLastClearedTimestamp(childId, "messages");
+          const lastClearedCalls = getLastClearedTimestamp(childId, "calls");
+
+          // Fetch unread messages from parent that arrived AFTER last clear
+          let messagesQuery = supabase
             .from("messages")
-            .select("child_id")
+            .select("child_id, created_at")
             .eq("child_id", childId)
             .eq("sender_type", "parent")
             .is("read_at", null);
 
+          // Only count messages created AFTER last clear timestamp
+          if (lastClearedMessages) {
+            messagesQuery = messagesQuery.gt("created_at", lastClearedMessages);
+          }
+
+          const { data: unreadMessages, error: msgError } = await messagesQuery;
+
           if (msgError) throw msgError;
 
-          // Fetch missed calls from parent
-          const { data: missedCalls, error: callError } = await supabase
+          // Fetch missed calls from parent that arrived AFTER last clear
+          let callsQuery = supabase
             .from("calls")
-            .select("child_id")
+            .select("child_id, created_at")
             .eq("child_id", childId)
             .eq("caller_type", "parent")
             .eq("missed_call", true)
             .is("missed_call_read_at", null);
+
+          // Only count calls created AFTER last clear timestamp
+          if (lastClearedCalls) {
+            callsQuery = callsQuery.gt("created_at", lastClearedCalls);
+          }
+
+          const { data: missedCalls, error: callError } = await callsQuery;
 
           if (callError) throw callError;
 
           if (mounted) {
             // For child, we only have one "conversation" (with their parent)
             // Store it with childId as key for consistency
+            // Only count NEW messages/calls (arrived after last clear)
             const unreadCount = unreadMessages?.length ?? 0;
             const missedCount = missedCalls?.length ?? 0;
+
+            console.log(`📦 [BADGE INIT] Child ${childId}: ${unreadCount} new unread messages, ${missedCount} new missed calls`, {
+              lastClearedMessages,
+              lastClearedCalls,
+            });
 
             useBadgeStore.getState().setInitialUnread({ [childId]: unreadCount });
             useBadgeStore.getState().setInitialMissed({ [childId]: missedCount });
@@ -65,40 +100,53 @@ export function useBadgeInitialization() {
 
           const childIds = children.map((c) => c.id);
 
+          // Aggregate counts per child - only count NEW messages/calls
+          const unreadByChild: Record<string, number> = {};
+          const missedByChild: Record<string, number> = {};
+
           // Fetch unread messages per child (from children to parent)
-          const { data: unreadMessages, error: msgError } = await supabase
-            .from("messages")
-            .select("child_id")
-            .in("child_id", childIds)
-            .eq("sender_type", "child")
-            .is("read_at", null);
+          // Only count messages that arrived AFTER last clear timestamp
+          for (const childId of childIds) {
+            const lastClearedMessages = getLastClearedTimestamp(childId, "messages");
+            const lastClearedCalls = getLastClearedTimestamp(childId, "calls");
 
-          if (msgError) throw msgError;
+            let messagesQuery = supabase
+              .from("messages")
+              .select("child_id, created_at")
+              .eq("child_id", childId)
+              .eq("sender_type", "child")
+              .is("read_at", null);
 
-          // Fetch missed calls per child (from children to parent)
-          const { data: missedCalls, error: callError } = await supabase
-            .from("calls")
-            .select("child_id")
-            .in("child_id", childIds)
-            .eq("caller_type", "child")
-            .eq("missed_call", true)
-            .is("missed_call_read_at", null);
+            if (lastClearedMessages) {
+              messagesQuery = messagesQuery.gt("created_at", lastClearedMessages);
+            }
 
-          if (callError) throw callError;
+            const { data: unreadMessages } = await messagesQuery;
+            unreadByChild[childId] = unreadMessages?.length ?? 0;
+
+            let callsQuery = supabase
+              .from("calls")
+              .select("child_id, created_at")
+              .eq("child_id", childId)
+              .eq("caller_type", "child")
+              .eq("missed_call", true)
+              .is("missed_call_read_at", null);
+
+            if (lastClearedCalls) {
+              callsQuery = callsQuery.gt("created_at", lastClearedCalls);
+            }
+
+            const { data: missedCalls } = await callsQuery;
+            missedByChild[childId] = missedCalls?.length ?? 0;
+          }
 
           if (mounted) {
-            // Aggregate counts per child
-            const unreadByChild: Record<string, number> = {};
-            const missedByChild: Record<string, number> = {};
-
-            unreadMessages?.forEach((msg) => {
-              unreadByChild[msg.child_id] = (unreadByChild[msg.child_id] ?? 0) + 1;
+            console.log(`📦 [BADGE INIT] Parent: loaded badge counts for ${childIds.length} children`, {
+              unreadByChild,
+              missedByChild,
             });
 
-            missedCalls?.forEach((call) => {
-              missedByChild[call.child_id] = (missedByChild[call.child_id] ?? 0) + 1;
-            });
-
+            // Only show badges for NEW messages/calls (arrived after last clear)
             useBadgeStore.getState().setInitialUnread(unreadByChild);
             useBadgeStore.getState().setInitialMissed(missedByChild);
           }

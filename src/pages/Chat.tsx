@@ -193,12 +193,21 @@ const Chat = () => {
         const isChild = !!childSession;
         const targetChildId = isChild ? childData.id : childId;
 
-        if (!targetChildId) return;
+        if (!targetChildId) {
+          console.log("⚠️ [CHAT READ] No targetChildId, skipping mark as read");
+          return;
+        }
 
-        // Get all unread messages for this conversation
+        console.log("📖 [CHAT READ] Starting mark as read process", {
+          targetChildId,
+          isChild,
+          timestamp: new Date().toISOString(),
+        });
+
+        // Get ALL unread messages for this conversation (no limit)
         let query = supabase
           .from("messages")
-          .select("id")
+          .select("id, sender_type, read_at")
           .eq("child_id", targetChildId)
           .is("read_at", null);
 
@@ -213,44 +222,80 @@ const Chat = () => {
         const { data: unreadMessages, error: fetchError } = await query;
 
         if (fetchError) {
-          console.error("Error fetching unread messages:", fetchError);
+          console.error("❌ [CHAT READ] Error fetching unread messages:", fetchError);
           return;
         }
 
-        if (!unreadMessages || unreadMessages.length === 0) return;
+        if (!unreadMessages || unreadMessages.length === 0) {
+          console.log("✅ [CHAT READ] No unread messages found");
+          // Clear badge anyway to ensure UI is in sync
+          useBadgeStore.getState().clearUnreadForChild(targetChildId);
+          return;
+        }
 
         const unreadMessageIds = unreadMessages.map((msg) => msg.id);
+        console.log(`📖 [CHAT READ] Found ${unreadMessageIds.length} unread messages to mark as read`, {
+          messageIds: unreadMessageIds.slice(0, 5), // Log first 5 IDs
+          totalCount: unreadMessageIds.length,
+        });
 
-        // Mark messages as read immediately
+        // Mark messages as read immediately in database
+        const readAt = new Date().toISOString();
         const { error } = await supabase
           .from("messages")
-          .update({ read_at: new Date().toISOString() })
+          .update({ read_at: readAt })
           .in("id", unreadMessageIds);
 
         if (error) {
-          console.error("Error marking messages as read:", error);
-        } else {
-          console.log(`✅ Marked ${unreadMessageIds.length} messages as read`);
-          // Update local state to reflect read status immediately
-          setMessages((prev) =>
-            prev.map((msg) =>
-              unreadMessageIds.includes(msg.id)
-                ? { ...msg, read_at: new Date().toISOString() }
-                : msg
-            )
-          );
-          
-          // Update badge store (no DB read needed)
-          useBadgeStore.getState().clearUnreadForChild(targetChildId);
+          console.error("❌ [CHAT READ] Error marking messages as read:", error);
+          return;
         }
+
+        console.log(`✅ [CHAT READ] Successfully marked ${unreadMessageIds.length} messages as read`, {
+          readAt,
+        });
+
+        // Update local state to reflect read status immediately
+        setMessages((prev) =>
+          prev.map((msg) =>
+            unreadMessageIds.includes(msg.id)
+              ? { ...msg, read_at: readAt }
+              : msg
+          )
+        );
+
+        // IMMEDIATELY clear badge count optimistically (before realtime events)
+        // This ensures instant UI feedback when user navigates away
+        useBadgeStore.getState().clearUnreadForChild(targetChildId);
+        console.log(`✅ [CHAT READ] Badge cleared immediately for child ${targetChildId}`);
+
+        // Note: Realtime subscription (useBadgeRealtime) will also handle decrements
+        // This ensures all devices receive the update and badge counts stay in sync
+        // The immediate clear above provides instant feedback, realtime syncs across devices
       } catch (error) {
-        console.error("Error in markMessagesAsRead:", error);
+        console.error("❌ [CHAT READ] Error in markMessagesAsRead:", error);
       }
     };
 
     // Mark messages as read immediately when chat page loads
     markMessagesAsRead();
   }, [childData, childId]); // Run when childData or childId changes (page loads)
+
+  // Cleanup: Ensure badge is cleared when navigating away from chat
+  useEffect(() => {
+    return () => {
+      // This cleanup runs when component unmounts (user navigates away)
+      const childSession = localStorage.getItem("childSession");
+      const isChild = !!childSession;
+      const targetChildId = isChild ? (childData?.id || null) : childId;
+
+      if (targetChildId) {
+        console.log("🧹 [CHAT CLEANUP] Clearing badge on chat exit", { targetChildId });
+        // Force clear badge on exit to ensure UI reflects cleared state
+        useBadgeStore.getState().clearUnreadForChild(targetChildId);
+      }
+    };
+  }, [childData, childId]);
 
   // Fallback polling for messages (in case realtime fails)
   useEffect(() => {

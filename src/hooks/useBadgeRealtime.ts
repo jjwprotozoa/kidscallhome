@@ -1,9 +1,11 @@
 // src/hooks/useBadgeRealtime.ts
 // Realtime subscriptions that update badge store (zero DB reads)
+// Only increments badges for NEW messages/calls (created after last cleared timestamp)
 
 import { useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useBadgeStore } from "@/stores/badgeStore";
+import { getLastClearedTimestamp } from "@/utils/badgeStorage";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 
 export function useBadgeRealtime() {
@@ -29,7 +31,15 @@ export function useBadgeRealtime() {
             child_id: string;
             sender_type: string;
             read_at: string | null;
+            created_at: string;
           };
+
+          // Only count NEW messages (created after last cleared timestamp)
+          const lastCleared = getLastClearedTimestamp(message.child_id, "messages");
+          if (lastCleared && message.created_at <= lastCleared) {
+            // This is an old message, ignore it
+            return;
+          }
 
           if (isChild) {
             // Child: count messages FROM parent (unread for child)
@@ -107,7 +117,15 @@ export function useBadgeRealtime() {
             caller_type: string;
             missed_call: boolean;
             missed_call_read_at: string | null;
+            created_at: string;
           };
+
+          // Only count NEW missed calls (created after last cleared timestamp)
+          const lastCleared = getLastClearedTimestamp(call.child_id, "calls");
+          if (lastCleared && call.created_at <= lastCleared) {
+            // This is an old call, ignore it
+            return;
+          }
 
           if (call.missed_call && !call.missed_call_read_at) {
             if (isChild) {
@@ -137,12 +155,14 @@ export function useBadgeRealtime() {
             caller_type: string;
             missed_call: boolean;
             missed_call_read_at: string | null;
+            status?: string;
           };
           const newCall = payload.new as {
             child_id: string;
             caller_type: string;
             missed_call: boolean;
             missed_call_read_at: string | null;
+            status?: string;
           };
 
           // If missed_call_read_at changed from null to a value, decrement count
@@ -157,6 +177,34 @@ export function useBadgeRealtime() {
             } else {
               if (oldCall.caller_type === "child") {
                 useBadgeStore.getState().decrementMissed(oldCall.child_id);
+              }
+            }
+          }
+
+          // CRITICAL: If call becomes "active" (connected), clear missed call badge
+          // This ensures that when a call is successfully connected, missed call notifications are cleared
+          // because the user has "seen" the missed calls by connecting with them
+          const statusChangedToActive = 
+            newCall.status === "active" && 
+            oldCall.status !== "active";
+
+          if (statusChangedToActive) {
+            console.log("✅ [BADGE REALTIME] Call became active - clearing missed call badge", {
+              childId: newCall.child_id,
+              callerType: newCall.caller_type,
+            });
+            
+            // Clear missed call badge for this child when ANY call connects
+            // This makes sense because if you're calling them now, you've "seen" previous missed calls
+            if (isChild) {
+              // Child: clear badge for missed calls from parent
+              if (newCall.caller_type === "parent") {
+                useBadgeStore.getState().clearMissedForChild(newCall.child_id);
+              }
+            } else {
+              // Parent: clear badge for missed calls from child
+              if (newCall.caller_type === "child") {
+                useBadgeStore.getState().clearMissedForChild(newCall.child_id);
               }
             }
           }
