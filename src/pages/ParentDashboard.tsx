@@ -602,7 +602,7 @@ const ParentDashboard = () => {
         <Navigation />
         <div className="p-4">
           <div className="max-w-4xl mx-auto space-y-6">
-            <div className="mt-8">
+            <div className="mt-6">
               <div className="h-9 w-48 bg-muted rounded animate-pulse mb-2" />
               <div className="h-6 w-96 bg-muted rounded animate-pulse" />
             </div>
@@ -639,7 +639,7 @@ const ParentDashboard = () => {
       <HelpBubble role="parent" pageKey="parent_dashboard" />
       <div className="p-4">
         <div className="max-w-4xl mx-auto space-y-6">
-          <div className="mt-8">
+          <div className="mt-6">
             <h1 className="text-3xl font-bold">My Children</h1>
             <p className="text-muted-foreground mt-2">
               Manage your children's profiles, login codes, and settings

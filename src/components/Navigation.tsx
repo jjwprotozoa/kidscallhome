@@ -170,7 +170,7 @@ const Navigation = () => {
 
   if (userType === "parent") {
     return (
-      <nav className="border-b bg-background safe-area-top">
+      <nav className="border-b bg-background" style={{ paddingTop: `calc(var(--safe-area-inset-top) * 0.3)` }}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-4" data-tour="parent-menu">
@@ -205,7 +205,7 @@ const Navigation = () => {
 
   if (userType === "child") {
     return (
-      <nav className="border-b bg-background safe-area-top">
+      <nav className="border-b bg-background" style={{ paddingTop: `calc(var(--safe-area-inset-top) * 0.3)` }}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-4" data-tour="child-help">
