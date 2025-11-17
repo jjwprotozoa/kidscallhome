@@ -10,8 +10,20 @@ ADD COLUMN IF NOT EXISTS mac_address TEXT;
 CREATE INDEX IF NOT EXISTS idx_devices_mac_address ON public.devices(mac_address) WHERE mac_address IS NOT NULL;
 
 -- Update the update_device_login function to accept MAC address parameter
+-- Drop both old 7-parameter version and new 8-parameter version to ensure clean migration
 DROP FUNCTION IF EXISTS public.update_device_login(
   UUID,
+  TEXT,
+  TEXT,
+  TEXT,
+  TEXT,
+  TEXT,
+  UUID
+);
+
+DROP FUNCTION IF EXISTS public.update_device_login(
+  UUID,
+  TEXT,
   TEXT,
   TEXT,
   TEXT,
@@ -37,18 +49,22 @@ SET search_path = public
 AS $$
 DECLARE
   device_id UUID;
-  ip_address_inet INET;
+  ip_address_validated TEXT;
 BEGIN
-  -- Safely convert IP address TEXT to INET (handles invalid IPs)
+  -- Safely validate IP address (handles invalid IPs)
+  -- Store as TEXT to match column type, but validate format
   BEGIN
     IF p_ip_address IS NULL OR p_ip_address = '' THEN
-      ip_address_inet := NULL;
+      ip_address_validated := NULL;
     ELSE
-      ip_address_inet := p_ip_address::inet;
+      -- Validate IP format by attempting conversion to INET
+      -- If valid, use original text; if invalid, set to NULL
+      PERFORM p_ip_address::inet;
+      ip_address_validated := p_ip_address;
     END IF;
   EXCEPTION WHEN OTHERS THEN
     -- If IP address is invalid, set to NULL instead of failing
-    ip_address_inet := NULL;
+    ip_address_validated := NULL;
   END;
 
   -- Try to find existing device by identifier
@@ -65,7 +81,7 @@ BEGIN
     SET 
       last_login_at = NOW(),
       last_used_child_id = COALESCE(p_child_id, last_used_child_id),
-      last_ip_address = ip_address_inet,
+      last_ip_address = ip_address_validated,
       mac_address = COALESCE(p_mac_address, mac_address), -- Update MAC if provided, keep existing if null
       user_agent = p_user_agent,
       updated_at = NOW()
@@ -88,7 +104,7 @@ BEGIN
       p_device_type,
       p_device_identifier,
       p_child_id,
-      ip_address_inet,
+      ip_address_validated,
       p_mac_address,
       p_user_agent
     )

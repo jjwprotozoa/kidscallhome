@@ -46,6 +46,7 @@ interface Device {
   last_login_at: string;
   last_ip_address: string | null;
   last_location: string | null;
+  mac_address: string | null;
   user_agent: string | null;
   is_active: boolean;
   created_at: string;

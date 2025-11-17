@@ -146,6 +146,7 @@ export type Database = {
           last_location: string | null
           last_login_at: string | null
           last_used_child_id: string | null
+          mac_address: string | null
           parent_id: string
           updated_at: string
           user_agent: string | null
@@ -161,6 +162,7 @@ export type Database = {
           last_location?: string | null
           last_login_at?: string | null
           last_used_child_id?: string | null
+          mac_address?: string | null
           parent_id: string
           updated_at?: string
           user_agent?: string | null
@@ -176,6 +178,7 @@ export type Database = {
           last_location?: string | null
           last_login_at?: string | null
           last_used_child_id?: string | null
+          mac_address?: string | null
           parent_id?: string
           updated_at?: string
           user_agent?: string | null
@@ -241,6 +244,7 @@ export type Database = {
           p_device_name: string
           p_device_type: string
           p_ip_address: string | null
+          p_mac_address: string | null
           p_parent_id: string
           p_user_agent: string
         }

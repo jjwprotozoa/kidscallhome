@@ -1,6 +1,7 @@
--- supabase/migrations/20250115000001_fix_child_call_insert_rls_final.sql
--- Final fix for child call insert RLS policy
+-- Migration: Fix Child Call Insert RLS Policy (Final)
+-- Purpose: Final fix for child call insert RLS policy
 -- Uses SECURITY DEFINER function to verify child relationship
+-- Note: This migration was moved from 20250122000000 to 20250122000006 to resolve timestamp conflict
 
 -- ============================================
 -- STEP 1: Create SECURITY DEFINER function to verify child can insert call
