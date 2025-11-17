@@ -27,6 +27,7 @@ import {
   useTotalUnreadBadge,
   useUnreadBadgeForChild,
 } from "@/stores/badgeStore";
+import { isPWA } from "@/utils/platformDetection";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import {
   BellOff,
@@ -139,6 +140,8 @@ const ParentDashboard = () => {
   const [incomingCall, setIncomingCall] = useState<IncomingCall | null>(null);
   const [parentName, setParentName] = useState<string | null>(null);
   const [familyCode, setFamilyCode] = useState<string | null>(null);
+  const [allowedChildren, setAllowedChildren] = useState<number | null>(null);
+  const [canAddMoreChildren, setCanAddMoreChildren] = useState<boolean>(true);
   const [showCodeDialog, setShowCodeDialog] = useState<{ child: Child } | null>(
     null
   );
@@ -193,10 +196,10 @@ const ParentDashboard = () => {
       navigate("/parent/auth");
       return;
     }
-    // Fetch parent name and family code from database
+    // Fetch parent name, family code, and subscription info from database
     const { data: parentData, error: parentError } = await supabase
       .from("parents")
-      .select("name, family_code")
+      .select("name, family_code, allowed_children")
       .eq("id", session.user.id)
       .maybeSingle();
 
@@ -217,12 +220,54 @@ const ParentDashboard = () => {
       }
     }
 
-    setParentName(parentData?.name || null);
-    setFamilyCode(parentData?.family_code || null);
+    if (parentData) {
+      setParentName((parentData as { name?: string })?.name || null);
+      setFamilyCode(
+        (parentData as { family_code?: string })?.family_code || null
+      );
+      setAllowedChildren(
+        (parentData as { allowed_children?: number })?.allowed_children || 1
+      );
+    }
+
+    // Check if parent can add more children (if function exists)
+    try {
+      // Type assertion needed because custom RPC function not in generated types
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: canAdd } = await (supabase.rpc as any)("can_add_child", {
+        p_parent_id: session.user.id,
+      });
+      setCanAddMoreChildren(canAdd === true);
+    } catch (error) {
+      // Function might not exist if migration hasn't been run
+      console.warn("Subscription check function not available:", error);
+      setCanAddMoreChildren(true); // Default to allowing if check fails
+    }
   }, [navigate]);
 
   const fetchChildren = useCallback(async () => {
     try {
+      // Refresh subscription check after adding/removing children
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user) {
+        try {
+          // Type assertion needed because custom RPC function not in generated types
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data: canAdd } = await (supabase.rpc as any)(
+            "can_add_child",
+            {
+              p_parent_id: user.id,
+            }
+          );
+          setCanAddMoreChildren(canAdd === true);
+        } catch (error) {
+          // Function might not exist if migration hasn't been run
+          console.warn("Subscription check function not available:", error);
+        }
+      }
+
       const { data, error } = await supabase
         .from("children")
         .select("*")
@@ -839,11 +884,22 @@ const ParentDashboard = () => {
       </div>
       <div className="p-4">
         <div className="max-w-4xl mx-auto space-y-6">
-          <div className="mt-2">
-            <h1 className="text-3xl font-bold">My Children</h1>
-            <p className="text-muted-foreground mt-2">
-              Manage your children's profiles, login codes, and settings
-            </p>
+          <div className="mt-2 flex items-center justify-between flex-wrap gap-4">
+            <div>
+              <h1 className="text-3xl font-bold">My Children</h1>
+              <p className="text-muted-foreground mt-2">
+                Manage your children's profiles, login codes, and settings
+              </p>
+            </div>
+            {isPWA() && (
+              <Button
+                variant="outline"
+                onClick={() => navigate("/parent/upgrade")}
+                className="flex-shrink-0"
+              >
+                Upgrade Plan
+              </Button>
+            )}
           </div>
 
           {familyCode && (
@@ -879,11 +935,38 @@ const ParentDashboard = () => {
             </Card>
           )}
 
+          {!canAddMoreChildren && (
+            <Card className="p-4 bg-yellow-50 dark:bg-yellow-950 border-yellow-200 dark:border-yellow-800 mb-4">
+              <div className="space-y-3">
+                <p className="text-sm text-yellow-900 dark:text-yellow-100">
+                  <strong>Subscription Limit Reached:</strong> You have{" "}
+                  {children.length} /{" "}
+                  {allowedChildren === 999 ? "∞" : allowedChildren || 1}{" "}
+                  children.
+                </p>
+                {isPWA() ? (
+                  <Button
+                    onClick={() => navigate("/parent/upgrade")}
+                    variant="default"
+                    size="sm"
+                    className="w-full sm:w-auto"
+                  >
+                    Upgrade Your Plan
+                  </Button>
+                ) : (
+                  <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                    Please upgrade through your app store to add more children.
+                  </p>
+                )}
+              </div>
+            </Card>
+          )}
           <div className="flex gap-2">
             <Button
               onClick={() => setShowAddChild(true)}
               className="flex-1"
               size="lg"
+              disabled={!canAddMoreChildren}
             >
               <Plus className="mr-2 h-5 w-5" />
               Add Child

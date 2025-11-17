@@ -6,7 +6,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { NavLink } from "@/components/NavLink";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
-import { Home, LayoutDashboard, Users, LogOut, MessageSquare, PhoneMissed, Smartphone } from "lucide-react";
+import { Home, LayoutDashboard, Users, LogOut, MessageSquare, PhoneMissed, Smartphone, Settings } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { useTotalUnreadBadge, useTotalMissedBadge, useBadgeStore } from "@/stores/badgeStore";
@@ -217,6 +217,10 @@ const Navigation = () => {
               <NavLink to="/parent/devices" className={navLinkClassName}>
                 <Smartphone className="h-4 w-4" />
                 <span>Devices</span>
+              </NavLink>
+              <NavLink to="/parent/settings" className={navLinkClassName}>
+                <Settings className="h-4 w-4" />
+                <span>Settings</span>
               </NavLink>
             </div>
             <Button variant="outline" size="sm" onClick={handleLogout} className="flex-shrink-0">

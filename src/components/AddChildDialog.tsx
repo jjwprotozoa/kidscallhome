@@ -236,6 +236,27 @@ const AddChildDialog = ({ open, onOpenChange, onChildAdded }: AddChildDialogProp
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
+      // Check if parent can add more children (subscription limit check)
+      const { data: canAdd, error: canAddError } = await supabase.rpc(
+        "can_add_child",
+        { p_parent_id: user.id }
+      );
+
+      if (canAddError) {
+        console.error("Error checking subscription limit:", canAddError);
+        // Continue anyway - don't block if check fails
+      } else if (canAdd === false) {
+        toast({
+          title: "Subscription Limit Reached",
+          description:
+            "You've reached your subscription limit. Please upgrade your plan to add more children.",
+          variant: "destructive",
+          duration: 8000,
+        });
+        setLoading(false);
+        return;
+      }
+
       // Check if code is unique
       const isUnique = await checkCodeUnique(generatedCode);
       if (!isUnique) {
