@@ -111,15 +111,17 @@ export const VideoCallUI = ({
         console.log("⏳ [VIDEO UI] Play error:", error.name);
         
         if (error.name === 'NotAllowedError') {
-          // Try playing muted
+          // Try playing muted (browsers require user interaction for audio)
+          // NOTE: This will mute audio temporarily, but audio will be unmuted automatically
+          // when audio tracks unmute (ICE connected) - see handleUnmute handler below
           video.muted = true;
           try {
             await video.play();
-            console.log("✅ [VIDEO UI] Playing muted - click to unmute");
+            console.log("✅ [VIDEO UI] Playing muted due to autoplay restrictions - audio will unmute when ICE connects");
             updateStateRef('playing');
           } catch (mutedError) {
-          console.error("❌ [VIDEO UI] Even muted play failed:", mutedError);
-          updateStateRef('error');
+            console.error("❌ [VIDEO UI] Even muted play failed:", mutedError);
+            updateStateRef('error');
           }
         } else if (error.name === 'NotSupportedError') {
           console.error("❌ [VIDEO UI] Media format not supported");
@@ -212,6 +214,14 @@ export const VideoCallUI = ({
     tracks.forEach(track => {
       const handleUnmute = () => {
         console.log("✅ [VIDEO UI] Track unmuted:", track.kind, "- ICE connected, media flowing");
+        
+        // CRITICAL FIX: When audio tracks unmute, unmute the video element if it was muted due to autoplay restrictions
+        // This ensures audio plays automatically once ICE connection is established
+        if (track.kind === "audio" && video.muted) {
+          console.log("🔊 [VIDEO UI] Audio track unmuted - unmuting video element to enable audio playback");
+          video.muted = false;
+        }
+        
         // When track unmutes, ICE connection is established - try to play immediately
         if (video.paused) {
           attemptPlay();
@@ -257,6 +267,14 @@ export const VideoCallUI = ({
           console.log("✅ [VIDEO UI] Video playing with unmuted tracks - updating state");
           updateStateRef('playing');
         }
+      }
+      
+      // CRITICAL FIX: Periodically check if audio tracks are unmuted but video element is muted
+      // This ensures audio plays even if the unmute event didn't fire
+      const hasUnmutedAudioTracks = tracks.some(t => t.kind === 'audio' && !t.muted && t.readyState === 'live');
+      if (hasUnmutedAudioTracks && video.muted && !video.paused) {
+        console.log("🔊 [VIDEO UI] Audio tracks are unmuted but video element is muted - unmuting to enable audio");
+        video.muted = false;
       }
     }, 500);
 
