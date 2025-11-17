@@ -217,9 +217,9 @@ const ChildDashboard = () => {
       // Check immediately
       await checkExistingCalls();
 
-      // Set up polling as a fallback (every 10 seconds to catch calls faster)
+      // Set up polling as a fallback (every 60 seconds - reduced frequency to minimize console noise)
       // Realtime subscriptions should handle most cases, this is just a safety net
-      pollInterval = setInterval(pollForCalls, 10000);
+      pollInterval = setInterval(pollForCalls, 60000);
 
       // Subscribe to new calls from parent
       // Listen to both INSERT and UPDATE events to catch calls that are reset to ringing

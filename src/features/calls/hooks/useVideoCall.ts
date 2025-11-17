@@ -889,7 +889,7 @@ export const useVideoCall = () => {
               if (isChildUser) {
                 navigate("/child/dashboard");
               } else if (session) {
-                navigate("/parent/dashboard");
+                navigate("/parent/children");
               } else {
                 // No session at all - redirect to login
                 navigate("/");
@@ -1021,7 +1021,7 @@ export const useVideoCall = () => {
     if (isChildUser) {
       navigate("/child/dashboard");
     } else {
-      navigate("/parent/dashboard");
+      navigate("/parent/children");
     }
   };
 

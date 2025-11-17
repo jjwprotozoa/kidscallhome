@@ -63,6 +63,7 @@ export const GlobalIncomingCall = () => {
   useEffect(() => {
     let lastCheckedCallId: string | null = null;
     let pollInterval: NodeJS.Timeout | null = null;
+    let cachedUserId: string | null = null; // Cache user ID to avoid repeated getUser() calls
 
     const setupSubscription = async () => {
       // Check if user is authenticated (parent) or has child session (child)
@@ -75,6 +76,11 @@ export const GlobalIncomingCall = () => {
       if (!session && !childSession) {
         // No session - don't set up subscriptions
         return;
+      }
+
+      // Cache user ID once at setup (for parents)
+      if (!isChild && session?.user?.id) {
+        cachedUserId = session.user.id;
       }
 
       const handleIncomingCallNotification = async (call: CallRecord) => {
@@ -157,13 +163,17 @@ export const GlobalIncomingCall = () => {
             }
           }
         } else {
-          const { data: { user } } = await supabase.auth.getUser();
-          if (!user) return;
+          // Use cached user ID instead of calling getUser()
+          if (!cachedUserId) {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session?.user?.id) return;
+            cachedUserId = session.user.id;
+          }
 
           const { data: existingCalls } = await supabase
             .from("calls")
             .select("*")
-            .eq("parent_id", user.id)
+            .eq("parent_id", cachedUserId)
             .eq("caller_type", "child")
             .eq("status", "ringing")
             .gte("created_at", twoMinutesAgo)
@@ -202,13 +212,17 @@ export const GlobalIncomingCall = () => {
             }
           }
         } else {
-          const { data: { user } } = await supabase.auth.getUser();
-          if (!user) return;
+          // Use cached user ID instead of calling getUser() every poll
+          if (!cachedUserId) {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session?.user?.id) return;
+            cachedUserId = session.user.id;
+          }
 
           const { data: newCalls } = await supabase
             .from("calls")
             .select("*")
-            .eq("parent_id", user.id)
+            .eq("parent_id", cachedUserId)
             .eq("caller_type", "child")
             .eq("status", "ringing")
             .gte("created_at", oneMinuteAgo)
@@ -225,7 +239,8 @@ export const GlobalIncomingCall = () => {
       };
 
       await checkExistingCalls();
-      pollInterval = setInterval(pollForCalls, 10000);
+      // Increased polling interval to 60s - realtime handles most cases, polling is just a safety net
+      pollInterval = setInterval(pollForCalls, 60000);
 
       // Set up realtime subscription
       if (isChild) {
@@ -287,8 +302,12 @@ export const GlobalIncomingCall = () => {
           )
           .subscribe();
       } else {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
+        // Use cached user ID instead of calling getUser()
+        if (!cachedUserId) {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (!session?.user?.id) return;
+          cachedUserId = session.user.id;
+        }
 
         channelRef.current = supabase
           .channel("global-parent-incoming-calls")
@@ -298,13 +317,13 @@ export const GlobalIncomingCall = () => {
               event: "INSERT",
               schema: "public",
               table: "calls",
-              filter: `parent_id=eq.${user.id}`,
+              filter: `parent_id=eq.${cachedUserId}`,
             },
             async (payload) => {
               const call = payload.new as CallRecord;
               if (
                 call.caller_type === "child" &&
-                call.parent_id === user.id &&
+                call.parent_id === cachedUserId &&
                 call.status === "ringing"
               ) {
                 await handleIncomingCallNotification(call);
@@ -317,7 +336,7 @@ export const GlobalIncomingCall = () => {
               event: "UPDATE",
               schema: "public",
               table: "calls",
-              filter: `parent_id=eq.${user.id}`,
+              filter: `parent_id=eq.${cachedUserId}`,
             },
             async (payload) => {
               const call = payload.new as CallRecord;
@@ -337,7 +356,7 @@ export const GlobalIncomingCall = () => {
 
               if (
                 call.caller_type === "child" &&
-                call.parent_id === user.id &&
+                call.parent_id === cachedUserId &&
                 call.status === "ringing" &&
                 oldCall.status !== "ringing"
               ) {

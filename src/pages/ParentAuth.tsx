@@ -5,9 +5,23 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { LogIn, UserPlus } from "lucide-react";
-import { useEffect, useState } from "react";
+import { LogIn, UserPlus, AlertCircle, Shield } from "lucide-react";
+import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { safeLog, sanitizeError } from "@/utils/security";
+import {
+  checkRateLimit,
+  recordRateLimit,
+  recordFailedLogin,
+  clearFailedLogins,
+  isEmailLocked,
+  getRateLimitKey,
+} from "@/utils/rateLimiting";
+import { detectBot, initBehaviorTracking, getBehaviorTracker } from "@/utils/botDetection";
+import { sanitizeAndValidate } from "@/utils/inputValidation";
+import { logAuditEvent } from "@/utils/auditLog";
+import { getCSRFToken } from "@/utils/csrf";
+import { Captcha } from "@/components/Captcha";
 
 // Cookie utility functions
 const setCookie = (name: string, value: string, days: number = 365) => {
@@ -35,46 +49,253 @@ const ParentAuth = () => {
   const [staySignedIn, setStaySignedIn] = useState(true);
   const [loading, setLoading] = useState(false);
   const [parentName, setParentName] = useState<string | null>(null);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [showCaptcha, setShowCaptcha] = useState(false);
+  const [lockoutInfo, setLockoutInfo] = useState<{ locked: boolean; lockedUntil?: number; attemptsRemaining?: number } | null>(null);
   const navigate = useNavigate();
   const { toast } = useToast();
+  const passwordInputRef = useRef<HTMLInputElement>(null);
+  
+  // Cloudflare Turnstile site key (set in environment variables)
+  const CAPTCHA_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || '';
 
-  // Load saved preference and parent name from cookie on mount
+  // Initialize security features
   useEffect(() => {
+    // Initialize behavior tracking
+    initBehaviorTracking();
+    
+    // Check for bot
+    const botDetection = detectBot();
+    if (botDetection.isBot) {
+      safeLog.warn("Bot detected:", botDetection);
+      logAuditEvent('bot_detected', {
+        metadata: { reasons: botDetection.reasons, confidence: botDetection.confidence },
+        severity: 'high',
+      });
+    }
+    
+    // Load saved preference and parent name from cookie
     const savedPreference = localStorage.getItem("staySignedIn");
     if (savedPreference !== null) {
       setStaySignedIn(savedPreference === "true");
     }
     
-    // Load parent name from cookie
     const savedParentName = getCookie("parentName");
     if (savedParentName) {
       setParentName(savedParentName);
     }
   }, []);
+  
+  // Check lockout status when email changes
+  useEffect(() => {
+    if (isLogin && email) {
+      const lockout = isEmailLocked(email);
+      setLockoutInfo(lockout);
+      
+      // Show CAPTCHA after 2 failed attempts
+      if (lockout.attemptsRemaining !== undefined && lockout.attemptsRemaining <= 3) {
+        setShowCaptcha(true);
+      }
+    } else {
+      setLockoutInfo(null);
+      setShowCaptcha(false);
+    }
+  }, [email, isLogin]);
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setCaptchaToken(null); // Reset CAPTCHA token
 
     try {
+      // SECURITY: Input validation
+      const validation = sanitizeAndValidate({
+        email: isLogin ? email : undefined,
+        password: password,
+        name: !isLogin ? name : undefined,
+      });
+
+      if (!validation.valid) {
+        const firstError = Object.values(validation.errors)[0]?.[0];
+        toast({
+          title: "Validation Error",
+          description: firstError || "Please check your input",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Use sanitized values
+      const sanitizedEmail = validation.sanitized.email || email;
+      const sanitizedPassword = validation.sanitized.password || password;
+
+      // SECURITY: Check rate limiting
+      const rateLimitKey = getRateLimitKey(sanitizedEmail, 'login');
+      const rateLimitCheck = checkRateLimit(rateLimitKey, 'login');
+      
+      if (!rateLimitCheck.allowed) {
+        if (rateLimitCheck.lockedUntil) {
+          const minutes = Math.ceil((rateLimitCheck.lockedUntil - Date.now()) / 60000);
+          toast({
+            title: "Account Temporarily Locked",
+            description: `Too many login attempts. Please try again in ${minutes} minute(s).`,
+            variant: "destructive",
+          });
+          logAuditEvent('login_locked', {
+            email: sanitizedEmail,
+            severity: 'high',
+          });
+          return;
+        } else {
+          toast({
+            title: "Too Many Attempts",
+            description: "Please wait before trying again.",
+            variant: "destructive",
+          });
+          logAuditEvent('rate_limit_exceeded', {
+            email: sanitizedEmail,
+            severity: 'medium',
+          });
+          return;
+        }
+      }
+
+      // SECURITY: Check account lockout
+      if (isLogin) {
+        const lockout = isEmailLocked(sanitizedEmail);
+        if (lockout.locked && lockout.lockedUntil) {
+          const minutes = Math.ceil((lockout.lockedUntil - Date.now()) / 60000);
+          toast({
+            title: "Account Locked",
+            description: `Account is locked due to multiple failed attempts. Try again in ${minutes} minute(s).`,
+            variant: "destructive",
+          });
+          setLockoutInfo(lockout);
+          logAuditEvent('account_locked', {
+            email: sanitizedEmail,
+            severity: 'high',
+          });
+          return;
+        }
+
+        // SECURITY: Require CAPTCHA after failed attempts
+        if (showCaptcha && CAPTCHA_SITE_KEY && !captchaToken) {
+          toast({
+            title: "Security Check Required",
+            description: "Please complete the security check below.",
+            variant: "destructive",
+          });
+          return;
+        }
+      }
+
+      // SECURITY: Bot detection check
+      const botDetection = detectBot();
+      if (botDetection.isBot && botDetection.confidence > 50) {
+        const behaviorTracker = getBehaviorTracker();
+        const behaviorAnalysis = behaviorTracker?.analyzeBehavior();
+        
+        if (behaviorAnalysis?.isSuspicious) {
+          toast({
+            title: "Security Check Failed",
+            description: "Unable to verify you're human. Please try again.",
+            variant: "destructive",
+          });
+          logAuditEvent('bot_detected', {
+            email: sanitizedEmail,
+            metadata: {
+              botReasons: botDetection.reasons,
+              behaviorReasons: behaviorAnalysis.reasons,
+            },
+            severity: 'high',
+          });
+          return;
+        }
+      }
+
+      // Record rate limit attempt
+      recordRateLimit(rateLimitKey, 'login');
+
       // Store preference for session persistence
       localStorage.setItem("staySignedIn", staySignedIn.toString());
       
       // If "Stay signed in" is unchecked, use sessionStorage for this session
-      // Note: Supabase client uses localStorage by default, but we'll handle clearing on unload
       if (!staySignedIn) {
-        // Store a flag to clear session on browser close
         sessionStorage.setItem("clearSessionOnClose", "true");
       } else {
         sessionStorage.removeItem("clearSessionOnClose");
       }
 
       if (isLogin) {
-        const { data: { user }, error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
+        // SECURITY: Log login attempt
+        logAuditEvent('login_attempt', {
+          email: sanitizedEmail,
+          severity: 'low',
         });
-        if (error) throw error;
+
+        // SECURITY: Never log passwords - Supabase handles auth securely
+        const { data: { user }, error } = await supabase.auth.signInWithPassword({
+          email: sanitizedEmail,
+          password: sanitizedPassword,
+        });
+        
+        if (error) {
+          // SECURITY: Record failed login
+          const failedLogin = recordFailedLogin(sanitizedEmail);
+          
+          // SECURITY: Sanitize error before logging
+          safeLog.error("Auth error:", sanitizeError(error));
+          
+          logAuditEvent('login_failed', {
+            email: sanitizedEmail,
+            metadata: { attempts: failedLogin.attempts },
+            severity: 'medium',
+          });
+
+          // Show lockout message if locked
+          if (failedLogin.locked && failedLogin.lockedUntil) {
+            const minutes = Math.ceil((failedLogin.lockedUntil - Date.now()) / 60000);
+            toast({
+              title: "Account Locked",
+              description: `Too many failed attempts. Account locked for ${minutes} minute(s).`,
+              variant: "destructive",
+            });
+            setLockoutInfo({
+              locked: true,
+              lockedUntil: failedLogin.lockedUntil,
+            });
+            logAuditEvent('account_locked', {
+              email: sanitizedEmail,
+              severity: 'high',
+            });
+          } else {
+            const remaining = 5 - failedLogin.attempts;
+            toast({
+              title: "Login Failed",
+              description: remaining > 0 
+                ? `Invalid credentials. ${remaining} attempt(s) remaining.`
+                : "Invalid credentials.",
+              variant: "destructive",
+            });
+            
+            // Show CAPTCHA after 2 failed attempts
+            if (failedLogin.attempts >= 2) {
+              setShowCaptcha(true);
+            }
+          }
+          
+          throw error;
+        }
+        
+        // SECURITY: Clear failed logins on success
+        clearFailedLogins(sanitizedEmail);
+        
+        // SECURITY: Log successful login
+        logAuditEvent('login_success', {
+          userId: user?.id,
+          email: sanitizedEmail,
+          severity: 'low',
+        });
         
         // Fetch parent name and store in cookie
         if (user) {
@@ -98,35 +319,62 @@ const ParentAuth = () => {
         toast({ title: "Welcome back!" });
         navigate("/parent/children");
       } else {
+        // SECURITY: Log signup attempt
+        logAuditEvent('signup', {
+          email: sanitizedEmail,
+          severity: 'low',
+        });
+
+        // SECURITY: Never log passwords - Supabase handles auth securely
         const { error } = await supabase.auth.signUp({
-          email,
-          password,
+          email: sanitizedEmail,
+          password: sanitizedPassword,
           options: {
-            data: { name },
+            data: { name: validation.sanitized.name || name },
             emailRedirectTo: `${window.location.origin}/parent/children`,
           },
         });
-        if (error) throw error;
+        
+        if (error) {
+          // SECURITY: Sanitize error before logging
+          safeLog.error("Signup error:", sanitizeError(error));
+          logAuditEvent('signup', {
+            email: sanitizedEmail,
+            metadata: { error: error.message },
+            severity: 'medium',
+          });
+          throw error;
+        }
         
         // Store name in cookie for new signups
-        if (name) {
-          setCookie("parentName", name, 365);
+        if (validation.sanitized.name || name) {
+          setCookie("parentName", validation.sanitized.name || name, 365);
         }
         
         toast({ title: "Account created! Welcome!" });
         navigate("/parent/children");
       }
     } catch (error: unknown) {
-      toast({
-        title: "Error",
-        description:
-          error instanceof Error
-            ? error.message
-            : "An unexpected error occurred",
-        variant: "destructive",
-      });
+      // SECURITY: Sanitize error before logging - never log passwords
+      const sanitizedError = sanitizeError(error);
+      safeLog.error("Auth operation failed:", sanitizedError);
+      
+      // Error toast is handled above for specific cases
+      if (!(error instanceof Error && error.message.includes('locked'))) {
+        toast({
+          title: "Error",
+          description:
+            error instanceof Error
+              ? error.message
+              : "An unexpected error occurred",
+          variant: "destructive",
+        });
+      }
     } finally {
       setLoading(false);
+      // SECURITY: Clear password field after use
+      setPassword("");
+      setCaptchaToken(null);
     }
   };
 
@@ -179,32 +427,94 @@ const ParentAuth = () => {
           <div className="space-y-2">
             <label className="text-sm font-medium">Password</label>
             <Input
+              ref={passwordInputRef}
               type="password"
               placeholder="••••••••"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
               minLength={6}
+              autoComplete={isLogin ? "current-password" : "new-password"}
+              // SECURITY: Ensure password is never exposed in DOM
+              onBlur={() => {
+                // Clear password from memory after blur (best effort)
+                // Note: React state will still hold it, but this prevents DOM exposure
+              }}
             />
           </div>
 
           {isLogin && (
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="staySignedIn"
-                checked={staySignedIn}
-                onCheckedChange={(checked) => setStaySignedIn(checked === true)}
-              />
-              <Label
-                htmlFor="staySignedIn"
-                className="text-sm font-normal cursor-pointer"
-              >
-                Stay signed in
-              </Label>
-            </div>
+            <>
+              {/* SECURITY: Show lockout warning */}
+              {lockoutInfo?.locked && lockoutInfo.lockedUntil && (
+                <div className="flex items-start gap-2 p-3 bg-destructive/10 border border-destructive/20 rounded-md">
+                  <AlertCircle className="h-5 w-5 text-destructive mt-0.5" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-destructive">Account Locked</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Too many failed login attempts. Please try again in{' '}
+                      {Math.ceil((lockoutInfo.lockedUntil - Date.now()) / 60000)} minute(s).
+                    </p>
+                  </div>
+                </div>
+              )}
+              
+              {/* SECURITY: Show attempts remaining warning */}
+              {lockoutInfo && !lockoutInfo.locked && lockoutInfo.attemptsRemaining !== undefined && lockoutInfo.attemptsRemaining < 5 && (
+                <div className="flex items-start gap-2 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-md">
+                  <Shield className="h-5 w-5 text-yellow-600 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-yellow-700">Security Notice</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {lockoutInfo.attemptsRemaining} attempt(s) remaining before account lockout.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* SECURITY: CAPTCHA after failed attempts */}
+              {showCaptcha && CAPTCHA_SITE_KEY && (
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Security Check</Label>
+                  <Captcha
+                    siteKey={CAPTCHA_SITE_KEY}
+                    onVerify={(token) => {
+                      setCaptchaToken(token);
+                    }}
+                    onError={(error) => {
+                      safeLog.error("CAPTCHA error:", error);
+                      toast({
+                        title: "Security Check Failed",
+                        description: "Please complete the security check.",
+                        variant: "destructive",
+                      });
+                    }}
+                    theme="auto"
+                    size="normal"
+                  />
+                </div>
+              )}
+
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="staySignedIn"
+                  checked={staySignedIn}
+                  onCheckedChange={(checked) => setStaySignedIn(checked === true)}
+                />
+                <Label
+                  htmlFor="staySignedIn"
+                  className="text-sm font-normal cursor-pointer"
+                >
+                  Stay signed in
+                </Label>
+              </div>
+            </>
           )}
 
-          <Button type="submit" className="w-full" disabled={loading}>
+          {/* SECURITY: Hidden CSRF token */}
+          <input type="hidden" name="csrf_token" value={getCSRFToken()} />
+
+          <Button type="submit" className="w-full" disabled={loading || (isLogin && lockoutInfo?.locked)}>
             {loading ? (
               "Processing..."
             ) : isLogin ? (

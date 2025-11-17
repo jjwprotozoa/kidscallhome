@@ -29,6 +29,10 @@ export const GlobalMessageNotifications = () => {
   useEffect(() => {
     let pollInterval: NodeJS.Timeout | null = null;
     let lastCheckedMessageId: string | null = null;
+    let cachedUserId: string | null = null; // Cache user ID to avoid repeated getUser() calls
+    let cachedChildIds: string[] | null = null; // Cache child IDs to avoid repeated fetches
+    let childrenCacheTime: number = 0; // Track when children list was last fetched
+    const CHILDREN_CACHE_TTL = 5 * 60 * 1000; // Refresh children list every 5 minutes
 
     const setupSubscription = async () => {
       // Check if user is authenticated (parent) or has child session (child)
@@ -41,6 +45,11 @@ export const GlobalMessageNotifications = () => {
       }
 
       const isChild = !session && !!childSession;
+
+      // Cache user ID once at setup (for parents)
+      if (!isChild && session?.user?.id) {
+        cachedUserId = session.user.id;
+      }
 
       const handleNewMessage = async (message: Message) => {
         // Skip if we already showed this message
@@ -189,21 +198,32 @@ export const GlobalMessageNotifications = () => {
               }
             }
           } else {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) return;
+            // Use cached user ID instead of calling getUser() every poll
+            if (!cachedUserId) {
+              const { data: { session } } = await supabase.auth.getSession();
+              if (!session?.user?.id) return;
+              cachedUserId = session.user.id;
+            }
 
-            const { data: children } = await supabase
-              .from("children")
-              .select("id")
-              .eq("parent_id", user.id);
+            // Refresh children list only if cache is stale (every 5 minutes)
+            const now = Date.now();
+            if (!cachedChildIds || (now - childrenCacheTime) > CHILDREN_CACHE_TTL) {
+              const { data: children } = await supabase
+                .from("children")
+                .select("id")
+                .eq("parent_id", cachedUserId);
 
-            if (!children || children.length === 0) return;
+              if (!children || children.length === 0) return;
+              cachedChildIds = children.map((c) => c.id);
+              childrenCacheTime = now;
+            }
 
-            const childIds = children.map((c) => c.id);
+            if (!cachedChildIds || cachedChildIds.length === 0) return;
+
             const { data: newMessages } = await supabase
               .from("messages")
               .select("*")
-              .in("child_id", childIds)
+              .in("child_id", cachedChildIds)
               .eq("sender_type", "child")
               .is("read_at", null)
               .gte("created_at", oneMinuteAgo)
@@ -257,20 +277,27 @@ export const GlobalMessageNotifications = () => {
             // CLOSED is normal cleanup, don't log as error
           });
       } else {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
+        // Use cached user ID instead of calling getUser()
+        if (!cachedUserId) {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (!session?.user?.id) return;
+          cachedUserId = session.user.id;
+        }
 
         // Parent: First get all their children, then listen for messages from those children
         const { data: children } = await supabase
           .from("children")
           .select("id")
-          .eq("parent_id", user.id);
+          .eq("parent_id", cachedUserId);
 
         if (!children || children.length === 0) {
           return; // No children, no need to subscribe
         }
 
         const childIds = children.map((c) => c.id);
+        // Cache child IDs for polling
+        cachedChildIds = childIds;
+        childrenCacheTime = Date.now();
 
         // Parent: listen for messages from all their children
         // We can't filter by multiple child_ids in one subscription, so we'll check in the handler
@@ -305,9 +332,9 @@ export const GlobalMessageNotifications = () => {
           });
       }
 
-      // Start polling as fallback (every 10 seconds - reduced frequency to minimize console noise)
+      // Start polling as fallback (every 60 seconds - reduced frequency to minimize console noise)
       // Realtime subscriptions handle most cases, polling is just a safety net
-      pollInterval = setInterval(pollForNewMessages, 10000);
+      pollInterval = setInterval(pollForNewMessages, 60000);
       
       // Initial poll to catch any missed messages (after a short delay)
       setTimeout(pollForNewMessages, 2000);

@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, Send } from "lucide-react";
 import { useBadgeStore } from "@/stores/badgeStore";
+import { safeLog, sanitizeObject, sanitizeError } from "@/utils/security";
 
 interface Message {
   id: string;
@@ -304,7 +305,7 @@ const Chat = () => {
     const targetChildId = isChild ? childData.id : childId;
     if (!targetChildId) return;
 
-    // Poll every 3 seconds as fallback if realtime isn't working
+    // Poll every 15 seconds as fallback if realtime isn't working (more frequent than global since user is actively viewing chat)
     const pollInterval = setInterval(async () => {
       try {
         const { data, error } = await supabase
@@ -329,7 +330,7 @@ const Chat = () => {
       } catch (error) {
         console.error("❌ [CHAT] Polling error:", error);
       }
-    }, 3000); // Poll every 3 seconds
+    }, 15000); // Poll every 15 seconds (fallback for realtime)
 
     return () => clearInterval(pollInterval);
   }, [childData, childId, isChild]);
@@ -403,8 +404,9 @@ const Chat = () => {
         content: newMessage.trim(),
       };
 
-      // DEBUG: Log payload to console
-      console.log("📤 [MESSAGE INSERT] Payload:", {
+      // DEBUG: Log payload to console (sanitized)
+      // SECURITY: Never log message content - only metadata
+      safeLog.log("📤 [MESSAGE INSERT] Payload:", {
         child_id: payload.child_id,
         sender_id: payload.sender_id,
         sender_type: payload.sender_type,
@@ -417,17 +419,23 @@ const Chat = () => {
       const { data, error } = await supabase.from("messages").insert(payload).select().single();
 
       if (error) {
-        console.error("❌ [MESSAGE INSERT] Error:", {
+        // SECURITY: Sanitize error and payload before logging
+        safeLog.error("❌ [MESSAGE INSERT] Error:", {
           message: error.message,
           code: error.code,
-          details: error.details,
+          details: error.details ? sanitizeObject(error.details) : undefined,
           hint: error.hint,
-          payload,
+          // Never log full payload - only metadata
+          payload_metadata: {
+            child_id: payload.child_id,
+            sender_type: payload.sender_type,
+            content_length: payload.content.length,
+          },
         });
         throw error;
       }
 
-      console.log("✅ [MESSAGE INSERT] Success", { messageId: data?.id });
+      safeLog.log("✅ [MESSAGE INSERT] Success", { messageId: data?.id });
 
       // Optimistic update: Add message to local state immediately
       // This ensures the message appears right away, even if realtime is slow
@@ -444,17 +452,18 @@ const Chat = () => {
           // Check for duplicates (shouldn't happen, but safety check)
           const exists = current.some((m) => m.id === newMessage.id);
           if (exists) {
-            console.log("ℹ️ [MESSAGE INSERT] Message already in state (realtime beat us), skipping optimistic update");
+            safeLog.log("ℹ️ [MESSAGE INSERT] Message already in state (realtime beat us), skipping optimistic update");
             return current;
           }
-          console.log("✅ [MESSAGE INSERT] Adding message to local state (optimistic update)");
+          safeLog.log("✅ [MESSAGE INSERT] Adding message to local state (optimistic update)");
           return [...current, newMessage];
         });
       }
 
       setNewMessage("");
     } catch (error: any) {
-      console.error("❌ [MESSAGE INSERT] Exception:", error);
+      // SECURITY: Sanitize error before logging
+      safeLog.error("❌ [MESSAGE INSERT] Exception:", sanitizeError(error));
       toast({
         title: "Error sending message",
         description: error.message || "Failed to send message",
@@ -470,7 +479,7 @@ const Chat = () => {
   };
 
   const goBack = () => {
-    navigate(isChild ? "/child/dashboard" : "/parent/dashboard");
+    navigate(isChild ? "/child/dashboard" : "/parent/children");
   };
 
   return (

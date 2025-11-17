@@ -233,10 +233,12 @@ const ParentDashboard = () => {
     let pollInterval: NodeJS.Timeout | null = null;
 
     const setupSubscription = async () => {
+      // Use getSession() instead of getUser() - lighter weight, no auth endpoint call
       const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return;
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session?.user?.id) return;
+      const userId = session.user.id; // Cache user ID to avoid repeated calls
 
       // Function to handle incoming call notification
       const handleIncomingCallNotification = async (call: CallRecord) => {
@@ -289,7 +291,7 @@ const ParentDashboard = () => {
         const { data: existingCalls } = await supabase
           .from("calls")
           .select("*")
-          .eq("parent_id", user.id)
+          .eq("parent_id", userId)
           .eq("caller_type", "child")
           .eq("status", "ringing")
           .gte("created_at", twoMinutesAgo)
@@ -306,13 +308,13 @@ const ParentDashboard = () => {
 
       // Polling function to check for new calls (fallback for realtime)
       // IMPORTANT: Only check for child-initiated calls, not parent-initiated ones
-      // Use a 1-minute window since we poll every 10 seconds
+      // Use a 1-minute window since we poll every 30 seconds
       const pollForCalls = async () => {
         const oneMinuteAgo = new Date(Date.now() - 60 * 1000).toISOString();
         const { data: newCalls, error: pollError } = await supabase
           .from("calls")
           .select("*")
-          .eq("parent_id", user.id)
+          .eq("parent_id", userId)
           .eq("caller_type", "child") // Only child-initiated calls
           .eq("status", "ringing")
           .gte("created_at", oneMinuteAgo)
@@ -335,9 +337,9 @@ const ParentDashboard = () => {
       // Check immediately
       await checkExistingCalls();
 
-      // Set up polling as a fallback (every 10 seconds to catch calls faster)
+      // Set up polling as a fallback (every 60 seconds - reduced frequency to minimize console noise)
       // Realtime subscriptions should handle most cases, this is just a safety net
-      pollInterval = setInterval(pollForCalls, 10000);
+      pollInterval = setInterval(pollForCalls, 60000);
 
       // Subscribe to new calls from children
       // Listen to both INSERT and UPDATE events to catch calls that are reset to ringing
@@ -350,7 +352,7 @@ const ParentDashboard = () => {
             event: "INSERT",
             schema: "public",
             table: "calls",
-            filter: `parent_id=eq.${user.id}`,
+            filter: `parent_id=eq.${userId}`,
           },
           async (payload) => {
             const call = payload.new as CallRecord;
@@ -359,7 +361,7 @@ const ParentDashboard = () => {
             // IMPORTANT: Only show incoming call dialog for child-initiated calls, not parent-initiated ones
             if (
               call.caller_type === "child" &&
-              call.parent_id === user.id &&
+              call.parent_id === userId &&
               call.status === "ringing"
             ) {
               await handleIncomingCallNotification(call);
@@ -372,7 +374,7 @@ const ParentDashboard = () => {
             event: "UPDATE",
             schema: "public",
             table: "calls",
-            filter: `parent_id=eq.${user.id}`,
+            filter: `parent_id=eq.${userId}`,
           },
           async (payload) => {
             const call = payload.new as CallRecord;
@@ -405,7 +407,7 @@ const ParentDashboard = () => {
             // IMPORTANT: Only show incoming call dialog for child-initiated calls
             if (
               call.caller_type === "child" &&
-              call.parent_id === user.id &&
+              call.parent_id === userId &&
               call.status === "ringing" &&
               oldCall.status !== "ringing"
             ) {
@@ -434,6 +436,8 @@ const ParentDashboard = () => {
         clearInterval(pollInterval);
       }
     };
+    // checkAuth and fetchChildren are stable useCallback hooks, so they won't cause unnecessary re-runs
+    // Only re-run subscription when location changes (e.g., navigating between pages)
   }, [checkAuth, fetchChildren, location.pathname]);
 
   // Keep refs in sync with state/hooks so subscription callbacks always have latest values
