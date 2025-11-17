@@ -4,6 +4,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { SafeAreaLayout } from "@/components/layout/SafeAreaLayout";
+import { useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import ServerError from "./pages/ServerError";
@@ -35,10 +37,54 @@ const BadgeProvider = () => {
   return null;
 };
 
+// Component to handle session clearing when "Stay signed in" is unchecked
+const SessionManager = () => {
+  useEffect(() => {
+    // Check if we should clear session on browser close
+    const shouldClearOnClose = sessionStorage.getItem("clearSessionOnClose");
+    
+    if (shouldClearOnClose === "true") {
+      const clearSession = () => {
+        // Clear Supabase session from localStorage
+        const supabaseKeys = Object.keys(localStorage).filter(key => 
+          key.startsWith("sb-") || key.includes("supabase")
+        );
+        supabaseKeys.forEach(key => localStorage.removeItem(key));
+        // Also sign out from Supabase to ensure clean state
+        supabase.auth.signOut().catch(() => {
+          // Ignore errors during signout
+        });
+      };
+
+      // Clear session on page unload/close
+      // Use pagehide for better reliability (fires on tab close, browser close, navigation)
+      const handlePageHide = () => {
+        clearSession();
+      };
+
+      // Fallback to beforeunload for browsers that don't support pagehide well
+      const handleBeforeUnload = () => {
+        clearSession();
+      };
+
+      window.addEventListener("pagehide", handlePageHide);
+      window.addEventListener("beforeunload", handleBeforeUnload);
+      
+      return () => {
+        window.removeEventListener("pagehide", handlePageHide);
+        window.removeEventListener("beforeunload", handleBeforeUnload);
+      };
+    }
+  }, []);
+
+  return null;
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <BadgeProvider />
+      <SessionManager />
       <Toaster />
       <Sonner />
       <SafeAreaLayout>

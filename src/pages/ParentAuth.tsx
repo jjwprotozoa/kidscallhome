@@ -1,10 +1,12 @@
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { LogIn, UserPlus } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 const ParentAuth = () => {
@@ -12,15 +14,36 @@ const ParentAuth = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
+  const [staySignedIn, setStaySignedIn] = useState(true);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
+
+  // Load saved preference on mount
+  useEffect(() => {
+    const savedPreference = localStorage.getItem("staySignedIn");
+    if (savedPreference !== null) {
+      setStaySignedIn(savedPreference === "true");
+    }
+  }, []);
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
     try {
+      // Store preference for session persistence
+      localStorage.setItem("staySignedIn", staySignedIn.toString());
+      
+      // If "Stay signed in" is unchecked, use sessionStorage for this session
+      // Note: Supabase client uses localStorage by default, but we'll handle clearing on unload
+      if (!staySignedIn) {
+        // Store a flag to clear session on browser close
+        sessionStorage.setItem("clearSessionOnClose", "true");
+      } else {
+        sessionStorage.removeItem("clearSessionOnClose");
+      }
+
       if (isLogin) {
         const { error } = await supabase.auth.signInWithPassword({
           email,
@@ -109,6 +132,22 @@ const ParentAuth = () => {
               minLength={6}
             />
           </div>
+
+          {isLogin && (
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="staySignedIn"
+                checked={staySignedIn}
+                onCheckedChange={(checked) => setStaySignedIn(checked === true)}
+              />
+              <Label
+                htmlFor="staySignedIn"
+                className="text-sm font-normal cursor-pointer"
+              >
+                Stay signed in
+              </Label>
+            </div>
+          )}
 
           <Button type="submit" className="w-full" disabled={loading}>
             {loading ? (

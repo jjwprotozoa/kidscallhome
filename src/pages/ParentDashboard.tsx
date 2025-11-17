@@ -133,6 +133,7 @@ const ParentDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [showAddChild, setShowAddChild] = useState(false);
   const [incomingCall, setIncomingCall] = useState<IncomingCall | null>(null);
+  const [parentName, setParentName] = useState<string | null>(null);
   const [showCodeDialog, setShowCodeDialog] = useState<{ child: Child } | null>(
     null
   );
@@ -180,7 +181,16 @@ const ParentDashboard = () => {
     } = await supabase.auth.getSession();
     if (!session) {
       navigate("/parent/auth");
+      return;
     }
+    // Fetch parent name from database
+    const { data: parentData } = await supabase
+      .from("parents")
+      .select("name")
+      .eq("id", session.user.id)
+      .maybeSingle();
+
+    setParentName(parentData?.name || null);
   }, [navigate]);
 
   const fetchChildren = useCallback(async () => {
@@ -602,7 +612,7 @@ const ParentDashboard = () => {
         <Navigation />
         <div className="p-4">
           <div className="max-w-4xl mx-auto space-y-6">
-            <div className="mt-6">
+            <div className="mt-2">
               <div className="h-9 w-48 bg-muted rounded animate-pulse mb-2" />
               <div className="h-6 w-96 bg-muted rounded animate-pulse" />
             </div>
@@ -637,9 +647,16 @@ const ParentDashboard = () => {
       <Navigation />
       <OnboardingTour role="parent" pageKey="parent_dashboard" />
       <HelpBubble role="parent" pageKey="parent_dashboard" />
+      <div className="px-4 pt-2 pb-4">
+        <div className="max-w-4xl mx-auto">
+          <p className="text-sm text-muted-foreground mb-4">
+            Welcome back{parentName ? `, ${parentName}` : ""}!
+          </p>
+        </div>
+      </div>
       <div className="p-4">
         <div className="max-w-4xl mx-auto space-y-6">
-          <div className="mt-6">
+          <div className="mt-2">
             <h1 className="text-3xl font-bold">My Children</h1>
             <p className="text-muted-foreground mt-2">
               Manage your children's profiles, login codes, and settings
