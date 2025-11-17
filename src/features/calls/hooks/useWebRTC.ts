@@ -543,6 +543,16 @@ export const useWebRTC = (
       // Add local stream tracks
       stream.getTracks().forEach((track) => {
         pc.addTrack(track, stream);
+        // CRITICAL FIX: Ensure all tracks are enabled when added
+        // This fixes the issue where child's audio tracks might be disabled
+        track.enabled = true;
+        console.log("✅ [MEDIA] Added track to peer connection:", {
+          kind: track.kind,
+          id: track.id,
+          enabled: track.enabled,
+          muted: track.muted,
+          readyState: track.readyState,
+        });
       });
 
       // Handle remote stream
