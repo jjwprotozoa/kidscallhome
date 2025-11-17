@@ -229,39 +229,22 @@ export const handleParentCall = async (
             const updatedCall = payload.new as CallRecord;
             const oldCall = payload.old as CallRecord;
 
-            // Check if call is in terminal state - use isCallTerminal for proper detection
-            // CRITICAL: Only process if status actually changed TO terminal (not if it was already ended)
-            const isTerminal = isCallTerminal(updatedCall);
-            const wasTerminal = oldCall ? isCallTerminal(oldCall) : null; // null means unknown, not false
-
-            // Only process if we have a previous state and it was NOT terminal
-            if (isTerminal && oldCall !== undefined && wasTerminal === false) {
+            // Check if call is in terminal state
+            if (isCallTerminal(updatedCall)) {
               const iceState = pc.iceConnectionState;
-              console.info(
+              console.error(
                 "🛑 [CALL LIFECYCLE] Call ended by remote party (parent handler - existing call)",
                 {
                   callId: updatedCall.id,
                   oldStatus: oldCall?.status,
                   newStatus: updatedCall.status,
-                  ended_at: updatedCall.ended_at,
-                  reason: "Status changed to terminal state in database",
+                  reason: "Status changed to 'ended' in database",
                   timestamp: new Date().toISOString(),
                   connectionState: pc.connectionState,
                   iceConnectionState: iceState,
                   signalingState: pc.signalingState,
                 }
               );
-              // Always close when call is ended - don't wait for ICE state
-              // The call was explicitly ended, so we should close immediately
-              console.log(
-                "🛑 [CALL LIFECYCLE] Call ended - closing peer connection immediately",
-                {
-                  iceState,
-                  reason:
-                    "Call status changed to terminal - closing regardless of ICE state",
-                }
-              );
-
               if (pc.signalingState !== "closed") {
                 pc.close();
               }
@@ -367,8 +350,9 @@ export const handleParentCall = async (
 
   if (incomingCall) {
     // Answer incoming call from child
-    // CRITICAL: Set callId through callback so termination listener gets set up
-    // This ensures proper cleanup when child ends the call
+    // CRITICAL: Set isConnecting to false immediately for incoming calls to stop ringtone
+    // This matches the child's approach when answering parent's call
+    setIsConnecting(false);
     setCallId(incomingCall.id);
 
     if (!incomingCall.offer) {
@@ -685,37 +669,17 @@ export const handleParentCall = async (
         },
         async (payload) => {
           const updatedCall = payload.new as CallRecord;
-          const oldCall = payload.old as CallRecord;
 
-          // CRITICAL: Check if status changed to "active" - this means call was answered
-          // Stop ringtone immediately when call becomes active
-          if (
-            updatedCall.status === "active" &&
-            oldCall?.status !== "active"
-          ) {
-            console.log(
-              "✅ [PARENT HANDLER] Call status changed to active (incoming call from child) - stopping ringtone"
-            );
-            setIsConnecting(false);
-            // Don't return - continue to check for terminal state below
-          }
-
-          // Check if call is in terminal state - use isCallTerminal for proper detection
-          // CRITICAL: Only process if status actually changed TO terminal (not if it was already ended)
-          const isTerminal = isCallTerminal(updatedCall);
-          const wasTerminal = oldCall ? isCallTerminal(oldCall) : null; // null means unknown, not false
-
-          // Only process if we have a previous state and it was NOT terminal
-          if (isTerminal && oldCall !== undefined && wasTerminal === false) {
+          // Check if call was ended
+          if (updatedCall.status === "ended") {
             const iceState = pc.iceConnectionState;
-            console.info(
-              "🛑 [CALL LIFECYCLE] Call ended by remote party (parent handler - incoming call from child)",
+            console.error(
+              "🛑 [CALL LIFECYCLE] Call ended by remote party (parent handler)",
               {
                 callId: updatedCall.id,
-                oldStatus: oldCall?.status,
+                oldStatus: (payload.old as CallRecord)?.status,
                 newStatus: updatedCall.status,
-                ended_at: updatedCall.ended_at,
-                reason: "Status changed to terminal state in database",
+                reason: "Status changed to 'ended' in database",
                 timestamp: new Date().toISOString(),
                 connectionState: pc.connectionState,
                 iceConnectionState: iceState,
@@ -729,12 +693,9 @@ export const handleParentCall = async (
               {
                 iceState,
                 reason:
-                  "Call status changed to terminal - closing regardless of ICE state",
+                  "Call status changed to 'ended' - closing regardless of ICE state",
               }
             );
-
-            // CRITICAL: Stop ringtone and reset connecting state when call ends
-            setIsConnecting(false);
 
             if (pc.signalingState !== "closed") {
               pc.close();
@@ -1021,6 +982,9 @@ export const handleParentCall = async (
             // Log answer only once when first received
             if (updatedCall.answer && !oldCall?.answer) {
               console.log("✅ [PARENT HANDLER] Answer received from child");
+              // CRITICAL: Stop connecting immediately when answer is first received to stop ringtone
+              // This ensures ringtone stops as soon as child answers, even before remote description is set
+              setIsConnecting(false);
             }
 
             // Check if call is in terminal state - only process if status actually changed TO ended
@@ -1065,6 +1029,10 @@ export const handleParentCall = async (
             // Check if child answered the call - CRITICAL: Process answer before ICE candidates
             if (updatedCall.answer && pc.remoteDescription === null) {
               try {
+                // CRITICAL: Stop connecting immediately when answer is received to stop ringtone
+                // This must happen BEFORE setting remote description to ensure ringtone stops immediately
+                setIsConnecting(false);
+                
                 console.log(
                   "✅ [PARENT HANDLER] Parent received answer from child, setting remote description...",
                   {

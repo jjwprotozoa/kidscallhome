@@ -691,24 +691,6 @@ const handleIncomingCallFromParent = async (
     "✅ [CHILD HANDLER] Answer created, setting local description..."
   );
   await pc.setLocalDescription(answer);
-  
-  // CRITICAL FIX: Verify and ensure audio tracks are still enabled after creating answer
-  // This fixes the issue where child's audio tracks might be disabled
-  const audioTracksAfterAnswer = pc.getSenders()
-    .map(s => s.track)
-    .filter(t => t && t.kind === "audio");
-  audioTracksAfterAnswer.forEach((track) => {
-    if (!track.enabled) {
-      console.warn("⚠️ [CHILD HANDLER] Audio track was disabled after creating answer - enabling it now");
-      track.enabled = true;
-    }
-    console.log("✅ [CHILD HANDLER] Audio track state after answer:", {
-      id: track.id,
-      enabled: track.enabled,
-      muted: track.muted,
-      readyState: track.readyState,
-    });
-  });
 
   // CRITICAL FIX: Verify answer SDP includes media tracks
   const hasAudio = answer.sdp?.includes("m=audio");
@@ -1163,24 +1145,6 @@ const handleChildInitiatedCall = async (
   }
   console.log("Offer created, setting local description...");
   await pc.setLocalDescription(offer);
-  
-  // CRITICAL FIX: Verify and ensure audio tracks are still enabled after creating offer
-  // This fixes the issue where child's audio tracks might be disabled
-  const audioTracksAfterOffer = pc.getSenders()
-    .map(s => s.track)
-    .filter(t => t && t.kind === "audio");
-  audioTracksAfterOffer.forEach((track) => {
-    if (!track.enabled) {
-      console.warn("⚠️ [CHILD CALL] Audio track was disabled after creating offer - enabling it now");
-      track.enabled = true;
-    }
-    console.log("✅ [CHILD CALL] Audio track state after offer:", {
-      id: track.id,
-      enabled: track.enabled,
-      muted: track.muted,
-      readyState: track.readyState,
-    });
-  });
 
   const offerData = { type: offer.type, sdp: offer.sdp };
   console.log("Updating call with offer:", { callId: call.id, offerData });
