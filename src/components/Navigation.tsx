@@ -123,13 +123,35 @@ const Navigation = () => {
 
   const handleLogout = async () => {
     if (userType === "child") {
+      const childSession = localStorage.getItem("childSession");
+      if (childSession) {
+        try {
+          const childData = JSON.parse(childSession);
+          // Write presence status to database on logout (major state change)
+          // Note: This is optional - presence is managed via WebSocket/Realtime
+          // import { writePresenceOnLogout } from "@/features/presence/presenceDb";
+          // await writePresenceOnLogout(childData.id, "child");
+        } catch (error) {
+          // Ignore errors
+        }
+      }
       localStorage.removeItem("childSession");
       // Reset badge store on logout
       useBadgeStore.getState().reset();
       toast({ title: "Logged out" });
       navigate("/child/login");
     } else if (userType === "parent") {
+      // Get user ID before signing out
+      const { data: { user } } = await supabase.auth.getUser();
       await supabase.auth.signOut();
+      
+      // Write presence status to database on logout (major state change)
+      // Note: This is optional - presence is managed via WebSocket/Realtime
+      // if (user) {
+      //   import { writePresenceOnLogout } from "@/features/presence/presenceDb";
+      //   await writePresenceOnLogout(user.id, "parent");
+      // }
+      
       // Reset badge store on logout
       useBadgeStore.getState().reset();
       toast({ title: "Logged out" });

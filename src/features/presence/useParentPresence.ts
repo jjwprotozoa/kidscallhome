@@ -68,16 +68,6 @@ export function useParentPresence({
       .on("presence", { event: "sync" }, () => {
         const state = channel.presenceState<PresenceMetadata>();
         
-        // Log in development
-        if (import.meta.env.DEV) {
-          console.log("🔄 [PARENT PRESENCE] Presence sync", {
-            parentId,
-            channelName,
-            state,
-            stateKeys: Object.keys(state),
-          });
-        }
-        
         // Check if parent is present
         const isOnline = parentId in state && Array.isArray(state[parentId]) && state[parentId].length > 0;
         
@@ -85,28 +75,37 @@ export function useParentPresence({
         const latestPresence = parentPresences && parentPresences.length > 0 
           ? parentPresences[0] 
           : undefined;
+        const newLastSeen = isOnline
+          ? latestPresence?.lastSeen || new Date().toISOString()
+          : null;
 
         setPresence((prev) => {
           const wasOnline = prev.isOnline;
+          const prevLastSeen = prev.lastSeen || null;
+          
+          // Only update state if something actually changed
+          // This prevents unnecessary re-renders and reduces message spam
+          if (wasOnline === isOnline && prevLastSeen === newLastSeen) {
+            return prev; // No change, return previous state
+          }
+          
+          // Log in development only when there's an actual change
+          if (import.meta.env.DEV && wasOnline !== isOnline) {
+            console.log("🔄 [PARENT PRESENCE] Presence status changed", {
+              parentId,
+              isOnline,
+              wasOnline,
+            });
+          }
+          
           const newState = {
             isOnline,
-            lastSeen: isOnline
-              ? latestPresence?.lastSeen || new Date().toISOString()
-              : prev.lastSeen || null,
+            lastSeen: newLastSeen || prevLastSeen,
           };
 
           // Notify if status changed
           if (wasOnline !== isOnline && onStatusChangeRef.current && prev.lastSeen !== null) {
             onStatusChangeRef.current(isOnline);
-            
-            // Only log in development
-            if (import.meta.env.DEV) {
-              console.log("🔄 [PARENT PRESENCE] Presence status changed", {
-                parentId,
-                isOnline,
-                wasOnline,
-              });
-            }
           }
 
           return newState;

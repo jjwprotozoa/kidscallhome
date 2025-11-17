@@ -305,11 +305,12 @@ export const GlobalMessageNotifications = () => {
           });
       }
 
-      // Start polling as fallback (every 3 seconds)
-      pollInterval = setInterval(pollForNewMessages, 3000);
+      // Start polling as fallback (every 10 seconds - reduced frequency to minimize console noise)
+      // Realtime subscriptions handle most cases, polling is just a safety net
+      pollInterval = setInterval(pollForNewMessages, 10000);
       
-      // Initial poll to catch any missed messages
-      setTimeout(pollForNewMessages, 1000);
+      // Initial poll to catch any missed messages (after a short delay)
+      setTimeout(pollForNewMessages, 2000);
 
       return () => {
         if (channelRef.current) {

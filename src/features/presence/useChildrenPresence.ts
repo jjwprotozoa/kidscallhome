@@ -102,52 +102,47 @@ export function useChildrenPresence({
       channel
         .on("presence", { event: "sync" }, () => {
           const state = channel.presenceState<PresenceMetadata>();
-          
-          // Log in development
-          if (import.meta.env.DEV) {
-            console.log("🔄 [CHILDREN PRESENCE] Presence sync", {
-              childId,
-              channelName,
-              state,
-              stateKeys: Object.keys(state),
-            });
-          }
-          
-          // Presence state structure: { [userId]: PresenceMetadata[] }
-          // Check if this specific child is present (their userId should be a key in the state)
           const isOnline = childId in state && Array.isArray(state[childId]) && state[childId].length > 0;
+          
+          // Get the most recent presence metadata
+          const childPresences = state[childId] as PresenceMetadata[] | undefined;
+          const latestPresence = childPresences && childPresences.length > 0 
+            ? childPresences[0] 
+            : undefined;
+          const newLastSeen = isOnline
+            ? latestPresence?.lastSeen || new Date().toISOString()
+            : null;
 
           setPresence((prev) => {
             const wasOnline = prev[childId]?.isOnline || false;
+            const prevLastSeen = prev[childId]?.lastSeen || null;
             
-            // Get the most recent presence metadata for this child
-            const childPresences = state[childId] as PresenceMetadata[] | undefined;
-            const latestPresence = childPresences && childPresences.length > 0 
-              ? childPresences[0] 
-              : undefined;
+            // Only update state if something actually changed
+            // This prevents unnecessary re-renders and reduces message spam
+            if (wasOnline === isOnline && prevLastSeen === newLastSeen) {
+              return prev; // No change, return previous state
+            }
+            
+            // Log in development only when status changes
+            if (import.meta.env.DEV && wasOnline !== isOnline) {
+              console.log("🔄 [CHILDREN PRESENCE] Status changed", {
+                childId,
+                isOnline,
+                wasOnline,
+              });
+            }
             
             const newState = {
               ...prev,
               [childId]: {
                 isOnline,
-                lastSeen: isOnline
-                  ? latestPresence?.lastSeen || new Date().toISOString()
-                  : prev[childId]?.lastSeen || null,
+                lastSeen: newLastSeen || prevLastSeen,
               },
             };
 
-            // Notify if status changed (only on actual change, not initial sync)
+            // Notify callback only on actual status change
             if (wasOnline !== isOnline && onStatusChangeRef.current && prev[childId] !== undefined) {
               onStatusChangeRef.current(childId, isOnline);
-              
-              // Only log in development
-              if (import.meta.env.DEV) {
-                console.log("🔄 [CHILDREN PRESENCE] Presence status changed", {
-                  childId,
-                  isOnline,
-                  wasOnline,
-                });
-              }
             }
 
             return newState;

@@ -87,6 +87,12 @@ const ParentAuth = () => {
           if (parentData?.name) {
             setCookie("parentName", parentData.name, 365); // Store for 1 year
           }
+          
+          // Write presence status to database on login (major state change)
+          // Note: This is optional - presence is managed via WebSocket/Realtime
+          // Only writes to DB if you need login history/analytics
+          // import { writePresenceOnLogin } from "@/features/presence/presenceDb";
+          // await writePresenceOnLogin(user.id, "parent");
         }
         
         toast({ title: "Welcome back!" });

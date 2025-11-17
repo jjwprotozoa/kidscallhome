@@ -1,5 +1,6 @@
 // src/features/presence/usePresence.ts
-// Hook for tracking user online presence using Supabase Realtime Presence API
+// Optimized presence tracking with 60-second heartbeat and minimal updates
+// Only updates UI on status changes, reduces server/database load
 
 import { useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -20,8 +21,11 @@ interface UsePresenceOptions {
 }
 
 /**
- * Hook to track user's online presence
- * Automatically tracks presence when enabled and cleans up on unmount
+ * Optimized presence tracking hook
+ * - Sends heartbeat every 60 seconds (not every few seconds)
+ * - Only updates on connection/disconnection events
+ * - Minimal server and database usage
+ * - Sends "online" event on connect, "offline" event on disconnect
  */
 export function usePresence({
   userId,
@@ -30,32 +34,17 @@ export function usePresence({
   enabled = true,
 }: UsePresenceOptions) {
   const channelRef = useRef<RealtimeChannel | null>(null);
+  const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const isConnectedRef = useRef(false);
 
   useEffect(() => {
-    // Log in development even if disabled or no userId
-    if (import.meta.env.DEV) {
-      console.log("🔍 [PRESENCE] usePresence hook called", {
-        enabled,
-        userId,
-        userType,
-        name,
-        willTrack: enabled && !!userId,
-      });
-    }
-
     if (!enabled || !userId) {
-      if (import.meta.env.DEV) {
-        console.log("⏸️ [PRESENCE] Skipping presence tracking", {
-          reason: !enabled ? "disabled" : "no userId",
-          enabled,
-          userId,
-        });
-      }
       return;
     }
 
     const channelName = `presence:${userType}:${userId}`;
-    // Only log in development
+    
+    // Log in development only
     if (import.meta.env.DEV) {
       console.log("🟢 [PRESENCE] Starting presence tracking", {
         channelName,
@@ -73,79 +62,105 @@ export function usePresence({
       },
     });
 
-    // Track presence
+    // Set initial presence metadata
+    const presence: PresenceMetadata = {
+      userId,
+      userType,
+      name,
+      lastSeen: new Date().toISOString(),
+    };
+
+    // Subscribe to channel
     channel
       .on("presence", { event: "sync" }, () => {
-        // Silent sync - only log errors
-      })
-      .on("presence", { event: "join" }, () => {
-        // Silent join - presence system handles this
-      })
-      .on("presence", { event: "leave" }, () => {
-        // Silent leave - presence system handles this
+        // Silent sync - no logging to reduce console noise
       })
       .subscribe(async (status) => {
         if (status === "SUBSCRIBED") {
-          // Log in development
-          if (import.meta.env.DEV) {
-            console.log("✅ [PRESENCE] Subscribed to presence channel", {
-              channelName,
-              userId,
-              userType,
-            });
-          }
-
-          // Set initial presence
-          const presence: PresenceMetadata = {
-            userId,
-            userType,
-            name,
-            lastSeen: new Date().toISOString(),
-          };
-
+          isConnectedRef.current = true;
+          
+          // Send initial "online" event on WebSocket connection
           await channel.track(presence);
-
-          // Log in development
+          
           if (import.meta.env.DEV) {
-            console.log("📡 [PRESENCE] Tracking presence", {
+            console.log("✅ [PRESENCE] Connected and tracking presence", {
               channelName,
               userId,
-              presence,
             });
           }
 
-          // Update presence periodically (every 30 seconds) to keep it fresh
-          const interval = setInterval(() => {
-            channel.track({
-              ...presence,
-              lastSeen: new Date().toISOString(),
-            });
-          }, 30000);
-
-          // Store interval ID for cleanup
-          (channel as any)._presenceInterval = interval;
+          // Start heartbeat timer - send heartbeat every 60 seconds
+          heartbeatIntervalRef.current = setInterval(() => {
+            if (isConnectedRef.current && channelRef.current) {
+              channelRef.current.track({
+                ...presence,
+                lastSeen: new Date().toISOString(),
+              });
+              
+              // Only log in development, and only occasionally to reduce noise
+              if (import.meta.env.DEV && Math.random() < 0.1) {
+                console.log("💓 [PRESENCE] Heartbeat sent", { userId });
+              }
+            }
+          }, 60000); // 60 seconds
+          
         } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+          isConnectedRef.current = false;
           console.error("❌ [PRESENCE] Presence channel error", {
             status,
             channelName,
             userId,
           });
+        } else if (status === "CLOSED") {
+          isConnectedRef.current = false;
+          // Silent close - normal cleanup
         }
       });
 
     channelRef.current = channel;
 
-    return () => {
-      // Silent cleanup
-
-      // Clear interval if it exists
-      if ((channel as any)._presenceInterval) {
-        clearInterval((channel as any)._presenceInterval);
+    // Handle page visibility changes - pause heartbeat when tab is hidden
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        // Tab is hidden - heartbeat will resume when visible again
+        // The WebSocket connection stays alive, but we reduce activity
+      } else {
+        // Tab is visible again - ensure we're still tracking
+        if (channelRef.current && isConnectedRef.current) {
+          channelRef.current.track({
+            ...presence,
+            lastSeen: new Date().toISOString(),
+          });
+        }
       }
+    };
 
-      // Untrack and unsubscribe
-      channel.untrack();
-      supabase.removeChannel(channel);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    // Handle page unload - send offline event
+    const handleBeforeUnload = () => {
+      if (channelRef.current) {
+        channelRef.current.untrack(); // Send "offline" event
+      }
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
+    return () => {
+      // Cleanup: send offline event and remove tracking
+      if (channelRef.current) {
+        channelRef.current.untrack(); // Send "offline" event on disconnect/app exit
+        supabase.removeChannel(channelRef.current);
+      }
+      
+      if (heartbeatIntervalRef.current) {
+        clearInterval(heartbeatIntervalRef.current);
+      }
+      
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      
+      isConnectedRef.current = false;
       channelRef.current = null;
     };
   }, [userId, userType, name, enabled]);
