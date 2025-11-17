@@ -625,7 +625,12 @@ const ParentDashboard = () => {
     return (
       <div className="min-h-[100dvh] bg-background w-full overflow-x-hidden">
         <Navigation />
-        <div className="p-4">
+        <div
+          className="p-4"
+          style={{
+            paddingTop: "calc(1rem + 64px + var(--safe-area-inset-top) * 0.15)",
+          }}
+        >
           <div className="max-w-4xl mx-auto space-y-6">
             <div className="mt-2">
               <div className="h-9 w-48 bg-muted rounded animate-pulse mb-2" />
@@ -662,7 +667,12 @@ const ParentDashboard = () => {
       <Navigation />
       <OnboardingTour role="parent" pageKey="parent_dashboard" />
       <HelpBubble role="parent" pageKey="parent_dashboard" />
-      <div className="px-4 pt-2 pb-4">
+      <div
+        className="px-4 pb-4"
+        style={{
+          paddingTop: "calc(0.5rem + 64px + var(--safe-area-inset-top) * 0.15)",
+        }}
+      >
         <div className="max-w-4xl mx-auto">
           <p className="text-sm text-muted-foreground mb-4">
             Welcome back{parentName ? `, ${parentName}` : ""}!

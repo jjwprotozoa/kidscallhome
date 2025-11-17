@@ -427,7 +427,7 @@ const ChildDashboard = () => {
       <Navigation />
       <OnboardingTour role="child" pageKey="child_dashboard" />
       <HelpBubble role="child" pageKey="child_dashboard" />
-      <div className="p-4">
+      <div className="p-4" style={{ paddingTop: 'calc(1rem + 64px + var(--safe-area-inset-top) * 0.15)' }}>
         <div className="max-w-2xl mx-auto space-y-6">
           <div className="mt-8">
             <div className="flex items-center gap-4">

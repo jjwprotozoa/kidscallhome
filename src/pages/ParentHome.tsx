@@ -30,7 +30,7 @@ const ParentHome = () => {
   return (
     <div className="min-h-[100dvh] bg-background">
       <Navigation />
-      <div className="p-4">
+      <div className="p-4" style={{ paddingTop: 'calc(1rem + 64px + var(--safe-area-inset-top) * 0.15)' }}>
         <div className="max-w-4xl mx-auto">
           <div className="mb-8 mt-8">
             <h1 className="text-3xl font-bold">Parent Home</h1>

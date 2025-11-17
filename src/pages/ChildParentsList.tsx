@@ -173,7 +173,7 @@ const ChildParentsList = () => {
     return (
       <div className="min-h-[100dvh] bg-background w-full overflow-x-hidden">
         <Navigation />
-        <div className="p-4 sm:p-6">
+        <div className="p-4 sm:p-6" style={{ paddingTop: 'calc(1rem + 64px + var(--safe-area-inset-top) * 0.15)' }}>
           <div className="max-w-4xl mx-auto">
             <div className="mb-6 sm:mb-8 mt-4 sm:mt-6">
               <div className="h-9 w-48 bg-muted rounded animate-pulse mb-2" />
@@ -200,7 +200,7 @@ const ChildParentsList = () => {
   return (
     <div className="min-h-[100dvh] bg-background w-full overflow-x-hidden">
       <Navigation />
-      <div className="p-4 sm:p-6">
+      <div className="p-4 sm:p-6" style={{ paddingTop: 'calc(1rem + 64px + var(--safe-area-inset-top) * 0.15)' }}>
         <div className="max-w-4xl mx-auto">
           <div className="mb-6 sm:mb-8 mt-4 sm:mt-6">
             <h1 className="text-2xl sm:text-3xl font-bold">Select Parent</h1>
