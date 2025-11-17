@@ -28,6 +28,7 @@ const Chat = () => {
   const [newMessage, setNewMessage] = useState("");
   const [isChild, setIsChild] = useState(false);
   const [childData, setChildData] = useState<ChildSession | null>(null);
+  const [parentData, setParentData] = useState<{ name: string; id?: string } | null>(null);
   const [loading, setLoading] = useState(false);
   const [parentName, setParentName] = useState<string>("Mom/Dad");
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -45,7 +46,7 @@ const Chat = () => {
       setChildData(data);
       targetChildId = data.id;
       fetchMessages(data.id);
-      // Fetch parent name for child users - get parent_id from database
+      // Fetch parent data for child users - get parent_id from database
       supabase
         .from("children")
         .select("parent_id")
@@ -56,22 +57,23 @@ const Chat = () => {
             console.error("Error fetching child record:", childError);
             return;
           }
-          // Now fetch parent name
+          // Now fetch parent data
           return supabase
             .from("parents")
-            .select("name")
+            .select("id, name")
             .eq("id", childRecord.parent_id)
             .maybeSingle();
         })
         .then((result) => {
-          if (result?.data?.name) {
+          if (result?.data) {
             setParentName(result.data.name);
+            setParentData({ name: result.data.name, id: result.data.id });
           } else if (result?.error) {
-            console.error("Error fetching parent name:", result.error);
+            console.error("Error fetching parent data:", result.error);
           }
         })
         .catch((error) => {
-          console.error("Error fetching parent name:", error);
+          console.error("Error fetching parent data:", error);
         });
     } else if (childId) {
       setIsChild(false);
@@ -427,19 +429,29 @@ const Chat = () => {
   };
 
   return (
-    <div className="min-h-[100dvh] flex flex-col bg-background">
-      <div className="bg-primary p-4 flex items-center gap-4">
+    <div className="min-h-[100dvh] flex flex-col bg-background relative">
+      <div className="bg-chat-accent p-4 flex items-center gap-4 fixed top-0 left-0 right-0 z-10">
         <Button onClick={goBack} variant="ghost" size="sm" className="text-white">
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <div className="flex items-center gap-3">
-          {childData && (
-            <div
-              className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold"
-              style={{ backgroundColor: childData.avatar_color }}
-            >
-              {childData.name[0]}
-            </div>
+          {isChild ? (
+            parentData && (
+              <div
+                className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold bg-primary"
+              >
+                {parentData.name[0].toUpperCase()}
+              </div>
+            )
+          ) : (
+            childData && (
+              <div
+                className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold"
+                style={{ backgroundColor: childData.avatar_color }}
+              >
+                {childData.name[0]}
+              </div>
+            )
           )}
           <h1 className="text-xl font-bold text-white">
             {isChild ? parentName : childData?.name}
@@ -447,7 +459,7 @@ const Chat = () => {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 overflow-y-auto p-4 space-y-4" style={{ paddingTop: '80px', paddingBottom: '100px' }}>
         {messages.map((message) => {
           const isMine = isChild
             ? message.sender_type === "child"
@@ -460,7 +472,7 @@ const Chat = () => {
             >
               <Card
                 className={`max-w-xs p-3 ${
-                  isMine ? "bg-primary text-white" : "bg-muted"
+                  isMine ? "bg-chat-accent text-chat-accent-foreground" : "bg-muted"
                 }`}
               >
                 <p className="break-words">{message.content}</p>
@@ -481,7 +493,7 @@ const Chat = () => {
         <div ref={messagesEndRef} />
       </div>
 
-      <form onSubmit={sendMessage} className="p-4 bg-card border-t">
+      <form onSubmit={sendMessage} className="p-4 bg-card border-t fixed bottom-0 left-0 right-0 z-10">
         <div className="flex gap-2">
           <Input
             value={newMessage}
@@ -490,7 +502,11 @@ const Chat = () => {
             disabled={loading}
             className="flex-1"
           />
-          <Button type="submit" disabled={loading || !newMessage.trim()}>
+          <Button 
+            type="submit" 
+            disabled={loading || !newMessage.trim()}
+            className="bg-chat-accent text-chat-accent-foreground hover:bg-chat-accent/90"
+          >
             <Send className="h-4 w-4" />
           </Button>
         </div>

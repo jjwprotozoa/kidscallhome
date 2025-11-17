@@ -171,24 +171,24 @@ const ChildParentsList = () => {
   // CLS: Reserve space for loading state to match final layout structure
   if (loading || !child) {
     return (
-      <div className="min-h-[100dvh] bg-background">
+      <div className="min-h-[100dvh] bg-background w-full overflow-x-hidden">
         <Navigation />
-        <div className="p-4">
+        <div className="p-4 sm:p-6">
           <div className="max-w-4xl mx-auto">
-            <div className="mb-8 mt-8">
+            <div className="mb-6 sm:mb-8 mt-4 sm:mt-6">
               <div className="h-9 w-48 bg-muted rounded animate-pulse mb-2" />
               <div className="h-6 w-64 bg-muted rounded animate-pulse" />
             </div>
-            <Card className="p-6">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-4">
-                  <div className="w-16 h-16 rounded-full bg-muted animate-pulse" />
-                  <div className="space-y-2">
+            <Card className="p-4 sm:p-6">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="flex items-center space-x-3 sm:space-x-4 flex-1 min-w-0">
+                  <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-muted animate-pulse flex-shrink-0" />
+                  <div className="space-y-2 min-w-0 flex-1">
                     <div className="h-7 w-32 bg-muted rounded animate-pulse" />
                     <div className="h-4 w-40 bg-muted rounded animate-pulse" />
                   </div>
                 </div>
-                <div className="h-10 w-24 bg-muted rounded animate-pulse" />
+                <div className="h-10 w-full sm:w-24 bg-muted rounded animate-pulse" />
               </div>
             </Card>
           </div>
@@ -198,30 +198,30 @@ const ChildParentsList = () => {
   }
 
   return (
-    <div className="min-h-[100dvh] bg-background">
+    <div className="min-h-[100dvh] bg-background w-full overflow-x-hidden">
       <Navigation />
-      <div className="p-4">
+      <div className="p-4 sm:p-6">
         <div className="max-w-4xl mx-auto">
-          <div className="mb-8 mt-8">
-            <h1 className="text-3xl font-bold">Select Parent</h1>
-            <p className="text-muted-foreground mt-2">
+          <div className="mb-6 sm:mb-8 mt-4 sm:mt-6">
+            <h1 className="text-2xl sm:text-3xl font-bold">Select Parent</h1>
+            <p className="text-muted-foreground mt-2 text-sm sm:text-base">
               Choose a parent to contact
             </p>
           </div>
 
           {parent ? (
             <Card 
-              className="p-6 cursor-pointer hover:shadow-lg transition-all"
+              className="p-4 sm:p-6 cursor-pointer hover:shadow-lg transition-all"
               onClick={() => handleSelectParent(parent.id)}
             >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-4">
-                  <div className="w-16 h-16 rounded-full bg-primary flex items-center justify-center text-white font-bold text-2xl">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="flex items-center space-x-3 sm:space-x-4 flex-1 min-w-0">
+                  <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-primary flex items-center justify-center text-white font-bold text-xl sm:text-2xl flex-shrink-0">
                     {parent.name?.charAt(0).toUpperCase() || "P"}
                   </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-2xl font-semibold">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="text-xl sm:text-2xl font-semibold truncate">
                         {parent.name || "Parent"}
                       </h3>
                       <StatusIndicator
@@ -235,10 +235,13 @@ const ChildParentsList = () => {
                     </p>
                   </div>
                 </div>
-                <Button onClick={(e) => {
-                  e.stopPropagation();
-                  handleSelectParent(parent.id);
-                }}>
+                <Button 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleSelectParent(parent.id);
+                  }}
+                  className="w-full sm:w-auto flex-shrink-0"
+                >
                   <Phone className="mr-2 h-4 w-4" />
                   Contact
                 </Button>

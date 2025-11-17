@@ -9,6 +9,24 @@ import { LogIn, UserPlus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
+// Cookie utility functions
+const setCookie = (name: string, value: string, days: number = 365) => {
+  const expires = new Date();
+  expires.setTime(expires.getTime() + days * 24 * 60 * 60 * 1000);
+  document.cookie = `${name}=${value};expires=${expires.toUTCString()};path=/`;
+};
+
+const getCookie = (name: string): string | null => {
+  const nameEQ = name + "=";
+  const ca = document.cookie.split(";");
+  for (let i = 0; i < ca.length; i++) {
+    let c = ca[i];
+    while (c.charAt(0) === " ") c = c.substring(1, c.length);
+    if (c.indexOf(nameEQ) === 0) return c.substring(nameEQ.length, c.length);
+  }
+  return null;
+};
+
 const ParentAuth = () => {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
@@ -16,14 +34,21 @@ const ParentAuth = () => {
   const [name, setName] = useState("");
   const [staySignedIn, setStaySignedIn] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [parentName, setParentName] = useState<string | null>(null);
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  // Load saved preference on mount
+  // Load saved preference and parent name from cookie on mount
   useEffect(() => {
     const savedPreference = localStorage.getItem("staySignedIn");
     if (savedPreference !== null) {
       setStaySignedIn(savedPreference === "true");
+    }
+    
+    // Load parent name from cookie
+    const savedParentName = getCookie("parentName");
+    if (savedParentName) {
+      setParentName(savedParentName);
     }
   }, []);
 
@@ -45,25 +70,45 @@ const ParentAuth = () => {
       }
 
       if (isLogin) {
-        const { error } = await supabase.auth.signInWithPassword({
+        const { data: { user }, error } = await supabase.auth.signInWithPassword({
           email,
           password,
         });
         if (error) throw error;
+        
+        // Fetch parent name and store in cookie
+        if (user) {
+          const { data: parentData } = await supabase
+            .from("parents")
+            .select("name")
+            .eq("id", user.id)
+            .maybeSingle();
+          
+          if (parentData?.name) {
+            setCookie("parentName", parentData.name, 365); // Store for 1 year
+          }
+        }
+        
         toast({ title: "Welcome back!" });
-        navigate("/parent/dashboard");
+        navigate("/parent/children");
       } else {
         const { error } = await supabase.auth.signUp({
           email,
           password,
           options: {
             data: { name },
-            emailRedirectTo: `${window.location.origin}/parent/dashboard`,
+            emailRedirectTo: `${window.location.origin}/parent/children`,
           },
         });
         if (error) throw error;
+        
+        // Store name in cookie for new signups
+        if (name) {
+          setCookie("parentName", name, 365);
+        }
+        
         toast({ title: "Account created! Welcome!" });
-        navigate("/parent/dashboard");
+        navigate("/parent/children");
       }
     } catch (error: unknown) {
       toast({
@@ -92,7 +137,11 @@ const ParentAuth = () => {
           </div>
           <h1 className="text-3xl font-bold">Kids Call Home</h1>
           <p className="text-muted-foreground">
-            {isLogin ? "Welcome back, parent!" : "Create your parent account"}
+            {isLogin 
+              ? parentName 
+                ? `Welcome back, ${parentName}!` 
+                : "Welcome back, parent!"
+              : "Create your parent account"}
           </p>
         </div>
 

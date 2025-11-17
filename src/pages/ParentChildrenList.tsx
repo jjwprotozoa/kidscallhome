@@ -71,7 +71,7 @@ const ChildCard = ({
           </Button>
           <Button 
             onClick={() => onChat(child.id)}
-            className="flex-1 sm:flex-none relative"
+            className="flex-1 sm:flex-none relative bg-chat-accent text-chat-accent-foreground hover:bg-chat-accent/90"
           >
             <MessageCircle className="mr-2 h-4 w-4" />
             Message

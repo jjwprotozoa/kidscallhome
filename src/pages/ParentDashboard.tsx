@@ -110,7 +110,7 @@ const ChildChatButton = ({
   return (
     <Button
       onClick={onChat}
-      className="flex-1 relative"
+      className="flex-1 relative bg-chat-accent text-chat-accent-foreground hover:bg-chat-accent/90"
       variant="default"
       data-tour="parent-messages"
     >
@@ -608,7 +608,7 @@ const ParentDashboard = () => {
   // CLS: Reserve space for loading state to match final layout structure
   if (loading) {
     return (
-      <div className="min-h-[100dvh] bg-background">
+      <div className="min-h-[100dvh] bg-background w-full overflow-x-hidden">
         <Navigation />
         <div className="p-4">
           <div className="max-w-4xl mx-auto space-y-6">
@@ -643,7 +643,7 @@ const ParentDashboard = () => {
   }
 
   return (
-    <div className="min-h-[100dvh] bg-background">
+    <div className="min-h-[100dvh] bg-background w-full overflow-x-hidden">
       <Navigation />
       <OnboardingTour role="parent" pageKey="parent_dashboard" />
       <HelpBubble role="parent" pageKey="parent_dashboard" />
@@ -696,7 +696,9 @@ const ParentDashboard = () => {
                 >
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
-                      <h3 className="text-xl font-bold">{child.name}</h3>
+                      <h3 className="text-2xl sm:text-3xl font-bold">
+                        {child.name}
+                      </h3>
                       <StatusIndicator
                         isOnline={isChildOnline(child.id)}
                         size="md"
@@ -708,7 +710,7 @@ const ParentDashboard = () => {
                         Login Code
                       </p>
                       <div className="flex items-center justify-between gap-2">
-                        <p className="text-2xl font-mono font-bold tracking-wider flex-1">
+                        <p className="text-xl sm:text-2xl font-mono font-bold tracking-wider flex-1">
                           {child.login_code}
                         </p>
                         <Button

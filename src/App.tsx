@@ -87,7 +87,7 @@ const App = () => (
       <SessionManager />
       <Toaster />
       <Sonner />
-      <SafeAreaLayout>
+      <SafeAreaLayout className="w-full overflow-x-hidden">
         <BrowserRouter
           future={{
             v7_startTransition: true,

@@ -20,7 +20,7 @@ export const SafeAreaLayout: React.FC<SafeAreaLayoutProps> = ({
   return (
     <div
       className={cn(
-        "safe-area-layout min-h-[100dvh]", // 100dvh avoids iOS 100vh bugs
+        "safe-area-layout min-h-[100dvh] w-full overflow-x-hidden", // 100dvh avoids iOS 100vh bugs, prevent horizontal scroll
         {
           "safe-area-top": withTopInset,
           "safe-area-bottom": withBottomInset,
