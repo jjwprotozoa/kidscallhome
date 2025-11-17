@@ -21,11 +21,15 @@ import { useChildrenPresence } from "@/features/presence/useChildrenPresence";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import {
+  useBadgeStore,
   useMissedBadgeForChild,
+  useTotalMissedBadge,
+  useTotalUnreadBadge,
   useUnreadBadgeForChild,
 } from "@/stores/badgeStore";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import {
+  BellOff,
   Copy,
   Edit,
   ExternalLink,
@@ -174,6 +178,11 @@ const ParentDashboard = () => {
     //   }
     // },
   });
+
+  // Get total badge counts
+  const totalUnreadMessages = useTotalUnreadBadge();
+  const totalMissedCalls = useTotalMissedBadge();
+  const hasNotifications = totalUnreadMessages > 0 || totalMissedCalls > 0;
 
   const checkAuth = useCallback(async () => {
     const {
@@ -502,6 +511,116 @@ const ParentDashboard = () => {
     navigate(`/call/${childId}`);
   };
 
+  const handleClearAllNotifications = useCallback(async () => {
+    if (!hasNotifications) return;
+
+    try {
+      const { acknowledgeMissedCalls } = await import(
+        "@/utils/acknowledgeMissedCalls"
+      );
+
+      // Clear all badges for all children
+      const badgeStore = useBadgeStore.getState();
+      let clearedMessageCount = 0;
+      let clearedCallCount = 0;
+
+      for (const childId of childIds) {
+        // Mark unread messages as read in database (parent receives messages from children)
+        const unreadCount = badgeStore.unreadMessagesByChild[childId] ?? 0;
+        if (unreadCount > 0) {
+          try {
+            // Get all unread messages from this child
+            const { data: unreadMessages, error: fetchError } = await supabase
+              .from("messages")
+              .select("id")
+              .eq("child_id", childId)
+              .eq("sender_type", "child")
+              .is("read_at", null);
+
+            if (!fetchError && unreadMessages && unreadMessages.length > 0) {
+              const unreadMessageIds = unreadMessages.map((msg) => msg.id);
+              const readAt = new Date().toISOString();
+
+              // Mark messages as read in database
+              const { error: updateError } = await supabase
+                .from("messages")
+                .update({ read_at: readAt } as Record<string, unknown>)
+                .in("id", unreadMessageIds);
+
+              if (!updateError) {
+                clearedMessageCount += unreadMessageIds.length;
+                console.log(
+                  `✅ Marked ${unreadMessageIds.length} messages as read for child ${childId}`
+                );
+              } else {
+                console.error(
+                  `Error marking messages as read for child ${childId}:`,
+                  updateError
+                );
+              }
+            }
+
+            // Clear badge regardless of DB update success
+            badgeStore.clearUnreadForChild(childId);
+          } catch (error) {
+            console.error(
+              `Error processing messages for child ${childId}:`,
+              error
+            );
+            // Still clear the badge locally even if DB update fails
+            badgeStore.clearUnreadForChild(childId);
+          }
+        }
+
+        // Acknowledge missed calls (updates database and clears badge)
+        const missedCount = badgeStore.missedCallsByChild[childId] ?? 0;
+        if (missedCount > 0) {
+          // Clear badge immediately for instant UI feedback (before DB update)
+          // This ensures the UI updates right away, even if DB is slow or out of sync
+          badgeStore.clearMissedForChild(childId);
+          clearedCallCount += missedCount;
+
+          // Then update database (realtime will sync across devices)
+          try {
+            await acknowledgeMissedCalls(childId, "child");
+          } catch (error) {
+            console.error(
+              `Error acknowledging missed calls for child ${childId}:`,
+              error
+            );
+            // Badge already cleared above, so no need to clear again
+          }
+        }
+      }
+
+      const messageText =
+        clearedMessageCount > 0
+          ? `${clearedMessageCount} unread message${
+              clearedMessageCount !== 1 ? "s" : ""
+            }`
+          : "";
+      const callText =
+        clearedCallCount > 0
+          ? `${clearedCallCount} missed call${
+              clearedCallCount !== 1 ? "s" : ""
+            }`
+          : "";
+      const description = [messageText, callText].filter(Boolean).join(" and ");
+
+      toast({
+        title: "Notifications cleared",
+        description: description || "All notifications cleared.",
+      });
+    } catch (error) {
+      console.error("Error clearing notifications:", error);
+      toast({
+        title: "Error",
+        description: "Failed to clear some notifications. Please try again.",
+        variant: "destructive",
+      });
+    }
+  }, [hasNotifications, childIds, toast]);
+
   const handleDeleteChild = async () => {
     if (!childToDelete) return;
 
@@ -688,14 +807,28 @@ const ParentDashboard = () => {
             </p>
           </div>
 
-          <Button
-            onClick={() => setShowAddChild(true)}
-            className="w-full"
-            size="lg"
-          >
-            <Plus className="mr-2 h-5 w-5" />
-            Add Child
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              onClick={() => setShowAddChild(true)}
+              className="flex-1"
+              size="lg"
+            >
+              <Plus className="mr-2 h-5 w-5" />
+              Add Child
+            </Button>
+            {hasNotifications && (
+              <Button
+                onClick={handleClearAllNotifications}
+                variant="outline"
+                size="lg"
+                className="flex-shrink-0"
+                title={`Clear all notifications (${totalUnreadMessages} messages, ${totalMissedCalls} missed calls)`}
+              >
+                <BellOff className="mr-2 h-5 w-5" />
+                Clear All
+              </Button>
+            )}
+          </div>
 
           {children.length === 0 ? (
             <Card className="p-12 text-center min-h-[220px]">
