@@ -6,7 +6,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { NavLink } from "@/components/NavLink";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
-import { Home, LayoutDashboard, Users, LogOut, MessageSquare, PhoneMissed } from "lucide-react";
+import { Home, LayoutDashboard, Users, LogOut, MessageSquare, PhoneMissed, Smartphone } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { useTotalUnreadBadge, useTotalMissedBadge, useBadgeStore } from "@/stores/badgeStore";
@@ -214,10 +214,14 @@ const Navigation = () => {
                 </div>
                 <span>Children</span>
               </NavLink>
+              <NavLink to="/parent/devices" className={navLinkClassName}>
+                <Smartphone className="h-4 w-4" />
+                <span>Devices</span>
+              </NavLink>
             </div>
-            <Button variant="outline" size="sm" onClick={handleLogout}>
-              <LogOut className="h-4 w-4 mr-2" />
-              Logout
+            <Button variant="outline" size="sm" onClick={handleLogout} className="flex-shrink-0">
+              <LogOut className="h-4 w-4 md:mr-2" />
+              <span className="hidden md:inline">Logout</span>
             </Button>
           </div>
         </div>
@@ -250,9 +254,9 @@ const Navigation = () => {
                 <span>Parents</span>
               </NavLink>
             </div>
-            <Button variant="outline" size="sm" onClick={handleLogout}>
-              <LogOut className="h-4 w-4 mr-2" />
-              Logout
+            <Button variant="outline" size="sm" onClick={handleLogout} className="flex-shrink-0">
+              <LogOut className="h-4 w-4 md:mr-2" />
+              <span className="hidden md:inline">Logout</span>
             </Button>
           </div>
         </div>

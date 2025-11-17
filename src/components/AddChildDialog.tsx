@@ -62,16 +62,66 @@ const AddChildDialog = ({ open, onOpenChange, onChildAdded }: AddChildDialogProp
   const [selectedOption, setSelectedOption] = useState<string>("");
   const [selectedNumber, setSelectedNumber] = useState<string>("");
   const [generatedCode, setGeneratedCode] = useState<string>("");
+  const [familyCode, setFamilyCode] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [checkingCode, setCheckingCode] = useState(false);
   const { toast } = useToast();
 
-  // Generate a random code when dialog opens
+  // Fetch family code and generate a random code when dialog opens
   useEffect(() => {
     if (open) {
+      fetchFamilyCode();
       generateRandomCode();
     }
   }, [open]);
+
+  const fetchFamilyCode = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from("parents")
+        .select("family_code")
+        .eq("id", user.id)
+        .single();
+
+      if (error) {
+        // Check if it's a column doesn't exist error
+        if (error.code === '42703' || error.message?.includes('does not exist')) {
+          toast({
+            title: "Database Migration Required",
+            description: "The family_code column doesn't exist yet. Please run the migration in Supabase: supabase/migrations/20250121000000_add_family_code.sql",
+            variant: "destructive",
+            duration: 10000, // Show for 10 seconds
+          });
+          console.error("❌ [FAMILY CODE] Migration not run. Error:", error);
+          return;
+        }
+        throw error;
+      }
+      
+      if (data?.family_code) {
+        setFamilyCode(data.family_code);
+      } else {
+        // Family code is null - might need to generate one
+        console.warn("⚠️ [FAMILY CODE] Parent exists but family_code is null");
+        toast({
+          title: "Family Code Missing",
+          description: "Your account doesn't have a family code yet. Please contact support or refresh the page after running the migration.",
+          variant: "destructive",
+        });
+      }
+    } catch (error: any) {
+      console.error("Failed to fetch family code:", error);
+      toast({
+        title: "Error Loading Family Code",
+        description: error.message || "Please refresh and try again. If the problem persists, ensure the database migration has been run.",
+        variant: "destructive",
+        duration: 8000,
+      });
+    }
+  };
 
   const generateRandomCode = async () => {
     setCheckingCode(true);
@@ -115,7 +165,11 @@ const AddChildDialog = ({ open, onOpenChange, onChildAdded }: AddChildDialogProp
   };
 
   const updateCode = (option: string, number: string) => {
-    if (option && number) {
+    if (option && number && familyCode) {
+      // Format: familyCode-color/animal-number
+      setGeneratedCode(`${familyCode}-${option}-${number}`);
+    } else if (option && number) {
+      // Show partial code while family code loads
       setGeneratedCode(`${option}-${number}`);
     }
   };
@@ -135,6 +189,16 @@ const AddChildDialog = ({ open, onOpenChange, onChildAdded }: AddChildDialogProp
     }
   };
 
+  // Update code whenever family code, option, or number changes
+  useEffect(() => {
+    if (familyCode && selectedOption && selectedNumber) {
+      setGeneratedCode(`${familyCode}-${selectedOption}-${selectedNumber}`);
+    } else if (selectedOption && selectedNumber) {
+      // Show partial code while family code loads
+      setGeneratedCode(`${selectedOption}-${selectedNumber}`);
+    }
+  }, [familyCode, selectedOption, selectedNumber]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -143,6 +207,16 @@ const AddChildDialog = ({ open, onOpenChange, onChildAdded }: AddChildDialogProp
         title: "Error",
         description: "Please enter a name",
         variant: "destructive",
+      });
+      return;
+    }
+
+    if (!familyCode) {
+      toast({
+        title: "Family Code Required",
+        description: "Family code not loaded. This may mean the database migration hasn't been run. Please check the console for details.",
+        variant: "destructive",
+        duration: 8000,
       });
       return;
     }
@@ -185,7 +259,7 @@ const AddChildDialog = ({ open, onOpenChange, onChildAdded }: AddChildDialogProp
 
       toast({ 
         title: "Child added successfully!",
-        description: `Login code: ${generatedCode}`,
+        description: `Full login code: ${generatedCode}`,
       });
       setName("");
       setSelectedColor(avatarColors[0]);
@@ -244,14 +318,24 @@ const AddChildDialog = ({ open, onOpenChange, onChildAdded }: AddChildDialogProp
           </div>
 
           <div className="space-y-4 border-t pt-4">
+            <div className="bg-blue-50 dark:bg-blue-950 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
+              <p className="text-xs font-medium text-blue-900 dark:text-blue-100 mb-1">Your Family Code</p>
+              <p className="text-xl font-mono font-bold text-blue-700 dark:text-blue-300 text-center">
+                {familyCode || "Loading..."}
+              </p>
+              <p className="text-xs text-blue-700 dark:text-blue-300 mt-2 text-center">
+                Share this code with your child for login
+              </p>
+            </div>
+
             <div className="flex items-center justify-between">
-              <label className="text-sm font-medium">Login Code</label>
+              <label className="text-sm font-medium">Child's Login Code</label>
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 onClick={generateRandomCode}
-                disabled={checkingCode}
+                disabled={checkingCode || !familyCode}
               >
                 <RefreshCw className={`h-4 w-4 mr-2 ${checkingCode ? "animate-spin" : ""}`} />
                 Generate New
@@ -259,9 +343,9 @@ const AddChildDialog = ({ open, onOpenChange, onChildAdded }: AddChildDialogProp
             </div>
 
             <div className="bg-muted p-4 rounded-lg">
-              <p className="text-xs text-muted-foreground mb-2">Generated Code</p>
-              <p className="text-2xl font-mono font-bold text-center">
-                {generatedCode || "Generating..."}
+              <p className="text-xs text-muted-foreground mb-2">Full Login Code</p>
+              <p className="text-2xl font-mono font-bold text-center break-all">
+                {generatedCode || (familyCode ? "Select color/animal and number" : "Loading...")}
               </p>
             </div>
 
@@ -339,17 +423,22 @@ const AddChildDialog = ({ open, onOpenChange, onChildAdded }: AddChildDialogProp
               />
             </div>
 
-            {generatedCode && (
+            {generatedCode && familyCode && (
               <div className="bg-green-50 dark:bg-green-950 p-3 rounded-lg flex items-center gap-2">
                 <Check className="h-5 w-5 text-green-600" />
-                <p className="text-sm text-green-800 dark:text-green-200">
-                  Code ready: <span className="font-mono font-bold">{generatedCode}</span>
-                </p>
+                <div className="flex-1">
+                  <p className="text-sm text-green-800 dark:text-green-200 font-medium">
+                    Code ready!
+                  </p>
+                  <p className="text-xs text-green-700 dark:text-green-300 mt-1">
+                    Your child will use: <span className="font-mono font-bold">{generatedCode}</span>
+                  </p>
+                </div>
               </div>
             )}
           </div>
 
-          <Button type="submit" className="w-full" disabled={loading || !generatedCode}>
+          <Button type="submit" className="w-full" disabled={loading || !generatedCode || !familyCode}>
             {loading ? "Creating..." : "Add Child"}
           </Button>
         </form>

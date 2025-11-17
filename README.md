@@ -10,6 +10,38 @@ A family communication app that helps parents and children stay connected throug
 
 Kids Call Home is a safe and secure platform for family communication. Parents can create accounts, add their children, and manage access. Children can use a special code to easily initiate video calls and send messages to their parents, keeping families connected anytime, anywhere.
 
+## Authentication Flow
+
+### Parent Authentication
+Parents sign up with email and password. Upon registration, each parent account is automatically assigned a unique **Family Code** (6-character alphanumeric code). This family code is shared with all children in the family.
+
+### Child Authentication
+Children log in using a three-part code system:
+1. **Family Code** - The 6-character code assigned to their family (e.g., "ABC123")
+2. **Color or Animal** - A visual selection (e.g., "blue" or "cat")
+3. **Number** - A number between 1-99
+
+**Full Login Format**: `familyCode-color/animal-number`  
+**Example**: `ABC123-blue-19` or `ABC123-cat-7`
+
+This multi-part authentication system:
+- Dramatically reduces accidental cross-account logins
+- Improves scalability by isolating families
+- Maintains child-friendly simplicity with visual selections
+- Ensures each family code is unique across the platform
+
+## Device Management
+
+Parents can view and manage all devices authorized to access their family account through the Device Management page (`/parent/devices`). Features include:
+
+- **Automatic Device Tracking**: Devices are tracked when parents or children log in
+- **Device Details**: View device name, type, last login time, IP address, and which child used it
+- **Device Management**: Rename devices for easy recognition or remove devices for security
+- **Security**: Device removal requires password re-authentication
+- **Visual Indicators**: Stale devices (unused for 30+ days) are highlighted
+
+See `docs/DEVICE_MANAGEMENT.md` for detailed documentation.
+
 ## How can I edit this code?
 
 There are several ways of editing your application.

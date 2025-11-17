@@ -15,6 +15,7 @@ import ParentDashboard from "./pages/ParentDashboard";
 import ParentHome from "./pages/ParentHome";
 import ParentChildrenList from "./pages/ParentChildrenList";
 import ParentCallScreen from "./pages/ParentCallScreen";
+import DeviceManagement from "./pages/DeviceManagement";
 import ChildLogin from "./pages/ChildLogin";
 import ChildDashboard from "./pages/ChildDashboard";
 import ChildHome from "./pages/ChildHome";
@@ -104,6 +105,7 @@ const App = () => (
             <Route path="/parent/children" element={<ParentChildrenList />} />
             <Route path="/parent/call/:childId" element={<ParentCallScreen />} />
             <Route path="/parent/dashboard" element={<ParentDashboard />} />
+            <Route path="/parent/devices" element={<DeviceManagement />} />
             <Route path="/child/login" element={<ChildLogin />} />
             <Route path="/child" element={<ChildHome />} />
             <Route path="/child/parents" element={<ChildParentsList />} />

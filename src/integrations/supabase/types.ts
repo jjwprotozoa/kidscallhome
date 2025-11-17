@@ -134,22 +134,88 @@ export type Database = {
           },
         ]
       }
+      devices: {
+        Row: {
+          created_at: string
+          device_identifier: string
+          device_name: string
+          device_type: string
+          id: string
+          is_active: boolean | null
+          last_ip_address: string | null
+          last_location: string | null
+          last_login_at: string | null
+          last_used_child_id: string | null
+          parent_id: string
+          updated_at: string
+          user_agent: string | null
+        }
+        Insert: {
+          created_at?: string
+          device_identifier: string
+          device_name: string
+          device_type: string
+          id?: string
+          is_active?: boolean | null
+          last_ip_address?: string | null
+          last_location?: string | null
+          last_login_at?: string | null
+          last_used_child_id?: string | null
+          parent_id: string
+          updated_at?: string
+          user_agent?: string | null
+        }
+        Update: {
+          created_at?: string
+          device_identifier?: string
+          device_name?: string
+          device_type?: string
+          id?: string
+          is_active?: boolean | null
+          last_ip_address?: string | null
+          last_location?: string | null
+          last_login_at?: string | null
+          last_used_child_id?: string | null
+          parent_id?: string
+          updated_at?: string
+          user_agent?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "devices_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "parents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "devices_last_used_child_id_fkey"
+            columns: ["last_used_child_id"]
+            isOneToOne: false
+            referencedRelation: "children"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       parents: {
         Row: {
           created_at: string | null
           email: string
+          family_code: string | null
           id: string
           name: string | null
         }
         Insert: {
           created_at?: string | null
           email: string
+          family_code?: string | null
           id: string
           name?: string | null
         }
         Update: {
           created_at?: string | null
           email?: string
+          family_code?: string | null
           id?: string
           name?: string | null
         }
@@ -161,6 +227,25 @@ export type Database = {
     }
     Functions: {
       generate_unique_login_code: { Args: never; Returns: string }
+      revoke_device: {
+        Args: {
+          p_device_id: string
+          p_parent_id: string
+        }
+        Returns: boolean
+      }
+      update_device_login: {
+        Args: {
+          p_child_id: string | null
+          p_device_identifier: string
+          p_device_name: string
+          p_device_type: string
+          p_ip_address: string | null
+          p_parent_id: string
+          p_user_agent: string
+        }
+        Returns: string
+      }
     }
     Enums: {
       [_ in never]: never

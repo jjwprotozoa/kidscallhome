@@ -138,6 +138,7 @@ const ParentDashboard = () => {
   const [showAddChild, setShowAddChild] = useState(false);
   const [incomingCall, setIncomingCall] = useState<IncomingCall | null>(null);
   const [parentName, setParentName] = useState<string | null>(null);
+  const [familyCode, setFamilyCode] = useState<string | null>(null);
   const [showCodeDialog, setShowCodeDialog] = useState<{ child: Child } | null>(
     null
   );
@@ -192,14 +193,32 @@ const ParentDashboard = () => {
       navigate("/parent/auth");
       return;
     }
-    // Fetch parent name from database
-    const { data: parentData } = await supabase
+    // Fetch parent name and family code from database
+    const { data: parentData, error: parentError } = await supabase
       .from("parents")
-      .select("name")
+      .select("name, family_code")
       .eq("id", session.user.id)
       .maybeSingle();
 
+    if (parentError) {
+      // Check if it's a column doesn't exist error
+      if (
+        parentError.code === "42703" ||
+        parentError.message?.includes("does not exist")
+      ) {
+        console.error(
+          "❌ [PARENT DASHBOARD] Migration not run. Family code column doesn't exist."
+        );
+        console.error(
+          "Please run: supabase/migrations/20250121000000_add_family_code.sql"
+        );
+      } else {
+        console.error("Error fetching parent data:", parentError);
+      }
+    }
+
     setParentName(parentData?.name || null);
+    setFamilyCode(parentData?.family_code || null);
   }, [navigate]);
 
   const fetchChildren = useCallback(async () => {
@@ -477,8 +496,28 @@ const ParentDashboard = () => {
     });
   };
 
+  // Helper function to get full login code (prepend family code if missing)
+  const getFullLoginCode = (child: Child): string => {
+    // Check if login_code already includes family code (has 3 parts: familyCode-color-number)
+    const parts = child.login_code.split("-");
+    if (parts.length === 3 && familyCode) {
+      // Already has family code, return as-is
+      return child.login_code;
+    }
+    // Old format (color-number), prepend family code
+    if (parts.length === 2 && familyCode) {
+      return `${familyCode}-${child.login_code}`;
+    }
+    // Fallback: return as-is if family code not available
+    return child.login_code;
+  };
+
   const handleCopyMagicLink = (child: Child) => {
-    const magicLink = `${window.location.origin}/child/login?code=${child.login_code}`;
+    // Magic link includes full login code: familyCode-color/animal-number
+    // For existing children, prepend family code if missing
+    const fullCode = getFullLoginCode(child);
+    const encodedCode = encodeURIComponent(fullCode);
+    const magicLink = `${window.location.origin}/child/login?code=${encodedCode}`;
     navigator.clipboard.writeText(magicLink);
     toast({
       title: "Copied!",
@@ -807,6 +846,39 @@ const ParentDashboard = () => {
             </p>
           </div>
 
+          {familyCode && (
+            <Card className="bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800 p-4">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-blue-900 dark:text-blue-100 mb-1">
+                    Your Family Code
+                  </p>
+                  <p className="text-2xl font-mono font-bold text-blue-700 dark:text-blue-300">
+                    {familyCode}
+                  </p>
+                  <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
+                    Share this code with your children for login
+                  </p>
+                </div>
+                <Button
+                  onClick={() => {
+                    navigator.clipboard.writeText(familyCode);
+                    toast({
+                      title: "Copied!",
+                      description: "Family code copied to clipboard",
+                    });
+                  }}
+                  variant="outline"
+                  size="sm"
+                  className="flex-shrink-0"
+                >
+                  <Copy className="h-4 w-4 mr-2" />
+                  Copy
+                </Button>
+              </div>
+            </Card>
+          )}
+
           <div className="flex gap-2">
             <Button
               onClick={() => setShowAddChild(true)}
@@ -869,7 +941,7 @@ const ParentDashboard = () => {
                       </p>
                       <div className="flex items-center justify-between gap-2">
                         <p className="text-xl sm:text-2xl font-mono font-bold tracking-wider flex-1">
-                          {child.login_code}
+                          {getFullLoginCode(child)}
                         </p>
                         <Button
                           onClick={() => setChildToEditCode(child)}
@@ -884,7 +956,7 @@ const ParentDashboard = () => {
                     </div>
                     <div className="flex gap-2 flex-wrap">
                       <Button
-                        onClick={() => handleCopyCode(child.login_code)}
+                        onClick={() => handleCopyCode(getFullLoginCode(child))}
                         variant="outline"
                         size="sm"
                         className="flex-1"
@@ -979,13 +1051,17 @@ const ParentDashboard = () => {
                     Login Code
                   </p>
                   <p className="text-2xl sm:text-3xl font-mono font-bold break-all">
-                    {showCodeDialog.child.login_code}
+                    {getFullLoginCode(showCodeDialog.child)}
                   </p>
                 </div>
                 <div className="flex justify-center">
                   <img
                     src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
-                      `${window.location.origin}/child/login?code=${showCodeDialog.child.login_code}`
+                      `${
+                        window.location.origin
+                      }/child/login?code=${encodeURIComponent(
+                        getFullLoginCode(showCodeDialog.child)
+                      )}`
                     )}`}
                     alt="QR Code"
                     className="border-2 border-muted rounded-lg w-[200px] h-[200px] sm:w-[250px] sm:h-[250px] object-contain"
@@ -994,7 +1070,7 @@ const ParentDashboard = () => {
                 <div className="flex flex-col sm:flex-row gap-2">
                   <Button
                     onClick={() =>
-                      handleCopyCode(showCodeDialog.child.login_code)
+                      handleCopyCode(getFullLoginCode(showCodeDialog.child))
                     }
                     variant="outline"
                     className="flex-1 w-full sm:w-auto"
@@ -1183,13 +1259,17 @@ const ParentDashboard = () => {
                     Login Code
                   </p>
                   <p className="text-2xl sm:text-3xl font-mono font-bold break-all print:text-3xl">
-                    {printViewChild.login_code}
+                    {getFullLoginCode(printViewChild)}
                   </p>
                 </div>
                 <div className="flex justify-center print:my-4">
                   <img
                     src={`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(
-                      `${window.location.origin}/child/login?code=${printViewChild.login_code}`
+                      `${
+                        window.location.origin
+                      }/child/login?code=${encodeURIComponent(
+                        getFullLoginCode(printViewChild)
+                      )}`
                     )}`}
                     alt="QR Code"
                     className="border-2 border-muted rounded-lg w-[250px] h-[250px] sm:w-[300px] sm:h-[300px] object-contain print:border-gray-800"

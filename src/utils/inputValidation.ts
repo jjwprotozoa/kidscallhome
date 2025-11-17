@@ -64,14 +64,18 @@ export function validatePassword(password: string): {
 
 /**
  * Validate child login code format
+ * Format: familyCode-color/animal-number (e.g., "ABC123-blue-19" or "123456-cat-7")
  */
 export function validateChildLoginCode(code: string): boolean {
   if (!code || typeof code !== 'string') {
     return false;
   }
 
-  // Format: color-animal or animal-number (e.g., "red-5" or "cat-12")
-  const codeRegex = /^[a-z]+-\d{1,2}$/i;
+  // Format: familyCode-color/animal-number
+  // familyCode: 3-6 alphanumeric characters
+  // color/animal: lowercase letters
+  // number: 1-2 digits (1-99)
+  const codeRegex = /^[A-Z0-9]{3,6}-[a-z]+-\d{1,2}$/i;
   return codeRegex.test(code.trim());
 }
 

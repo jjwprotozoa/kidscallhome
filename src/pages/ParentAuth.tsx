@@ -309,6 +309,31 @@ const ParentAuth = () => {
             setCookie("parentName", parentData.name, 365); // Store for 1 year
           }
           
+          // Track device on login
+          try {
+            const { generateDeviceIdentifierAsync, detectDeviceType, getDeviceName, getClientIP, getDeviceMacAddress } = await import("@/utils/deviceTracking");
+            const deviceIdentifier = await generateDeviceIdentifierAsync();
+            const deviceType = detectDeviceType();
+            const deviceName = getDeviceName();
+            const userAgent = navigator.userAgent;
+            const ipAddress = await getClientIP();
+            const macAddress = await getDeviceMacAddress();
+            
+            await supabase.rpc("update_device_login", {
+              p_parent_id: user.id,
+              p_device_identifier: deviceIdentifier,
+              p_device_name: deviceName,
+              p_device_type: deviceType,
+              p_user_agent: userAgent,
+              p_ip_address: ipAddress || null,
+              p_mac_address: macAddress || null,
+              p_child_id: null,
+            });
+          } catch (error) {
+            // Silently fail - device tracking shouldn't break login
+            console.warn("Device tracking failed:", error);
+          }
+          
           // Write presence status to database on login (major state change)
           // Note: This is optional - presence is managed via WebSocket/Realtime
           // Only writes to DB if you need login history/analytics
