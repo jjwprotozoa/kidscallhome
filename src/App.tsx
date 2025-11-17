@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { SafeAreaLayout } from "@/components/layout/SafeAreaLayout";
 import { useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import ServerError from "./pages/ServerError";
@@ -84,49 +85,51 @@ const SessionManager = () => {
 };
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <BadgeProvider />
-      <SessionManager />
-      <Toaster />
-      <Sonner />
-      <SafeAreaLayout className="w-full overflow-x-hidden">
-        <BrowserRouter
-          future={{
-            v7_startTransition: true,
-            v7_relativeSplatPath: true,
-          }}
-        >
-          <GlobalIncomingCall />
-          <GlobalMessageNotifications />
-          <GlobalPresenceTracker />
-          <Routes>
-            <Route path="/" element={<Index />} />
-            <Route path="/parent/auth" element={<ParentAuth />} />
-            <Route path="/parent" element={<ParentHome />} />
-            <Route path="/parent/children" element={<ParentChildrenList />} />
-            <Route path="/parent/call/:childId" element={<ParentCallScreen />} />
-            <Route path="/parent/dashboard" element={<ParentDashboard />} />
-            <Route path="/parent/devices" element={<DeviceManagement />} />
-            <Route path="/parent/upgrade" element={<Upgrade />} />
-            <Route path="/parent/settings" element={<AccountSettings />} />
-            <Route path="/child/login" element={<ChildLogin />} />
-            <Route path="/child" element={<ChildHome />} />
-            <Route path="/child/parents" element={<ChildParentsList />} />
-            <Route path="/child/call/:parentId" element={<ChildCallScreen />} />
-            <Route path="/child/dashboard" element={<ChildDashboard />} />
-            <Route path="/call/:childId" element={<VideoCall />} />
-            <Route path="/chat/:childId" element={<Chat />} />
-            {/* Error pages */}
-            <Route path="/error/server" element={<ServerError />} />
-            <Route path="/error/network" element={<NetworkError />} />
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </BrowserRouter>
-      </SafeAreaLayout>
-    </TooltipProvider>
-  </QueryClientProvider>
+  <ErrorBoundary>
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <BadgeProvider />
+        <SessionManager />
+        <Toaster />
+        <Sonner />
+        <SafeAreaLayout className="w-full overflow-x-hidden">
+          <BrowserRouter
+            future={{
+              v7_startTransition: true,
+              v7_relativeSplatPath: true,
+            }}
+          >
+            <GlobalIncomingCall />
+            <GlobalMessageNotifications />
+            <GlobalPresenceTracker />
+            <Routes>
+              <Route path="/" element={<Index />} />
+              <Route path="/parent/auth" element={<ParentAuth />} />
+              <Route path="/parent" element={<ParentHome />} />
+              <Route path="/parent/children" element={<ParentChildrenList />} />
+              <Route path="/parent/call/:childId" element={<ParentCallScreen />} />
+              <Route path="/parent/dashboard" element={<ParentDashboard />} />
+              <Route path="/parent/devices" element={<DeviceManagement />} />
+              <Route path="/parent/upgrade" element={<Upgrade />} />
+              <Route path="/parent/settings" element={<AccountSettings />} />
+              <Route path="/child/login" element={<ChildLogin />} />
+              <Route path="/child" element={<ChildHome />} />
+              <Route path="/child/parents" element={<ChildParentsList />} />
+              <Route path="/child/call/:parentId" element={<ChildCallScreen />} />
+              <Route path="/child/dashboard" element={<ChildDashboard />} />
+              <Route path="/call/:childId" element={<VideoCall />} />
+              <Route path="/chat/:childId" element={<Chat />} />
+              {/* Error pages */}
+              <Route path="/error/server" element={<ServerError />} />
+              <Route path="/error/network" element={<NetworkError />} />
+              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </BrowserRouter>
+        </SafeAreaLayout>
+      </TooltipProvider>
+    </QueryClientProvider>
+  </ErrorBoundary>
 );
 
 export default App;

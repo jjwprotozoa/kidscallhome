@@ -5,23 +5,51 @@ import type { Database } from './types';
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
+// Debug logging (always log to help diagnose production issues)
+console.log('🔍 [SUPABASE CLIENT] Environment check:', {
+  hasUrl: !!SUPABASE_URL,
+  hasKey: !!SUPABASE_PUBLISHABLE_KEY,
+  urlLength: SUPABASE_URL?.length || 0,
+  keyLength: SUPABASE_PUBLISHABLE_KEY?.length || 0,
+  mode: import.meta.env.MODE,
+  dev: import.meta.env.DEV,
+  prod: import.meta.env.PROD,
+});
+
+// Validate environment variables
+if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
+  const missingVars = [];
+  if (!SUPABASE_URL) missingVars.push('VITE_SUPABASE_URL');
+  if (!SUPABASE_PUBLISHABLE_KEY) missingVars.push('VITE_SUPABASE_PUBLISHABLE_KEY');
+  
+  console.error(
+    `❌ Missing required environment variables: ${missingVars.join(', ')}\n` +
+    `Please set these in your Vercel project settings or .env file.\n` +
+    `The app will not function without these variables.`
+  );
+}
+
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
-export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
-  auth: {
-    storage: localStorage,
-    persistSession: true,
-    autoRefreshToken: true,
-  },
-  realtime: {
-    params: {
-      eventsPerSecond: 10,
+export const supabase = createClient<Database>(
+  SUPABASE_URL || 'https://placeholder.supabase.co',
+  SUPABASE_PUBLISHABLE_KEY || 'placeholder-key',
+  {
+    auth: {
+      storage: localStorage,
+      persistSession: true,
+      autoRefreshToken: true,
     },
-  },
-  global: {
-    headers: {
-      'x-client-info': 'kidscallhome-web',
+    realtime: {
+      params: {
+        eventsPerSecond: 10,
+      },
     },
-  },
-});
+    global: {
+      headers: {
+        'x-client-info': 'kidscallhome-web',
+      },
+    },
+  }
+);

@@ -2,4 +2,64 @@ import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
 
-createRoot(document.getElementById("root")!).render(<App />);
+// Log startup (works in both dev and prod)
+console.log("🚀 [APP INIT] Starting application...", {
+  mode: import.meta.env.MODE,
+  dev: import.meta.env.DEV,
+  prod: import.meta.env.PROD,
+});
+
+// Validate root element exists
+const rootElement = document.getElementById("root");
+if (!rootElement) {
+  const error = new Error("Root element not found. Make sure index.html has a <div id='root'></div> element.");
+  console.error("❌ [APP INIT]", error);
+  document.body.innerHTML = `
+    <div style="padding: 2rem; font-family: system-ui; max-width: 600px; margin: 2rem auto;">
+      <h1 style="color: #dc2626;">Application Error</h1>
+      <p style="color: #6b7280;">Root element not found.</p>
+      <pre style="background: #f3f4f6; padding: 1rem; border-radius: 0.5rem; overflow: auto; margin-top: 1rem;">
+${error.message}
+      </pre>
+    </div>
+  `;
+  throw error;
+}
+
+// Log environment info for debugging (always log in production too for troubleshooting)
+console.log("🔍 [ENV] Environment variables check:", {
+  hasSupabaseUrl: !!import.meta.env.VITE_SUPABASE_URL,
+  hasSupabaseKey: !!import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+  urlLength: import.meta.env.VITE_SUPABASE_URL?.length || 0,
+  keyLength: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY?.length || 0,
+});
+
+try {
+  console.log("⚛️ [APP INIT] Creating React root...");
+  const root = createRoot(rootElement);
+  console.log("⚛️ [APP INIT] Rendering App component...");
+  root.render(<App />);
+  console.log("✅ [APP INIT] App rendered successfully");
+} catch (error) {
+  console.error("❌ [APP INIT] Failed to render app:", error);
+  // Show error in the DOM if React fails to render
+  rootElement.innerHTML = `
+    <div style="padding: 2rem; font-family: system-ui; max-width: 600px; margin: 2rem auto;">
+      <h1 style="color: #dc2626;">Application Error</h1>
+      <p style="color: #6b7280;">Failed to initialize the application.</p>
+      <pre style="background: #f3f4f6; padding: 1rem; border-radius: 0.5rem; overflow: auto; margin-top: 1rem; white-space: pre-wrap;">
+${error instanceof Error ? error.message + '\n\n' + error.stack : String(error)}
+      </pre>
+      <button 
+        onclick="window.location.reload()" 
+        style="margin-top: 1rem; padding: 0.5rem 1rem; background: #3b82f6; color: white; border: none; border-radius: 0.25rem; cursor: pointer;"
+      >
+        Reload Page
+      </button>
+      <p style="margin-top: 1rem; font-size: 0.875rem; color: #6b7280;">
+        Check the browser console (F12) for more details.
+      </p>
+    </div>
+  `;
+  throw error;
+}
