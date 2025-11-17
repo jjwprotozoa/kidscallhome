@@ -25,6 +25,14 @@ export const GlobalMessageNotifications = () => {
   const { toast } = useToast();
   const channelRef = useRef<RealtimeChannel | null>(null);
   const lastMessageIdRef = useRef<string | null>(null);
+  // Track the currently active chat childId using a ref that updates immediately
+  const activeChatChildIdRef = useRef<string | null>(null);
+
+  // Update active chat childId whenever location changes
+  useEffect(() => {
+    const chatMatch = location.pathname.match(/^\/chat\/(.+)$/);
+    activeChatChildIdRef.current = chatMatch ? chatMatch[1] : null;
+  }, [location.pathname]);
 
   useEffect(() => {
     let pollInterval: NodeJS.Timeout | null = null;
@@ -55,10 +63,12 @@ export const GlobalMessageNotifications = () => {
         // Skip if we already showed this message
         if (message.id === lastMessageIdRef.current) return;
 
-        // IMPORTANT: Don't show notification if user is currently on the chat page for this child
-        if (location.pathname === `/chat/${message.child_id}`) {
+        // IMPORTANT: Don't show notification if user is currently chatting with this child
+        // Use ref to get the current active chat (updates immediately when location changes)
+        if (activeChatChildIdRef.current === message.child_id) {
           console.log(
-            "📨 [GLOBAL MESSAGE] User is on chat page, not showing notification"
+            "📨 [GLOBAL MESSAGE] User is actively chatting with this child, not showing notification",
+            { childId: message.child_id, activeChat: activeChatChildIdRef.current }
           );
           return;
         }
@@ -350,7 +360,7 @@ export const GlobalMessageNotifications = () => {
     };
 
     setupSubscription();
-  }, [location.pathname, navigate, toast]);
+  }, [navigate, toast]); // Note: location.pathname removed - we use activeChatChildIdRef instead
 
   return null; // This component doesn't render anything
 };
