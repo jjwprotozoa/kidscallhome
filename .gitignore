@@ -25,3 +25,8 @@ dist-ssr
 
 # ngrok configuration (contains authtoken)
 ngrok.yml
+
+# Environment variables (contains sensitive keys)
+.env
+.env.local
+.env.*.local
