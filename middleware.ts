@@ -70,22 +70,6 @@ export default function middleware(request: Request) {
   const url = new URL(request.url);
   const path = url.pathname;
   
-  // Create response (will be modified)
-  const response = new Response(null, {
-    status: 200,
-    headers: new Headers(),
-  });
-
-  // SECURITY: Add security headers
-  response.headers.set('X-Content-Type-Options', 'nosniff');
-  response.headers.set('X-Frame-Options', 'DENY');
-  response.headers.set('X-XSS-Protection', '1; mode=block');
-  response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
-  response.headers.set(
-    'Permissions-Policy',
-    'camera=(), microphone=(), geolocation=(), interest-cohort=()'
-  );
-
   // SECURITY: CORS headers (adjust for your domain)
   const origin = request.headers.get('origin');
   const allowedOrigins = [
@@ -94,19 +78,6 @@ export default function middleware(request: Request) {
     'http://localhost:8080',
     'http://localhost:5173',
   ];
-
-  if (origin && allowedOrigins.includes(origin)) {
-    response.headers.set('Access-Control-Allow-Origin', origin);
-    response.headers.set('Access-Control-Allow-Credentials', 'true');
-    response.headers.set(
-      'Access-Control-Allow-Methods',
-      'GET, POST, PUT, DELETE, OPTIONS'
-    );
-    response.headers.set(
-      'Access-Control-Allow-Headers',
-      'Content-Type, Authorization, X-CSRF-Token'
-    );
-  }
 
   // SECURITY: Rate limiting for auth endpoints
   if (path.includes('/auth/v1/token') || path.includes('/auth/v1/signup')) {
@@ -172,7 +143,6 @@ export default function middleware(request: Request) {
 
   // SECURITY: Validate Origin header for state-changing requests
   if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(request.method)) {
-    const origin = request.headers.get('origin');
     if (origin && !allowedOrigins.some((allowed) => origin.includes(allowed))) {
       return new Response(
         JSON.stringify({ error: 'Forbidden', message: 'Invalid origin' }),
@@ -184,19 +154,29 @@ export default function middleware(request: Request) {
     }
   }
 
-  return response;
+  // For Vercel Edge Middleware with Vite/React apps, we need to pass through
+  // Headers will be added via vercel.json headers configuration
+  // Don't return an empty response - let Vercel handle the request normally
+  return new Response(null, {
+    status: 200,
+    headers: {
+      'X-Content-Type-Options': 'nosniff',
+      'X-Frame-Options': 'DENY',
+      'X-XSS-Protection': '1; mode=block',
+      'Referrer-Policy': 'strict-origin-when-cross-origin',
+      'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), interest-cohort=()',
+    },
+  });
 }
 
 // Configure which routes to run middleware on
 // Note: Vercel Edge Middleware uses this config
+// Only run middleware on API/auth endpoints, not on HTML pages or static assets
 export const config = {
   matcher: [
-    /*
-     * Match all request paths except:
-     * - Static files (images, fonts, etc.)
-     * - Favicon
-     */
-    '/((?!.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff|woff2|ttf|eot)$).*)',
+    '/auth/:path*',
+    '/rest/:path*',
+    '/functions/:path*',
   ],
 };
 
