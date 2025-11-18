@@ -134,33 +134,40 @@ workflows:
           fi
 
           echo "=== Building Debug APK (to verify build works) ==="
-          # Build with output visible and captured
-          if ./gradlew assembleDebug --stacktrace --info 2>&1 | tee debug-build.log; then
-            BUILD_SUCCESS=true
-          else
-            BUILD_SUCCESS=false
-          fi
+          echo "Running: ./gradlew assembleDebug --stacktrace --info"
+          echo ""
           
-          if [ "$BUILD_SUCCESS" != "true" ]; then
+          # Build with output visible and captured - use unbuffered output
+          set -o pipefail  # Ensure pipe failures are caught
+          ./gradlew assembleDebug --stacktrace --info 2>&1 | tee debug-build.log
+          BUILD_EXIT_CODE=${PIPESTATUS[0]}
+          
+          echo ""
+          echo "=== Build completed with exit code: $BUILD_EXIT_CODE ==="
+          echo ""
+          
+          if [ $BUILD_EXIT_CODE -ne 0 ]; then
+            echo "❌ Debug build failed with exit code $BUILD_EXIT_CODE!"
             echo ""
-            echo "❌ Debug build failed!"
+            echo "=== FULL BUILD OUTPUT (showing everything) ==="
+            cat debug-build.log
             echo ""
-            echo "=== Last 200 lines of build output ==="
-            tail -n 200 debug-build.log
-            echo ""
-            echo "=== Searching for ERROR/Failed/Exception ==="
-            grep -i -A 5 -B 5 "error\|failed\|exception" debug-build.log | tail -n 50 || echo "No obvious error keywords found"
+            echo "=== Searching for ERROR/Failed/Exception (with context) ==="
+            grep -i -A 10 -B 5 "error\|failed\|exception\|FAILURE" debug-build.log || echo "No obvious error keywords found"
             echo ""
             echo "=== Checking for common issues ==="
-            grep -i "signing\|keystore\|missing\|not found\|cannot\|unable" debug-build.log | head -20 || echo "No common issues found"
+            grep -i "signing\|keystore\|missing\|not found\|cannot\|unable\|configuration" debug-build.log | head -30 || echo "No common issues found"
             echo ""
-            echo "=== First 50 lines (might show early errors) ==="
-            head -n 50 debug-build.log
+            echo "=== Checking Gradle version and Java ==="
+            ./gradlew --version 2>&1 || echo "Gradle version check failed"
             echo ""
-            echo "=== Full build log saved to debug-build.log ==="
+            echo "=== Checking if gradle.properties exists ==="
+            cat gradle.properties 2>&1 || echo "gradle.properties not found"
             exit 1
           fi
           
+          echo "✅ Build succeeded!"
+
           # Verify debug APK was created (only if build succeeded)
           echo ""
           echo "=== Verifying debug APK was created ==="
@@ -325,6 +332,38 @@ workflows:
             echo "Listing android/app/build directory:"
             ls -la android/app/build/ 2>/dev/null || echo "android/app/build does not exist"
           fi
+
+      - name: Artifact Summary and Download Instructions
+        script: |
+          echo "=========================================="
+          echo "📦 ARTIFACT SUMMARY"
+          echo "=========================================="
+          echo ""
+          echo "Finding all APK and AAB files:"
+          find . -type f \( -name "*.apk" -o -name "*.aab" \) 2>/dev/null | while read file; do
+            echo "  ✅ Found: $file ($(du -h "$file" | cut -f1))"
+          done || echo "  ⚠️ No APK/AAB files found"
+          echo ""
+          echo "=========================================="
+          echo "📥 HOW TO DOWNLOAD ARTIFACTS"
+          echo "=========================================="
+          echo ""
+          echo "After a successful build, download your app files from Codemagic:"
+          echo ""
+          echo "1. Go to your Codemagic dashboard"
+          echo "2. Click on the completed build"
+          echo "3. Scroll to the 'Artifacts' section"
+          echo "4. Click the download button next to:"
+          echo "   - *.apk files (for direct installation)"
+          echo "   - *.aab files (for Google Play Store upload)"
+          echo ""
+          echo "Or use the Codemagic CLI:"
+          echo "  codemagic-cli builds artifacts <build-id>"
+          echo ""
+          echo "Artifacts are automatically collected from:"
+          echo "  - android/app/build/outputs/**/*.apk"
+          echo "  - android/app/build/outputs/**/*.aab"
+          echo ""
 
     artifacts:
       - android/app/build/outputs/**/*.aab
