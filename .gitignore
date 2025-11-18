@@ -30,3 +30,6 @@ ngrok.yml
 .env
 .env.local
 .env.*.local
+
+# Android local properties (machine-specific SDK paths)
+android/local.properties
