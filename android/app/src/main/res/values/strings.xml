@@ -14,6 +14,7 @@
     <string name="shortcut_add_kid_long">Add a new child</string>
     
     <!-- Widget -->
+    <string name="widget_description">Quick access to call home or view last contact</string>
     <string name="widget_call_home">Call Home</string>
     <string name="widget_last_contact">Last Contact</string>
 </resources>

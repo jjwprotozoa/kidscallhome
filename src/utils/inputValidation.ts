@@ -30,7 +30,8 @@ export function isValidEmail(email: string): boolean {
 }
 
 /**
- * Validate password strength
+ * Validate password strength (basic validation only)
+ * For breach checking, use validatePasswordWithBreachCheck from passwordBreachCheck.ts
  */
 export function validatePassword(password: string): {
   valid: boolean;
