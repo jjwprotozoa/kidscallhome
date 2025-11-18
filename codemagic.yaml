@@ -75,9 +75,8 @@ workflows:
               if [ -f "app/capacitor.build.gradle" ]; then
                 echo "Found capacitor.build.gradle, creating app/build.gradle..."
                 # Create app/build.gradle with application plugin using echo
-                echo "plugins {" > app/build.gradle
-                echo "    id 'com.android.application'" >> app/build.gradle
-                echo "}" >> app/build.gradle
+                # Use apply plugin syntax (works with buildscript in root build.gradle)
+                echo "apply plugin: 'com.android.application'" > app/build.gradle
                 echo "apply from: '../capacitor-cordova-android-plugins/cordova.variables.gradle'" >> app/build.gradle
                 echo "apply from: 'capacitor.build.gradle'" >> app/build.gradle
                 echo "android {" >> app/build.gradle
@@ -132,30 +131,36 @@ workflows:
                   echo "⚠️ Gradle wrapper command failed, trying download method..."
                 }
               fi
-              # If wrapper still doesn't exist, download wrapper jar from reliable source
+              # If wrapper still doesn't exist, use gradle wrapper command (most reliable)
               if [ ! -f "gradle/wrapper/gradle-wrapper.jar" ]; then
-                echo "Downloading gradle-wrapper.jar from CDN..."
-                # Download from jsDelivr CDN (serves GitHub files as binaries correctly)
-                curl -L https://cdn.jsdelivr.net/gh/gradle/gradle@v8.2.0/gradle/wrapper/gradle-wrapper.jar -o gradle/wrapper/gradle-wrapper.jar || {
-                  echo "⚠️ CDN download failed, trying direct download..."
-                  # Alternative: download from a known working source
-                  # The wrapper jar is ~60KB and can be downloaded from Gradle's wrapper repository
-                  curl -L "https://raw.githubusercontent.com/gradle/gradle/v8.2.0/gradle/wrapper/gradle-wrapper.jar" --output gradle/wrapper/gradle-wrapper.jar --fail || {
-                    echo "❌ All download methods failed"
-                    echo "Trying to install gradle and use wrapper command..."
-                    # Last resort: try to install gradle via homebrew or download
-                    if command -v brew >/dev/null 2>&1; then
-                      brew install gradle || echo "⚠️ Homebrew install failed"
-                      if command -v gradle >/dev/null 2>&1; then
-                        gradle wrapper --gradle-version 8.2 || exit 1
-                      else
-                        exit 1
-                      fi
-                    else
-                      exit 1
-                    fi
+                echo "Wrapper jar not found, using gradle wrapper command..."
+                # Ensure we have a build.gradle for wrapper generation
+                if [ ! -f "build.gradle" ]; then
+                  echo "Creating minimal build.gradle for wrapper generation..."
+                  echo "// Minimal build.gradle for wrapper generation" > build.gradle
+                  echo "buildscript { repositories { google(); mavenCentral() } }" >> build.gradle
+                fi
+                # Try gradle wrapper command
+                if command -v gradle >/dev/null 2>&1; then
+                  echo "Using gradle wrapper command..."
+                  gradle wrapper --gradle-version 8.2 || {
+                    echo "⚠️ Gradle wrapper command failed"
+                    exit 1
                   }
-                }
+                else
+                  # Install gradle via homebrew (Codemagic uses macOS)
+                  echo "Gradle not found, installing via homebrew..."
+                  if command -v brew >/dev/null 2>&1; then
+                    brew install gradle || {
+                      echo "❌ Failed to install gradle via homebrew"
+                      exit 1
+                    }
+                    gradle wrapper --gradle-version 8.2 || exit 1
+                  else
+                    echo "❌ Cannot create wrapper: gradle not available and brew not found"
+                    exit 1
+                  fi
+                fi
               fi
               # Verify wrapper jar exists and is valid
               if [ ! -f "gradle/wrapper/gradle-wrapper.jar" ]; then
@@ -267,12 +272,28 @@ workflows:
             echo "        classpath 'com.android.tools.build:gradle:8.2.1'" >> build.gradle
             echo "    }" >> build.gradle
             echo "}" >> build.gradle
+            echo "" >> build.gradle
             echo "allprojects {" >> build.gradle
             echo "    repositories {" >> build.gradle
             echo "        google()" >> build.gradle
             echo "        mavenCentral()" >> build.gradle
             echo "    }" >> build.gradle
             echo "}" >> build.gradle
+            echo "✅ Created root build.gradle"
+          else
+            # Ensure buildscript has Android Gradle plugin
+            if ! grep -q "com.android.tools.build:gradle" build.gradle; then
+              echo "⚠️ Root build.gradle missing Android Gradle plugin, prepending buildscript..."
+              # Prepend buildscript block (simpler than modifying existing)
+              echo "buildscript {" > build.gradle.tmp
+              echo "    repositories { google(); mavenCentral() }" >> build.gradle.tmp
+              echo "    dependencies { classpath 'com.android.tools.build:gradle:8.2.1' }" >> build.gradle.tmp
+              echo "}" >> build.gradle.tmp
+              echo "" >> build.gradle.tmp
+              cat build.gradle >> build.gradle.tmp
+              mv build.gradle.tmp build.gradle
+              echo "✅ Updated root build.gradle with Android Gradle plugin"
+            fi
           fi
           # Check available tasks
           echo "Checking available Gradle tasks..."
