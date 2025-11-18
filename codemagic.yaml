@@ -42,8 +42,16 @@ workflows:
           # This script assumes keystore is available at $CM_KEYSTORE_PATH
           if [ -z "$CM_KEYSTORE_PATH" ]; then
             echo "⚠️ Keystore path not set. Please configure keystore in Codemagic UI."
-            echo "Creating a debug keystore for testing..."
-            keytool -genkey -v -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000
+            DEBUG_KEYSTORE=~/.android/debug.keystore
+            if [ ! -f "$DEBUG_KEYSTORE" ]; then
+              echo "Creating a debug keystore for testing..."
+              mkdir -p ~/.android
+              keytool -genkey -v -keystore "$DEBUG_KEYSTORE" -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+            else
+              echo "✅ Debug keystore already exists, skipping creation."
+            fi
+          else
+            echo "✅ Using keystore from CM_KEYSTORE_PATH: $CM_KEYSTORE_PATH"
           fi
       - name: Build Android App Bundle (AAB)
         script: |
