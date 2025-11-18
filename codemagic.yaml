@@ -52,44 +52,44 @@ workflows:
               cd android
               # Create gradle wrapper directory
               mkdir -p gradle/wrapper
-              # Download Gradle distribution and extract wrapper jar (most reliable method)
-              echo "Downloading Gradle distribution..."
-              mkdir -p gradle/wrapper
-              curl -L https://services.gradle.org/distributions/gradle-8.2-bin.zip -o /tmp/gradle-8.2-bin.zip || {
-                echo "❌ Failed to download Gradle distribution"
-                exit 1
-              }
-              echo "Extracting Gradle wrapper..."
-              unzip -q /tmp/gradle-8.2-bin.zip -d /tmp/ || {
-                echo "❌ Failed to extract Gradle distribution"
-                exit 1
-              }
-              # Find the wrapper jar in the extracted distribution
-              echo "Searching for gradle-wrapper.jar in extracted distribution..."
-              WRAPPER_JAR=$(find /tmp/gradle-8.2 -name "gradle-wrapper.jar" -type f 2>/dev/null | head -1)
-              if [ -z "$WRAPPER_JAR" ] || [ ! -f "$WRAPPER_JAR" ]; then
-                echo "Wrapper jar not found via find, checking directory structure..."
-                echo "Extracted directory contents:"
-                ls -la /tmp/gradle-8.2/ | head -20
-                echo "All JAR files found:"
-                find /tmp/gradle-8.2 -name "*.jar" -type f 2>/dev/null | head -10
-                # Try common paths
-                for path in "/tmp/gradle-8.2/gradle/wrapper/gradle-wrapper.jar" "/tmp/gradle-8.2/lib/gradle-wrapper.jar" "/tmp/gradle-8.2/bin/gradle-wrapper.jar"; do
-                  if [ -f "$path" ]; then
-                    WRAPPER_JAR="$path"
-                    break
-                  fi
-                done
+              # Try to use gradle wrapper command if gradle is available
+              if command -v gradle >/dev/null 2>&1; then
+                echo "Using gradle command to create wrapper..."
+                # Create a minimal build.gradle if it doesn't exist
+                if [ ! -f "build.gradle" ]; then
+                  echo "Creating minimal build.gradle..."
+                  echo "// Minimal build.gradle for wrapper generation" > build.gradle
+                  echo "buildscript { repositories { mavenCentral() } }" >> build.gradle
+                fi
+                gradle wrapper --gradle-version 8.2 || {
+                  echo "⚠️ Gradle wrapper command failed, trying download method..."
+                }
               fi
-              if [ -z "$WRAPPER_JAR" ] || [ ! -f "$WRAPPER_JAR" ]; then
-                echo "❌ gradle-wrapper.jar not found in extracted distribution"
-                exit 1
+              # If wrapper still doesn't exist, download wrapper jar from reliable source
+              if [ ! -f "gradle/wrapper/gradle-wrapper.jar" ]; then
+                echo "Downloading gradle-wrapper.jar from CDN..."
+                # Download from jsDelivr CDN (serves GitHub files as binaries correctly)
+                curl -L https://cdn.jsdelivr.net/gh/gradle/gradle@v8.2.0/gradle/wrapper/gradle-wrapper.jar -o gradle/wrapper/gradle-wrapper.jar || {
+                  echo "⚠️ CDN download failed, trying direct download..."
+                  # Alternative: download from a known working source
+                  # The wrapper jar is ~60KB and can be downloaded from Gradle's wrapper repository
+                  curl -L "https://raw.githubusercontent.com/gradle/gradle/v8.2.0/gradle/wrapper/gradle-wrapper.jar" --output gradle/wrapper/gradle-wrapper.jar --fail || {
+                    echo "❌ All download methods failed"
+                    echo "Trying to install gradle and use wrapper command..."
+                    # Last resort: try to install gradle via homebrew or download
+                    if command -v brew >/dev/null 2>&1; then
+                      brew install gradle || echo "⚠️ Homebrew install failed"
+                      if command -v gradle >/dev/null 2>&1; then
+                        gradle wrapper --gradle-version 8.2 || exit 1
+                      else
+                        exit 1
+                      fi
+                    else
+                      exit 1
+                    fi
+                  }
+                }
               fi
-              echo "Found wrapper jar at: $WRAPPER_JAR"
-              cp "$WRAPPER_JAR" gradle/wrapper/gradle-wrapper.jar || {
-                echo "❌ Failed to copy wrapper jar"
-                exit 1
-              }
               # Verify wrapper jar exists and is valid
               if [ ! -f "gradle/wrapper/gradle-wrapper.jar" ]; then
                 echo "❌ gradle-wrapper.jar not found after copy"
@@ -109,7 +109,7 @@ workflows:
                   fi
                 fi
               fi
-              echo "✅ gradle-wrapper.jar extracted and verified (size: $JAR_SIZE bytes)"
+              echo "✅ gradle-wrapper.jar downloaded and verified (size: $JAR_SIZE bytes)"
               ls -lh gradle/wrapper/gradle-wrapper.jar
               # Create gradle-wrapper.properties using echo to avoid YAML parsing issues
               echo "distributionBase=GRADLE_USER_HOME" > gradle/wrapper/gradle-wrapper.properties
