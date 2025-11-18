@@ -161,6 +161,23 @@ export type Database = {
     }
     Functions: {
       generate_unique_login_code: { Args: never; Returns: string }
+      verify_child_call_access: {
+        Args: { p_call_id: string; p_child_id: string }
+        Returns: boolean
+      }
+      verify_child_can_send_message: {
+        Args: { p_child_id: string; p_sender_id: string }
+        Returns: boolean
+      }
+      verify_login_code: {
+        Args: { p_code: string }
+        Returns: {
+          avatar_color: string
+          id: string
+          name: string
+          parent_id: string
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never
