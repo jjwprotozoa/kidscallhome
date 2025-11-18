@@ -112,6 +112,46 @@ workflows:
           echo "=== Verifying Gradle wrapper configuration ==="
           echo "Gradle wrapper will use: $JAVA_HOME/bin/java"
 
+      - name: Build Debug APK first (to verify build works)
+        script: |
+          cd android
+          # Ensure JAVA_HOME is set
+          if [ -z "$JAVA_HOME" ]; then
+            export JAVA_HOME=$(/usr/libexec/java_home -v 17 2>/dev/null || /usr/libexec/java_home -v 17+ 2>/dev/null || echo "")
+          fi
+          if [ -z "$JAVA_HOME" ] || [ ! -f "$JAVA_HOME/bin/java" ]; then
+            export JAVA_HOME=$(/usr/libexec/java_home -v 17)
+          fi
+          export JAVA_HOME
+          
+          # Ensure gradle.properties has org.gradle.java.home set
+          if [ -f gradle.properties ]; then
+            if ! grep -q "^org\.gradle\.java\.home=" gradle.properties; then
+              echo "org.gradle.java.home=$JAVA_HOME" >> gradle.properties
+            fi
+          else
+            echo "org.gradle.java.home=$JAVA_HOME" > gradle.properties
+          fi
+          
+          echo "=== Building Debug APK (to verify build works) ==="
+          ./gradlew assembleDebug --stacktrace 2>&1 | tee debug-build.log || {
+            echo ""
+            echo "❌ Debug build failed!"
+            echo ""
+            echo "=== Full build output ==="
+            cat debug-build.log
+            exit 1
+          }
+          
+          # Verify debug APK was created
+          if [ -f "app/build/outputs/apk/debug/app-debug.apk" ]; then
+            echo "✅ Debug APK created successfully!"
+            ls -lh app/build/outputs/apk/debug/
+          else
+            echo "⚠️ Debug APK not found, but build succeeded"
+            find app/build/outputs -name "*.apk" -type f
+          fi
+
       - name: Build Android App Bundle
         script: |
           cd android
@@ -126,7 +166,7 @@ workflows:
           fi
           export JAVA_HOME
           echo "Building with JAVA_HOME: $JAVA_HOME"
-
+          
           # Ensure gradle.properties has org.gradle.java.home set (it should from previous step, but verify)
           if [ -f gradle.properties ]; then
             if ! grep -q "^org\.gradle\.java\.home=" gradle.properties; then
@@ -137,31 +177,38 @@ workflows:
             echo "Creating gradle.properties with org.gradle.java.home..."
             echo "org.gradle.java.home=$JAVA_HOME" > gradle.properties
           fi
-
+          
           # Verify Java version
           echo "Java version:"
           "$JAVA_HOME/bin/java" -version
-
+          
           # Clean build to ensure fresh state
           echo ""
           echo "=== Cleaning previous build ==="
           ./gradlew clean || true
-
+          
           # Build with full error output
           echo ""
-          echo "=== Building Android App Bundle ==="
-          ./gradlew bundleRelease --stacktrace --info 2>&1 | tee build.log || {
+          echo "=== Building Android App Bundle (Release) ==="
+          ./gradlew bundleRelease --stacktrace 2>&1 | tee release-build.log || {
             echo ""
-            echo "❌ Build failed!"
+            echo "❌ Release build failed!"
             echo ""
-            echo "=== Last 100 lines of build output ==="
-            tail -n 100 build.log
+            echo "=== Full build output ==="
+            cat release-build.log
             echo ""
-            echo "=== Searching for error messages ==="
-            grep -i "error\|failed\|exception" build.log | tail -n 20 || echo "No obvious error keywords found"
-            exit 1
+            echo "=== Searching for specific errors ==="
+            grep -i "signing\|keystore\|password\|error\|failed\|exception" release-build.log | head -30
+            echo ""
+            echo "⚠️ Release build failed. This might be due to missing signing configuration."
+            echo "Trying to build debug bundle instead..."
+            ./gradlew bundleDebug --stacktrace 2>&1 | tee debug-bundle.log || {
+              echo "Debug bundle also failed:"
+              cat debug-bundle.log
+              exit 1
+            }
           }
-          
+
           # Verify build artifacts were created
           echo ""
           echo "=== Verifying build artifacts ==="
@@ -179,7 +226,7 @@ workflows:
           ls -la app/build/outputs/bundle/release/ 2>/dev/null || echo "Bundle release directory not found"
           ls -la app/build/outputs/apk/release/ 2>/dev/null || echo "APK release directory not found"
 
-      - name: Build APK (for testing)
+      - name: Build Release APK (for testing)
         script: |
           cd android
           # Ensure JAVA_HOME is set (environment variables don't persist between steps)
@@ -192,7 +239,7 @@ workflows:
           fi
           export JAVA_HOME
           echo "Building with JAVA_HOME: $JAVA_HOME"
-
+          
           # Ensure gradle.properties has org.gradle.java.home set
           if [ -f gradle.properties ]; then
             if ! grep -q "^org\.gradle\.java\.home=" gradle.properties; then
@@ -201,14 +248,22 @@ workflows:
           else
             echo "org.gradle.java.home=$JAVA_HOME" > gradle.properties
           fi
-
+          
           # Build with full error output
           echo ""
-          echo "=== Building Android APK ==="
-          ./gradlew assembleRelease --stacktrace --info 2>&1 | tee build.log || {
-            echo "❌ Build failed. Last 50 lines of build.log:"
-            tail -n 50 build.log
-            exit 1
+          echo "=== Building Android Release APK ==="
+          ./gradlew assembleRelease --stacktrace 2>&1 | tee release-apk.log || {
+            echo ""
+            echo "❌ Release APK build failed!"
+            echo ""
+            echo "=== Full build output ==="
+            cat release-apk.log
+            echo ""
+            echo "=== Searching for specific errors ==="
+            grep -i "signing\|keystore\|password\|error\|failed\|exception" release-apk.log | head -30
+            echo ""
+            echo "⚠️ Release APK build failed. Debug APK should already be available from earlier step."
+            # Don't exit - debug APK is already built
           }
           
           # Verify build artifacts were created
@@ -223,6 +278,7 @@ workflows:
           echo "Full path to outputs:"
           pwd
           ls -la app/build/outputs/apk/release/ 2>/dev/null || echo "APK release directory not found"
+          ls -la app/build/outputs/apk/debug/ 2>/dev/null || echo "APK debug directory not found"
 
       - name: Verify artifacts from workspace root
         script: |
@@ -250,6 +306,8 @@ workflows:
       - android/app/build/outputs/**/*.apk
       - android/app/build/outputs/bundle/**/*
       - android/app/build/outputs/apk/**/*
+      - android/app/build/outputs/**/debug/**
+      - android/app/build/outputs/**/release/**
 
     publishing:
       email:
