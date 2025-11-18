@@ -126,7 +126,7 @@ workflows:
           fi
           export JAVA_HOME
           echo "Building with JAVA_HOME: $JAVA_HOME"
-          
+
           # Ensure gradle.properties has org.gradle.java.home set (it should from previous step, but verify)
           if [ -f gradle.properties ]; then
             if ! grep -q "^org\.gradle\.java\.home=" gradle.properties; then
@@ -137,16 +137,16 @@ workflows:
             echo "Creating gradle.properties with org.gradle.java.home..."
             echo "org.gradle.java.home=$JAVA_HOME" > gradle.properties
           fi
-          
+
           # Verify Java version
           echo "Java version:"
           "$JAVA_HOME/bin/java" -version
-          
+
           # Clean build to ensure fresh state
           echo ""
           echo "=== Cleaning previous build ==="
           ./gradlew clean || true
-          
+
           # Build with full error output
           echo ""
           echo "=== Building Android App Bundle ==="
