@@ -161,6 +161,23 @@ workflows:
             grep -i "error\|failed\|exception" build.log | tail -n 20 || echo "No obvious error keywords found"
             exit 1
           }
+          
+          # Verify build artifacts were created
+          echo ""
+          echo "=== Verifying build artifacts ==="
+          echo "Checking for AAB files..."
+          find app/build/outputs -name "*.aab" -type f 2>/dev/null | head -10 || echo "No AAB files found"
+          echo ""
+          echo "Checking for APK files..."
+          find app/build/outputs -name "*.apk" -type f 2>/dev/null | head -10 || echo "No APK files found"
+          echo ""
+          echo "Listing app/build/outputs directory structure:"
+          ls -laR app/build/outputs/ 2>/dev/null | head -50 || echo "Outputs directory not found"
+          echo ""
+          echo "Full path to outputs:"
+          pwd
+          ls -la app/build/outputs/bundle/release/ 2>/dev/null || echo "Bundle release directory not found"
+          ls -la app/build/outputs/apk/release/ 2>/dev/null || echo "APK release directory not found"
 
       - name: Build APK (for testing)
         script: |
@@ -193,10 +210,46 @@ workflows:
             tail -n 50 build.log
             exit 1
           }
+          
+          # Verify build artifacts were created
+          echo ""
+          echo "=== Verifying build artifacts ==="
+          echo "Checking for APK files..."
+          find app/build/outputs -name "*.apk" -type f 2>/dev/null | head -10 || echo "No APK files found"
+          echo ""
+          echo "Listing app/build/outputs directory structure:"
+          ls -laR app/build/outputs/ 2>/dev/null | head -50 || echo "Outputs directory not found"
+          echo ""
+          echo "Full path to outputs:"
+          pwd
+          ls -la app/build/outputs/apk/release/ 2>/dev/null || echo "APK release directory not found"
+
+      - name: Verify artifacts from workspace root
+        script: |
+          echo "=== Verifying artifacts from workspace root ==="
+          echo "Current directory: $(pwd)"
+          echo ""
+          echo "Looking for AAB files:"
+          find . -name "*.aab" -type f 2>/dev/null | head -10 || echo "No AAB files found"
+          echo ""
+          echo "Looking for APK files:"
+          find . -name "*.apk" -type f 2>/dev/null | head -10 || echo "No APK files found"
+          echo ""
+          echo "Checking android/app/build/outputs:"
+          if [ -d "android/app/build/outputs" ]; then
+            echo "✅ Outputs directory exists"
+            ls -laR android/app/build/outputs/ | head -100
+          else
+            echo "❌ Outputs directory does not exist!"
+            echo "Listing android/app/build directory:"
+            ls -la android/app/build/ 2>/dev/null || echo "android/app/build does not exist"
+          fi
 
     artifacts:
       - android/app/build/outputs/**/*.aab
       - android/app/build/outputs/**/*.apk
+      - android/app/build/outputs/bundle/**/*
+      - android/app/build/outputs/apk/**/*
 
     publishing:
       email:
