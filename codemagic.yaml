@@ -47,6 +47,73 @@ workflows:
           if [ -d "android" ]; then
             echo "Android directory exists"
             ls -la android/ | head -20
+            # Ensure app module is included in settings.gradle
+            cd android
+            if [ -f "capacitor.settings.gradle" ] && [ ! -f "settings.gradle" ]; then
+              echo "Creating settings.gradle from capacitor.settings.gradle..."
+              cp capacitor.settings.gradle settings.gradle
+            fi
+            # Ensure :app module is included in settings.gradle
+            if [ -f "settings.gradle" ] && ! grep -q "include ':app'" settings.gradle; then
+              echo "⚠️ :app module not found in settings.gradle, adding it..."
+              # Prepend include ':app' at the beginning (before other includes)
+              echo "include ':app'" > settings.gradle.tmp
+              cat settings.gradle >> settings.gradle.tmp
+              mv settings.gradle.tmp settings.gradle
+              echo "✅ Added include ':app' to settings.gradle"
+            fi
+            # Verify app module exists
+            if [ ! -d "app" ]; then
+              echo "❌ app module directory not found. Capacitor sync may have failed."
+              echo "Listing android directory contents:"
+              ls -la
+              exit 1
+            fi
+            # Verify app/build.gradle exists and uses application plugin
+            if [ ! -f "app/build.gradle" ]; then
+              echo "⚠️ app/build.gradle not found, checking for capacitor.build.gradle..."
+              if [ -f "app/capacitor.build.gradle" ]; then
+                echo "Found capacitor.build.gradle, creating app/build.gradle..."
+                # Create app/build.gradle with application plugin using echo
+                echo "plugins {" > app/build.gradle
+                echo "    id 'com.android.application'" >> app/build.gradle
+                echo "}" >> app/build.gradle
+                echo "apply from: '../capacitor-cordova-android-plugins/cordova.variables.gradle'" >> app/build.gradle
+                echo "apply from: 'capacitor.build.gradle'" >> app/build.gradle
+                echo "android {" >> app/build.gradle
+                echo "    namespace \"com.kidscallhome.app\"" >> app/build.gradle
+                echo "    compileSdk rootProject.ext.compileSdkVersion ?: 34" >> app/build.gradle
+                echo "    defaultConfig {" >> app/build.gradle
+                echo "        applicationId \"com.kidscallhome.app\"" >> app/build.gradle
+                echo "        minSdk rootProject.ext.minSdkVersion ?: 22" >> app/build.gradle
+                echo "        targetSdk rootProject.ext.targetSdkVersion ?: 34" >> app/build.gradle
+                echo "        versionCode 1" >> app/build.gradle
+                echo "        versionName \"1.0\"" >> app/build.gradle
+                echo "    }" >> app/build.gradle
+                echo "    buildTypes {" >> app/build.gradle
+                echo "        release {" >> app/build.gradle
+                echo "            minifyEnabled false" >> app/build.gradle
+                echo "            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'" >> app/build.gradle
+                echo "        }" >> app/build.gradle
+                echo "    }" >> app/build.gradle
+                echo "}" >> app/build.gradle
+                echo "dependencies {" >> app/build.gradle
+                echo "    implementation fileTree(dir: \"libs\", include: [\"*.jar\"])" >> app/build.gradle
+                echo "    implementation project(':capacitor-app')" >> app/build.gradle
+                echo "    implementation project(':capacitor-device')" >> app/build.gradle
+                echo "    implementation project(':capacitor-haptics')" >> app/build.gradle
+                echo "    implementation project(':capacitor-keyboard')" >> app/build.gradle
+                echo "    implementation project(':capacitor-local-notifications')" >> app/build.gradle
+                echo "    implementation project(':capacitor-push-notifications')" >> app/build.gradle
+                echo "    implementation project(':capacitor-splash-screen')" >> app/build.gradle
+                echo "    implementation project(':capacitor-status-bar')" >> app/build.gradle
+                echo "}" >> app/build.gradle
+              else
+                echo "❌ Neither app/build.gradle nor app/capacitor.build.gradle found"
+                exit 1
+              fi
+            fi
+            cd ..
             if [ ! -f "android/gradlew" ]; then
               echo "⚠️ gradlew not found after sync, initializing Gradle wrapper..."
               cd android
