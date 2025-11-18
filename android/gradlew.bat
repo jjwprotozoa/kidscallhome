@@ -65,6 +65,24 @@ echo location of your Java installation.
 goto fail
 
 :execute
+@rem Check Java version - AGP 8.2.1 requires Java 11+
+@rem Get Java version and check if it's Java 8 or earlier
+"%JAVA_EXE%" -version 2>%TEMP%\java_version.txt
+findstr /C:"version \"1.8" /C:"version \"1.7" /C:"version \"1.6" /C:"version \"1.5" /C:"version \"1.4" /C:"version \"1.3" /C:"version \"1.2" /C:"version \"1.1" /C:"version \"1.0" %TEMP%\java_version.txt >NUL 2>&1
+if %ERRORLEVEL% equ 0 (
+    echo.
+    echo ERROR: Java 11 or higher is required for Android Gradle Plugin 8.2.1
+    echo.
+    type %TEMP%\java_version.txt
+    echo.
+    echo Please set JAVA_HOME to point to Java 11 or higher.
+    echo Example: set JAVA_HOME=C:\Program Files\Java\jdk-17
+    echo.
+    del %TEMP%\java_version.txt >NUL 2>&1
+    goto fail
+)
+del %TEMP%\java_version.txt >NUL 2>&1
+
 @rem Setup the command line
 
 set CLASSPATH=%APP_HOME%\gradle\wrapper\gradle-wrapper.jar

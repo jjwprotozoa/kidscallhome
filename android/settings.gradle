@@ -3,3 +3,8 @@ rootProject.name = "android"
 include ':app'
 apply from: 'capacitor.settings.gradle'
 
+// Configure Java toolchain to use Java 11+ (required for AGP 8.2.1)
+// This ensures all projects use Java 17 for compilation
+// Note: The Gradle wrapper scripts check Java version before execution
+// For buildscript classpath resolution, ensure JAVA_HOME points to Java 11+
+

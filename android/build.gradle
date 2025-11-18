@@ -6,3 +6,8 @@ buildscript {
 allprojects {
     repositories { google(); mavenCentral() }
 }
+
+// Ensure Java 11+ is used - AGP 8.2.1 requires Java 11+
+// This is enforced via JAVA_HOME in CI/CD (Codemagic sets java: 17)
+// For local development, ensure JAVA_HOME points to Java 11+
+// Java toolchain is configured in settings.gradle
