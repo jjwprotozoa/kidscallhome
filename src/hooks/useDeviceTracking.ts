@@ -9,6 +9,7 @@ import {
   getDeviceName,
   getClientIP,
   getDeviceMacAddress,
+  getCountryFromIP,
 } from "@/utils/deviceTracking";
 
 export function useDeviceTracking(parentId?: string, childId?: string) {
@@ -24,6 +25,7 @@ export function useDeviceTracking(parentId?: string, childId?: string) {
         const userAgent = navigator.userAgent;
         const ipAddress = await getClientIP();
         const macAddress = await getDeviceMacAddress(); // Get MAC address for native apps
+        const countryCode = await getCountryFromIP(ipAddress); // Get country code from IP
 
         // Call the database function to update/create device
         const { error } = await supabase.rpc("update_device_login", {
@@ -34,6 +36,7 @@ export function useDeviceTracking(parentId?: string, childId?: string) {
           p_user_agent: userAgent,
           p_ip_address: ipAddress || null,
           p_mac_address: macAddress || null,
+          p_country_code: countryCode || null,
           p_child_id: childId || null,
         });
 

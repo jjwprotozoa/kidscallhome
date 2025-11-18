@@ -311,13 +311,14 @@ const ParentAuth = () => {
           
           // Track device on login
           try {
-            const { generateDeviceIdentifierAsync, detectDeviceType, getDeviceName, getClientIP, getDeviceMacAddress } = await import("@/utils/deviceTracking");
+            const { generateDeviceIdentifierAsync, detectDeviceType, getDeviceName, getClientIP, getDeviceMacAddress, getCountryFromIP } = await import("@/utils/deviceTracking");
             const deviceIdentifier = await generateDeviceIdentifierAsync();
             const deviceType = detectDeviceType();
             const deviceName = getDeviceName();
             const userAgent = navigator.userAgent;
             const ipAddress = await getClientIP();
             const macAddress = await getDeviceMacAddress();
+            const countryCode = await getCountryFromIP(ipAddress);
             
             await supabase.rpc("update_device_login", {
               p_parent_id: user.id,
@@ -327,6 +328,7 @@ const ParentAuth = () => {
               p_user_agent: userAgent,
               p_ip_address: ipAddress || null,
               p_mac_address: macAddress || null,
+              p_country_code: countryCode || null,
               p_child_id: null,
             });
           } catch (error) {

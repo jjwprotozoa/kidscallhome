@@ -10,17 +10,21 @@ The Device Management feature allows parents to view and manage all devices that
 - Automatically tracks devices when parents or children log in
 - Creates unique device fingerprints based on browser/device characteristics
 - Records device type (mobile, tablet, desktop, other)
-- Tracks last login time, IP address, and which child used the device
+- Tracks last login time, IP address, MAC address (for native apps), and which child used the device
+- Collects and displays browser information (Chrome, Safari, Firefox, etc.) and OS information (iOS, Android, Windows, macOS, etc.)
 
 ### Device Management Page
 - **Location**: `/parent/devices`
 - **Access**: Available in parent navigation menu
 - **Features**:
   - View all authorized devices
-  - See device details (name, type, last login, IP, location)
+  - See device details (name, type, browser, OS, model, MAC address, last login, IP, country flag)
   - Rename devices for easy recognition
   - Remove/revoke devices (requires password confirmation)
   - Visual indicators for stale devices (not used in 30+ days)
+  - Shows which browser and OS each device is using (e.g., "Chrome 120", "iOS 17.2", "Android 13")
+  - Displays MAC address for native Android apps (iOS blocks MAC address access)
+  - **Country flags** show which country each device is logging in from (🇺🇸 US, 🇬🇧 GB, etc.)
 
 ### Security Features
 - **Re-authentication Required**: Device removal requires password confirmation
@@ -79,8 +83,13 @@ Devices are automatically tracked when:
 
 The system creates or updates device records with:
 - Device fingerprint (unique identifier)
-- Device type and name
+- Device type and name (with improved model detection)
+- Browser information (name and version)
+- OS information (name and version)
+- Device model (iPhone, iPad, Samsung Galaxy, etc.)
+- MAC address (for native Android apps, iOS blocks access)
 - IP address (if available)
+- Country code (ISO 3166-1 alpha-2) derived from IP geolocation
 - Last login timestamp
 - Which child used the device (for child logins)
 
@@ -107,10 +116,12 @@ The system attempts to detect IP addresses using:
 
 ### Location Detection
 
-Location can be:
-- Manually entered by users (future feature)
-- Derived from IP geolocation (future feature)
-- Currently stored as null until implemented
+Country information is automatically detected from IP addresses:
+- Uses IP geolocation services (ip-api.com and ipapi.co as fallback)
+- Stores ISO 3166-1 alpha-2 country code (e.g., "US", "GB", "CA")
+- Displays country flag emoji in the Device Management UI
+- Falls back gracefully if geolocation services are unavailable
+- Note: IP geolocation provides country-level accuracy, not exact location
 
 ## Migration
 

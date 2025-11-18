@@ -66,6 +66,10 @@ const ChildLogin = () => {
   const keypadRef = useRef<HTMLDivElement>(null);
   const touchStartX = useRef<number>(0);
   const touchEndX = useRef<number>(0);
+  const touchStartTime = useRef<number>(0);
+  const isButtonInteraction = useRef<boolean>(false);
+  const buttonTouchStartX = useRef<number>(0);
+  const buttonTouchStartTime = useRef<number>(0);
 
   const handleLoginWithCode = async (fullCode: string) => {
     setLoading(true);
@@ -126,13 +130,14 @@ const ChildLogin = () => {
       // Track device on child login (for parent's device management)
       if (data.parent_id) {
         try {
-          const { generateDeviceIdentifierAsync, detectDeviceType, getDeviceName, getClientIP, getDeviceMacAddress } = await import("@/utils/deviceTracking");
+          const { generateDeviceIdentifierAsync, detectDeviceType, getDeviceName, getClientIP, getDeviceMacAddress, getCountryFromIP } = await import("@/utils/deviceTracking");
           const deviceIdentifier = await generateDeviceIdentifierAsync();
           const deviceType = detectDeviceType();
           const deviceName = getDeviceName();
           const userAgent = navigator.userAgent;
           const ipAddress = await getClientIP();
           const macAddress = await getDeviceMacAddress();
+          const countryCode = await getCountryFromIP(ipAddress);
           
           console.log("🔍 [DEVICE TRACKING] Attempting to track device:", {
             parent_id: data.parent_id,
@@ -142,9 +147,11 @@ const ChildLogin = () => {
             device_name: deviceName,
             is_native: deviceIdentifier.startsWith('native-') || deviceIdentifier.startsWith('cordova-') || deviceIdentifier.startsWith('mac-'),
             mac_address: macAddress || 'not available',
+            country_code: countryCode || 'not available',
           });
           
-          const { data: deviceData, error: deviceError } = await supabase.rpc("update_device_login", {
+          // Try calling with country_code first (if migration 20250122000012 has been applied)
+          let { data: deviceData, error: deviceError } = await supabase.rpc("update_device_login", {
             p_parent_id: data.parent_id,
             p_device_identifier: deviceIdentifier,
             p_device_name: deviceName,
@@ -152,15 +159,41 @@ const ChildLogin = () => {
             p_user_agent: userAgent,
             p_ip_address: ipAddress || null,
             p_mac_address: macAddress || null,
+            p_country_code: countryCode || null,
             p_child_id: data.id,
           });
           
-          if (deviceError) {
+          // If error suggests function signature mismatch, try without country_code
+          // This handles the case where migration 20250122000012 hasn't been applied yet
+          if (deviceError && (deviceError.code === '42883' || deviceError.message?.includes('function') || deviceError.message?.includes('does not exist'))) {
+            console.warn("⚠️ [DEVICE TRACKING] Function signature mismatch, trying without country_code:", deviceError.message);
+            
+            // Fallback: try without country_code parameter (for older function signature)
+            const fallbackResult = await supabase.rpc("update_device_login", {
+              p_parent_id: data.parent_id,
+              p_device_identifier: deviceIdentifier,
+              p_device_name: deviceName,
+              p_device_type: deviceType,
+              p_user_agent: userAgent,
+              p_ip_address: ipAddress || null,
+              p_mac_address: macAddress || null,
+              p_child_id: data.id,
+            });
+            
+            if (fallbackResult.error) {
+              console.error("❌ [DEVICE TRACKING] Error (fallback also failed):", fallbackResult.error);
+              throw fallbackResult.error;
+            }
+            
+            deviceData = fallbackResult.data;
+            deviceError = null;
+            console.log("✅ [DEVICE TRACKING] Device tracked successfully (without country_code):", deviceData);
+          } else if (deviceError) {
             console.error("❌ [DEVICE TRACKING] Error:", deviceError);
             throw deviceError;
+          } else {
+            console.log("✅ [DEVICE TRACKING] Device tracked successfully:", deviceData);
           }
-          
-          console.log("✅ [DEVICE TRACKING] Device tracked successfully:", deviceData);
         } catch (error) {
           // Log error but don't break login
           console.error("❌ [DEVICE TRACKING] Failed to track device:", error);
@@ -330,26 +363,81 @@ const ChildLogin = () => {
   };
 
   const handleSwipeStart = (e: React.TouchEvent) => {
+    // Check if button interaction flag is set (button was touched first)
+    if (isButtonInteraction.current) {
+      return;
+    }
+    
+    // Always track swipe start - buttons will set the flag if they're being clicked
+    // This allows swipes to work even if they start near buttons
     touchStartX.current = e.touches[0].clientX;
+    touchStartTime.current = Date.now();
+    const target = e.target as HTMLElement;
+    console.log('🔄 [SWIPE] Start:', { x: touchStartX.current, target: target.tagName, isButton: target.closest('button') !== null });
   };
 
   const handleSwipeMove = (e: React.TouchEvent) => {
+    // Only update if swipe was started
+    if (touchStartX.current === 0) {
+      return;
+    }
+    
+    // Update end position during swipe (even if it passes over buttons)
+    // Don't check button flag here - allow swipes to continue even if they pass over buttons
     touchEndX.current = e.touches[0].clientX;
   };
 
-  const handleSwipeEnd = () => {
-    const swipeDistance = touchStartX.current - touchEndX.current;
-    const minSwipeDistance = 50; // Minimum distance for a swipe
+  const handleSwipeEnd = (e?: React.TouchEvent) => {
+    // Don't process swipe if touch positions weren't set
+    if (touchStartX.current === 0 || touchEndX.current === 0) {
+      return;
+    }
 
-    if (Math.abs(swipeDistance) > minSwipeDistance) {
+    const swipeDistance = touchStartX.current - touchEndX.current;
+    const swipeDuration = Date.now() - touchStartTime.current;
+    const minSwipeDistance = 30; // Minimum distance for a swipe
+    const maxSwipeDuration = 600; // Maximum duration for a swipe
+
+    console.log('🔄 [SWIPE] End:', {
+      distance: Math.abs(swipeDistance),
+      duration: swipeDuration,
+      startX: touchStartX.current,
+      endX: touchEndX.current,
+      buttonFlag: isButtonInteraction.current,
+      meetsDistance: Math.abs(swipeDistance) > minSwipeDistance,
+      meetsDuration: swipeDuration < maxSwipeDuration,
+    });
+
+    // If it's a significant swipe, process it even if button flag is set
+    // (button flag only prevents small taps from triggering swipes)
+    const isSignificantSwipe = Math.abs(swipeDistance) > minSwipeDistance;
+    
+    // Only trigger swipe if:
+    // 1. Distance is significant enough
+    // 2. Duration is reasonable
+    // 3. Either it's a significant swipe OR button flag is not set
+    if (
+      isSignificantSwipe &&
+      swipeDuration < maxSwipeDuration &&
+      touchStartX.current !== 0 &&
+      touchEndX.current !== 0 &&
+      (!isButtonInteraction.current || Math.abs(swipeDistance) > 50) // Allow swipes > 50px even if button flag is set
+    ) {
       if (swipeDistance > 0) {
         // Swipe left - go to next block
+        console.log('➡️ [SWIPE] Moving to next block');
         handleBlockChange(Math.min(currentBlock + 1, KEYPAD_BLOCKS.length - 1));
       } else {
         // Swipe right - go to previous block
+        console.log('⬅️ [SWIPE] Moving to previous block');
         handleBlockChange(Math.max(currentBlock - 1, 0));
       }
     }
+
+    // Reset touch positions
+    touchStartX.current = 0;
+    touchEndX.current = 0;
+    touchStartTime.current = 0;
   };
 
   const handleLogin = async () => {
@@ -445,13 +533,14 @@ const ChildLogin = () => {
       // Track device on child login (for parent's device management)
       if (data.parent_id) {
         try {
-          const { generateDeviceIdentifier, detectDeviceType, getDeviceName, getClientIP, getDeviceMacAddress } = await import("@/utils/deviceTracking");
-          const deviceIdentifier = generateDeviceIdentifier();
+          const { generateDeviceIdentifierAsync, detectDeviceType, getDeviceName, getClientIP, getDeviceMacAddress, getCountryFromIP } = await import("@/utils/deviceTracking");
+          const deviceIdentifier = await generateDeviceIdentifierAsync();
           const deviceType = detectDeviceType();
           const deviceName = getDeviceName();
           const userAgent = navigator.userAgent;
           const ipAddress = await getClientIP();
           const macAddress = await getDeviceMacAddress();
+          const countryCode = await getCountryFromIP(ipAddress);
           
           console.log("🔍 [DEVICE TRACKING] Attempting to track device:", {
             parent_id: data.parent_id,
@@ -459,10 +548,13 @@ const ChildLogin = () => {
             device_identifier: deviceIdentifier,
             device_type: deviceType,
             device_name: deviceName,
+            is_native: deviceIdentifier.startsWith('native-') || deviceIdentifier.startsWith('cordova-') || deviceIdentifier.startsWith('mac-'),
             mac_address: macAddress || 'not available',
+            country_code: countryCode || 'not available',
           });
           
-          const { data: deviceData, error: deviceError } = await supabase.rpc("update_device_login", {
+          // Try calling with country_code first (if migration 20250122000012 has been applied)
+          let { data: deviceData, error: deviceError } = await supabase.rpc("update_device_login", {
             p_parent_id: data.parent_id,
             p_device_identifier: deviceIdentifier,
             p_device_name: deviceName,
@@ -470,15 +562,41 @@ const ChildLogin = () => {
             p_user_agent: userAgent,
             p_ip_address: ipAddress || null,
             p_mac_address: macAddress || null,
+            p_country_code: countryCode || null,
             p_child_id: data.id,
           });
           
-          if (deviceError) {
+          // If error suggests function signature mismatch, try without country_code
+          // This handles the case where migration 20250122000012 hasn't been applied yet
+          if (deviceError && (deviceError.code === '42883' || deviceError.message?.includes('function') || deviceError.message?.includes('does not exist'))) {
+            console.warn("⚠️ [DEVICE TRACKING] Function signature mismatch, trying without country_code:", deviceError.message);
+            
+            // Fallback: try without country_code parameter (for older function signature)
+            const fallbackResult = await supabase.rpc("update_device_login", {
+              p_parent_id: data.parent_id,
+              p_device_identifier: deviceIdentifier,
+              p_device_name: deviceName,
+              p_device_type: deviceType,
+              p_user_agent: userAgent,
+              p_ip_address: ipAddress || null,
+              p_mac_address: macAddress || null,
+              p_child_id: data.id,
+            });
+            
+            if (fallbackResult.error) {
+              console.error("❌ [DEVICE TRACKING] Error (fallback also failed):", fallbackResult.error);
+              throw fallbackResult.error;
+            }
+            
+            deviceData = fallbackResult.data;
+            deviceError = null;
+            console.log("✅ [DEVICE TRACKING] Device tracked successfully (without country_code):", deviceData);
+          } else if (deviceError) {
             console.error("❌ [DEVICE TRACKING] Error:", deviceError);
             throw deviceError;
+          } else {
+            console.log("✅ [DEVICE TRACKING] Device tracked successfully:", deviceData);
           }
-          
-          console.log("✅ [DEVICE TRACKING] Device tracked successfully:", deviceData);
         } catch (error) {
           // Log error but don't break login
           console.error("❌ [DEVICE TRACKING] Failed to track device:", error);
@@ -626,21 +744,21 @@ const ChildLogin = () => {
 
     return (
       <div className="min-h-[100dvh] flex items-center justify-center bg-primary/5 p-4">
-        <Card className="w-full max-w-md p-8 space-y-6">
-          <div className="text-center space-y-4">
-            <Smile className="h-20 w-20 text-primary mx-auto" />
-            <h1 className="text-4xl font-bold text-primary">Hi There!</h1>
-            <p className="text-xl">Enter your family code</p>
-            <p className="text-sm text-muted-foreground">
+        <Card className="w-full max-w-md p-6 space-y-3">
+          <div className="text-center space-y-2">
+            <Smile className="h-16 w-16 text-primary mx-auto" />
+            <h1 className="text-3xl font-bold text-primary">Hi There!</h1>
+            <p className="text-lg">Enter your family code</p>
+            <p className="text-xs text-muted-foreground">
               Ask a parent for your 6-character family code
             </p>
           </div>
 
-          <div className="space-y-4">
-            <div className="bg-muted p-6 rounded-2xl">
-              <div className="flex justify-center mb-4">
-                <div className="w-full max-w-xs h-20 rounded-xl bg-card flex items-center justify-center border-2 border-primary/20">
-                  <span className="text-4xl font-bold text-primary font-mono tracking-wider">
+          <div className="space-y-2">
+            <div className="bg-muted p-4 rounded-2xl">
+              <div className="flex justify-center">
+                <div className="w-full max-w-xs h-16 rounded-xl bg-card flex items-center justify-center border-2 border-primary/20">
+                  <span className="text-3xl font-bold text-primary font-mono tracking-wider">
                     {familyCode || "______"}
                   </span>
                 </div>
@@ -690,8 +808,8 @@ const ChildLogin = () => {
             </div>
 
             {/* Block Label */}
-            <div className="text-center">
-              <p className="text-sm font-medium text-muted-foreground">
+            <div className="text-center -mt-1">
+              <p className="text-xs font-medium text-muted-foreground">
                 {currentBlockData.label}
               </p>
             </div>
@@ -699,31 +817,89 @@ const ChildLogin = () => {
             {/* Keypad Block */}
             <div
               ref={keypadRef}
-              className="relative overflow-hidden min-h-[280px] sm:min-h-[320px]"
-              onTouchStart={handleSwipeStart}
-              onTouchMove={handleSwipeMove}
-              onTouchEnd={handleSwipeEnd}
+              className="relative overflow-hidden"
+              style={{ touchAction: 'pan-x' }}
             >
+              {/* Swipe zones on edges - always swipeable (behind buttons but functional) */}
+              <div
+                className="absolute left-0 top-0 bottom-0 w-16 z-0 pointer-events-auto"
+                onTouchStart={handleSwipeStart}
+                onTouchMove={handleSwipeMove}
+                onTouchEnd={(e) => handleSwipeEnd(e)}
+              />
+              <div
+                className="absolute right-0 top-0 bottom-0 w-16 z-0 pointer-events-auto"
+                onTouchStart={handleSwipeStart}
+                onTouchMove={handleSwipeMove}
+                onTouchEnd={(e) => handleSwipeEnd(e)}
+              />
+              {/* Center area with buttons - gaps between buttons are swipeable */}
+              <div 
+                className="relative z-10"
+                onTouchStart={handleSwipeStart}
+                onTouchMove={handleSwipeMove}
+                onTouchEnd={(e) => handleSwipeEnd(e)}
+              >
               {KEYPAD_BLOCKS.map((block, blockIndex) => (
                 <div
                   key={block.id}
                   className={`grid grid-cols-3 gap-3 transition-all duration-300 ease-in-out ${
                     blockIndex === currentBlock
-                      ? "opacity-100 translate-x-0"
+                      ? "opacity-100 translate-x-0 pointer-events-auto"
                       : blockIndex < currentBlock
-                      ? "opacity-0 -translate-x-full absolute inset-0"
-                      : "opacity-0 translate-x-full absolute inset-0"
+                      ? "opacity-0 -translate-x-full absolute inset-0 pointer-events-none"
+                      : "opacity-0 translate-x-full absolute inset-0 pointer-events-none"
                   }`}
                 >
                   {block.chars.map((char) => (
                     <Button
                       key={char}
                       onClick={() => handleFamilyCodeChange(familyCode + char)}
+                      onTouchStart={(e) => {
+                        // Track button touch start position and time
+                        buttonTouchStartX.current = e.touches[0].clientX;
+                        buttonTouchStartTime.current = Date.now();
+                        // Don't set flag yet - wait to see if it's a click or swipe
+                      }}
+                      onTouchMove={(e) => {
+                        // If finger moves significantly, it's a swipe, not a button click
+                        const moveDistance = Math.abs(e.touches[0].clientX - buttonTouchStartX.current);
+                        if (moveDistance > 10) {
+                          // It's a swipe, don't mark as button interaction
+                          isButtonInteraction.current = false;
+                        } else {
+                          // Small movement, likely a button click
+                          isButtonInteraction.current = true;
+                        }
+                      }}
+                      onTouchEnd={(e) => {
+                        // Check if it was a click (small movement) or swipe
+                        const moveDistance = Math.abs(e.changedTouches[0].clientX - buttonTouchStartX.current);
+                        const touchDuration = Date.now() - buttonTouchStartTime.current;
+                        
+                        if (moveDistance < 10 && touchDuration < 300) {
+                          // It's a button click - prevent swipe
+                          isButtonInteraction.current = true;
+                          setTimeout(() => {
+                            isButtonInteraction.current = false;
+                          }, 100);
+                        } else {
+                          // It was a swipe - allow it
+                          isButtonInteraction.current = false;
+                        }
+                      }}
+                      onTouchCancel={(e) => {
+                        // Handle touch cancel
+                        isButtonInteraction.current = false;
+                        buttonTouchStartX.current = 0;
+                        buttonTouchStartTime.current = 0;
+                      }}
                       size="lg"
                       variant="outline"
-                      className="h-16 sm:h-20 text-2xl sm:text-3xl font-bold rounded-xl hover:bg-primary hover:text-primary-foreground transition-all active:scale-95 border-2"
+                      className="h-14 sm:h-16 text-xl sm:text-2xl font-bold rounded-xl hover:bg-primary hover:text-primary-foreground transition-all active:scale-95 border-2 pointer-events-auto relative z-10"
                       disabled={familyCode.length >= 6}
                       aria-label={`Enter ${char}`}
+                      style={{ touchAction: 'manipulation', WebkitTouchCallout: 'none', WebkitUserSelect: 'none' }}
                     >
                       {char}
                     </Button>
@@ -740,29 +916,31 @@ const ChildLogin = () => {
                   )}
                 </div>
               ))}
+              </div>
             </div>
 
-            {/* Delete Button */}
-            <Button
-              onClick={() => setFamilyCode(familyCode.slice(0, -1))}
-              size="lg"
-              variant="outline"
-              className="w-full h-14 rounded-xl"
-              disabled={!familyCode}
-            >
-              <Delete className="h-6 w-6 mr-2" />
-              Delete
-            </Button>
+            {/* Delete and Next Buttons - Closer to keypad */}
+            <div className="space-y-2 -mt-1">
+              <Button
+                onClick={() => setFamilyCode(familyCode.slice(0, -1))}
+                size="lg"
+                variant="outline"
+                className="w-full h-11 rounded-xl"
+                disabled={!familyCode}
+              >
+                <Delete className="h-4 w-4 mr-2" />
+                Delete
+              </Button>
 
-            {/* Next Button */}
-            <Button
-              onClick={handleFamilyCodeSubmit}
-              disabled={familyCode.length < 3 || loading}
-              size="lg"
-              className="w-full text-xl h-14 rounded-xl"
-            >
-              {loading ? "Checking..." : "Next"}
-            </Button>
+              <Button
+                onClick={handleFamilyCodeSubmit}
+                disabled={familyCode.length < 3 || loading}
+                size="lg"
+                className="w-full text-lg h-11 rounded-xl"
+              >
+                {loading ? "Checking..." : "Next"}
+              </Button>
+            </div>
           </div>
         </Card>
       </div>

@@ -255,23 +255,79 @@ export function detectDeviceType(): 'mobile' | 'tablet' | 'desktop' | 'other' {
 
 /**
  * Get device name from user agent or default
+ * Uses improved parsing to show more specific device models
  */
 export function getDeviceName(): string {
   const ua = navigator.userAgent;
   const deviceType = detectDeviceType();
   
-  // Try to extract device name from user agent
-  if (ua.includes('iPad')) return 'iPad';
-  if (ua.includes('iPhone')) return 'iPhone';
+  // Try to extract device name from user agent with more detail
+  if (ua.includes('iPad')) {
+    // Try to extract iPad model (e.g., iPad13,2)
+    const match = ua.match(/iPad(\d+,\d+)/i);
+    if (match) {
+      return `iPad ${match[1]}`;
+    }
+    return 'iPad';
+  }
+  
+  if (ua.includes('iPhone')) {
+    // Try to extract iPhone model (e.g., iPhone14,2)
+    const match = ua.match(/iPhone(\d+,\d+)/i);
+    if (match) {
+      return `iPhone ${match[1]}`;
+    }
+    return 'iPhone';
+  }
+  
   if (ua.includes('Android')) {
-    // Try to extract Android device model
+    // Try to extract Android device model (e.g., SM-S918B for Samsung Galaxy S23 Ultra)
     const match = ua.match(/Android.*?; ([^)]+)\)/);
-    if (match) return match[1];
+    if (match) {
+      const model = match[1].trim();
+      // Clean up common prefixes and make it more readable
+      if (model.startsWith('SM-')) {
+        return `Samsung ${model.substring(3)}`;
+      }
+      if (model.startsWith('LM-')) {
+        return `LG ${model.substring(3)}`;
+      }
+      // Return the model as-is if it's already readable
+      return model;
+    }
     return 'Android Device';
   }
-  if (ua.includes('Macintosh')) return 'Mac';
-  if (ua.includes('Windows')) return 'Windows PC';
-  if (ua.includes('Linux')) return 'Linux PC';
+  
+  if (ua.includes('Macintosh')) {
+    // Try to extract Mac model if available
+    const match = ua.match(/Mac OS X ([\d_]+)/i);
+    if (match) {
+      const version = match[1].replace(/_/g, '.');
+      return `Mac (macOS ${version})`;
+    }
+    return 'Mac';
+  }
+  
+  if (ua.includes('Windows')) {
+    // Try to extract Windows version
+    if (ua.includes('Windows NT 10.0')) {
+      return 'Windows PC (Windows 10/11)';
+    }
+    if (ua.includes('Windows NT 6.3')) {
+      return 'Windows PC (Windows 8.1)';
+    }
+    if (ua.includes('Windows NT 6.2')) {
+      return 'Windows PC (Windows 8)';
+    }
+    if (ua.includes('Windows NT 6.1')) {
+      return 'Windows PC (Windows 7)';
+    }
+    return 'Windows PC';
+  }
+  
+  if (ua.includes('Linux')) {
+    return 'Linux PC';
+  }
   
   // Fallback to device type
   return deviceType.charAt(0).toUpperCase() + deviceType.slice(1);
@@ -288,6 +344,25 @@ export async function getClientIP(): Promise<string | null> {
     const data = await response.json();
     return data.ip || null;
   } catch {
+    return null;
+  }
+}
+
+/**
+ * Get country code from IP address
+ * Uses IP geolocation services to determine country
+ */
+export async function getCountryFromIP(ipAddress: string | null): Promise<string | null> {
+  if (!ipAddress) {
+    return null;
+  }
+
+  try {
+    const { getCountryFromIP: getCountry } = await import('@/utils/ipGeolocation');
+    const result = await getCountry(ipAddress);
+    return result.countryCode || null;
+  } catch (error) {
+    console.warn('Failed to get country from IP:', error);
     return null;
   }
 }

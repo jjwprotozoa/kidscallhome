@@ -1,8 +1,9 @@
 // src/pages/DeviceManagement.tsx
 // Purpose: Device management page for parents to view and manage authorized devices
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -37,6 +38,8 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+import { parseDeviceInfo } from "@/utils/userAgentParser";
+import { countryCodeToFlag } from "@/utils/ipGeolocation";
 
 interface Device {
   id: string;
@@ -48,6 +51,7 @@ interface Device {
   last_location: string | null;
   mac_address: string | null;
   user_agent: string | null;
+  country_code: string | null;
   is_active: boolean;
   created_at: string;
   child_name?: string; // Joined from children table
@@ -63,6 +67,7 @@ const DeviceManagement = () => {
   const [requireAuth, setRequireAuth] = useState(false);
   const [authPassword, setAuthPassword] = useState("");
   const { toast } = useToast();
+  const channelRef = useRef<RealtimeChannel | null>(null);
 
   const fetchDevices = useCallback(async () => {
     try {
@@ -102,6 +107,15 @@ const DeviceManagement = () => {
         child_name: device.children?.name || null,
       }));
 
+      console.log("📋 [DEVICE MANAGEMENT] Fetched devices:", {
+        count: transformedDevices.length,
+        devices: transformedDevices.map((d: Device) => ({
+          id: d.id,
+          name: d.device_name,
+          isActive: d.is_active,
+        })),
+      });
+
       setDevices(transformedDevices);
     } catch (error: any) {
       console.error("Error fetching devices:", error);
@@ -117,20 +131,124 @@ const DeviceManagement = () => {
 
   useEffect(() => {
     fetchDevices();
+
+    // Set up real-time subscription for device updates
+    const setupRealtimeSubscription = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Clean up existing channel if any
+      if (channelRef.current) {
+        await supabase.removeChannel(channelRef.current);
+      }
+
+      // Subscribe to INSERT and UPDATE events on devices table for this parent
+      channelRef.current = supabase
+        .channel("device-management-updates")
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "devices",
+            filter: `parent_id=eq.${user.id}`,
+          },
+          (payload) => {
+            console.log("📱 [DEVICE MANAGEMENT] New device added:", payload.new);
+            // Refresh devices list when a new device is added
+            fetchDevices();
+          }
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "devices",
+            filter: `parent_id=eq.${user.id}`,
+          },
+          (payload) => {
+            console.log("📱 [DEVICE MANAGEMENT] Device updated:", {
+              deviceId: payload.new.id,
+              deviceName: payload.new.device_name,
+              isActive: payload.new.is_active,
+              oldIsActive: payload.old?.is_active,
+            });
+            // Refresh devices list when a device is updated (e.g., last_login_at changes or is_active changes)
+            fetchDevices();
+          }
+        )
+        .subscribe((status, err) => {
+          if (err) {
+            console.error("❌ [DEVICE MANAGEMENT] Subscription error:", err);
+          } else if (status === "SUBSCRIBED") {
+            console.log("✅ [DEVICE MANAGEMENT] Subscribed to device updates");
+          }
+        });
+    };
+
+    setupRealtimeSubscription();
+
+    // Cleanup subscription on unmount
+    return () => {
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
+    };
   }, [fetchDevices]);
 
   const handleRemoveDevice = async () => {
-    if (!deviceToRemove) return;
+    if (!deviceToRemove) {
+      console.warn("⚠️ [DEVICE MANAGEMENT] No device selected for removal");
+      return;
+    }
+
+    console.log("🔍 [DEVICE MANAGEMENT] Remove device initiated:", {
+      deviceId: deviceToRemove.id,
+      deviceName: deviceToRemove.device_name,
+      requireAuth,
+    });
 
     // Require re-authentication
     if (!requireAuth) {
-      setRequireAuth(true);
+      console.log("🔐 [DEVICE MANAGEMENT] Showing password prompt");
+      
+      // Show warning toast first, then update state after a brief delay to ensure toast is visible
+      const childInfo = deviceToRemove.child_name 
+        ? ` (used by ${deviceToRemove.child_name})`
+        : "";
+      toast({
+        title: "⚠️ Warning: Device Removal",
+        description: `You are about to remove "${deviceToRemove.device_name}"${childInfo}. This action requires password confirmation and cannot be undone.`,
+        variant: "destructive",
+        duration: 5000,
+      });
+      
+      // Small delay to ensure toast renders before dialog updates
+      setTimeout(() => {
+        setRequireAuth(true);
+      }, 100);
+      return;
+    }
+
+    if (!authPassword.trim()) {
+      toast({
+        title: "Password Required",
+        description: "Please enter your password to confirm device removal.",
+        variant: "destructive",
+      });
       return;
     }
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not authenticated");
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) {
+        console.error("❌ [DEVICE MANAGEMENT] User auth error:", userError);
+        throw new Error("Not authenticated");
+      }
+
+      console.log("🔐 [DEVICE MANAGEMENT] Verifying password for user:", user.email);
 
       // Verify password
       const { error: authError } = await supabase.auth.signInWithPassword({
@@ -139,6 +257,7 @@ const DeviceManagement = () => {
       });
 
       if (authError) {
+        console.error("❌ [DEVICE MANAGEMENT] Password verification failed:", authError);
         toast({
           title: "Authentication Failed",
           description: "Incorrect password. Please try again.",
@@ -148,25 +267,54 @@ const DeviceManagement = () => {
         return;
       }
 
+      console.log("✅ [DEVICE MANAGEMENT] Password verified, calling revoke_device RPC");
+
       // Revoke device
-      const { error } = await supabase.rpc("revoke_device", {
+      const { data: revokeResult, error } = await supabase.rpc("revoke_device", {
         p_device_id: deviceToRemove.id,
         p_parent_id: user.id,
       });
 
-      if (error) throw error;
+      console.log("📡 [DEVICE MANAGEMENT] RPC response:", { revokeResult, error });
 
-      toast({
-        title: "Device Removed",
-        description: `${deviceToRemove.device_name} has been removed and will need to be re-authorized.`,
+      if (error) {
+        console.error("❌ [DEVICE MANAGEMENT] RPC error:", error);
+        throw error;
+      }
+
+      // Check if device was actually revoked (function returns boolean)
+      if (revokeResult === false) {
+        console.warn("⚠️ [DEVICE MANAGEMENT] Device not found or permission denied");
+        throw new Error("Device not found or you don't have permission to remove it");
+      }
+
+      console.log("✅ [DEVICE MANAGEMENT] Device revoked successfully:", {
+        deviceId: deviceToRemove.id,
+        deviceName: deviceToRemove.device_name,
+        revokeResult,
       });
 
+      // Store device name for toast (before clearing state)
+      const removedDeviceName = deviceToRemove.device_name;
+
+      // Close dialog first
       setDeviceToRemove(null);
       setRequireAuth(false);
       setAuthPassword("");
-      fetchDevices();
+      
+      // Show success toast with prominent green styling
+      toast({
+        title: "✅ Device Removed Successfully",
+        description: `${removedDeviceName} has been removed and will need to be re-authorized on next login.`,
+        variant: "success",
+        duration: 5000,
+      });
+      
+      // Refresh devices list
+      console.log("🔄 [DEVICE MANAGEMENT] Refreshing devices list");
+      await fetchDevices();
     } catch (error: any) {
-      console.error("Error removing device:", error);
+      console.error("❌ [DEVICE MANAGEMENT] Error removing device:", error);
       toast({
         title: "Error",
         description: error.message || "Failed to remove device. Please try again.",
@@ -331,6 +479,37 @@ const DeviceManagement = () => {
                           })}
                         </span>
                       </p>
+                      {device.country_code && (
+                        <p className="text-muted-foreground">
+                          Country:{" "}
+                          <span className="font-medium text-base">
+                            {countryCodeToFlag(device.country_code) || ''} {device.country_code}
+                          </span>
+                        </p>
+                      )}
+                      {device.user_agent && (() => {
+                        const deviceInfo = parseDeviceInfo(device.user_agent);
+                        return (
+                          <>
+                            <p className="text-muted-foreground">
+                              Browser: <span className="font-medium">{deviceInfo.browser.fullName}</span>
+                            </p>
+                            <p className="text-muted-foreground">
+                              OS: <span className="font-medium">{deviceInfo.os.fullName}</span>
+                            </p>
+                            {deviceInfo.deviceModel && (
+                              <p className="text-muted-foreground">
+                                Model: <span className="font-medium">{deviceInfo.deviceModel}</span>
+                              </p>
+                            )}
+                          </>
+                        );
+                      })()}
+                      {device.mac_address && (
+                        <p className="text-muted-foreground">
+                          MAC: <span className="font-mono text-xs">{device.mac_address}</span>
+                        </p>
+                      )}
                       {device.last_ip_address && (
                         <p className="text-muted-foreground">
                           IP: <span className="font-mono text-xs">{device.last_ip_address}</span>
@@ -338,7 +517,7 @@ const DeviceManagement = () => {
                       )}
                       {device.last_location && (
                         <p className="text-muted-foreground">
-                          Location: <span className="font-medium">{device.last_location}</span>
+                          Location Details: <span className="font-medium">{device.last_location}</span>
                         </p>
                       )}
                     </div>
@@ -387,7 +566,7 @@ const DeviceManagement = () => {
           }
         }}
       >
-        <AlertDialogContent>
+        <AlertDialogContent key={requireAuth ? "password" : "confirm"}>
           <AlertDialogHeader>
             <AlertDialogTitle>
               {requireAuth ? "Confirm Password" : "Remove Device?"}
@@ -427,7 +606,16 @@ const DeviceManagement = () => {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={handleRemoveDevice}
+              onClick={async (e) => {
+                // If we're not requiring auth yet, trigger handleRemoveDevice which will show warning toast
+                if (!requireAuth) {
+                  e.preventDefault();
+                  handleRemoveDevice();
+                  return;
+                }
+                // Otherwise, proceed with device removal
+                await handleRemoveDevice();
+              }}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {requireAuth ? "Remove Device" : "Continue"}
