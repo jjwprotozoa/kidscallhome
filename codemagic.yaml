@@ -1,0 +1,78 @@
+# codemagic.yaml
+# Codemagic CI/CD configuration for KidsCallHome Android native app
+# Reference: https://docs.codemagic.io/yaml-quick-start/building-a-native-android-app/
+
+workflows:
+  android-build:
+    name: Android Build
+    max_build_duration: 120
+    instance_type: mac_mini_m1
+    environment:
+      groups:
+        # Add these groups in Codemagic UI with your credentials:
+        # - android_keystore: Contains ANDROID_KEYSTORE, KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD
+        # - google_play: Contains GCLOUD_SERVICE_ACCOUNT_CREDENTIALS (for Play Store publishing)
+        - android_keystore
+        - google_play
+      android_signing:
+        - keystore_reference:
+            # Reference to keystore credentials stored in Codemagic UI
+            # Store these securely in Codemagic environment variables:
+            # - CM_KEYSTORE_PATH (path to keystore file)
+            # - CM_KEYSTORE_PASSWORD
+            # - CM_KEY_ALIAS
+            # - CM_KEY_PASSWORD
+            keystore_password: $KEYSTORE_PASSWORD
+            key_alias: $KEY_ALIAS
+            key_password: $KEY_PASSWORD
+      node: 20
+      java: 17
+      vars:
+        PACKAGE_NAME: "com.kidscallhome.app"
+        APP_NAME: "Kids Call Home"
+    scripts:
+      - name: Install dependencies
+        script: |
+          npm ci
+      - name: Install Capacitor CLI
+        script: |
+          npm install -g @capacitor/cli
+      - name: Build web app
+        script: |
+          npm run build
+      - name: Sync Capacitor Android
+        script: |
+          npx cap sync android
+      - name: Set up Android keystore
+        script: |
+          # Keystore should be uploaded to Codemagic and referenced via environment variables
+          # This script assumes keystore is available at $CM_KEYSTORE_PATH
+          if [ -z "$CM_KEYSTORE_PATH" ]; then
+            echo "⚠️ Keystore path not set. Please configure keystore in Codemagic UI."
+            echo "Creating a debug keystore for testing..."
+            keytool -genkey -v -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000
+          fi
+      - name: Build Android App Bundle (AAB)
+        script: |
+          cd android
+          ./gradlew bundleRelease
+      - name: Build APK (optional, for testing)
+        script: |
+          cd android
+          ./gradlew assembleRelease
+    artifacts:
+      - android/app/build/outputs/**/*.aab
+      - android/app/build/outputs/**/*.apk
+    publishing:
+      email:
+        recipients:
+          - your-email@example.com
+        notify:
+          success: true
+          failure: true
+      # Uncomment to enable automatic Play Store publishing
+      # google_play:
+      #   credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
+      #   track: internal # Options: internal, alpha, beta, production
+      #   submit_as_draft: true
+

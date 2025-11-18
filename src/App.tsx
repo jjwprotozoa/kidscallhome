@@ -33,6 +33,7 @@ import { GlobalIncomingCall } from "@/components/GlobalIncomingCall";
 import { GlobalMessageNotifications } from "@/components/GlobalMessageNotifications";
 import { GlobalPresenceTracker } from "@/components/GlobalPresenceTracker";
 import { CookieConsent } from "@/components/CookieConsent";
+import { initializeNativeAndroid } from "@/utils/nativeAndroid";
 
 const queryClient = new QueryClient();
 
@@ -40,6 +41,16 @@ const queryClient = new QueryClient();
 const BadgeProvider = () => {
   useBadgeInitialization(); // One-time initial snapshot
   useBadgeRealtime(); // Realtime subscriptions
+  return null;
+};
+
+// Component to initialize native Android features
+const NativeAndroidInitializer = () => {
+  useEffect(() => {
+    initializeNativeAndroid().catch((error) => {
+      console.error('Failed to initialize native Android features:', error);
+    });
+  }, []);
   return null;
 };
 
@@ -92,6 +103,7 @@ const App = () => (
       <TooltipProvider>
         <BadgeProvider />
         <SessionManager />
+        <NativeAndroidInitializer />
         <Toaster />
         <Sonner />
         <SafeAreaLayout className="w-full overflow-x-hidden">

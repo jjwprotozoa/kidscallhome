@@ -6,6 +6,8 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useIncomingCallNotifications } from "@/features/calls/hooks/useIncomingCallNotifications";
 import { endCall as endCallUtil } from "@/features/calls/utils/callEnding";
+import { AndroidIncomingCall } from "@/components/native/AndroidIncomingCall";
+import { isNativeAndroid } from "@/utils/nativeAndroid";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -436,14 +438,26 @@ export const GlobalIncomingCall = () => {
   if (!incomingCall) return null;
 
   return (
-    <AlertDialog
-      open={!!incomingCall}
-      onOpenChange={(open) => {
-        if (!open && incomingCall && !isAnsweringRef.current) {
-          handleDeclineCall();
-        }
-      }}
-    >
+    <>
+      {/* Native Android incoming call enhancement */}
+      {isNativeAndroid() && (
+        <AndroidIncomingCall
+          callId={incomingCall.id}
+          callerName={incomingCall.child_name || incomingCall.parent_name || "Caller"}
+          callerId={incomingCall.child_id || incomingCall.parent_id || ""}
+          onAccept={handleAnswerCall}
+          onDecline={handleDeclineCall}
+          isActive={!!incomingCall}
+        />
+      )}
+      <AlertDialog
+        open={!!incomingCall}
+        onOpenChange={(open) => {
+          if (!open && incomingCall && !isAnsweringRef.current) {
+            handleDeclineCall();
+          }
+        }}
+      >
       <AlertDialogContent className="sm:max-w-md">
         <AlertDialogHeader>
           <div className="flex items-center gap-3 mb-2">
@@ -487,6 +501,7 @@ export const GlobalIncomingCall = () => {
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+    </>
   );
 };
 
