@@ -32,6 +32,7 @@ import { useBadgeRealtime } from "@/hooks/useBadgeRealtime";
 import { GlobalIncomingCall } from "@/components/GlobalIncomingCall";
 import { GlobalMessageNotifications } from "@/components/GlobalMessageNotifications";
 import { GlobalPresenceTracker } from "@/components/GlobalPresenceTracker";
+import { CookieConsent } from "@/components/CookieConsent";
 
 const queryClient = new QueryClient();
 
@@ -103,6 +104,7 @@ const App = () => (
             <GlobalIncomingCall />
             <GlobalMessageNotifications />
             <GlobalPresenceTracker />
+            <CookieConsent />
             <Routes>
               <Route path="/" element={<Index />} />
               <Route path="/parent/auth" element={<ParentAuth />} />
