@@ -25,6 +25,7 @@ interface ChildSession {
   id: string;
   name: string;
   avatar_color: string;
+  token?: string; // Secure session token
 }
 
 const Chat = () => {

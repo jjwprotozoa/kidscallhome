@@ -28,6 +28,7 @@ interface ChildSession {
   name: string;
   avatar_color: string;
   parent_id: string;
+  token?: string; // Secure session token
 }
 
 interface IncomingCall {
