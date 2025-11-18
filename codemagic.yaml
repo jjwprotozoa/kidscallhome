@@ -47,20 +47,16 @@ workflows:
           if [ -d "android" ]; then
             echo "Android directory exists"
             ls -la android/ | head -20
-            # Ensure app module is included in settings.gradle
             cd android
-            if [ -f "capacitor.settings.gradle" ] && [ ! -f "settings.gradle" ]; then
-              echo "Creating settings.gradle from capacitor.settings.gradle..."
-              cp capacitor.settings.gradle settings.gradle
-            fi
-            # Ensure :app module is included in settings.gradle
-            if [ -f "settings.gradle" ] && ! grep -q "include ':app'" settings.gradle; then
-              echo "⚠️ :app module not found in settings.gradle, adding it..."
-              # Prepend include ':app' at the beginning (before other includes)
-              echo "include ':app'" > settings.gradle.tmp
-              cat settings.gradle >> settings.gradle.tmp
-              mv settings.gradle.tmp settings.gradle
-              echo "✅ Added include ':app' to settings.gradle"
+            # Create a clean settings.gradle that includes :app and Capacitor plugins
+            if [ -f "capacitor.settings.gradle" ]; then
+              echo "Creating settings.gradle that includes :app and Capacitor plugins..."
+              cat > settings.gradle << 'EOF'
+rootProject.name = "android"
+include ':app'
+apply from: 'capacitor.settings.gradle'
+EOF
+              echo "✅ settings.gradle created"
             fi
             # Verify app module exists
             if [ ! -d "app" ]; then
@@ -73,9 +69,8 @@ workflows:
             if [ ! -f "app/build.gradle" ]; then
               echo "⚠️ app/build.gradle not found, checking for capacitor.build.gradle..."
               if [ -f "app/capacitor.build.gradle" ]; then
-                echo "Found capacitor.build.gradle, creating app/build.gradle..."
-                # Create app/build.gradle with application plugin using echo
-                # Use apply plugin syntax (works with buildscript in root build.gradle)
+                echo "Found app/capacitor.build.gradle, creating app/build.gradle..."
+                # Use classic Gradle plugin syntax compatible with root buildscript
                 echo "apply plugin: 'com.android.application'" > app/build.gradle
                 echo "apply from: '../capacitor-cordova-android-plugins/cordova.variables.gradle'" >> app/build.gradle
                 echo "apply from: 'capacitor.build.gradle'" >> app/build.gradle
@@ -113,106 +108,15 @@ workflows:
               fi
             fi
             cd ..
-            if [ ! -f "android/gradlew" ]; then
-              echo "⚠️ gradlew not found after sync, initializing Gradle wrapper..."
-              cd android
-              # Create gradle wrapper directory
-              mkdir -p gradle/wrapper
-              # Try to use gradle wrapper command if gradle is available
-              if command -v gradle >/dev/null 2>&1; then
-                echo "Using gradle command to create wrapper..."
-                # Create a minimal build.gradle if it doesn't exist
-                if [ ! -f "build.gradle" ]; then
-                  echo "Creating minimal build.gradle..."
-                  echo "// Minimal build.gradle for wrapper generation" > build.gradle
-                  echo "buildscript { repositories { mavenCentral() } }" >> build.gradle
-                fi
-                gradle wrapper --gradle-version 8.2 || {
-                  echo "⚠️ Gradle wrapper command failed, trying download method..."
-                }
-              fi
-              # If wrapper still doesn't exist, use gradle wrapper command (most reliable)
-              if [ ! -f "gradle/wrapper/gradle-wrapper.jar" ]; then
-                echo "Wrapper jar not found, using gradle wrapper command..."
-                # Ensure we have a build.gradle for wrapper generation
-                if [ ! -f "build.gradle" ]; then
-                  echo "Creating minimal build.gradle for wrapper generation..."
-                  echo "// Minimal build.gradle for wrapper generation" > build.gradle
-                  echo "buildscript { repositories { google(); mavenCentral() } }" >> build.gradle
-                fi
-                # Try gradle wrapper command
-                if command -v gradle >/dev/null 2>&1; then
-                  echo "Using gradle wrapper command..."
-                  gradle wrapper --gradle-version 8.2 || {
-                    echo "⚠️ Gradle wrapper command failed"
-                    exit 1
-                  }
-                else
-                  # Install gradle via homebrew (Codemagic uses macOS)
-                  echo "Gradle not found, installing via homebrew..."
-                  if command -v brew >/dev/null 2>&1; then
-                    brew install gradle || {
-                      echo "❌ Failed to install gradle via homebrew"
-                      exit 1
-                    }
-                    gradle wrapper --gradle-version 8.2 || exit 1
-                  else
-                    echo "❌ Cannot create wrapper: gradle not available and brew not found"
-                    exit 1
-                  fi
-                fi
-              fi
-              # Verify wrapper jar exists and is valid
-              if [ ! -f "gradle/wrapper/gradle-wrapper.jar" ]; then
-                echo "❌ gradle-wrapper.jar not found after copy"
-                exit 1
-              fi
-              # Verify file size (wrapper jar should be ~60-70KB)
-              JAR_SIZE=$(stat -f%z gradle/wrapper/gradle-wrapper.jar 2>/dev/null || stat -c%s gradle/wrapper/gradle-wrapper.jar 2>/dev/null || echo "0")
-              if [ "$JAR_SIZE" -lt 50000 ]; then
-                echo "⚠️ Warning: gradle-wrapper.jar seems too small ($JAR_SIZE bytes), may be corrupted"
-                echo "File info:"
-                ls -lh gradle/wrapper/gradle-wrapper.jar
-                # Try to verify it's a valid ZIP/JAR
-                if command -v unzip >/dev/null 2>&1; then
-                  if ! unzip -t gradle/wrapper/gradle-wrapper.jar >/dev/null 2>&1; then
-                    echo "❌ gradle-wrapper.jar is not a valid ZIP/JAR file"
-                    exit 1
-                  fi
-                fi
-              fi
-              echo "✅ gradle-wrapper.jar downloaded and verified (size: $JAR_SIZE bytes)"
-              ls -lh gradle/wrapper/gradle-wrapper.jar
-              # Create gradle-wrapper.properties using echo to avoid YAML parsing issues
-              echo "distributionBase=GRADLE_USER_HOME" > gradle/wrapper/gradle-wrapper.properties
-              echo "distributionPath=wrapper/dists" >> gradle/wrapper/gradle-wrapper.properties
-              echo "distributionUrl=https\\://services.gradle.org/distributions/gradle-8.2-bin.zip" >> gradle/wrapper/gradle-wrapper.properties
-              echo "networkTimeout=10000" >> gradle/wrapper/gradle-wrapper.properties
-              echo "zipStoreBase=GRADLE_USER_HOME" >> gradle/wrapper/gradle-wrapper.properties
-              echo "zipStorePath=wrapper/dists" >> gradle/wrapper/gradle-wrapper.properties
-              # Create gradlew script using echo
-              echo "#!/bin/sh" > gradlew
-              echo 'exec java -jar "$(dirname "$0")/gradle/wrapper/gradle-wrapper.jar" "$@"' >> gradlew
-              chmod +x gradlew
-              # Verify gradlew and wrapper jar exist
-              if [ -f "gradlew" ] && [ -f "gradle/wrapper/gradle-wrapper.jar" ]; then
-                echo "✅ Gradle wrapper created and verified"
-                ls -lh gradlew gradle/wrapper/gradle-wrapper.jar
-              else
-                echo "❌ Gradle wrapper verification failed"
-                echo "gradlew exists: $([ -f "gradlew" ] && echo "yes" || echo "no")"
-                echo "wrapper jar exists: $([ -f "gradle/wrapper/gradle-wrapper.jar" ] && echo "yes" || echo "no")"
-                exit 1
-              fi
-              cd ..
-            fi
-            if [ -f "android/gradlew" ]; then
-              echo "✅ gradlew found/created"
-              chmod +x android/gradlew
-            else
-              echo "❌ Failed to create gradlew"
+            # Do NOT run any gradle/gradlew here. Wrapper and build will be handled in the build step.
+            if [ ! -f "android/gradlew" ] || [ ! -f "android/gradle/wrapper/gradle-wrapper.jar" ]; then
+              echo "❌ Gradle wrapper missing after Capacitor sync. Commit android/ with wrapper or ensure cap add android creates it."
+              echo "Contents of android/:"
+              ls -la android
               exit 1
             fi
+            chmod +x android/gradlew
+            echo "✅ gradlew found"
           else
             echo "❌ Android directory not found after sync"
             exit 1
@@ -241,50 +145,28 @@ workflows:
             echo "❌ gradlew not found. This should have been created in the sync step."
             exit 1
           fi
-          if [ ! -f "./gradle/wrapper/gradle-wrapper.jar" ]; then
-            echo "❌ gradle-wrapper.jar not found. Checking wrapper directory..."
-            ls -la gradle/wrapper/ || echo "gradle/wrapper directory not found"
+          chmod +x ./gradlew
+          # Ensure settings.gradle exists (already created in Sync step)
+          if [ ! -f "settings.gradle" ]; then
+            echo "❌ settings.gradle not found. Sync step did not complete correctly."
             exit 1
           fi
-          echo "✅ Verifying Gradle wrapper files..."
-          ls -lh gradlew gradle/wrapper/gradle-wrapper.jar
-          chmod +x ./gradlew
-          # Check if settings.gradle exists, if not Capacitor might not have created it
-          if [ ! -f "settings.gradle" ]; then
-            echo "⚠️ settings.gradle not found, checking if capacitor.settings.gradle exists..."
-            if [ -f "capacitor.settings.gradle" ]; then
-              echo "Using capacitor.settings.gradle as settings.gradle..."
-              cp capacitor.settings.gradle settings.gradle
-            else
-              echo "❌ No settings.gradle found. Capacitor sync may have failed."
-              exit 1
-            fi
-          fi
-          # Check if root build.gradle exists, create minimal one if needed
+          # Ensure root build.gradle exists and has Android Gradle plugin
+          # This MUST be done BEFORE any ./gradlew command, otherwise :app evaluation will fail
           if [ ! -f "build.gradle" ]; then
             echo "⚠️ Root build.gradle not found, creating minimal one..."
             echo "buildscript {" > build.gradle
-            echo "    repositories {" >> build.gradle
-            echo "        google()" >> build.gradle
-            echo "        mavenCentral()" >> build.gradle
-            echo "    }" >> build.gradle
-            echo "    dependencies {" >> build.gradle
-            echo "        classpath 'com.android.tools.build:gradle:8.2.1'" >> build.gradle
-            echo "    }" >> build.gradle
+            echo "    repositories { google(); mavenCentral() }" >> build.gradle
+            echo "    dependencies { classpath 'com.android.tools.build:gradle:8.2.1' }" >> build.gradle
             echo "}" >> build.gradle
             echo "" >> build.gradle
             echo "allprojects {" >> build.gradle
-            echo "    repositories {" >> build.gradle
-            echo "        google()" >> build.gradle
-            echo "        mavenCentral()" >> build.gradle
-            echo "    }" >> build.gradle
+            echo "    repositories { google(); mavenCentral() }" >> build.gradle
             echo "}" >> build.gradle
             echo "✅ Created root build.gradle"
           else
-            # Ensure buildscript has Android Gradle plugin
             if ! grep -q "com.android.tools.build:gradle" build.gradle; then
               echo "⚠️ Root build.gradle missing Android Gradle plugin, prepending buildscript..."
-              # Prepend buildscript block (simpler than modifying existing)
               echo "buildscript {" > build.gradle.tmp
               echo "    repositories { google(); mavenCentral() }" >> build.gradle.tmp
               echo "    dependencies { classpath 'com.android.tools.build:gradle:8.2.1' }" >> build.gradle.tmp
@@ -295,15 +177,10 @@ workflows:
               echo "✅ Updated root build.gradle with Android Gradle plugin"
             fi
           fi
-          # Check available tasks
           echo "Checking available Gradle tasks..."
           ./gradlew tasks --all | grep -i "bundle\|assemble" || echo "No bundle/assemble tasks found"
-          # Try building app module directly
           echo "Building Android App Bundle..."
-          ./gradlew :app:bundleRelease || {
-            echo "⚠️ :app:bundleRelease failed, trying bundleRelease..."
-            ./gradlew bundleRelease
-          }
+          ./gradlew :app:bundleRelease || ./gradlew :app:assembleRelease
       - name: Build APK (optional, for testing)
         script: |
           cd android
