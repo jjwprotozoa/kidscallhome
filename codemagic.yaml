@@ -112,6 +112,36 @@ workflows:
           echo "=== Verifying Gradle wrapper configuration ==="
           echo "Gradle wrapper will use: $JAVA_HOME/bin/java"
 
+      - name: Diagnostic checks before build
+        script: |
+          cd android
+          echo "=== PRE-BUILD DIAGNOSTICS ==="
+          echo ""
+          echo "1. Checking Java version:"
+          java -version 2>&1 || echo "Java not found in PATH"
+          echo ""
+          echo "2. Checking JAVA_HOME:"
+          echo "JAVA_HOME=$JAVA_HOME"
+          if [ ! -z "$JAVA_HOME" ]; then
+            "$JAVA_HOME/bin/java" -version 2>&1 || echo "Java at JAVA_HOME not working"
+          fi
+          echo ""
+          echo "3. Checking Gradle wrapper:"
+          ls -la gradlew* || echo "Gradle wrapper not found"
+          echo ""
+          echo "4. Testing Gradle can run:"
+          ./gradlew --version 2>&1 | head -10 || echo "Gradle --version failed"
+          echo ""
+          echo "5. Testing Gradle can list tasks:"
+          ./gradlew tasks --all 2>&1 | head -30 || echo "Gradle tasks failed"
+          echo ""
+          echo "6. Checking gradle.properties:"
+          cat gradle.properties 2>&1 | head -20 || echo "gradle.properties not found"
+          echo ""
+          echo "7. Checking build.gradle files exist:"
+          find . -name "build.gradle" -type f | head -10
+          echo ""
+
       - name: Build Debug APK first (to verify build works)
         script: |
           cd android
@@ -137,8 +167,8 @@ workflows:
           echo "Running: ./gradlew assembleDebug --stacktrace --info"
           echo ""
 
-          # Build with output visible and captured - use unbuffered output
-          set -o pipefail  # Ensure pipe failures are caught
+          # Build with output visible and captured
+          set -o pipefail
           ./gradlew assembleDebug --stacktrace --info 2>&1 | tee debug-build.log
           BUILD_EXIT_CODE=${PIPESTATUS[0]}
 
@@ -147,22 +177,27 @@ workflows:
           echo ""
 
           if [ $BUILD_EXIT_CODE -ne 0 ]; then
-            echo "❌ Debug build failed with exit code $BUILD_EXIT_CODE!"
+            echo "❌❌❌ DEBUG BUILD FAILED WITH EXIT CODE $BUILD_EXIT_CODE ❌❌❌"
             echo ""
-            echo "=== FULL BUILD OUTPUT (showing everything) ==="
+            echo "=== FIRST 100 LINES (likely contains the actual error) ==="
+            head -n 100 debug-build.log
+            echo ""
+            echo "=== LAST 100 LINES (stack trace) ==="
+            tail -n 100 debug-build.log
+            echo ""
+            echo "=== SEARCHING FOR ERROR MESSAGES ==="
+            grep -i -E "error|failed|exception|FAILURE|^FAILURE|^> Task" debug-build.log | head -50 || echo "No error keywords found"
+            echo ""
+            echo "=== FULL BUILD LOG (complete output) ==="
             cat debug-build.log
             echo ""
-            echo "=== Searching for ERROR/Failed/Exception (with context) ==="
-            grep -i -A 10 -B 5 "error\|failed\|exception\|FAILURE" debug-build.log || echo "No obvious error keywords found"
+            echo "=== DIAGNOSTIC INFO ==="
+            echo "Gradle version:"
+            ./gradlew --version 2>&1 | head -5 || echo "Could not get Gradle version"
             echo ""
-            echo "=== Checking for common issues ==="
-            grep -i "signing\|keystore\|missing\|not found\|cannot\|unable\|configuration" debug-build.log | head -30 || echo "No common issues found"
-            echo ""
-            echo "=== Checking Gradle version and Java ==="
-            ./gradlew --version 2>&1 || echo "Gradle version check failed"
-            echo ""
-            echo "=== Checking if gradle.properties exists ==="
-            cat gradle.properties 2>&1 || echo "gradle.properties not found"
+            echo "Current directory: $(pwd)"
+            echo "Files in current directory:"
+            ls -la | head -20
             exit 1
           fi
 
@@ -225,7 +260,7 @@ workflows:
           set -o pipefail
           ./gradlew bundleRelease --stacktrace --info 2>&1 | tee release-build.log
           BUNDLE_EXIT_CODE=${PIPESTATUS[0]}
-          
+
           if [ $BUNDLE_EXIT_CODE -ne 0 ]; then
             echo ""
             echo "❌ Release build failed with exit code $BUNDLE_EXIT_CODE!"
@@ -301,7 +336,7 @@ workflows:
           set -o pipefail
           ./gradlew assembleRelease --stacktrace --info 2>&1 | tee release-apk.log
           RELEASE_APK_EXIT_CODE=${PIPESTATUS[0]}
-          
+
           if [ $RELEASE_APK_EXIT_CODE -ne 0 ]; then
             echo ""
             echo "❌ Release APK build failed with exit code $RELEASE_APK_EXIT_CODE!"
@@ -317,7 +352,7 @@ workflows:
           else
             echo "✅ Release APK built successfully!"
           fi
-          
+
           # Verify build artifacts were created
           echo ""
           echo "=== Verifying build artifacts ==="
