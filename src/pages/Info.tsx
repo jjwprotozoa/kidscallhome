@@ -12,13 +12,16 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import { supabase } from "@/integrations/supabase/client";
 import {
+  ArrowLeft,
   ArrowUp,
   Check,
   Crown,
   DollarSign,
   ExternalLink,
   FileText,
+  Home,
   Info as InfoIcon,
   Mail,
   Menu,
@@ -34,18 +37,52 @@ const Info = () => {
   const location = useLocation();
   const [showFloatingNav, setShowFloatingNav] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [userType, setUserType] = useState<"parent" | "child" | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // Determine user type and home route
+  useEffect(() => {
+    const determineUserType = async () => {
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        const childSession = localStorage.getItem("childSession");
+
+        if (session) {
+          setUserType("parent");
+        } else if (childSession) {
+          try {
+            JSON.parse(childSession);
+            setUserType("child");
+          } catch {
+            setUserType(null);
+          }
+        } else {
+          setUserType(null);
+        }
+      } catch (error) {
+        console.error("Error determining user type:", error);
+        setUserType(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    determineUserType();
+  }, []);
+
+  // Get home route based on user type
+  const getHomeRoute = () => {
+    if (userType === "parent") return "/parent";
+    if (userType === "child") return "/child";
+    return "/"; // Landing page if not logged in
+  };
 
   // Check if user is likely a parent (synchronous, non-blocking)
   const isParent = useMemo(() => {
-    // Check if on parent route
-    if (location.pathname.includes("/parent/")) {
-      return true;
-    }
-    // Quick check: if no childSession, likely a parent or not logged in
-    // Navigation component will handle its own logic
-    const childSession = localStorage.getItem("childSession");
-    return !childSession;
-  }, [location.pathname]);
+    return userType === "parent";
+  }, [userType]);
 
   // Show floating nav when scrolled down
   useEffect(() => {
@@ -91,15 +128,50 @@ const Info = () => {
         }}
       >
         <div className="max-w-4xl mx-auto">
-          {/* Header */}
+          {/* Header with App Icon and Back Button */}
           <div className="mt-4 mb-8">
-            <div className="flex items-center gap-3 mb-2">
-              <InfoIcon className="h-6 w-6" />
-              <h1 className="text-3xl font-bold">App Information</h1>
+            <div className="flex items-start justify-between gap-4 mb-4">
+              <div className="flex items-center gap-4 flex-1">
+                {/* App Icon */}
+                <div className="flex-shrink-0">
+                  <img
+                    src="/icon-192x192.png"
+                    alt="Kids Call Home"
+                    className="w-16 h-16 rounded-xl shadow-md"
+                    width="64"
+                    height="64"
+                  />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-3 mb-2">
+                    <InfoIcon className="h-6 w-6 flex-shrink-0" />
+                    <h1 className="text-3xl font-bold">App Information</h1>
+                  </div>
+                  <p className="text-muted-foreground">
+                    Important information about Kids Call Home
+                  </p>
+                </div>
+              </div>
+              {/* Back to App Button */}
+              {!loading && (
+                <Button
+                  onClick={() => navigate(getHomeRoute())}
+                  variant="default"
+                  size="lg"
+                  className="flex-shrink-0 shadow-md"
+                >
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  <span className="hidden sm:inline">
+                    {userType === "parent"
+                      ? "Back to Parent Home"
+                      : userType === "child"
+                      ? "Back to Kid Home"
+                      : "Back to App"}
+                  </span>
+                  <Home className="h-4 w-4 sm:hidden" />
+                </Button>
+              )}
             </div>
-            <p className="text-muted-foreground">
-              Important information about Kids Call Home
-            </p>
           </div>
 
           {/* Quick Navigation */}
@@ -714,6 +786,24 @@ const Info = () => {
             bottom: `calc(1.5rem + var(--safe-area-inset-bottom))`,
           }}
         >
+          {/* Back to App Button - Floating */}
+          {!loading && (
+            <Button
+              onClick={() => navigate(getHomeRoute())}
+              size="lg"
+              className="h-14 w-14 rounded-full shadow-lg"
+              aria-label="Back to App"
+              title={
+                userType === "parent"
+                  ? "Back to Parent Home"
+                  : userType === "child"
+                  ? "Back to Kid Home"
+                  : "Back to App"
+              }
+            >
+              <Home className="h-6 w-6" />
+            </Button>
+          )}
           <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
             <SheetTrigger asChild>
               <Button
