@@ -59,20 +59,16 @@ workflows:
                   if [ -f "/tmp/gradle-8.2-bin.zip" ]; then
                     unzip -q /tmp/gradle-8.2-bin.zip -d /tmp/ || echo "⚠️ Failed to extract Gradle"
                     cp /tmp/gradle-8.2/gradle/wrapper/gradle-wrapper.jar gradle/wrapper/ || echo "⚠️ Failed to copy wrapper jar"
-                    # Create gradle-wrapper.properties
-                    cat > gradle/wrapper/gradle-wrapper.properties << 'PROPEOF'
-distributionBase=GRADLE_USER_HOME
-distributionPath=wrapper/dists
-distributionUrl=https\://services.gradle.org/distributions/gradle-8.2-bin.zip
-networkTimeout=10000
-zipStoreBase=GRADLE_USER_HOME
-zipStorePath=wrapper/dists
-PROPEOF
-                    # Create gradlew script
-                    cat > gradlew << 'EOF'
-#!/bin/sh
-exec java -jar "$(dirname "$0")/gradle/wrapper/gradle-wrapper.jar" "$@"
-EOF
+                    # Create gradle-wrapper.properties using echo to avoid YAML parsing issues
+                    echo "distributionBase=GRADLE_USER_HOME" > gradle/wrapper/gradle-wrapper.properties
+                    echo "distributionPath=wrapper/dists" >> gradle/wrapper/gradle-wrapper.properties
+                    echo "distributionUrl=https\\://services.gradle.org/distributions/gradle-8.2-bin.zip" >> gradle/wrapper/gradle-wrapper.properties
+                    echo "networkTimeout=10000" >> gradle/wrapper/gradle-wrapper.properties
+                    echo "zipStoreBase=GRADLE_USER_HOME" >> gradle/wrapper/gradle-wrapper.properties
+                    echo "zipStorePath=wrapper/dists" >> gradle/wrapper/gradle-wrapper.properties
+                    # Create gradlew script using echo
+                    echo "#!/bin/sh" > gradlew
+                    echo 'exec java -jar "$(dirname "$0")/gradle/wrapper/gradle-wrapper.jar" "$@"' >> gradlew
                     chmod +x gradlew
                     echo "✅ Gradle wrapper created manually"
                   else
