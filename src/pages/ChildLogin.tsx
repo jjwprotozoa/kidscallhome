@@ -55,9 +55,9 @@ const ChildLogin = () => {
   const handleLoginWithCode = async (code: string) => {
     setLoading(true);
     try {
-      // Use secure SECURITY DEFINER function to verify login code
+      // Use secure authentication function that generates session token
       const { data, error } = await supabase
-        .rpc("verify_login_code", { p_code: code })
+        .rpc("authenticate_child_with_code", { p_login_code: code })
         .maybeSingle();
 
       if (error || !data) {
@@ -71,9 +71,18 @@ const ChildLogin = () => {
         return;
       }
 
-      setChildData(data);
+      // Store secure session with cryptographically secure token
+      const sessionData = {
+        id: data.child_id,
+        name: data.child_name,
+        avatar_color: data.avatar_color,
+        parent_id: data.parent_id,
+        token: data.session_token, // Secure server-generated token
+      };
+      
+      setChildData(sessionData);
       setStep("success");
-      localStorage.setItem("childSession", JSON.stringify(data));
+      localStorage.setItem("childSession", JSON.stringify(sessionData));
       setTimeout(() => {
         navigate("/child/dashboard");
       }, 2000);

@@ -64,6 +64,41 @@ export type Database = {
           },
         ]
       }
+      child_sessions: {
+        Row: {
+          child_id: string
+          created_at: string
+          expires_at: string
+          id: string
+          last_used_at: string
+          token: string
+        }
+        Insert: {
+          child_id: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          last_used_at?: string
+          token: string
+        }
+        Update: {
+          child_id?: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          last_used_at?: string
+          token?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "child_sessions_child_id_fkey"
+            columns: ["child_id"]
+            isOneToOne: false
+            referencedRelation: "children"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       children: {
         Row: {
           avatar_color: string | null
@@ -160,14 +195,46 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      authenticate_child_with_code: {
+        Args: { p_login_code: string }
+        Returns: {
+          avatar_color: string
+          child_id: string
+          child_name: string
+          parent_id: string
+          session_token: string
+        }[]
+      }
+      cleanup_expired_child_sessions: { Args: never; Returns: number }
       generate_unique_login_code: { Args: never; Returns: string }
+      get_child_id_from_token: { Args: { p_token: string }; Returns: string }
+      get_child_messages: {
+        Args: { p_child_id: string; p_token: string }
+        Returns: {
+          child_id: string
+          content: string
+          created_at: string
+          id: string
+          sender_id: string
+          sender_type: string
+        }[]
+      }
       get_parent_name: { Args: { p_parent_id: string }; Returns: string }
+      logout_child_session: { Args: { p_token: string }; Returns: boolean }
+      send_child_message: {
+        Args: { p_child_id: string; p_content: string; p_token: string }
+        Returns: string
+      }
       verify_child_call_access: {
         Args: { p_call_id: string; p_child_id: string }
         Returns: boolean
       }
       verify_child_can_send_message: {
         Args: { p_child_id: string; p_sender_id: string }
+        Returns: boolean
+      }
+      verify_child_session: {
+        Args: { p_child_id: string; p_token: string }
         Returns: boolean
       }
       verify_login_code: {
