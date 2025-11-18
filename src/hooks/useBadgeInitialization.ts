@@ -19,32 +19,19 @@ export function useBadgeInitialization() {
           const childData = JSON.parse(childSession);
           const childId = childData.id;
 
-          // Fetch unread messages from parent
-          const { data: unreadMessages, error: msgError } = await supabase
-            .from("messages")
-            .select("child_id")
-            .eq("child_id", childId)
-            .eq("sender_type", "parent")
-            .is("read_at", null);
+          // Fetch unread messages from parent (read_at field doesn't exist)
+          // TODO: Implement read tracking when schema is updated
+          const unreadMessageCount = 0;
 
-          if (msgError) throw msgError;
-
-          // Fetch missed calls from parent
-          const { data: missedCalls, error: callError } = await supabase
-            .from("calls")
-            .select("child_id")
-            .eq("child_id", childId)
-            .eq("caller_type", "parent")
-            .eq("missed_call", true)
-            .is("missed_call_read_at", null);
-
-          if (callError) throw callError;
+          // Fetch missed calls from parent (missed_call fields don't exist)
+          // TODO: Implement missed call tracking when schema is updated
+          const missedCallCount = 0;
 
           if (mounted) {
             // For child, we only have one "conversation" (with their parent)
             // Store it with childId as key for consistency
-            const unreadCount = unreadMessages?.length ?? 0;
-            const missedCount = missedCalls?.length ?? 0;
+            const unreadCount = unreadMessageCount;
+            const missedCount = missedCallCount;
 
             useBadgeStore.getState().setInitialUnread({ [childId]: unreadCount });
             useBadgeStore.getState().setInitialMissed({ [childId]: missedCount });
@@ -66,25 +53,12 @@ export function useBadgeInitialization() {
           const childIds = children.map((c) => c.id);
 
           // Fetch unread messages per child (from children to parent)
-          const { data: unreadMessages, error: msgError } = await supabase
-            .from("messages")
-            .select("child_id")
-            .in("child_id", childIds)
-            .eq("sender_type", "child")
-            .is("read_at", null);
-
-          if (msgError) throw msgError;
+          // Note: read_at field doesn't exist yet, so count will be 0
+          const unreadMessages: any[] = [];
 
           // Fetch missed calls per child (from children to parent)
-          const { data: missedCalls, error: callError } = await supabase
-            .from("calls")
-            .select("child_id")
-            .in("child_id", childIds)
-            .eq("caller_type", "child")
-            .eq("missed_call", true)
-            .is("missed_call_read_at", null);
-
-          if (callError) throw callError;
+          // Note: missed_call fields don't exist yet, so count will be 0
+          const missedCalls: any[] = [];
 
           if (mounted) {
             // Aggregate counts per child

@@ -76,7 +76,7 @@ const AddChildDialog = ({ open, onOpenChange, onChildAdded }: AddChildDialogProp
   const generateRandomCode = async () => {
     setCheckingCode(true);
     try {
-      const { data, error } = await supabase.rpc("generate_kid_friendly_login_code");
+      const { data, error } = await supabase.rpc("generate_unique_login_code");
       if (error) throw error;
       setGeneratedCode(data);
       // Parse the generated code

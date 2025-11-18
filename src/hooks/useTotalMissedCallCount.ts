@@ -25,71 +25,11 @@ export const useTotalMissedCallCount = (options: UseTotalMissedCallCountOptions 
 
     const fetchTotalMissedCallCount = async () => {
       try {
-        // Check if user is parent or child
-        const childSession = localStorage.getItem("childSession");
-        const isChild = !!childSession;
-
-        if (isChild) {
-          // Child: count missed calls from parent
-          const childData = JSON.parse(childSession);
-          const { count: missedCount, error } = await supabase
-            .from("calls")
-            .select("id", { count: "exact", head: true })
-            .eq("child_id", childData.id)
-            .eq("caller_type", "parent")
-            .eq("missed_call", true)
-            .is("missed_call_read_at", null);
-
-          if (error) throw error;
-
-          if (mounted) {
-            setCount(missedCount || 0);
-            setLoading(false);
-          }
-        } else {
-          // Parent: count missed calls from all children
-          const { data: { user } } = await supabase.auth.getUser();
-          if (!user) {
-            if (mounted) {
-              setCount(0);
-              setLoading(false);
-            }
-            return;
-          }
-
-          // Get all children for this parent
-          const { data: children, error: childrenError } = await supabase
-            .from("children")
-            .select("id")
-            .eq("parent_id", user.id);
-
-          if (childrenError) throw childrenError;
-
-          if (!children || children.length === 0) {
-            if (mounted) {
-              setCount(0);
-              setLoading(false);
-            }
-            return;
-          }
-
-          const childIds = children.map((c) => c.id);
-
-          // Count missed calls from children
-          const { count: missedCount, error } = await supabase
-            .from("calls")
-            .select("id", { count: "exact", head: true })
-            .in("child_id", childIds)
-            .eq("caller_type", "child")
-            .eq("missed_call", true)
-            .is("missed_call_read_at", null);
-
-          if (error) throw error;
-
-          if (mounted) {
-            setCount(missedCount || 0);
-            setLoading(false);
-          }
+        // Note: missed_call fields don't exist in schema yet
+        // Return 0 until schema is updated
+        if (mounted) {
+          setCount(0);
+          setLoading(false);
         }
       } catch (error) {
         console.error("Error fetching total missed call count:", error);

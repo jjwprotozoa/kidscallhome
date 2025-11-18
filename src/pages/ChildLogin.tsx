@@ -242,12 +242,12 @@ const ChildLogin = () => {
               ← Back
             </Button>
             <div className="flex items-center justify-center gap-3">
-              {codeType === "color" && selectedItem ? (
+              {codeType === "color" && selectedItem && 'color' in selectedItem ? (
                 <div
                   className="w-16 h-16 rounded-full border-4 border-primary"
                   style={{ backgroundColor: selectedItem.color }}
                 />
-              ) : selectedItem ? (
+              ) : selectedItem && 'emoji' in selectedItem ? (
                 <div className="text-6xl">{selectedItem.emoji}</div>
               ) : null}
               <div>
