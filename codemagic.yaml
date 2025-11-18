@@ -177,46 +177,64 @@ workflows:
           echo ""
 
           if [ $BUILD_EXIT_CODE -ne 0 ]; then
+            # Extract errors to a separate file for easy access
+            echo "Extracting error messages..." > build-errors.txt
+            
+            echo "" >> build-errors.txt
+            echo "═══════════════════════════════════════════════════════════════" >> build-errors.txt
+            echo "❌ BUILD FAILED - ERROR EXTRACTION" >> build-errors.txt
+            echo "═══════════════════════════════════════════════════════════════" >> build-errors.txt
+            echo "" >> build-errors.txt
+            
+            # Find the line number where "BUILD FAILED" appears
+            FAIL_LINE=$(grep -n "BUILD FAILED" debug-build.log | tail -1 | cut -d: -f1)
+            if [ ! -z "$FAIL_LINE" ]; then
+              echo "Found 'BUILD FAILED' at line $FAIL_LINE" >> build-errors.txt
+              echo "Showing 100 lines before and 50 lines after:" >> build-errors.txt
+              echo "" >> build-errors.txt
+              sed -n "$((FAIL_LINE - 100)),$((FAIL_LINE + 50))p" debug-build.log >> build-errors.txt
+            fi
+            
+            echo "" >> build-errors.txt
+            echo "=== FAILURE MESSAGES ===" >> build-errors.txt
+            grep -A 30 "FAILURE:" debug-build.log >> build-errors.txt 2>/dev/null || echo "No FAILURE: found" >> build-errors.txt
+            
+            echo "" >> build-errors.txt
+            echo "=== WHAT WENT WRONG ===" >> build-errors.txt
+            grep -A 30 "What went wrong:" debug-build.log >> build-errors.txt 2>/dev/null || echo "No 'What went wrong:' found" >> build-errors.txt
+            
+            echo "" >> build-errors.txt
+            echo "=== EXECUTION FAILED FOR TASK ===" >> build-errors.txt
+            grep -B 10 -A 20 "Execution failed for task" debug-build.log >> build-errors.txt 2>/dev/null || echo "No task execution failures found" >> build-errors.txt
+            
+            echo "" >> build-errors.txt
+            echo "=== FAILED TASKS ===" >> build-errors.txt
+            grep "> Task :.*FAILED" debug-build.log >> build-errors.txt 2>/dev/null || echo "No failed tasks found" >> build-errors.txt
+            
+            echo "" >> build-errors.txt
+            echo "=== ERROR PATTERNS ===" >> build-errors.txt
+            grep -i -E "error|exception|failed|cannot|unable" debug-build.log | grep -v "at org.gradle" | head -50 >> build-errors.txt 2>/dev/null || echo "No error patterns found" >> build-errors.txt
+            
+            # Display the error file prominently
             echo ""
             echo "═══════════════════════════════════════════════════════════════"
             echo "❌❌❌ BUILD FAILED WITH EXIT CODE $BUILD_EXIT_CODE ❌❌❌"
             echo "═══════════════════════════════════════════════════════════════"
             echo ""
-            
-            echo "=== 🔍 EXTRACTING GRADLE ERROR MESSAGES ==="
+            echo "📄 EXTRACTED ERROR MESSAGES (also saved to build-errors.txt):"
             echo ""
-            echo "Looking for 'FAILURE:' messages:"
-            grep -A 20 "FAILURE:" debug-build.log | head -30 || echo "No FAILURE: messages found"
+            cat build-errors.txt
             echo ""
-            echo "Looking for 'What went wrong:' messages:"
-            grep -A 20 "What went wrong:" debug-build.log | head -30 || echo "No 'What went wrong:' found"
+            echo "═══════════════════════════════════════════════════════════════"
             echo ""
-            echo "Looking for 'Execution failed for task':"
-            grep -B 5 -A 15 "Execution failed for task" debug-build.log | head -40 || echo "No 'Execution failed for task' found"
+            echo "=== FIRST 200 LINES OF BUILD LOG ==="
+            head -n 200 debug-build.log
             echo ""
-            echo "Looking for failed tasks (lines starting with '> Task :'):"
-            grep "^> Task :.*FAILED" debug-build.log | head -20 || echo "No failed tasks found"
+            echo "=== LAST 100 LINES OF BUILD LOG ==="
+            tail -n 100 debug-build.log
             echo ""
-            echo "Looking for error patterns:"
-            grep -i -E "^\\* |error:|exception:|failed" debug-build.log | head -30 || echo "No error patterns found"
-            echo ""
-            
-            echo "=== FIRST 150 LINES (build start - may contain error) ==="
-            head -n 150 debug-build.log
-            echo ""
-            echo "=== LAST 150 LINES (build end - stack trace) ==="
-            tail -n 150 debug-build.log
-            echo ""
-            
-            echo "=== 📋 FULL BUILD LOG (saved to debug-build.log, $(wc -l < debug-build.log) lines) ==="
-            echo "The complete log is available in debug-build.log"
-            echo ""
-            
-            echo "=== DIAGNOSTIC INFO ==="
-            echo "Gradle version:"
-            ./gradlew --version 2>&1 | head -5 || echo "Could not get Gradle version"
-            echo ""
-            echo "Current directory: $(pwd)"
+            echo "📋 Full log: debug-build.log ($(wc -l < debug-build.log) lines)"
+            echo "📋 Errors: build-errors.txt"
             exit 1
           fi
 
@@ -446,6 +464,11 @@ workflows:
       - android/app/build/outputs/apk/**/*
       - android/app/build/outputs/**/debug/**
       - android/app/build/outputs/**/release/**
+      - android/build-errors.txt
+      - android/debug-build.log
+      - android/release-build.log
+      - android/debug-bundle.log
+      - android/release-apk.log
 
     publishing:
       email:
