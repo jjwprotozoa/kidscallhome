@@ -52,26 +52,47 @@ workflows:
               cd android
               # Create gradle wrapper directory
               mkdir -p gradle/wrapper
-              # Download gradle wrapper jar from official Gradle distribution
-              echo "Downloading Gradle wrapper..."
-              curl -L https://services.gradle.org/distributions/gradle-8.2-bin.zip -o /tmp/gradle-8.2-bin.zip || echo "⚠️ Failed to download Gradle distribution"
-              if [ -f "/tmp/gradle-8.2-bin.zip" ]; then
-                unzip -q /tmp/gradle-8.2-bin.zip -d /tmp/ || echo "⚠️ Failed to extract Gradle"
-                cp /tmp/gradle-8.2/gradle/wrapper/gradle-wrapper.jar gradle/wrapper/ || echo "⚠️ Failed to copy wrapper jar"
-                # Create gradle-wrapper.properties using echo to avoid YAML parsing issues
-                echo "distributionBase=GRADLE_USER_HOME" > gradle/wrapper/gradle-wrapper.properties
-                echo "distributionPath=wrapper/dists" >> gradle/wrapper/gradle-wrapper.properties
-                echo "distributionUrl=https\\://services.gradle.org/distributions/gradle-8.2-bin.zip" >> gradle/wrapper/gradle-wrapper.properties
-                echo "networkTimeout=10000" >> gradle/wrapper/gradle-wrapper.properties
-                echo "zipStoreBase=GRADLE_USER_HOME" >> gradle/wrapper/gradle-wrapper.properties
-                echo "zipStorePath=wrapper/dists" >> gradle/wrapper/gradle-wrapper.properties
-                # Create gradlew script using echo
-                echo "#!/bin/sh" > gradlew
-                echo 'exec java -jar "$(dirname "$0")/gradle/wrapper/gradle-wrapper.jar" "$@"' >> gradlew
-                chmod +x gradlew
-                echo "✅ Gradle wrapper created manually"
+              # Download gradle wrapper jar directly from Gradle repository
+              echo "Downloading Gradle wrapper jar..."
+              mkdir -p gradle/wrapper
+              # Download wrapper jar directly (more reliable than extracting from zip)
+              if ! curl -L https://raw.githubusercontent.com/gradle/gradle/v8.2.0/gradle/wrapper/gradle-wrapper.jar -o gradle/wrapper/gradle-wrapper.jar 2>/dev/null; then
+                echo "⚠️ Direct download failed, trying alternative method..."
+                # Fallback: download full distribution and extract
+                curl -L https://services.gradle.org/distributions/gradle-8.2-bin.zip -o /tmp/gradle-8.2-bin.zip || echo "⚠️ Failed to download Gradle distribution"
+                if [ -f "/tmp/gradle-8.2-bin.zip" ]; then
+                  unzip -q /tmp/gradle-8.2-bin.zip -d /tmp/ || echo "⚠️ Failed to extract Gradle"
+                  cp /tmp/gradle-8.2/gradle/wrapper/gradle-wrapper.jar gradle/wrapper/ || echo "⚠️ Failed to copy wrapper jar"
+                fi
+              fi
+              # Verify wrapper jar exists
+              if [ ! -f "gradle/wrapper/gradle-wrapper.jar" ]; then
+                echo "❌ gradle-wrapper.jar not found after download attempt"
+                echo "Checking wrapper directory..."
+                ls -la gradle/wrapper/ || echo "gradle/wrapper directory not found"
+                exit 1
+              fi
+              echo "✅ gradle-wrapper.jar downloaded successfully"
+              ls -lh gradle/wrapper/gradle-wrapper.jar
+              # Create gradle-wrapper.properties using echo to avoid YAML parsing issues
+              echo "distributionBase=GRADLE_USER_HOME" > gradle/wrapper/gradle-wrapper.properties
+              echo "distributionPath=wrapper/dists" >> gradle/wrapper/gradle-wrapper.properties
+              echo "distributionUrl=https\\://services.gradle.org/distributions/gradle-8.2-bin.zip" >> gradle/wrapper/gradle-wrapper.properties
+              echo "networkTimeout=10000" >> gradle/wrapper/gradle-wrapper.properties
+              echo "zipStoreBase=GRADLE_USER_HOME" >> gradle/wrapper/gradle-wrapper.properties
+              echo "zipStorePath=wrapper/dists" >> gradle/wrapper/gradle-wrapper.properties
+              # Create gradlew script using echo
+              echo "#!/bin/sh" > gradlew
+              echo 'exec java -jar "$(dirname "$0")/gradle/wrapper/gradle-wrapper.jar" "$@"' >> gradlew
+              chmod +x gradlew
+              # Verify gradlew and wrapper jar exist
+              if [ -f "gradlew" ] && [ -f "gradle/wrapper/gradle-wrapper.jar" ]; then
+                echo "✅ Gradle wrapper created and verified"
+                ls -lh gradlew gradle/wrapper/gradle-wrapper.jar
               else
-                echo "❌ Failed to download Gradle distribution"
+                echo "❌ Gradle wrapper verification failed"
+                echo "gradlew exists: $([ -f "gradlew" ] && echo "yes" || echo "no")"
+                echo "wrapper jar exists: $([ -f "gradle/wrapper/gradle-wrapper.jar" ] && echo "yes" || echo "no")"
                 exit 1
               fi
               cd ..
@@ -111,6 +132,13 @@ workflows:
             echo "❌ gradlew not found. This should have been created in the sync step."
             exit 1
           fi
+          if [ ! -f "./gradle/wrapper/gradle-wrapper.jar" ]; then
+            echo "❌ gradle-wrapper.jar not found. Checking wrapper directory..."
+            ls -la gradle/wrapper/ || echo "gradle/wrapper directory not found"
+            exit 1
+          fi
+          echo "✅ Verifying Gradle wrapper files..."
+          ls -lh gradlew gradle/wrapper/gradle-wrapper.jar
           chmod +x ./gradlew
           ./gradlew bundleRelease
       - name: Build APK (optional, for testing)
