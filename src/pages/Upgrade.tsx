@@ -2,6 +2,8 @@
 // Upgrade page for Stripe subscription plans
 
 import Navigation from "@/components/Navigation";
+import { OnboardingTour } from "@/features/onboarding/OnboardingTour";
+import { HelpBubble } from "@/features/onboarding/HelpBubble";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -430,6 +432,8 @@ const Upgrade = () => {
   return (
     <div className="min-h-[100dvh] bg-background w-full overflow-x-hidden">
       <Navigation />
+      <OnboardingTour role="parent" pageKey="parent_upgrade" />
+      <HelpBubble role="parent" pageKey="parent_upgrade" />
       <div
         className="px-4 pb-4"
         style={{
@@ -495,7 +499,7 @@ const Upgrade = () => {
           )}
 
           {/* Plans Grid */}
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8">
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8" data-tour="parent-upgrade-plans">
             {PLANS.map((plan) => {
               // Check if this is the same plan they already have
               const isCurrentPlan = subscriptionType === plan.id;

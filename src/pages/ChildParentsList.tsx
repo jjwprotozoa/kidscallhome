@@ -12,6 +12,8 @@ import { Phone } from "lucide-react";
 import Navigation from "@/components/Navigation";
 import { useParentPresence } from "@/features/presence/useParentPresence";
 import { StatusIndicator } from "@/features/presence/StatusIndicator";
+import { OnboardingTour } from "@/features/onboarding/OnboardingTour";
+import { HelpBubble } from "@/features/onboarding/HelpBubble";
 
 interface ChildSession {
   id: string;
@@ -200,6 +202,8 @@ const ChildParentsList = () => {
   return (
     <div className="min-h-[100dvh] bg-background w-full overflow-x-hidden">
       <Navigation />
+      <OnboardingTour role="child" pageKey="child_parents_list" />
+      <HelpBubble role="child" pageKey="child_parents_list" />
       <div className="p-4 sm:p-6" style={{ paddingTop: 'calc(1rem + 64px + var(--safe-area-inset-top) * 0.15)' }}>
         <div className="max-w-4xl mx-auto">
           <div className="mb-6 sm:mb-8 mt-4 sm:mt-6">
@@ -210,7 +214,8 @@ const ChildParentsList = () => {
           </div>
 
           {parent ? (
-            <Card 
+            <Card
+              data-tour="child-parents-list-card" 
               className="p-4 sm:p-6 cursor-pointer hover:shadow-lg transition-all"
               onClick={() => handleSelectParent(parent.id)}
             >

@@ -25,6 +25,11 @@ export function HelpBubble({ role, pageKey }: HelpBubbleProps) {
     const key = getStorageKey(role, pageKey);
     localStorage.removeItem(key);
     
+    // Also clear device fingerprint so tour will run regardless of device
+    // This allows manual restart on same device
+    const deviceKey = `${STORAGE_PREFIX}${role}_${pageKey}_device`;
+    localStorage.removeItem(deviceKey);
+    
     // Dispatch custom event to trigger tour restart
     window.dispatchEvent(new CustomEvent("onboarding:restart", { 
       detail: { role, pageKey } 

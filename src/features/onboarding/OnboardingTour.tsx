@@ -50,50 +50,122 @@ export function OnboardingTour({ role, pageKey }: OnboardingTourProps) {
     const updatePosition = () => {
       const rect = element.getBoundingClientRect();
       const placement = activeStep.placement || "bottom";
-      const spacing = 16; // Space between element and bubble
+      const spacing = 24; // Increased space between element and bubble
       const viewportWidth = window.innerWidth;
       const isMobile = viewportWidth < 640; // sm breakpoint
       const bubbleWidth = isMobile ? Math.min(viewportWidth - 32, 320) : 320; // Responsive width
-      const bubbleHeight = 120; // Approximate bubble height
+      const bubbleHeight = 140; // Increased approximate bubble height
+      const padding = 16;
+      const viewportHeight = window.innerHeight;
 
       let top = 0;
       let left = 0;
 
+      // Calculate target bounds with extra padding to ensure no overlap
+      const targetTop = rect.top - 8; // Include outline offset
+      const targetBottom = rect.bottom + 8;
+      const targetLeft = rect.left - 8;
+      const targetRight = rect.right + 8;
+
       switch (placement) {
         case "top":
-          top = rect.top - bubbleHeight - spacing;
+          top = targetTop - bubbleHeight - spacing;
           left = rect.left + rect.width / 2 - bubbleWidth / 2;
           break;
         case "bottom":
-          top = rect.bottom + spacing;
+          top = targetBottom + spacing;
           left = rect.left + rect.width / 2 - bubbleWidth / 2;
           break;
         case "left":
           top = rect.top + rect.height / 2 - bubbleHeight / 2;
-          left = rect.left - bubbleWidth - spacing;
+          left = targetLeft - bubbleWidth - spacing;
           break;
         case "right":
           top = rect.top + rect.height / 2 - bubbleHeight / 2;
-          left = rect.right + spacing;
+          left = targetRight + spacing;
           break;
       }
 
-      // Ensure bubble stays within viewport
-      const viewportHeight = window.innerHeight;
+      // Check for overlap and adjust position
+      const bubbleRight = left + bubbleWidth;
+      const bubbleBottom = top + bubbleHeight;
+      const bubbleLeft = left;
+      const bubbleTop = top;
 
-      if (left < 16) left = 16;
-      if (left + bubbleWidth > viewportWidth - 16) {
-        left = viewportWidth - bubbleWidth - 16;
-      }
-      if (top < 16) top = 16;
-      if (top + bubbleHeight > viewportHeight - 16) {
-        top = viewportHeight - bubbleHeight - 16;
+      // Check if bubble overlaps with target element (with padding)
+      const overlapsHorizontally = bubbleLeft < targetRight && bubbleRight > targetLeft;
+      const overlapsVertically = bubbleTop < targetBottom && bubbleBottom > targetTop;
+      const overlaps = overlapsHorizontally && overlapsVertically;
+
+      if (overlaps) {
+        // Try alternative positions to avoid overlap
+        if (placement === "top" || placement === "bottom") {
+          // Try right side first
+          if (targetRight + spacing + bubbleWidth < viewportWidth - padding) {
+            left = targetRight + spacing;
+            top = Math.max(padding, Math.min(rect.top + rect.height / 2 - bubbleHeight / 2, viewportHeight - bubbleHeight - padding));
+          }
+          // Try left side if right doesn't work
+          else if (targetLeft - spacing - bubbleWidth > padding) {
+            left = targetLeft - spacing - bubbleWidth;
+            top = Math.max(padding, Math.min(rect.top + rect.height / 2 - bubbleHeight / 2, viewportHeight - bubbleHeight - padding));
+          }
+          // If neither side works, place above/below with more spacing
+          else if (placement === "top") {
+            top = targetTop - bubbleHeight - spacing * 2;
+            left = Math.max(padding, Math.min(left, viewportWidth - bubbleWidth - padding));
+          } else {
+            top = targetBottom + spacing * 2;
+            left = Math.max(padding, Math.min(left, viewportWidth - bubbleWidth - padding));
+          }
+        } else if (placement === "left" || placement === "right") {
+          // Try bottom first
+          if (targetBottom + spacing + bubbleHeight < viewportHeight - padding) {
+            top = targetBottom + spacing;
+            left = Math.max(padding, Math.min(rect.left + rect.width / 2 - bubbleWidth / 2, viewportWidth - bubbleWidth - padding));
+          }
+          // Try top if bottom doesn't work
+          else if (targetTop - spacing - bubbleHeight > padding) {
+            top = targetTop - spacing - bubbleHeight;
+            left = Math.max(padding, Math.min(rect.left + rect.width / 2 - bubbleWidth / 2, viewportWidth - bubbleWidth - padding));
+          }
+          // If neither works, place left/right with more spacing
+          else if (placement === "left") {
+            left = targetLeft - bubbleWidth - spacing * 2;
+            top = Math.max(padding, Math.min(top, viewportHeight - bubbleHeight - padding));
+          } else {
+            left = targetRight + spacing * 2;
+            top = Math.max(padding, Math.min(top, viewportHeight - bubbleHeight - padding));
+          }
+        }
       }
 
-      // On mobile, prefer bottom placement if there's not enough space
-      if (isMobile && (top < 16 || top + bubbleHeight > viewportHeight - 16)) {
-        top = Math.min(rect.bottom + spacing, viewportHeight - bubbleHeight - 16);
-        left = Math.max(16, Math.min(left, viewportWidth - bubbleWidth - 16));
+      // Ensure bubble stays within viewport bounds
+      if (left < padding) left = padding;
+      if (left + bubbleWidth > viewportWidth - padding) {
+        left = viewportWidth - bubbleWidth - padding;
+      }
+      if (top < padding) top = padding;
+      if (top + bubbleHeight > viewportHeight - padding) {
+        top = viewportHeight - bubbleHeight - padding;
+      }
+
+      // Final overlap check - if still overlapping, force position above
+      const finalBubbleRight = left + bubbleWidth;
+      const finalBubbleBottom = top + bubbleHeight;
+      const stillOverlaps = 
+        left < targetRight && finalBubbleRight > targetLeft &&
+        top < targetBottom && finalBubbleBottom > targetTop;
+
+      if (stillOverlaps) {
+        // Force position above the target with extra spacing
+        top = targetTop - bubbleHeight - spacing * 2;
+        left = Math.max(padding, Math.min(rect.left + rect.width / 2 - bubbleWidth / 2, viewportWidth - bubbleWidth - padding));
+        
+        // If above doesn't fit, try below
+        if (top < padding) {
+          top = targetBottom + spacing * 2;
+        }
       }
 
       setBubblePosition({ top, left, placement });
@@ -109,6 +181,31 @@ export function OnboardingTour({ role, pageKey }: OnboardingTourProps) {
     };
   }, [activeStep, isRunning, next]);
 
+  // Track target element position for backdrop cutout
+  const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
+
+  // Update target element position for backdrop cutout
+  useEffect(() => {
+    if (!targetElement) {
+      setTargetRect(null);
+      return;
+    }
+
+    const updateRect = () => {
+      const rect = targetElement.getBoundingClientRect();
+      setTargetRect(rect);
+    };
+
+    updateRect();
+    window.addEventListener("resize", updateRect);
+    window.addEventListener("scroll", updateRect, true);
+
+    return () => {
+      window.removeEventListener("resize", updateRect);
+      window.removeEventListener("scroll", updateRect, true);
+    };
+  }, [targetElement]);
+
   // Add highlight effect to target element
   useEffect(() => {
     if (!targetElement) return;
@@ -116,15 +213,20 @@ export function OnboardingTour({ role, pageKey }: OnboardingTourProps) {
     const originalZIndex = targetElement.style.zIndex;
     const originalPosition = targetElement.style.position;
     const originalOutline = targetElement.style.outline;
+    const originalBoxShadow = targetElement.style.boxShadow;
 
-    // Ensure element is above backdrop
-    targetElement.style.zIndex = "10001";
+    // Ensure element is above backdrop but below speech bubble
+    targetElement.style.zIndex = "10002";
     if (getComputedStyle(targetElement).position === "static") {
       targetElement.style.position = "relative";
     }
     targetElement.style.outline = "3px solid hsl(var(--primary))";
     targetElement.style.outlineOffset = "4px";
     targetElement.style.borderRadius = "8px";
+    // Add shadow to make it stand out more
+    targetElement.style.boxShadow = "0 0 0 4px rgba(0, 0, 0, 0.1), 0 4px 12px rgba(0, 0, 0, 0.15)";
+    // Ensure target is clickable
+    targetElement.style.pointerEvents = "auto";
 
     return () => {
       targetElement.style.zIndex = originalZIndex;
@@ -132,6 +234,7 @@ export function OnboardingTour({ role, pageKey }: OnboardingTourProps) {
       targetElement.style.outline = originalOutline;
       targetElement.style.outlineOffset = "";
       targetElement.style.borderRadius = "";
+      targetElement.style.boxShadow = originalBoxShadow;
     };
   }, [targetElement]);
 
@@ -144,17 +247,70 @@ export function OnboardingTour({ role, pageKey }: OnboardingTourProps) {
 
   return (
     <>
-      {/* Backdrop */}
-      <div
-        className="fixed inset-0 bg-black/50 z-[10000]"
-        onClick={skip}
-        aria-hidden="true"
-      />
+      {/* Backdrop with cutout for target element */}
+      {targetRect ? (
+        <>
+          {/* Top overlay */}
+          <div
+            className="fixed z-[10000] bg-black/50"
+            style={{
+              top: 0,
+              left: 0,
+              right: 0,
+              height: `${Math.max(0, targetRect.top - 8)}px`,
+            }}
+            onClick={skip}
+            aria-hidden="true"
+          />
+          {/* Bottom overlay */}
+          <div
+            className="fixed z-[10000] bg-black/50"
+            style={{
+              top: `${targetRect.bottom + 8}px`,
+              left: 0,
+              right: 0,
+              bottom: 0,
+            }}
+            onClick={skip}
+            aria-hidden="true"
+          />
+          {/* Left overlay */}
+          <div
+            className="fixed z-[10000] bg-black/50"
+            style={{
+              top: `${Math.max(0, targetRect.top - 8)}px`,
+              left: 0,
+              width: `${Math.max(0, targetRect.left - 8)}px`,
+              height: `${targetRect.height + 16}px`,
+            }}
+            onClick={skip}
+            aria-hidden="true"
+          />
+          {/* Right overlay */}
+          <div
+            className="fixed z-[10000] bg-black/50"
+            style={{
+              top: `${Math.max(0, targetRect.top - 8)}px`,
+              left: `${targetRect.right + 8}px`,
+              right: 0,
+              height: `${targetRect.height + 16}px`,
+            }}
+            onClick={skip}
+            aria-hidden="true"
+          />
+        </>
+      ) : (
+        <div
+          className="fixed inset-0 bg-black/50 z-[10000]"
+          onClick={skip}
+          aria-hidden="true"
+        />
+      )}
 
-      {/* Speech bubble */}
+      {/* Speech bubble - positioned above cutout area */}
       <div
         ref={bubbleRef}
-        className="fixed z-[10002] bg-background border-2 border-primary rounded-lg shadow-lg p-4 max-w-[calc(100vw-2rem)] sm:max-w-[320px] mx-4 sm:mx-0"
+        className="fixed z-[10003] bg-background border-2 border-primary rounded-lg shadow-xl p-4 max-w-[calc(100vw-2rem)] sm:max-w-[320px] mx-4 sm:mx-0 pointer-events-auto"
         style={{
           top: `${bubblePosition.top}px`,
           left: `${bubblePosition.left}px`,

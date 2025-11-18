@@ -2,6 +2,8 @@
 // Child Home / Dashboard page
 
 import Navigation from "@/components/Navigation";
+import { OnboardingTour } from "@/features/onboarding/OnboardingTour";
+import { HelpBubble } from "@/features/onboarding/HelpBubble";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { usePresence } from "@/features/presence/usePresence";
@@ -72,6 +74,8 @@ const ChildHome = () => {
   return (
     <div className="min-h-[100dvh] bg-background">
       <Navigation />
+      <OnboardingTour role="child" pageKey="child_home" />
+      <HelpBubble role="child" pageKey="child_home" />
       <div
         className="p-4"
         style={{
@@ -93,6 +97,7 @@ const ChildHome = () => {
                 className="w-full"
                 size="lg"
                 onClick={() => navigate("/child/parents")}
+                data-tour="child-home-parents"
               >
                 <Users className="mr-2 h-5 w-5" />
                 Select Parent

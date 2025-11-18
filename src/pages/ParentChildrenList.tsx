@@ -13,6 +13,8 @@ import Navigation from "@/components/Navigation";
 import { useUnreadBadgeForChild } from "@/stores/badgeStore";
 import { StatusIndicator } from "@/features/presence/StatusIndicator";
 import { useChildrenPresence } from "@/features/presence/useChildrenPresence";
+import { OnboardingTour } from "@/features/onboarding/OnboardingTour";
+import { HelpBubble } from "@/features/onboarding/HelpBubble";
 
 interface Child {
   id: string;
@@ -26,17 +28,19 @@ const ChildCard = ({
   child, 
   onCall, 
   onChat,
-  isOnline
+  isOnline,
+  "data-tour": dataTour
 }: { 
   child: Child; 
   onCall: (childId: string) => void; 
   onChat: (childId: string) => void;
   isOnline: boolean;
+  "data-tour"?: string;
 }) => {
   const unreadMessageCount = useUnreadBadgeForChild(child.id);
   
   return (
-    <Card className="p-6">
+    <Card className="p-6" data-tour={dataTour}>
       <div className="flex items-start justify-between flex-col sm:flex-row gap-4">
         <div className="flex items-start space-x-4 flex-1">
           {/* CLS: Use aspect-square to ensure consistent avatar sizing */}
@@ -65,6 +69,7 @@ const ChildCard = ({
             onClick={() => onCall(child.id)}
             variant="secondary"
             className="flex-1 sm:flex-none relative"
+            data-tour={dataTour ? "parent-children-list-call" : undefined}
           >
             <Phone className="mr-2 h-4 w-4" />
             Call
@@ -72,6 +77,7 @@ const ChildCard = ({
           <Button 
             onClick={() => onChat(child.id)}
             className="flex-1 sm:flex-none relative bg-chat-accent text-chat-accent-foreground hover:bg-chat-accent/90"
+            data-tour={dataTour ? "parent-children-list-message" : undefined}
           >
             <MessageCircle className="mr-2 h-4 w-4" />
             Message
@@ -182,6 +188,8 @@ const ParentChildrenList = () => {
   return (
     <div className="min-h-[100dvh] bg-background">
       <Navigation />
+      <OnboardingTour role="parent" pageKey="parent_children_list" />
+      <HelpBubble role="parent" pageKey="parent_children_list" />
       <div className="p-4" style={{ paddingTop: 'calc(1rem + 64px + var(--safe-area-inset-top) * 0.15)' }}>
         <div className="max-w-4xl mx-auto">
           <div className="mb-8 mt-8">
@@ -197,13 +205,14 @@ const ParentChildrenList = () => {
             </Card>
           ) : (
             <div className="grid gap-4">
-              {children.map((child) => (
+              {children.map((child, index) => (
                 <ChildCard
                   key={child.id}
                   child={child}
                   onCall={handleCall}
                   onChat={handleChat}
                   isOnline={isChildOnline(child.id)}
+                  data-tour={index === 0 ? "parent-children-list-card" : undefined}
                 />
               ))}
             </div>

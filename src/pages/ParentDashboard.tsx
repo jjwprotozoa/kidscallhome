@@ -896,6 +896,7 @@ const ParentDashboard = () => {
                 variant="outline"
                 onClick={() => navigate("/parent/upgrade")}
                 className="flex-shrink-0"
+                data-tour="parent-upgrade-plan"
               >
                 Upgrade Plan
               </Button>
@@ -950,6 +951,7 @@ const ParentDashboard = () => {
                     variant="default"
                     size="sm"
                     className="w-full sm:w-auto"
+                    data-tour="parent-upgrade-limit"
                   >
                     Upgrade Your Plan
                   </Button>
@@ -1003,12 +1005,14 @@ const ParentDashboard = () => {
                   style={{
                     borderLeft: `4px solid ${child.avatar_color}`,
                   }}
-                  data-tour={
-                    index === 0 ? "parent-status-indicator" : undefined
-                  }
                 >
                   <div className="space-y-2">
-                    <div className="flex items-center gap-2">
+                    <div
+                      className="flex items-center gap-2"
+                      data-tour={
+                        index === 0 ? "parent-child-name-status" : undefined
+                      }
+                    >
                       <h3 className="text-2xl sm:text-3xl font-bold">
                         {child.name}
                       </h3>
@@ -1018,7 +1022,10 @@ const ParentDashboard = () => {
                         showPulse={isChildOnline(child.id)}
                       />
                     </div>
-                    <div className="bg-muted p-3 rounded-lg relative">
+                    <div
+                      className="bg-muted p-3 rounded-lg relative"
+                      data-tour={index === 0 ? "parent-login-code" : undefined}
+                    >
                       <p className="text-xs text-muted-foreground mb-1">
                         Login Code
                       </p>
@@ -1043,6 +1050,7 @@ const ParentDashboard = () => {
                         variant="outline"
                         size="sm"
                         className="flex-1"
+                        data-tour={index === 0 ? "parent-copy-code" : undefined}
                       >
                         <Copy className="mr-2 h-4 w-4" />
                         Copy Code
@@ -1052,6 +1060,7 @@ const ParentDashboard = () => {
                         variant="outline"
                         size="sm"
                         className="flex-1"
+                        data-tour={index === 0 ? "parent-copy-link" : undefined}
                       >
                         <ExternalLink className="mr-2 h-4 w-4" />
                         Copy Link
@@ -1061,6 +1070,9 @@ const ParentDashboard = () => {
                         variant="outline"
                         size="sm"
                         className="flex-1"
+                        data-tour={
+                          index === 0 ? "parent-print-code" : undefined
+                        }
                       >
                         <Printer className="mr-2 h-4 w-4" />
                         Print
@@ -1070,6 +1082,7 @@ const ParentDashboard = () => {
                         variant="outline"
                         size="sm"
                         className="flex-1"
+                        data-tour={index === 0 ? "parent-view-qr" : undefined}
                       >
                         <QrCode className="mr-2 h-4 w-4" />
                         View QR
@@ -1090,6 +1103,9 @@ const ParentDashboard = () => {
                       onClick={() => setChildToDelete(child)}
                       variant="destructive"
                       size="icon"
+                      data-tour={
+                        index === 0 ? "parent-delete-child" : undefined
+                      }
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>

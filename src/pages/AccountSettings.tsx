@@ -2,6 +2,8 @@
 // Account settings page with upgrade link
 
 import Navigation from "@/components/Navigation";
+import { OnboardingTour } from "@/features/onboarding/OnboardingTour";
+import { HelpBubble } from "@/features/onboarding/HelpBubble";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
@@ -183,6 +185,8 @@ const AccountSettings = () => {
   return (
     <div className="min-h-[100dvh] bg-background w-full overflow-x-hidden">
       <Navigation />
+      <OnboardingTour role="parent" pageKey="parent_settings" />
+      <HelpBubble role="parent" pageKey="parent_settings" />
       <div
         className="px-4 pb-4"
         style={{
@@ -201,7 +205,7 @@ const AccountSettings = () => {
           </div>
 
           {/* Account Info */}
-          <Card className="p-6 mb-6">
+          <Card className="p-6 mb-6" data-tour="parent-settings-account">
             <h2 className="text-xl font-semibold mb-4">Account Information</h2>
             <div className="space-y-4">
               <div>
@@ -300,6 +304,7 @@ const AccountSettings = () => {
                   <Button
                     onClick={() => navigate("/parent/upgrade")}
                     className="w-full sm:w-auto"
+                    data-tour="parent-settings-upgrade"
                   >
                     {subscriptionStatus === "cancelled" ? "Resubscribe" : "View Plans"}
                     <ArrowRight className="ml-2 h-4 w-4" />

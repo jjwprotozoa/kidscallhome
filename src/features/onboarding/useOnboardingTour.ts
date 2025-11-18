@@ -3,6 +3,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { Role, OnboardingStep, getTourConfig } from "./onboardingConfig";
+import { generateDeviceIdentifier } from "@/utils/deviceTracking";
 
 export interface UseOnboardingTourArgs {
   role: Role;
@@ -27,6 +28,10 @@ function getStorageKey(role: Role, pageKey: string): string {
   return `${STORAGE_PREFIX}${role}_${pageKey}_done`;
 }
 
+function getDeviceFingerprintKey(role: Role, pageKey: string): string {
+  return `${STORAGE_PREFIX}${role}_${pageKey}_device`;
+}
+
 function isTourCompleted(role: Role, pageKey: string): boolean {
   const key = getStorageKey(role, pageKey);
   return localStorage.getItem(key) === "true";
@@ -35,20 +40,42 @@ function isTourCompleted(role: Role, pageKey: string): boolean {
 function markTourCompleted(role: Role, pageKey: string): void {
   const key = getStorageKey(role, pageKey);
   localStorage.setItem(key, "true");
+  // Also store device fingerprint when tour is completed
+  const deviceKey = getDeviceFingerprintKey(role, pageKey);
+  const fingerprint = generateDeviceIdentifier();
+  localStorage.setItem(deviceKey, fingerprint);
+}
+
+function isNewDevice(role: Role, pageKey: string): boolean {
+  const deviceKey = getDeviceFingerprintKey(role, pageKey);
+  const storedFingerprint = localStorage.getItem(deviceKey);
+  
+  // If no stored fingerprint, it's a new device (or cache cleared)
+  if (!storedFingerprint) {
+    return true;
+  }
+  
+  // Check if current device fingerprint matches stored one
+  const currentFingerprint = generateDeviceIdentifier();
+  return storedFingerprint !== currentFingerprint;
 }
 
 export function useOnboardingTour({
   role,
   pageKey,
 }: UseOnboardingTourArgs): UseOnboardingTourResult {
-  const steps = getTourConfig(role);
+  const steps = getTourConfig(role, pageKey);
   const [stepIndex, setStepIndex] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
 
   // Check if tour should auto-start on mount
+  // Only auto-start if:
+  // 1. Tour not completed AND it's a new device (or cache cleared)
+  // 2. Manual trigger via HelpBubble (handled by event listener below)
   useEffect(() => {
-    if (!isTourCompleted(role, pageKey)) {
-      // Auto-start tour on first visit
+    const shouldAutoStart = !isTourCompleted(role, pageKey) && isNewDevice(role, pageKey);
+    if (shouldAutoStart) {
+      // Auto-start tour on new device or cache clear
       setIsRunning(true);
       setStepIndex(0);
     }

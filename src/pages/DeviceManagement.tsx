@@ -26,6 +26,8 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import Navigation from "@/components/Navigation";
+import { OnboardingTour } from "@/features/onboarding/OnboardingTour";
+import { HelpBubble } from "@/features/onboarding/HelpBubble";
 import {
   Smartphone,
   Tablet,
@@ -546,6 +548,8 @@ const DeviceManagement = () => {
   return (
     <div className="min-h-[100dvh] bg-background w-full overflow-x-hidden">
       <Navigation />
+      <OnboardingTour role="parent" pageKey="parent_devices" />
+      <HelpBubble role="parent" pageKey="parent_devices" />
       <div
         className="px-4 pb-4"
         style={{
@@ -643,6 +647,7 @@ const DeviceManagement = () => {
               )}
 
               {/* Devices List */}
+              <div data-tour="parent-devices-list">
               {loading ? (
             <Card className="p-12 text-center">
               <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-4 text-muted-foreground" />
@@ -784,6 +789,7 @@ const DeviceManagement = () => {
               })}
             </div>
           )}
+              </div>
             </TabsContent>
 
             {/* Device History Tab */}
