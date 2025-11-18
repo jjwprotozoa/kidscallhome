@@ -177,27 +177,46 @@ workflows:
           echo ""
 
           if [ $BUILD_EXIT_CODE -ne 0 ]; then
-            echo "❌❌❌ DEBUG BUILD FAILED WITH EXIT CODE $BUILD_EXIT_CODE ❌❌❌"
             echo ""
-            echo "=== FIRST 100 LINES (likely contains the actual error) ==="
-            head -n 100 debug-build.log
+            echo "═══════════════════════════════════════════════════════════════"
+            echo "❌❌❌ BUILD FAILED WITH EXIT CODE $BUILD_EXIT_CODE ❌❌❌"
+            echo "═══════════════════════════════════════════════════════════════"
             echo ""
-            echo "=== LAST 100 LINES (stack trace) ==="
-            tail -n 100 debug-build.log
+            
+            echo "=== 🔍 EXTRACTING GRADLE ERROR MESSAGES ==="
             echo ""
-            echo "=== SEARCHING FOR ERROR MESSAGES ==="
-            grep -i -E "error|failed|exception|FAILURE|^FAILURE|^> Task" debug-build.log | head -50 || echo "No error keywords found"
+            echo "Looking for 'FAILURE:' messages:"
+            grep -A 20 "FAILURE:" debug-build.log | head -30 || echo "No FAILURE: messages found"
             echo ""
-            echo "=== FULL BUILD LOG (complete output) ==="
-            cat debug-build.log
+            echo "Looking for 'What went wrong:' messages:"
+            grep -A 20 "What went wrong:" debug-build.log | head -30 || echo "No 'What went wrong:' found"
             echo ""
+            echo "Looking for 'Execution failed for task':"
+            grep -B 5 -A 15 "Execution failed for task" debug-build.log | head -40 || echo "No 'Execution failed for task' found"
+            echo ""
+            echo "Looking for failed tasks (lines starting with '> Task :'):"
+            grep "^> Task :.*FAILED" debug-build.log | head -20 || echo "No failed tasks found"
+            echo ""
+            echo "Looking for error patterns:"
+            grep -i -E "^\\* |error:|exception:|failed" debug-build.log | head -30 || echo "No error patterns found"
+            echo ""
+            
+            echo "=== FIRST 150 LINES (build start - may contain error) ==="
+            head -n 150 debug-build.log
+            echo ""
+            echo "=== LAST 150 LINES (build end - stack trace) ==="
+            tail -n 150 debug-build.log
+            echo ""
+            
+            echo "=== 📋 FULL BUILD LOG (saved to debug-build.log, $(wc -l < debug-build.log) lines) ==="
+            echo "The complete log is available in debug-build.log"
+            echo ""
+            
             echo "=== DIAGNOSTIC INFO ==="
             echo "Gradle version:"
             ./gradlew --version 2>&1 | head -5 || echo "Could not get Gradle version"
             echo ""
             echo "Current directory: $(pwd)"
-            echo "Files in current directory:"
-            ls -la | head -20
             exit 1
           fi
 
