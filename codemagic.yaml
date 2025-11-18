@@ -136,16 +136,16 @@ workflows:
           echo "=== Building Debug APK (to verify build works) ==="
           echo "Running: ./gradlew assembleDebug --stacktrace --info"
           echo ""
-          
+
           # Build with output visible and captured - use unbuffered output
           set -o pipefail  # Ensure pipe failures are caught
           ./gradlew assembleDebug --stacktrace --info 2>&1 | tee debug-build.log
           BUILD_EXIT_CODE=${PIPESTATUS[0]}
-          
+
           echo ""
           echo "=== Build completed with exit code: $BUILD_EXIT_CODE ==="
           echo ""
-          
+
           if [ $BUILD_EXIT_CODE -ne 0 ]; then
             echo "❌ Debug build failed with exit code $BUILD_EXIT_CODE!"
             echo ""
@@ -165,7 +165,7 @@ workflows:
             cat gradle.properties 2>&1 || echo "gradle.properties not found"
             exit 1
           fi
-          
+
           echo "✅ Build succeeded!"
 
           # Verify debug APK was created (only if build succeeded)
@@ -222,26 +222,38 @@ workflows:
           # Build with full error output
           echo ""
           echo "=== Building Android App Bundle (Release) ==="
-          ./gradlew bundleRelease --stacktrace 2>&1 | tee release-build.log || {
+          set -o pipefail
+          ./gradlew bundleRelease --stacktrace --info 2>&1 | tee release-build.log
+          BUNDLE_EXIT_CODE=${PIPESTATUS[0]}
+          
+          if [ $BUNDLE_EXIT_CODE -ne 0 ]; then
             echo ""
-            echo "❌ Release build failed!"
+            echo "❌ Release build failed with exit code $BUNDLE_EXIT_CODE!"
             echo ""
-            echo "=== Full build output ==="
+            echo "=== FULL BUILD OUTPUT ==="
             cat release-build.log
             echo ""
             echo "=== Searching for specific errors ==="
-            grep -i "signing\|keystore\|password\|error\|failed\|exception" release-build.log | head -30
+            grep -i -A 10 -B 5 "error\|failed\|exception\|FAILURE" release-build.log | head -50 || echo "No obvious errors found"
             echo ""
-            echo "⚠️ Release build failed. This might be due to missing signing configuration."
-            echo "Trying to build debug bundle instead..."
-            ./gradlew bundleDebug --stacktrace 2>&1 | tee debug-bundle.log || {
-              echo "Debug bundle also failed:"
+            echo "⚠️ Release build failed. Trying to build debug bundle instead..."
+            ./gradlew bundleDebug --stacktrace --info 2>&1 | tee debug-bundle.log
+            DEBUG_BUNDLE_EXIT_CODE=${PIPESTATUS[0]}
+            
+            if [ $DEBUG_BUNDLE_EXIT_CODE -ne 0 ]; then
+              echo ""
+              echo "❌ Debug bundle also failed!"
+              echo "=== FULL DEBUG BUNDLE OUTPUT ==="
               cat debug-bundle.log
               exit 1
-            }
-          }
+            else
+              echo "✅ Debug bundle built successfully!"
+            fi
+          else
+            echo "✅ Release bundle built successfully!"
+          fi
 
-          # Verify build artifacts were created
+          # Verify build artifacts were created (only if build succeeded)
           echo ""
           echo "=== Verifying build artifacts ==="
           echo "Checking for AAB files..."
@@ -256,7 +268,9 @@ workflows:
           echo "Full path to outputs:"
           pwd
           ls -la app/build/outputs/bundle/release/ 2>/dev/null || echo "Bundle release directory not found"
+          ls -la app/build/outputs/bundle/debug/ 2>/dev/null || echo "Bundle debug directory not found"
           ls -la app/build/outputs/apk/release/ 2>/dev/null || echo "APK release directory not found"
+          ls -la app/build/outputs/apk/debug/ 2>/dev/null || echo "APK debug directory not found"
 
       - name: Build Release APK (for testing)
         script: |
@@ -284,20 +298,26 @@ workflows:
           # Build with full error output
           echo ""
           echo "=== Building Android Release APK ==="
-          ./gradlew assembleRelease --stacktrace 2>&1 | tee release-apk.log || {
+          set -o pipefail
+          ./gradlew assembleRelease --stacktrace --info 2>&1 | tee release-apk.log
+          RELEASE_APK_EXIT_CODE=${PIPESTATUS[0]}
+          
+          if [ $RELEASE_APK_EXIT_CODE -ne 0 ]; then
             echo ""
-            echo "❌ Release APK build failed!"
+            echo "❌ Release APK build failed with exit code $RELEASE_APK_EXIT_CODE!"
             echo ""
-            echo "=== Full build output ==="
+            echo "=== FULL BUILD OUTPUT ==="
             cat release-apk.log
             echo ""
             echo "=== Searching for specific errors ==="
-            grep -i "signing\|keystore\|password\|error\|failed\|exception" release-apk.log | head -30
+            grep -i -A 10 -B 5 "error\|failed\|exception\|FAILURE" release-apk.log | head -50 || echo "No obvious errors found"
             echo ""
             echo "⚠️ Release APK build failed. Debug APK should already be available from earlier step."
             # Don't exit - debug APK is already built
-          }
-
+          else
+            echo "✅ Release APK built successfully!"
+          fi
+          
           # Verify build artifacts were created
           echo ""
           echo "=== Verifying build artifacts ==="
