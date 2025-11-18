@@ -26,6 +26,7 @@ import ChildParentsList from "./pages/ChildParentsList";
 import ChildCallScreen from "./pages/ChildCallScreen";
 import VideoCall from "./pages/VideoCall";
 import Chat from "./pages/Chat";
+import Info from "./pages/Info";
 import { useBadgeInitialization } from "@/hooks/useBadgeInitialization";
 import { useBadgeRealtime } from "@/hooks/useBadgeRealtime";
 import { GlobalIncomingCall } from "@/components/GlobalIncomingCall";
@@ -119,6 +120,7 @@ const App = () => (
               <Route path="/child/dashboard" element={<ChildDashboard />} />
               <Route path="/call/:childId" element={<VideoCall />} />
               <Route path="/chat/:childId" element={<Chat />} />
+              <Route path="/info" element={<Info />} />
               {/* Error pages */}
               <Route path="/error/server" element={<ServerError />} />
               <Route path="/error/network" element={<NetworkError />} />

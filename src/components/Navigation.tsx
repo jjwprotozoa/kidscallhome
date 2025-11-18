@@ -6,10 +6,26 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { NavLink } from "@/components/NavLink";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
-import { Home, LayoutDashboard, Users, LogOut, MessageSquare, PhoneMissed, Smartphone, Settings } from "lucide-react";
+import { Home, LayoutDashboard, Users, LogOut, MessageSquare, PhoneMissed, Smartphone, Settings, Info, MoreVertical } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { useTotalUnreadBadge, useTotalMissedBadge, useBadgeStore } from "@/stores/badgeStore";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const Navigation = () => {
   const location = useLocation();
@@ -48,6 +64,7 @@ const Navigation = () => {
 
   const [userType, setUserType] = useState<"parent" | "child" | null>(getInitialUserType);
   const [loading, setLoading] = useState(false);
+  const [showLogoutDialog, setShowLogoutDialog] = useState(false);
   
   // Get badge counts from store (derived, no DB reads)
   const unreadMessageCount = useTotalUnreadBadge();
@@ -192,6 +209,7 @@ const Navigation = () => {
 
   if (userType === "parent") {
     return (
+      <>
       <nav className="fixed top-0 left-0 right-0 z-50 border-b bg-background w-full overflow-x-hidden" style={{ paddingTop: `calc(var(--safe-area-inset-top) * 0.15)` }}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
           <div className="flex items-center justify-between h-16 min-w-0">
@@ -214,57 +232,144 @@ const Navigation = () => {
                 </div>
                 <span>Children</span>
               </NavLink>
-              <NavLink to="/parent/devices" className={navLinkClassName}>
-                <Smartphone className="h-4 w-4" />
-                <span>Devices</span>
-              </NavLink>
-              <NavLink to="/parent/settings" className={navLinkClassName}>
-                <Settings className="h-4 w-4" />
-                <span>Settings</span>
-              </NavLink>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    className={cn(
+                      "flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors",
+                      location.pathname === "/parent/devices" || 
+                      location.pathname === "/parent/settings" || 
+                      location.pathname === "/info"
+                        ? "bg-accent text-accent-foreground"
+                        : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                    )}
+                  >
+                    <MoreVertical className="h-4 w-4" />
+                    <span className="hidden sm:inline">More</span>
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  <DropdownMenuItem onClick={() => navigate("/parent/devices")}>
+                    <Smartphone className="mr-2 h-4 w-4" />
+                    <span>Devices</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => navigate("/parent/settings")}>
+                    <Settings className="mr-2 h-4 w-4" />
+                    <span>Settings</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => navigate("/info")}>
+                    <Info className="mr-2 h-4 w-4" />
+                    <span>App Information</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
-            <Button variant="outline" size="sm" onClick={handleLogout} className="flex-shrink-0">
+            <Button variant="outline" size="sm" onClick={() => setShowLogoutDialog(true)} className="flex-shrink-0">
               <LogOut className="h-4 w-4 md:mr-2" />
               <span className="hidden md:inline">Logout</span>
             </Button>
           </div>
         </div>
       </nav>
+      {/* Logout Confirmation Dialog */}
+      <AlertDialog open={showLogoutDialog} onOpenChange={setShowLogoutDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm Logout</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to log out? You'll need to sign in again to access your account.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleLogout}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Logout
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      </>
     );
   }
 
   if (userType === "child") {
     return (
-      <nav className="fixed top-0 left-0 right-0 z-50 border-b bg-background w-full overflow-x-hidden" style={{ paddingTop: `calc(var(--safe-area-inset-top) * 0.15)` }}>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
-          <div className="flex items-center justify-between h-16 min-w-0">
-            <div className="flex items-center gap-4 min-w-0 flex-shrink" data-tour="child-help">
-              <NavLink to="/child" className={navLinkClassName}>
-                <Home className="h-4 w-4" />
-                <span>Home</span>
-              </NavLink>
-              <NavLink to="/child/dashboard" className={navLinkClassName}>
-                <div className="relative flex items-center justify-center">
-                  <LayoutDashboard className="h-4 w-4" />
-                  <Badge count={missedCallCount} />
-                </div>
-                <span>Dashboard</span>
-              </NavLink>
-              <NavLink to="/child/parents" className={navLinkClassName}>
-                <div className="relative flex items-center justify-center">
-                  <Users className="h-4 w-4" />
-                  <Badge count={unreadMessageCount} />
-                </div>
-                <span>Parents</span>
-              </NavLink>
+      <>
+        <nav className="fixed top-0 left-0 right-0 z-50 border-b bg-background w-full overflow-x-hidden" style={{ paddingTop: `calc(var(--safe-area-inset-top) * 0.15)` }}>
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
+            <div className="flex items-center justify-between h-16 min-w-0">
+              <div className="flex items-center gap-4 min-w-0 flex-shrink" data-tour="child-help">
+                <NavLink to="/child" className={navLinkClassName}>
+                  <Home className="h-4 w-4" />
+                  <span>Home</span>
+                </NavLink>
+                <NavLink to="/child/dashboard" className={navLinkClassName}>
+                  <div className="relative flex items-center justify-center">
+                    <LayoutDashboard className="h-4 w-4" />
+                    <Badge count={missedCallCount} />
+                  </div>
+                  <span>Dashboard</span>
+                </NavLink>
+                <NavLink to="/child/parents" className={navLinkClassName}>
+                  <div className="relative flex items-center justify-center">
+                    <Users className="h-4 w-4" />
+                    <Badge count={unreadMessageCount} />
+                  </div>
+                  <span>Parents</span>
+                </NavLink>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      className={cn(
+                        "flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors",
+                        location.pathname === "/info"
+                          ? "bg-accent text-accent-foreground"
+                          : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                      )}
+                    >
+                      <MoreVertical className="h-4 w-4" />
+                      <span className="hidden sm:inline">More</span>
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-48">
+                    <DropdownMenuItem onClick={() => navigate("/info")}>
+                      <Info className="mr-2 h-4 w-4" />
+                      <span>App Information</span>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => setShowLogoutDialog(true)} className="flex-shrink-0">
+                <LogOut className="h-4 w-4 md:mr-2" />
+                <span className="hidden md:inline">Logout</span>
+              </Button>
             </div>
-            <Button variant="outline" size="sm" onClick={handleLogout} className="flex-shrink-0">
-              <LogOut className="h-4 w-4 md:mr-2" />
-              <span className="hidden md:inline">Logout</span>
-            </Button>
           </div>
-        </div>
-      </nav>
+        </nav>
+        {/* Logout Confirmation Dialog */}
+        <AlertDialog open={showLogoutDialog} onOpenChange={setShowLogoutDialog}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Confirm Logout</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to log out? You'll need to sign in again to access your account.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleLogout}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                Logout
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </>
     );
   }
 

@@ -46,9 +46,9 @@ export async function getIPGeolocation(ipAddress: string | null): Promise<IPGeol
 
   try {
     // Try ip-api.com first (free, no API key needed, 45 req/min)
-    // Format: http://ip-api.com/json/{ip}?fields=status,message,country,countryCode,city,regionName
+    // Format: https://ip-api.com/json/{ip}?fields=status,message,country,countryCode,city,regionName
     const response = await fetch(
-      `http://ip-api.com/json/${ipAddress}?fields=status,message,country,countryCode,city,regionName`,
+      `https://ip-api.com/json/${ipAddress}?fields=status,message,country,countryCode,city,regionName`,
       {
         method: 'GET',
         headers: {
@@ -70,9 +70,15 @@ export async function getIPGeolocation(ipAddress: string | null): Promise<IPGeol
           region: data.regionName || null,
         };
       }
+    } else if (response.status === 403 || response.status === 429) {
+      // Rate limited or forbidden - silently fall back to ipapi.co
+      // Don't log as error since this is expected behavior
     }
   } catch (error) {
-    console.warn('ip-api.com geolocation failed, trying fallback:', error);
+    // Only log unexpected errors, not rate limits
+    if (error instanceof TypeError) {
+      console.warn('ip-api.com geolocation failed, trying fallback:', error);
+    }
   }
 
   // Fallback to ipapi.co (free tier: 1000 requests/day)

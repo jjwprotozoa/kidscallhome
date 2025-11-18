@@ -82,6 +82,17 @@ const Index = () => {
             </p>
           </div>
         </div>
+
+        {/* Footer Links */}
+        <div className="mt-16 pt-8 border-t text-center">
+          <Button
+            variant="ghost"
+            onClick={() => navigate("/info")}
+            className="text-muted-foreground hover:text-foreground"
+          >
+            App Information & Legal
+          </Button>
+        </div>
       </div>
     </div>
   );

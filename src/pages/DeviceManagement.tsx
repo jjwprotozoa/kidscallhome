@@ -36,7 +36,18 @@ import {
   Shield,
   Plus,
   RefreshCw,
+  History,
+  ArrowUp,
+  Filter,
 } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { formatDistanceToNow } from "date-fns";
 import { parseDeviceInfo } from "@/utils/userAgentParser";
 import { countryCodeToFlag } from "@/utils/ipGeolocation";
@@ -59,15 +70,32 @@ interface Device {
 
 const DeviceManagement = () => {
   const [devices, setDevices] = useState<Device[]>([]);
+  const [deviceHistory, setDeviceHistory] = useState<Device[]>([]);
+  const [allChildren, setAllChildren] = useState<Array<{ id: string; name: string }>>([]);
   const [loading, setLoading] = useState(true);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState("active");
   const [deviceToRemove, setDeviceToRemove] = useState<Device | null>(null);
   const [deviceToRename, setDeviceToRename] = useState<Device | null>(null);
   const [newDeviceName, setNewDeviceName] = useState("");
   const [showAddDeviceDialog, setShowAddDeviceDialog] = useState(false);
   const [requireAuth, setRequireAuth] = useState(false);
   const [authPassword, setAuthPassword] = useState("");
+  
+  // Filter and pagination state
+  const [historyChildFilter, setHistoryChildFilter] = useState<string>("all");
+  const [historyDeviceTypeFilter, setHistoryDeviceTypeFilter] = useState<string>("all");
+  const [historyPage, setHistoryPage] = useState(1);
+  const [showBackToTop, setShowBackToTop] = useState(false);
+  const historyPageSize = 10;
+  
+  // Active devices filter state
+  const [activeChildFilter, setActiveChildFilter] = useState<string>("all");
+  const [activeDeviceTypeFilter, setActiveDeviceTypeFilter] = useState<string>("all");
+  
   const { toast } = useToast();
   const channelRef = useRef<RealtimeChannel | null>(null);
+  const historyContainerRef = useRef<HTMLDivElement | null>(null);
 
   const fetchDevices = useCallback(async () => {
     try {
@@ -129,8 +157,71 @@ const DeviceManagement = () => {
     }
   }, [toast]);
 
+  const fetchChildren = useCallback(async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from("children")
+        .select("id, name")
+        .order("name", { ascending: true });
+
+      if (error) throw error;
+      setAllChildren(data || []);
+    } catch (error: any) {
+      console.error("Error fetching children:", error);
+    }
+  }, []);
+
+  const fetchDeviceHistory = useCallback(async () => {
+    try {
+      setHistoryLoading(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Fetch ALL devices (active and inactive) for history
+      const { data, error } = await supabase
+        .from("devices")
+        .select(`
+          *,
+          children:last_used_child_id (
+            name
+          )
+        `)
+        .eq("parent_id", user.id)
+        .order("updated_at", { ascending: false }); // Order by last update (when deactivated or last login)
+
+      if (error) throw error;
+
+      // Transform data to include child name
+      const transformedDevices = (data || []).map((device: any) => ({
+        ...device,
+        child_name: device.children?.name || null,
+      }));
+
+      console.log("📋 [DEVICE MANAGEMENT] Fetched device history:", {
+        count: transformedDevices.length,
+        active: transformedDevices.filter((d: Device) => d.is_active).length,
+        inactive: transformedDevices.filter((d: Device) => !d.is_active).length,
+      });
+
+      setDeviceHistory(transformedDevices);
+    } catch (error: any) {
+      console.error("Error fetching device history:", error);
+      toast({
+        title: "Error",
+        description: "Failed to load device history. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [toast]);
+
   useEffect(() => {
     fetchDevices();
+    fetchChildren();
 
     // Set up real-time subscription for device updates
     const setupRealtimeSubscription = async () => {
@@ -143,7 +234,7 @@ const DeviceManagement = () => {
       }
 
       // Subscribe to INSERT and UPDATE events on devices table for this parent
-      channelRef.current = supabase
+        channelRef.current = supabase
         .channel("device-management-updates")
         .on(
           "postgres_changes",
@@ -157,6 +248,9 @@ const DeviceManagement = () => {
             console.log("📱 [DEVICE MANAGEMENT] New device added:", payload.new);
             // Refresh devices list when a new device is added
             fetchDevices();
+            if (activeTab === "history") {
+              fetchDeviceHistory();
+            }
           }
         )
         .on(
@@ -176,6 +270,9 @@ const DeviceManagement = () => {
             });
             // Refresh devices list when a device is updated (e.g., last_login_at changes or is_active changes)
             fetchDevices();
+            if (activeTab === "history") {
+              fetchDeviceHistory();
+            }
           }
         )
         .subscribe((status, err) => {
@@ -196,7 +293,76 @@ const DeviceManagement = () => {
         channelRef.current = null;
       }
     };
-  }, [fetchDevices]);
+  }, [fetchDevices, fetchDeviceHistory, activeTab]);
+
+  // Load history when switching to history tab
+  useEffect(() => {
+    if (activeTab === "history" && deviceHistory.length === 0 && !historyLoading) {
+      fetchDeviceHistory();
+    }
+  }, [activeTab, fetchDeviceHistory, deviceHistory.length, historyLoading]);
+
+  // Handle scroll for back-to-top button
+  useEffect(() => {
+    if (activeTab !== "history") {
+      setShowBackToTop(false);
+      return;
+    }
+
+    const handleScroll = () => {
+      if (historyContainerRef.current) {
+        const scrollTop = historyContainerRef.current.scrollTop;
+        setShowBackToTop(scrollTop > 400);
+      }
+    };
+
+    const container = historyContainerRef.current;
+    if (container) {
+      container.addEventListener("scroll", handleScroll);
+      // Check initial scroll position
+      handleScroll();
+      return () => container.removeEventListener("scroll", handleScroll);
+    }
+  }, [activeTab]);
+
+  // Filter and paginate history
+  const filteredHistory = deviceHistory.filter((device) => {
+    if (historyChildFilter !== "all" && device.last_used_child_id !== historyChildFilter) {
+      return false;
+    }
+    if (historyDeviceTypeFilter !== "all" && device.device_type !== historyDeviceTypeFilter) {
+      return false;
+    }
+    return true;
+  });
+
+  const totalPages = Math.ceil(filteredHistory.length / historyPageSize);
+  const paginatedHistory = filteredHistory.slice(
+    (historyPage - 1) * historyPageSize,
+    historyPage * historyPageSize
+  );
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setHistoryPage(1);
+  }, [historyChildFilter, historyDeviceTypeFilter]);
+
+  const scrollToTop = () => {
+    if (historyContainerRef.current) {
+      historyContainerRef.current.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  };
+
+  // Filter active devices
+  const filteredActiveDevices = devices.filter((device) => {
+    if (activeChildFilter !== "all" && device.last_used_child_id !== activeChildFilter) {
+      return false;
+    }
+    if (activeDeviceTypeFilter !== "all" && device.device_type !== activeDeviceTypeFilter) {
+      return false;
+    }
+    return true;
+  });
 
   const handleRemoveDevice = async () => {
     if (!deviceToRemove) {
@@ -310,9 +476,12 @@ const DeviceManagement = () => {
         duration: 5000,
       });
       
-      // Refresh devices list
+      // Refresh devices list and history
       console.log("🔄 [DEVICE MANAGEMENT] Refreshing devices list");
       await fetchDevices();
+      if (activeTab === "history") {
+        await fetchDeviceHistory();
+      }
     } catch (error: any) {
       console.error("❌ [DEVICE MANAGEMENT] Error removing device:", error);
       toast({
@@ -408,31 +577,94 @@ const DeviceManagement = () => {
             </div>
           </Card>
 
-          {/* Actions */}
-          <div className="flex gap-2">
-            <Button onClick={fetchDevices} variant="outline" size="sm">
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Refresh
-            </Button>
-          </div>
+          {/* Tabs */}
+          <Tabs value={activeTab} onValueChange={(value) => {
+            setActiveTab(value);
+            if (value === "history" && deviceHistory.length === 0) {
+              fetchDeviceHistory();
+            }
+          }}>
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="active">Active Devices</TabsTrigger>
+              <TabsTrigger value="history">
+                <History className="h-4 w-4 mr-2" />
+                History
+              </TabsTrigger>
+            </TabsList>
 
-          {/* Devices List */}
-          {loading ? (
+            {/* Active Devices Tab */}
+            <TabsContent value="active" className="space-y-4">
+              {/* Actions and Filters */}
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Button onClick={fetchDevices} variant="outline" size="sm">
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Refresh
+                </Button>
+                
+                {/* Filters */}
+                <div className="flex flex-1 gap-2">
+                  <Select value={activeChildFilter} onValueChange={setActiveChildFilter}>
+                    <SelectTrigger className="w-full sm:w-[180px]">
+                      <Filter className="h-4 w-4 mr-2" />
+                      <SelectValue placeholder="Filter by child" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Children</SelectItem>
+                      {allChildren.map((child) => (
+                        <SelectItem key={child.id} value={child.id}>
+                          {child.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  <Select value={activeDeviceTypeFilter} onValueChange={setActiveDeviceTypeFilter}>
+                    <SelectTrigger className="w-full sm:w-[180px]">
+                      <SelectValue placeholder="Filter by device type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Types</SelectItem>
+                      <SelectItem value="mobile">Mobile</SelectItem>
+                      <SelectItem value="tablet">Tablet</SelectItem>
+                      <SelectItem value="desktop">Desktop</SelectItem>
+                      <SelectItem value="other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Filter Info */}
+              {filteredActiveDevices.length !== devices.length && devices.length > 0 && (
+                <Card className="p-3 bg-muted/50 border-muted">
+                  <p className="text-sm text-muted-foreground">
+                    Showing {filteredActiveDevices.length} of {devices.length} active devices
+                  </p>
+                </Card>
+              )}
+
+              {/* Devices List */}
+              {loading ? (
             <Card className="p-12 text-center">
               <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-4 text-muted-foreground" />
               <p className="text-muted-foreground">Loading devices...</p>
             </Card>
-          ) : devices.length === 0 ? (
-            <Card className="p-12 text-center">
-              <Smartphone className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-              <p className="text-muted-foreground mb-2">No devices found</p>
-              <p className="text-sm text-muted-foreground">
-                Devices will appear here after they're used to log in
-              </p>
-            </Card>
-          ) : (
-            <div className="grid gap-4 md:grid-cols-2">
-              {devices.map((device) => {
+              ) : filteredActiveDevices.length === 0 ? (
+                <Card className="p-12 text-center">
+                  <Smartphone className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+                  <p className="text-muted-foreground mb-2">
+                    {devices.length === 0 
+                      ? "No devices found"
+                      : "No devices match your filters"}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    {devices.length === 0
+                      ? "Devices will appear here after they're used to log in"
+                      : "Try adjusting your filters"}
+                  </p>
+                </Card>
+              ) : (
+                <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+              {filteredActiveDevices.map((device) => {
                 const stale = isDeviceStale(device.last_login_at);
                 return (
                   <Card
@@ -552,6 +784,248 @@ const DeviceManagement = () => {
               })}
             </div>
           )}
+            </TabsContent>
+
+            {/* Device History Tab */}
+            <TabsContent value="history" className="space-y-4">
+              {/* Actions and Filters */}
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Button onClick={fetchDeviceHistory} variant="outline" size="sm" disabled={historyLoading}>
+                  <RefreshCw className={`h-4 w-4 mr-2 ${historyLoading ? 'animate-spin' : ''}`} />
+                  Refresh History
+                </Button>
+                
+                {/* Filters */}
+                <div className="flex flex-1 gap-2">
+                  <Select value={historyChildFilter} onValueChange={setHistoryChildFilter}>
+                    <SelectTrigger className="w-full sm:w-[180px]">
+                      <Filter className="h-4 w-4 mr-2" />
+                      <SelectValue placeholder="Filter by child" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Children</SelectItem>
+                      {allChildren.map((child) => (
+                        <SelectItem key={child.id} value={child.id}>
+                          {child.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  <Select value={historyDeviceTypeFilter} onValueChange={setHistoryDeviceTypeFilter}>
+                    <SelectTrigger className="w-full sm:w-[180px]">
+                      <SelectValue placeholder="Filter by device type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Types</SelectItem>
+                      <SelectItem value="mobile">Mobile</SelectItem>
+                      <SelectItem value="tablet">Tablet</SelectItem>
+                      <SelectItem value="desktop">Desktop</SelectItem>
+                      <SelectItem value="other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* History Info */}
+              <Card className="p-4 bg-muted/50 border-muted">
+                <div className="flex items-start gap-3">
+                  <History className="h-5 w-5 text-muted-foreground mt-0.5 flex-shrink-0" />
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-foreground mb-1">
+                      Device History
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                      This is a read-only history of all devices that have accessed your account, including removed devices. 
+                      This history cannot be modified and serves as a security audit trail.
+                      {filteredHistory.length !== deviceHistory.length && (
+                        <span className="block mt-1 font-medium">
+                          Showing {filteredHistory.length} of {deviceHistory.length} devices
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                </div>
+              </Card>
+
+              {/* History List - Scrollable Container */}
+              <div 
+                ref={historyContainerRef}
+                className="max-h-[calc(100vh-400px)] overflow-y-auto space-y-4"
+                style={{ scrollBehavior: 'smooth' }}
+              >
+                {historyLoading ? (
+                  <Card className="p-12 text-center">
+                    <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-4 text-muted-foreground" />
+                    <p className="text-muted-foreground">Loading device history...</p>
+                  </Card>
+                ) : filteredHistory.length === 0 ? (
+                  <Card className="p-12 text-center">
+                    <History className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+                    <p className="text-muted-foreground mb-2">No devices found</p>
+                    <p className="text-sm text-muted-foreground">
+                      {deviceHistory.length === 0 
+                        ? "Device history will appear here as devices are used or removed"
+                        : "Try adjusting your filters"}
+                    </p>
+                  </Card>
+                ) : (
+                  <>
+                    <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+                      {paginatedHistory.map((device) => {
+                    const stale = isDeviceStale(device.last_login_at);
+                    const isInactive = !device.is_active;
+                    return (
+                      <Card
+                        key={device.id}
+                        className={`p-4 space-y-3 ${
+                          isInactive ? "opacity-75 border-destructive/20 bg-muted/30" : ""
+                        } ${stale ? "border-yellow-200 dark:border-yellow-800" : ""}`}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-start gap-3 flex-1 min-w-0">
+                            <div className="mt-1">{getDeviceIcon(device.device_type)}</div>
+                            <div className="flex-1 min-w-0">
+                              <h3 className="font-semibold truncate">{device.device_name}</h3>
+                              <p className="text-sm text-muted-foreground capitalize">
+                                {device.device_type}
+                              </p>
+                            </div>
+                          </div>
+                          {isInactive ? (
+                            <span className="text-xs text-destructive bg-destructive/10 px-2 py-1 rounded">
+                              Removed
+                            </span>
+                          ) : (
+                            <span className="text-xs text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950 px-2 py-1 rounded">
+                              Active
+                            </span>
+                          )}
+                        </div>
+
+                        {stale && (
+                          <div className="flex items-center gap-2 text-yellow-700 dark:text-yellow-300 text-sm">
+                            <AlertTriangle className="h-4 w-4" />
+                            <span>Not used recently</span>
+                          </div>
+                        )}
+
+                        <div className="space-y-1 text-sm">
+                          <p className="text-muted-foreground">
+                            Created:{" "}
+                            <span className="font-medium">
+                              {formatDistanceToNow(new Date(device.created_at), {
+                                addSuffix: true,
+                              })}
+                            </span>
+                          </p>
+                          {device.child_name && (
+                            <p className="text-muted-foreground">
+                              Last used by: <span className="font-medium">{device.child_name}</span>
+                            </p>
+                          )}
+                          <p className="text-muted-foreground">
+                            Last login:{" "}
+                            <span className="font-medium">
+                              {formatDistanceToNow(new Date(device.last_login_at), {
+                                addSuffix: true,
+                              })}
+                            </span>
+                          </p>
+                          {isInactive && (
+                            <p className="text-muted-foreground">
+                              Removed:{" "}
+                              <span className="font-medium">
+                                {formatDistanceToNow(new Date(device.updated_at), {
+                                  addSuffix: true,
+                                })}
+                              </span>
+                            </p>
+                          )}
+                          {device.country_code && (
+                            <p className="text-muted-foreground">
+                              Country:{" "}
+                              <span className="font-medium text-base">
+                                {countryCodeToFlag(device.country_code) || ''} {device.country_code}
+                              </span>
+                            </p>
+                          )}
+                          {device.user_agent && (() => {
+                            const deviceInfo = parseDeviceInfo(device.user_agent);
+                            return (
+                              <>
+                                <p className="text-muted-foreground">
+                                  Browser: <span className="font-medium">{deviceInfo.browser.fullName}</span>
+                                </p>
+                                <p className="text-muted-foreground">
+                                  OS: <span className="font-medium">{deviceInfo.os.fullName}</span>
+                                </p>
+                                {deviceInfo.deviceModel && (
+                                  <p className="text-muted-foreground">
+                                    Model: <span className="font-medium">{deviceInfo.deviceModel}</span>
+                                  </p>
+                                )}
+                              </>
+                            );
+                          })()}
+                          {device.mac_address && (
+                            <p className="text-muted-foreground">
+                              MAC: <span className="font-mono text-xs">{device.mac_address}</span>
+                            </p>
+                          )}
+                          {device.last_ip_address && (
+                            <p className="text-muted-foreground">
+                              IP: <span className="font-mono text-xs">{device.last_ip_address}</span>
+                            </p>
+                          )}
+                        </div>
+                      </Card>
+                    );
+                  })}
+                    </div>
+
+                    {/* Pagination */}
+                    {totalPages > 1 && (
+                      <div className="flex items-center justify-center gap-2 pt-4">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setHistoryPage((p) => Math.max(1, p - 1))}
+                          disabled={historyPage === 1}
+                        >
+                          Previous
+                        </Button>
+                        <span className="text-sm text-muted-foreground px-4">
+                          Page {historyPage} of {totalPages}
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setHistoryPage((p) => Math.min(totalPages, p + 1))}
+                          disabled={historyPage === totalPages}
+                        >
+                          Next
+                        </Button>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+
+              {/* Back to Top Button */}
+              {showBackToTop && (
+                <Button
+                  onClick={scrollToTop}
+                  className="fixed bottom-6 right-6 rounded-full shadow-lg z-50 h-12 w-12 p-0"
+                  size="icon"
+                  variant="default"
+                >
+                  <ArrowUp className="h-5 w-5" />
+                  <span className="sr-only">Back to top</span>
+                </Button>
+              )}
+            </TabsContent>
+          </Tabs>
         </div>
       </div>
 
