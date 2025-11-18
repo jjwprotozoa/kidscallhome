@@ -41,11 +41,57 @@ workflows:
           if [ -d "android" ]; then
             echo "Android directory exists"
             ls -la android/ | head -20
+            if [ ! -f "android/gradlew" ]; then
+              echo "⚠️ gradlew not found after sync, initializing Gradle wrapper..."
+              cd android
+              # Check if build.gradle exists (required for wrapper)
+              if [ -f "build.gradle" ]; then
+                # Try to initialize wrapper using gradle command if available
+                if command -v gradle &> /dev/null; then
+                  echo "Using gradle command to create wrapper..."
+                  gradle wrapper --gradle-version 8.2 --distribution-type all || echo "⚠️ Gradle command failed"
+                else
+                  echo "⚠️ Gradle not found, downloading wrapper files..."
+                  # Create gradle wrapper directory
+                  mkdir -p gradle/wrapper
+                  # Download gradle wrapper jar from official Gradle distribution
+                  curl -L https://services.gradle.org/distributions/gradle-8.2-bin.zip -o /tmp/gradle-8.2-bin.zip || echo "⚠️ Failed to download Gradle distribution"
+                  if [ -f "/tmp/gradle-8.2-bin.zip" ]; then
+                    unzip -q /tmp/gradle-8.2-bin.zip -d /tmp/ || echo "⚠️ Failed to extract Gradle"
+                    cp /tmp/gradle-8.2/gradle/wrapper/gradle-wrapper.jar gradle/wrapper/ || echo "⚠️ Failed to copy wrapper jar"
+                    # Create gradle-wrapper.properties
+                    cat > gradle/wrapper/gradle-wrapper.properties << 'PROPEOF'
+distributionBase=GRADLE_USER_HOME
+distributionPath=wrapper/dists
+distributionUrl=https\://services.gradle.org/distributions/gradle-8.2-bin.zip
+networkTimeout=10000
+zipStoreBase=GRADLE_USER_HOME
+zipStorePath=wrapper/dists
+PROPEOF
+                    # Create gradlew script
+                    cat > gradlew << 'EOF'
+#!/bin/sh
+exec java -jar "$(dirname "$0")/gradle/wrapper/gradle-wrapper.jar" "$@"
+EOF
+                    chmod +x gradlew
+                    echo "✅ Gradle wrapper created manually"
+                  else
+                    echo "❌ Failed to download Gradle distribution"
+                    exit 1
+                  fi
+                fi
+              else
+                echo "❌ build.gradle not found in android directory"
+                exit 1
+              fi
+              cd ..
+            fi
             if [ -f "android/gradlew" ]; then
-              echo "✅ gradlew found"
+              echo "✅ gradlew found/created"
               chmod +x android/gradlew
             else
-              echo "⚠️ gradlew not found after sync"
+              echo "❌ Failed to create gradlew"
+              exit 1
             fi
           else
             echo "❌ Android directory not found after sync"
@@ -72,17 +118,11 @@ workflows:
         script: |
           cd android
           if [ ! -f "./gradlew" ]; then
-            echo "❌ gradlew not found. Ensuring Gradle wrapper exists..."
-            # Try to generate gradle wrapper if it doesn't exist
-            gradle wrapper --gradle-version 8.2 || echo "⚠️ Could not generate gradle wrapper"
-          fi
-          if [ -f "./gradlew" ]; then
-            chmod +x ./gradlew
-            ./gradlew bundleRelease
-          else
-            echo "❌ gradlew still not found after sync. Check Capacitor sync output."
+            echo "❌ gradlew not found. This should have been created in the sync step."
             exit 1
           fi
+          chmod +x ./gradlew
+          ./gradlew bundleRelease
       - name: Build APK (optional, for testing)
         script: |
           cd android
@@ -98,7 +138,7 @@ workflows:
     publishing:
       email:
         recipients:
-          - your-email@example.com
+          - justin@fluidinvestmentgroup.com
         notify:
           success: true
           failure: true
