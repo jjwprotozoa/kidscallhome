@@ -51,11 +51,9 @@ workflows:
             # Create a clean settings.gradle that includes :app and Capacitor plugins
             if [ -f "capacitor.settings.gradle" ]; then
               echo "Creating settings.gradle that includes :app and Capacitor plugins..."
-              cat > settings.gradle << 'EOF'
-rootProject.name = "android"
-include ':app'
-apply from: 'capacitor.settings.gradle'
-EOF
+              echo "rootProject.name = \"android\"" > settings.gradle
+              echo "include ':app'" >> settings.gradle
+              echo "apply from: 'capacitor.settings.gradle'" >> settings.gradle
               echo "✅ settings.gradle created"
             fi
             # Verify app module exists
