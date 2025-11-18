@@ -88,6 +88,10 @@ workflows:
                 echo "            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'" >> app/build.gradle
                 echo "        }" >> app/build.gradle
                 echo "    }" >> app/build.gradle
+                echo "    compileOptions {" >> app/build.gradle
+                echo "        sourceCompatibility JavaVersion.VERSION_17" >> app/build.gradle
+                echo "        targetCompatibility JavaVersion.VERSION_17" >> app/build.gradle
+                echo "    }" >> app/build.gradle
                 echo "}" >> app/build.gradle
                 echo "dependencies {" >> app/build.gradle
                 echo "    implementation fileTree(dir: \"libs\", include: [\"*.jar\"])" >> app/build.gradle
@@ -178,7 +182,19 @@ workflows:
           echo "Checking available Gradle tasks..."
           ./gradlew tasks --all | grep -i "bundle\|assemble" || echo "No bundle/assemble tasks found"
           echo "Building Android App Bundle..."
-          ./gradlew :app:bundleRelease || ./gradlew :app:assembleRelease
+          if ./gradlew :app:bundleRelease; then
+            echo "✅ AAB build successful"
+          else
+            echo "⚠️ AAB build failed, trying APK build..."
+            if ./gradlew :app:assembleRelease --stacktrace; then
+              echo "✅ APK build successful"
+            else
+              echo "❌ Both AAB and APK builds failed"
+              echo "=== Full error output ==="
+              ./gradlew :app:assembleRelease --stacktrace --info 2>&1 | tail -100
+              exit 1
+            fi
+          fi
       - name: Build APK (optional, for testing)
         script: |
           cd android
