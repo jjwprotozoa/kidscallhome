@@ -36,6 +36,21 @@ workflows:
       - name: Sync Capacitor Android
         script: |
           npx cap sync android
+          echo "✅ Capacitor sync completed"
+          echo "Checking Android project structure..."
+          if [ -d "android" ]; then
+            echo "Android directory exists"
+            ls -la android/ | head -20
+            if [ -f "android/gradlew" ]; then
+              echo "✅ gradlew found"
+              chmod +x android/gradlew
+            else
+              echo "⚠️ gradlew not found after sync"
+            fi
+          else
+            echo "❌ Android directory not found after sync"
+            exit 1
+          fi
       - name: Set up Android keystore
         script: |
           # Keystore should be uploaded to Codemagic and referenced via environment variables
@@ -56,11 +71,27 @@ workflows:
       - name: Build Android App Bundle (AAB)
         script: |
           cd android
-          ./gradlew bundleRelease
+          if [ ! -f "./gradlew" ]; then
+            echo "❌ gradlew not found. Ensuring Gradle wrapper exists..."
+            # Try to generate gradle wrapper if it doesn't exist
+            gradle wrapper --gradle-version 8.2 || echo "⚠️ Could not generate gradle wrapper"
+          fi
+          if [ -f "./gradlew" ]; then
+            chmod +x ./gradlew
+            ./gradlew bundleRelease
+          else
+            echo "❌ gradlew still not found after sync. Check Capacitor sync output."
+            exit 1
+          fi
       - name: Build APK (optional, for testing)
         script: |
           cd android
-          ./gradlew assembleRelease
+          if [ -f "./gradlew" ]; then
+            chmod +x ./gradlew
+            ./gradlew assembleRelease
+          else
+            echo "⚠️ gradlew not found, skipping APK build"
+          fi
     artifacts:
       - android/app/build/outputs/**/*.aab
       - android/app/build/outputs/**/*.apk
