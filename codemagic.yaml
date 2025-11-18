@@ -115,26 +115,84 @@ workflows:
       - name: Build Android App Bundle
         script: |
           cd android
-          # JAVA_HOME should be set from previous step via CM_ENV
-          # But ensure it's set just in case
+          # Ensure JAVA_HOME is set (environment variables don't persist between steps)
           if [ -z "$JAVA_HOME" ]; then
+            export JAVA_HOME=$(/usr/libexec/java_home -v 17 2>/dev/null || /usr/libexec/java_home -v 17+ 2>/dev/null || echo "")
+          fi
+          if [ -z "$JAVA_HOME" ] || [ ! -f "$JAVA_HOME/bin/java" ]; then
+            echo "❌ ERROR: JAVA_HOME is not set or invalid!"
+            echo "Attempting to find Java 17..."
             export JAVA_HOME=$(/usr/libexec/java_home -v 17)
           fi
           export JAVA_HOME
           echo "Building with JAVA_HOME: $JAVA_HOME"
-          ./gradlew bundleRelease --stacktrace
+          
+          # Ensure gradle.properties has org.gradle.java.home set (it should from previous step, but verify)
+          if [ -f gradle.properties ]; then
+            if ! grep -q "^org\.gradle\.java\.home=" gradle.properties; then
+              echo "Setting org.gradle.java.home in gradle.properties..."
+              echo "org.gradle.java.home=$JAVA_HOME" >> gradle.properties
+            fi
+          else
+            echo "Creating gradle.properties with org.gradle.java.home..."
+            echo "org.gradle.java.home=$JAVA_HOME" > gradle.properties
+          fi
+          
+          # Verify Java version
+          echo "Java version:"
+          "$JAVA_HOME/bin/java" -version
+          
+          # Clean build to ensure fresh state
+          echo ""
+          echo "=== Cleaning previous build ==="
+          ./gradlew clean || true
+          
+          # Build with full error output
+          echo ""
+          echo "=== Building Android App Bundle ==="
+          ./gradlew bundleRelease --stacktrace --info 2>&1 | tee build.log || {
+            echo ""
+            echo "❌ Build failed!"
+            echo ""
+            echo "=== Last 100 lines of build output ==="
+            tail -n 100 build.log
+            echo ""
+            echo "=== Searching for error messages ==="
+            grep -i "error\|failed\|exception" build.log | tail -n 20 || echo "No obvious error keywords found"
+            exit 1
+          }
 
       - name: Build APK (for testing)
         script: |
           cd android
-          # JAVA_HOME should be set from previous step via CM_ENV
-          # But ensure it's set just in case
+          # Ensure JAVA_HOME is set (environment variables don't persist between steps)
           if [ -z "$JAVA_HOME" ]; then
+            export JAVA_HOME=$(/usr/libexec/java_home -v 17 2>/dev/null || /usr/libexec/java_home -v 17+ 2>/dev/null || echo "")
+          fi
+          if [ -z "$JAVA_HOME" ] || [ ! -f "$JAVA_HOME/bin/java" ]; then
+            echo "❌ ERROR: JAVA_HOME is not set or invalid!"
             export JAVA_HOME=$(/usr/libexec/java_home -v 17)
           fi
           export JAVA_HOME
           echo "Building with JAVA_HOME: $JAVA_HOME"
-          ./gradlew assembleRelease --stacktrace
+
+          # Ensure gradle.properties has org.gradle.java.home set
+          if [ -f gradle.properties ]; then
+            if ! grep -q "^org\.gradle\.java\.home=" gradle.properties; then
+              echo "org.gradle.java.home=$JAVA_HOME" >> gradle.properties
+            fi
+          else
+            echo "org.gradle.java.home=$JAVA_HOME" > gradle.properties
+          fi
+
+          # Build with full error output
+          echo ""
+          echo "=== Building Android APK ==="
+          ./gradlew assembleRelease --stacktrace --info 2>&1 | tee build.log || {
+            echo "❌ Build failed. Last 50 lines of build.log:"
+            tail -n 50 build.log
+            exit 1
+          }
 
     artifacts:
       - android/app/build/outputs/**/*.aab
