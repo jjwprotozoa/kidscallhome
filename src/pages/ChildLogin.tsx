@@ -55,11 +55,10 @@ const ChildLogin = () => {
   const handleLoginWithCode = async (code: string) => {
     setLoading(true);
     try {
+      // Use secure SECURITY DEFINER function to verify login code
       const { data, error } = await supabase
-        .from("children")
-        .select("id, name, avatar_color, parent_id")
-        .eq("login_code", code)
-        .single();
+        .rpc("verify_login_code", { p_code: code })
+        .maybeSingle();
 
       if (error || !data) {
         toast({
