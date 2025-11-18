@@ -64,18 +64,32 @@ workflows:
                 echo "❌ Failed to extract Gradle distribution"
                 exit 1
               }
-              # Copy wrapper jar from extracted distribution
-              if [ -f "/tmp/gradle-8.2/gradle/wrapper/gradle-wrapper.jar" ]; then
-                cp /tmp/gradle-8.2/gradle/wrapper/gradle-wrapper.jar gradle/wrapper/ || {
-                  echo "❌ Failed to copy wrapper jar"
-                  exit 1
-                }
-              else
+              # Find the wrapper jar in the extracted distribution
+              echo "Searching for gradle-wrapper.jar in extracted distribution..."
+              WRAPPER_JAR=$(find /tmp/gradle-8.2 -name "gradle-wrapper.jar" -type f 2>/dev/null | head -1)
+              if [ -z "$WRAPPER_JAR" ] || [ ! -f "$WRAPPER_JAR" ]; then
+                echo "Wrapper jar not found via find, checking directory structure..."
+                echo "Extracted directory contents:"
+                ls -la /tmp/gradle-8.2/ | head -20
+                echo "All JAR files found:"
+                find /tmp/gradle-8.2 -name "*.jar" -type f 2>/dev/null | head -10
+                # Try common paths
+                for path in "/tmp/gradle-8.2/gradle/wrapper/gradle-wrapper.jar" "/tmp/gradle-8.2/lib/gradle-wrapper.jar" "/tmp/gradle-8.2/bin/gradle-wrapper.jar"; do
+                  if [ -f "$path" ]; then
+                    WRAPPER_JAR="$path"
+                    break
+                  fi
+                done
+              fi
+              if [ -z "$WRAPPER_JAR" ] || [ ! -f "$WRAPPER_JAR" ]; then
                 echo "❌ gradle-wrapper.jar not found in extracted distribution"
-                echo "Checking extracted files..."
-                ls -la /tmp/gradle-8.2/gradle/wrapper/ || echo "Wrapper directory not found"
                 exit 1
               fi
+              echo "Found wrapper jar at: $WRAPPER_JAR"
+              cp "$WRAPPER_JAR" gradle/wrapper/gradle-wrapper.jar || {
+                echo "❌ Failed to copy wrapper jar"
+                exit 1
+              }
               # Verify wrapper jar exists and is valid
               if [ ! -f "gradle/wrapper/gradle-wrapper.jar" ]; then
                 echo "❌ gradle-wrapper.jar not found after copy"
@@ -188,4 +202,3 @@ workflows:
       #   credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
       #   track: internal # Options: internal, alpha, beta, production
       #   submit_as_draft: true
-
