@@ -8,6 +8,11 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { RefreshCw, Check } from "lucide-react";
+import { z } from "zod";
+
+const childNameSchema = z.object({
+  name: z.string().trim().min(1, "Child name is required").max(100, "Name too long (max 100 characters)"),
+});
 
 interface AddChildDialogProps {
   open: boolean;
@@ -138,10 +143,21 @@ const AddChildDialog = ({ open, onOpenChange, onChildAdded }: AddChildDialogProp
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!name.trim()) {
+    // Validate child name using zod
+    const validationResult = childNameSchema.safeParse({ name: name.trim() });
+    if (!validationResult.success) {
+      toast({
+        title: "Invalid name",
+        description: validationResult.error.errors[0].message,
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    if (!generatedCode) {
       toast({
         title: "Error",
-        description: "Please enter a name",
+        description: "Please generate a login code",
         variant: "destructive",
       });
       return;

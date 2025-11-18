@@ -161,6 +161,7 @@ export type Database = {
     }
     Functions: {
       generate_unique_login_code: { Args: never; Returns: string }
+      get_parent_name: { Args: { p_parent_id: string }; Returns: string }
       verify_child_call_access: {
         Args: { p_call_id: string; p_child_id: string }
         Returns: boolean

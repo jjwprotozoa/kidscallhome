@@ -7,6 +7,11 @@ import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, Send } from "lucide-react";
 import { useBadgeStore } from "@/stores/badgeStore";
+import { z } from "zod";
+
+const messageSchema = z.object({
+  content: z.string().trim().min(1, "Message cannot be empty").max(5000, "Message too long (max 5000 characters)"),
+});
 
 interface Message {
   id: string;
@@ -45,7 +50,7 @@ const Chat = () => {
       setChildData(data);
       targetChildId = data.id;
       fetchMessages(data.id);
-      // Fetch parent name for child users - get parent_id from database
+      // Fetch parent name for child users using secure function
       supabase
         .from("children")
         .select("parent_id")
@@ -56,16 +61,12 @@ const Chat = () => {
             console.error("Error fetching child record:", childError);
             return;
           }
-          // Now fetch parent name
-          return supabase
-            .from("parents")
-            .select("name")
-            .eq("id", childRecord.parent_id)
-            .maybeSingle();
+          // Use SECURITY DEFINER function to get parent name only (not email)
+          return supabase.rpc("get_parent_name", { p_parent_id: childRecord.parent_id });
         })
         .then((result) => {
-          if (result?.data?.name) {
-            setParentName(result.data.name);
+          if (result?.data) {
+            setParentName(result.data);
           } else if (result?.error) {
             console.error("Error fetching parent name:", result.error);
           }
@@ -313,6 +314,17 @@ const Chat = () => {
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessage.trim() || !childData) return;
+
+    // Validate message using zod schema
+    const validationResult = messageSchema.safeParse({ content: newMessage.trim() });
+    if (!validationResult.success) {
+      toast({
+        title: "Invalid message",
+        description: validationResult.error.errors[0].message,
+        variant: "destructive",
+      });
+      return;
+    }
 
     setLoading(true);
     try {
