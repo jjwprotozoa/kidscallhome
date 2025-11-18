@@ -1,0 +1,5 @@
+rootProject.name = "android"
+
+include ':app'
+apply from: 'capacitor.settings.gradle'
+

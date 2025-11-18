@@ -1,6 +1,6 @@
 # codemagic.yaml
 # Codemagic CI/CD configuration for KidsCallHome Android native app
-# Reference: https://docs.codemagic.io/yaml-quick-start/building-a-native-android-app/
+# Simplified version - requires Android project to be properly committed
 
 workflows:
   android-build:
@@ -9,15 +9,8 @@ workflows:
     instance_type: mac_mini_m1
     environment:
       groups:
-        # Add these groups in Codemagic UI with your credentials:
-        # - android_keystore: Contains ANDROID_KEYSTORE, KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD
-        # - google_play: Contains GCLOUD_SERVICE_ACCOUNT_CREDENTIALS (for Play Store publishing)
         - android_keystore
         - google_play
-      # Android signing configuration
-      # Note: Keystore signing is handled manually in scripts below
-      # If you need automatic signing, configure android_signing in Codemagic UI
-      # and reference it here as a file reference object
       node: 20
       java: 17
       vars:
@@ -27,186 +20,38 @@ workflows:
       - name: Install dependencies
         script: |
           npm ci
-      - name: Install Capacitor CLI
-        script: |
-          npm install -g @capacitor/cli
+          
       - name: Build web app
         script: |
           npm run build
-      - name: Sync Capacitor Android
+          
+      - name: Sync Capacitor
         script: |
-          # Ensure Android platform is added if it doesn't exist
-          if [ ! -d "android" ]; then
-            echo "Android directory not found, adding Android platform..."
-            npx cap add android
-          fi
-          # Sync Capacitor
           npx cap sync android
-          echo "✅ Capacitor sync completed"
-          echo "Checking Android project structure..."
-          if [ -d "android" ]; then
-            echo "Android directory exists"
-            ls -la android/ | head -20
-            cd android
-            # Create a clean settings.gradle that includes :app and Capacitor plugins
-            if [ -f "capacitor.settings.gradle" ]; then
-              echo "Creating settings.gradle that includes :app and Capacitor plugins..."
-              echo "rootProject.name = \"android\"" > settings.gradle
-              echo "include ':app'" >> settings.gradle
-              echo "apply from: 'capacitor.settings.gradle'" >> settings.gradle
-              echo "✅ settings.gradle created"
-            fi
-            # Verify app module exists
-            if [ ! -d "app" ]; then
-              echo "❌ app module directory not found. Capacitor sync may have failed."
-              echo "Listing android directory contents:"
-              ls -la
-              exit 1
-            fi
-            # Verify app/build.gradle exists and uses application plugin
-            if [ ! -f "app/build.gradle" ]; then
-              echo "⚠️ app/build.gradle not found, checking for capacitor.build.gradle..."
-              if [ -f "app/capacitor.build.gradle" ]; then
-                echo "Found app/capacitor.build.gradle, creating app/build.gradle..."
-                # Use classic Gradle plugin syntax compatible with root buildscript
-                echo "apply plugin: 'com.android.application'" > app/build.gradle
-                echo "apply from: '../capacitor-cordova-android-plugins/cordova.variables.gradle'" >> app/build.gradle
-                echo "apply from: 'capacitor.build.gradle'" >> app/build.gradle
-                echo "android {" >> app/build.gradle
-                echo "    namespace \"com.kidscallhome.app\"" >> app/build.gradle
-                echo "    compileSdk 34" >> app/build.gradle
-                echo "    defaultConfig {" >> app/build.gradle
-                echo "        applicationId \"com.kidscallhome.app\"" >> app/build.gradle
-                echo "        minSdk 22" >> app/build.gradle
-                echo "        targetSdk 34" >> app/build.gradle
-                echo "        versionCode 1" >> app/build.gradle
-                echo "        versionName \"1.0\"" >> app/build.gradle
-                echo "    }" >> app/build.gradle
-                echo "    buildTypes {" >> app/build.gradle
-                echo "        release {" >> app/build.gradle
-                echo "            minifyEnabled false" >> app/build.gradle
-                echo "            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'" >> app/build.gradle
-                echo "        }" >> app/build.gradle
-                echo "    }" >> app/build.gradle
-                echo "    compileOptions {" >> app/build.gradle
-                echo "        sourceCompatibility JavaVersion.VERSION_17" >> app/build.gradle
-                echo "        targetCompatibility JavaVersion.VERSION_17" >> app/build.gradle
-                echo "    }" >> app/build.gradle
-                echo "}" >> app/build.gradle
-                echo "dependencies {" >> app/build.gradle
-                echo "    implementation fileTree(dir: \"libs\", include: [\"*.jar\"])" >> app/build.gradle
-                echo "    implementation project(':capacitor-app')" >> app/build.gradle
-                echo "    implementation project(':capacitor-device')" >> app/build.gradle
-                echo "    implementation project(':capacitor-haptics')" >> app/build.gradle
-                echo "    implementation project(':capacitor-keyboard')" >> app/build.gradle
-                echo "    implementation project(':capacitor-local-notifications')" >> app/build.gradle
-                echo "    implementation project(':capacitor-push-notifications')" >> app/build.gradle
-                echo "    implementation project(':capacitor-splash-screen')" >> app/build.gradle
-                echo "    implementation project(':capacitor-status-bar')" >> app/build.gradle
-                echo "}" >> app/build.gradle
-              else
-                echo "❌ Neither app/build.gradle nor app/capacitor.build.gradle found"
-                exit 1
-              fi
-            fi
-            cd ..
-            # Do NOT run any gradle/gradlew here. Wrapper and build will be handled in the build step.
-            if [ ! -f "android/gradlew" ] || [ ! -f "android/gradle/wrapper/gradle-wrapper.jar" ]; then
-              echo "❌ Gradle wrapper missing after Capacitor sync. Commit android/ with wrapper or ensure cap add android creates it."
-              echo "Contents of android/:"
-              ls -la android
-              exit 1
-            fi
-            chmod +x android/gradlew
-            echo "✅ gradlew found"
-          else
-            echo "❌ Android directory not found after sync"
-            exit 1
-          fi
+          
       - name: Set up Android keystore
         script: |
-          # Keystore should be uploaded to Codemagic and referenced via environment variables
-          # This script assumes keystore is available at $CM_KEYSTORE_PATH
-          if [ -z "$CM_KEYSTORE_PATH" ]; then
-            echo "⚠️ Keystore path not set. Please configure keystore in Codemagic UI."
-            DEBUG_KEYSTORE=~/.android/debug.keystore
-            if [ ! -f "$DEBUG_KEYSTORE" ]; then
-              echo "Creating a debug keystore for testing..."
-              mkdir -p ~/.android
-              keytool -genkey -v -keystore "$DEBUG_KEYSTORE" -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
-            else
-              echo "✅ Debug keystore already exists, skipping creation."
-            fi
+          if [ ! -z "$CM_KEYSTORE_PATH" ]; then
+            echo "✅ Using keystore from CM_KEYSTORE_PATH"
           else
-            echo "✅ Using keystore from CM_KEYSTORE_PATH: $CM_KEYSTORE_PATH"
+            echo "⚠️ No keystore configured, using debug signing"
           fi
-      - name: Build Android App Bundle (AAB)
+          
+      - name: Build Android App Bundle
         script: |
           cd android
-          if [ ! -f "./gradlew" ]; then
-            echo "❌ gradlew not found. This should have been created in the sync step."
-            exit 1
-          fi
           chmod +x ./gradlew
-          # Ensure settings.gradle exists (already created in Sync step)
-          if [ ! -f "settings.gradle" ]; then
-            echo "❌ settings.gradle not found. Sync step did not complete correctly."
-            exit 1
-          fi
-          # Ensure root build.gradle exists and has Android Gradle plugin
-          # This MUST be done BEFORE any ./gradlew command, otherwise :app evaluation will fail
-          if [ ! -f "build.gradle" ]; then
-            echo "⚠️ Root build.gradle not found, creating minimal one..."
-            echo "buildscript {" > build.gradle
-            echo "    repositories { google(); mavenCentral() }" >> build.gradle
-            echo "    dependencies { classpath 'com.android.tools.build:gradle:8.2.1' }" >> build.gradle
-            echo "}" >> build.gradle
-            echo "" >> build.gradle
-            echo "allprojects {" >> build.gradle
-            echo "    repositories { google(); mavenCentral() }" >> build.gradle
-            echo "}" >> build.gradle
-            echo "✅ Created root build.gradle"
-          else
-            if ! grep -q "com.android.tools.build:gradle" build.gradle; then
-              echo "⚠️ Root build.gradle missing Android Gradle plugin, prepending buildscript..."
-              echo "buildscript {" > build.gradle.tmp
-              echo "    repositories { google(); mavenCentral() }" >> build.gradle.tmp
-              echo "    dependencies { classpath 'com.android.tools.build:gradle:8.2.1' }" >> build.gradle.tmp
-              echo "}" >> build.gradle.tmp
-              echo "" >> build.gradle.tmp
-              cat build.gradle >> build.gradle.tmp
-              mv build.gradle.tmp build.gradle
-              echo "✅ Updated root build.gradle with Android Gradle plugin"
-            fi
-          fi
-          echo "Checking available Gradle tasks..."
-          ./gradlew tasks --all | grep -i "bundle\|assemble" || echo "No bundle/assemble tasks found"
-          echo "Building Android App Bundle..."
-          if ./gradlew :app:bundleRelease; then
-            echo "✅ AAB build successful"
-          else
-            echo "⚠️ AAB build failed, trying APK build..."
-            if ./gradlew :app:assembleRelease --stacktrace; then
-              echo "✅ APK build successful"
-            else
-              echo "❌ Both AAB and APK builds failed"
-              echo "=== Full error output ==="
-              ./gradlew :app:assembleRelease --stacktrace --info 2>&1 | tail -100
-              exit 1
-            fi
-          fi
-      - name: Build APK (optional, for testing)
+          ./gradlew bundleRelease --stacktrace
+          
+      - name: Build APK (for testing)
         script: |
           cd android
-          if [ -f "./gradlew" ]; then
-            chmod +x ./gradlew
-            ./gradlew assembleRelease
-          else
-            echo "⚠️ gradlew not found, skipping APK build"
-          fi
+          ./gradlew assembleRelease --stacktrace
+          
     artifacts:
       - android/app/build/outputs/**/*.aab
       - android/app/build/outputs/**/*.apk
+      
     publishing:
       email:
         recipients:
@@ -214,8 +59,3 @@ workflows:
         notify:
           success: true
           failure: true
-      # Uncomment to enable automatic Play Store publishing
-      # google_play:
-      #   credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
-      #   track: internal # Options: internal, alpha, beta, production
-      #   submit_as_draft: true
