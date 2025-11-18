@@ -74,11 +74,11 @@ workflows:
                 echo "apply from: 'capacitor.build.gradle'" >> app/build.gradle
                 echo "android {" >> app/build.gradle
                 echo "    namespace \"com.kidscallhome.app\"" >> app/build.gradle
-                echo "    compileSdk rootProject.ext.compileSdkVersion ?: 34" >> app/build.gradle
+                echo "    compileSdk 34" >> app/build.gradle
                 echo "    defaultConfig {" >> app/build.gradle
                 echo "        applicationId \"com.kidscallhome.app\"" >> app/build.gradle
-                echo "        minSdk rootProject.ext.minSdkVersion ?: 22" >> app/build.gradle
-                echo "        targetSdk rootProject.ext.targetSdkVersion ?: 34" >> app/build.gradle
+                echo "        minSdk 22" >> app/build.gradle
+                echo "        targetSdk 34" >> app/build.gradle
                 echo "        versionCode 1" >> app/build.gradle
                 echo "        versionName \"1.0\"" >> app/build.gradle
                 echo "    }" >> app/build.gradle
