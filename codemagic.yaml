@@ -166,11 +166,19 @@ workflows:
           echo "=== Building Debug APK (to verify build works) ==="
           echo "Running: ./gradlew assembleDebug --stacktrace --info"
           echo ""
+          echo "⚠️ If build fails, look for '📄 EXTRACTED ERROR MESSAGES' section below"
+          echo ""
 
           # Build with output visible and captured
           set -o pipefail
           ./gradlew assembleDebug --stacktrace --info 2>&1 | tee debug-build.log
           BUILD_EXIT_CODE=${PIPESTATUS[0]}
+          
+          # Immediately show if build failed (before detailed extraction)
+          if [ $BUILD_EXIT_CODE -ne 0 ]; then
+            echo ""
+            echo "🚨🚨🚨 BUILD FAILED! Extracting error messages... 🚨🚨🚨"
+          fi
 
           echo ""
           echo "=== Build completed with exit code: $BUILD_EXIT_CODE ==="
