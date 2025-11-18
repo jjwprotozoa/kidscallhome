@@ -41,13 +41,17 @@ const toastVariants = cva(
 
 const Toast = React.forwardRef<
   React.ElementRef<typeof ToastPrimitives.Root>,
-  React.ComponentPropsWithoutRef<typeof ToastPrimitives.Root> & VariantProps<typeof toastVariants>
->(({ className, variant, swipeDirection = "right", ...props }, ref) => {
+  React.ComponentPropsWithoutRef<typeof ToastPrimitives.Root> & VariantProps<typeof toastVariants> & {
+    swipeDirection?: "left" | "right" | "up" | "down";
+  }
+>(({ className, variant, swipeDirection: _, ...props }, ref) => {
+  // swipeDirection is handled by ToastProvider, not individual Toast components
+  // Filter it out to prevent React warning about unknown DOM prop
+  
   return (
     <ToastPrimitives.Root
       ref={ref}
       className={cn(toastVariants({ variant }), className)}
-      swipeDirection={swipeDirection}
       {...props}
     />
   );

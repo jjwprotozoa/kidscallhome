@@ -70,13 +70,13 @@ export async function getIPGeolocation(ipAddress: string | null): Promise<IPGeol
           region: data.regionName || null,
         };
       }
-    } else if (response.status === 403 || response.status === 429) {
-      // Rate limited or forbidden - silently fall back to ipapi.co
-      // Don't log as error since this is expected behavior
     }
+    // 403/429 responses are handled silently - fall through to fallback
+    // Don't log as error since rate limiting is expected behavior
   } catch (error) {
-    // Only log unexpected errors, not rate limits
-    if (error instanceof TypeError) {
+    // Silently handle network errors and rate limits - fall through to fallback
+    // Only log unexpected errors that aren't network-related
+    if (error instanceof TypeError && !error.message.includes('Failed to fetch')) {
       console.warn('ip-api.com geolocation failed, trying fallback:', error);
     }
   }
