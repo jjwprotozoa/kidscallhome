@@ -158,13 +158,16 @@ const ChildParentsList = () => {
         expectedRole: "anon (anonymous)"
       });
 
-      // Try using the function first (if it exists) - this bypasses RLS
-      console.log("🔧 [ChildParentsList] Attempting to use function get_parent_name_for_child...");
+      // Direct query to parents table (RLS allows children to view parent names)
+      console.log("🔧 [ChildParentsList] Fetching parent name from parents table...");
       try {
         const { data: functionData, error: functionError } = await supabase
-          .rpc('get_parent_name_for_child', { parent_uuid: parentId });
+          .from('parents')
+          .select('id, name')
+          .eq('id', parentId)
+          .maybeSingle();
         
-        console.log("🔧 [ChildParentsList] Function result:", {
+        console.log("🔧 [ChildParentsList] Query result:", {
           data: functionData,
           dataType: Array.isArray(functionData) ? 'array' : typeof functionData,
           dataLength: Array.isArray(functionData) ? functionData.length : 'N/A',
@@ -178,10 +181,9 @@ const ChildParentsList = () => {
           } : null
         });
         
-        if (functionData && (Array.isArray(functionData) ? functionData.length > 0 : true)) {
-          const parentData = Array.isArray(functionData) ? functionData[0] : functionData;
-          console.log("✅ [ChildParentsList] Got parent from function:", parentData);
-          setParent(parentData);
+        if (functionData) {
+          console.log("✅ [ChildParentsList] Got parent data:", functionData);
+          setParent(functionData as { id: string; name: string; });
           setLoading(false);
           return;
         }

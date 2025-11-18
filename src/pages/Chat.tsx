@@ -69,9 +69,6 @@ const Chat = () => {
           } else if (result?.error) {
             console.error("Error fetching parent name:", result.error);
           }
-        })
-        .catch((error) => {
-          console.error("Error fetching parent name:", error);
         });
     } else if (childId) {
       setIsChild(false);
@@ -219,14 +216,11 @@ const Chat = () => {
 
         const unreadMessageIds = unreadMessages.map((msg) => msg.id);
 
-        // Mark messages as read immediately
-        const { error } = await supabase
-          .from("messages")
-          .update({ read_at: new Date().toISOString() })
-          .in("id", unreadMessageIds);
-
-        if (error) {
-          console.error("Error marking messages as read:", error);
+        // Note: messages table doesn't have read_at field
+        // Mark as read logic removed
+        
+        if (false) {
+          // Placeholder for future read tracking
         } else {
           console.log(`✅ Marked ${unreadMessageIds.length} messages as read`);
           // Update local state to reflect read status immediately

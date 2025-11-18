@@ -91,13 +91,10 @@ const Navigation = () => {
     return null;
   }
 
-  const navLinkClassName = ({ isActive }: { isActive: boolean }) =>
-    cn(
-      "flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors relative",
-      isActive
-        ? "bg-primary text-primary-foreground"
-        : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-    );
+  const baseNavLinkClassName =
+    "flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors relative";
+  const activeNavClassName = "bg-primary text-primary-foreground";
+  const inactiveNavClassName = "text-muted-foreground hover:bg-accent hover:text-accent-foreground";
 
   // Badge component for showing counts on icons (positioned relative to icon)
   const Badge = ({ count }: { count: number }) => {
@@ -115,18 +112,18 @@ const Navigation = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-4" data-tour="parent-menu">
-              <NavLink to="/parent" className={navLinkClassName}>
+              <NavLink to="/parent" className={baseNavLinkClassName} activeClassName={activeNavClassName}>
                 <Home className="h-4 w-4" />
                 <span>Home</span>
               </NavLink>
-              <NavLink to="/parent/dashboard" className={navLinkClassName}>
+              <NavLink to="/parent/dashboard" className={baseNavLinkClassName} activeClassName={activeNavClassName}>
                 <div className="relative flex items-center justify-center">
                   <LayoutDashboard className="h-4 w-4" />
                   <Badge count={missedCallCount} />
                 </div>
                 <span>Dashboard</span>
               </NavLink>
-              <NavLink to="/parent/children" className={navLinkClassName}>
+              <NavLink to="/parent/children" className={baseNavLinkClassName} activeClassName={activeNavClassName}>
                 <div className="relative flex items-center justify-center">
                   <Users className="h-4 w-4" />
                   <Badge count={unreadMessageCount} />
@@ -150,18 +147,18 @@ const Navigation = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-4" data-tour="child-help">
-              <NavLink to="/child" className={navLinkClassName}>
+              <NavLink to="/child" className={baseNavLinkClassName} activeClassName={activeNavClassName}>
                 <Home className="h-4 w-4" />
                 <span>Home</span>
               </NavLink>
-              <NavLink to="/child/dashboard" className={navLinkClassName}>
+              <NavLink to="/child/dashboard" className={baseNavLinkClassName} activeClassName={activeNavClassName}>
                 <div className="relative flex items-center justify-center">
                   <LayoutDashboard className="h-4 w-4" />
                   <Badge count={missedCallCount} />
                 </div>
                 <span>Dashboard</span>
               </NavLink>
-              <NavLink to="/child/parents" className={navLinkClassName}>
+              <NavLink to="/child/parents" className={baseNavLinkClassName} activeClassName={activeNavClassName}>
                 <div className="relative flex items-center justify-center">
                   <Users className="h-4 w-4" />
                   <Badge count={unreadMessageCount} />

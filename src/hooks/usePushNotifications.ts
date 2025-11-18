@@ -11,9 +11,7 @@ interface NotificationOptions {
   badge?: string;
   tag?: string;
   requireInteraction?: boolean;
-  vibrate?: number[];
   data?: Record<string, any>;
-  actions?: NotificationAction[];
 }
 
 export const usePushNotifications = () => {
@@ -107,10 +105,8 @@ export const usePushNotifications = () => {
             badge: options.badge || "/icon-96x96.png",
             tag: options.tag || "notification",
             requireInteraction: options.requireInteraction ?? true,
-            vibrate: options.vibrate || [200, 100, 200],
             data: options.data || {},
-            actions: options.actions || [],
-          });
+          } as NotificationOptions);
           console.log("✅ [PUSH] Notification sent via service worker");
         } catch (error) {
           console.error("❌ [PUSH] Failed to send notification:", error);

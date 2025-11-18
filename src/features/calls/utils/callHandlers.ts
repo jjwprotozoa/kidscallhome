@@ -1151,8 +1151,7 @@ export const handleParentCall = async (
 
             // Add ICE candidates - CRITICAL for connection establishment
             // Parent reads child's candidates from child_ice_candidates field
-            const candidatesToProcess = (updatedCall.child_ice_candidates ||
-              updatedCall.ice_candidates) as unknown as
+            const candidatesToProcess = (updatedCall.child_ice_candidates) as unknown as
               | RTCIceCandidateInit[]
               | null;
 

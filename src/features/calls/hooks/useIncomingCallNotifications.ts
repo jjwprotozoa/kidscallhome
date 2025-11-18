@@ -99,7 +99,6 @@ export const useIncomingCallNotifications = (
           badge: "/icon-96x96.png",
           tag: "incoming-call",
           requireInteraction: true,
-          vibrate: [200, 100, 200, 100, 200], // Vibrate pattern for notification
           data: {
             callId: callData.callId,
             callerName: callData.callerName,

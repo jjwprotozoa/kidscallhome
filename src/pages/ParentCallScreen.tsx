@@ -152,7 +152,7 @@ const ParentCallScreen = () => {
       localVideoRef={localVideoRef}
       remoteVideoRef={remoteVideoRef}
       remoteStream={callEngine.remoteStream}
-      isConnecting={callEngine.state === "calling" || callEngine.state === "connecting"}
+      isConnecting={callEngine.state === "connecting"}
       isMuted={callEngine.isMuted}
       isVideoOff={callEngine.isVideoOff}
       onToggleMute={callEngine.toggleMute}

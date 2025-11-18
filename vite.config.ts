@@ -9,7 +9,7 @@ export default defineConfig(({ mode }) => {
   const htmlPlugin = () => {
     return {
       name: "html-transform",
-      transformIndexHtml(html: string, ctx) {
+      transformIndexHtml(html: string, ctx: any) {
         // For Open Graph images, always use the production domain
         // This ensures social media shares always show the correct image URL
         // regardless of whether it's a preview or production deployment

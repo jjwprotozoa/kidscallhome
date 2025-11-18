@@ -89,40 +89,8 @@ export async function endCall({
       errorMessage: error.message 
     });
     
-    // Try to ensure columns exist via RPC function
-    let ensureError = null;
-    try {
-      const { error: rpcError } = await supabase.rpc('ensure_call_ending_columns');
-      ensureError = rpcError;
-    } catch (rpcErr) {
-      // RPC might not exist yet - that's OK, we'll fall back
-      ensureError = { message: 'RPC function not available' };
-    }
-    
-    if (!ensureError) {
-      console.log("✅ [CALL LIFECYCLE] Columns created, retrying update", { callId });
-      // Retry the original update now that columns exist (without .neq() filter)
-      const { data: retryData, error: retryError } = await supabase
-        .from('calls')
-        .update({
-          status: 'ended',
-          ended_at: new Date().toISOString(),
-          ended_by: by,
-          end_reason: reason,
-        })
-        .eq('id', callId)
-        .select('id, status, ended_at, ended_by, end_reason')
-        .single();
-      
-      if (!retryError) {
-        data = retryData;
-        error = null;
-        console.log("✅ [CALL LIFECYCLE] Call ended successfully after creating columns", { callId });
-      } else {
-        // If retry still fails, fall through to basic update
-        error = retryError;
-      }
-    }
+    // Try basic update without extra columns
+    console.log("⚠️ [CALL LIFECYCLE] Attempting basic status+ended_at update");
     
     // If column creation failed or retry failed, fall back to basic update
     if (error) {
@@ -168,20 +136,9 @@ export async function endCall({
     }
   }
 
-  // Increment version separately (if RPC exists)
+  // Log success
   if (!error && data) {
-    try {
-      const rpcResult = supabase.rpc('increment_call_version', { call_id: callId });
-      // Check if it's a promise before calling .catch
-      if (rpcResult && typeof rpcResult.catch === 'function') {
-        await rpcResult.catch(() => {
-          // RPC might not exist yet - that's OK, version is optional
-        });
-      }
-    } catch (rpcErr) {
-      // RPC might not exist yet - that's OK, version is optional
-      console.log("ℹ️ [CALL LIFECYCLE] Version increment RPC not available (optional)", { callId });
-    }
+    console.log("✅ [CALL LIFECYCLE] Call ended successfully", { callId });
   }
 
   if (error) {
@@ -202,9 +159,9 @@ export async function endCall({
       console.warn("⚠️ [CALL LIFECYCLE] 406 error detected, trying simple status update", { callId });
       const { data: simpleData, error: simpleError } = await supabase
         .from('calls')
-        .update({ status: 'ended' })
+        .update({ status: 'ended', ended_at: new Date().toISOString() })
         .eq('id', callId)
-        .select('id, status')
+        .select('id, status, ended_at')
         .single();
       
       if (!simpleError && simpleData) {

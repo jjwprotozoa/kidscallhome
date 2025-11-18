@@ -317,7 +317,6 @@ export const VideoCallUI = ({
           autoPlay
           playsInline
           muted={false}
-          volume={1.0}
           className="w-full h-full object-cover"
           style={{ backgroundColor: '#000' }}
         />
