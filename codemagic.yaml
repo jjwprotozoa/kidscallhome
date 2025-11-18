@@ -177,7 +177,45 @@ workflows:
           echo "✅ Verifying Gradle wrapper files..."
           ls -lh gradlew gradle/wrapper/gradle-wrapper.jar
           chmod +x ./gradlew
-          ./gradlew bundleRelease
+          # Check if settings.gradle exists, if not Capacitor might not have created it
+          if [ ! -f "settings.gradle" ]; then
+            echo "⚠️ settings.gradle not found, checking if capacitor.settings.gradle exists..."
+            if [ -f "capacitor.settings.gradle" ]; then
+              echo "Using capacitor.settings.gradle as settings.gradle..."
+              cp capacitor.settings.gradle settings.gradle
+            else
+              echo "❌ No settings.gradle found. Capacitor sync may have failed."
+              exit 1
+            fi
+          fi
+          # Check if root build.gradle exists, create minimal one if needed
+          if [ ! -f "build.gradle" ]; then
+            echo "⚠️ Root build.gradle not found, creating minimal one..."
+            echo "buildscript {" > build.gradle
+            echo "    repositories {" >> build.gradle
+            echo "        google()" >> build.gradle
+            echo "        mavenCentral()" >> build.gradle
+            echo "    }" >> build.gradle
+            echo "    dependencies {" >> build.gradle
+            echo "        classpath 'com.android.tools.build:gradle:8.2.1'" >> build.gradle
+            echo "    }" >> build.gradle
+            echo "}" >> build.gradle
+            echo "allprojects {" >> build.gradle
+            echo "    repositories {" >> build.gradle
+            echo "        google()" >> build.gradle
+            echo "        mavenCentral()" >> build.gradle
+            echo "    }" >> build.gradle
+            echo "}" >> build.gradle
+          fi
+          # Check available tasks
+          echo "Checking available Gradle tasks..."
+          ./gradlew tasks --all | grep -i "bundle\|assemble" || echo "No bundle/assemble tasks found"
+          # Try building app module directly
+          echo "Building Android App Bundle..."
+          ./gradlew :app:bundleRelease || {
+            echo "⚠️ :app:bundleRelease failed, trying bundleRelease..."
+            ./gradlew bundleRelease
+          }
       - name: Build APK (optional, for testing)
         script: |
           cd android
