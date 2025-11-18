@@ -14,17 +14,10 @@ workflows:
         # - google_play: Contains GCLOUD_SERVICE_ACCOUNT_CREDENTIALS (for Play Store publishing)
         - android_keystore
         - google_play
-      android_signing:
-        - keystore: $CM_KEYSTORE_PATH
-          # Reference to keystore credentials stored in Codemagic UI
-          # Store these securely in Codemagic environment variables:
-          # - CM_KEYSTORE_PATH (path to keystore file)
-          # - CM_KEYSTORE_PASSWORD
-          # - CM_KEY_ALIAS
-          # - CM_KEY_PASSWORD
-          keystore_password: $KEYSTORE_PASSWORD
-          key_alias: $KEY_ALIAS
-          key_password: $KEY_PASSWORD
+      # Android signing configuration
+      # Note: Keystore signing is handled manually in scripts below
+      # If you need automatic signing, configure android_signing in Codemagic UI
+      # and reference it here as a file reference object
       node: 20
       java: 17
       vars:
