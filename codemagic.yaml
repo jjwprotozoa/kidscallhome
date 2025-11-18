@@ -173,7 +173,7 @@ workflows:
           set -o pipefail
           ./gradlew assembleDebug --stacktrace --info 2>&1 | tee debug-build.log
           BUILD_EXIT_CODE=${PIPESTATUS[0]}
-          
+
           # Immediately show if build failed (before detailed extraction)
           if [ $BUILD_EXIT_CODE -ne 0 ]; then
             echo ""
@@ -198,9 +198,9 @@ workflows:
             FAIL_LINE=$(grep -n "BUILD FAILED" debug-build.log | tail -1 | cut -d: -f1)
             if [ ! -z "$FAIL_LINE" ]; then
               echo "Found 'BUILD FAILED' at line $FAIL_LINE" >> build-errors.txt
-              echo "Showing 100 lines before and 50 lines after:" >> build-errors.txt
+              echo "Showing 50 lines before and 200 lines after (error usually appears right after BUILD FAILED):" >> build-errors.txt
               echo "" >> build-errors.txt
-              sed -n "$((FAIL_LINE - 100)),$((FAIL_LINE + 50))p" debug-build.log >> build-errors.txt
+              sed -n "$((FAIL_LINE - 50)),$((FAIL_LINE + 200))p" debug-build.log >> build-errors.txt
             fi
             
             echo "" >> build-errors.txt
