@@ -52,7 +52,22 @@ const PageLoader = () => (
   </div>
 );
 
-const queryClient = new QueryClient();
+// Configure QueryClient with error handling
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 1,
+      refetchOnWindowFocus: false,
+      // Prevent queries from throwing errors that break the app
+      throwOnError: false,
+    },
+    mutations: {
+      retry: 1,
+      // Prevent mutations from throwing errors that break the app
+      throwOnError: false,
+    },
+  },
+});
 
 // Badge initialization component (runs once per session)
 const BadgeProvider = () => {
@@ -166,31 +181,47 @@ const SessionManager = () => {
   return null;
 };
 
-const App = () => (
-  <ErrorBoundary>
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <BadgeProvider />
-        <SessionManager />
-        <NativeAndroidInitializer />
-        <WidgetDataManager />
-        <WidgetIntentHandler />
-        <Toaster />
-        <Sonner />
-        <SafeAreaLayout className="w-full overflow-x-hidden">
-          <BrowserRouter
-            future={{
-              v7_startTransition: true,
-              v7_relativeSplatPath: true,
-            }}
-          >
-            <GlobalIncomingCall />
-            <GlobalMessageNotifications />
-            <GlobalPresenceTracker />
-            <CookieConsent />
-            <PWAInstallPrompt />
-            <Suspense fallback={<PageLoader />}>
-              <Routes>
+const App = () => {
+  // Wrap critical components in error boundaries to prevent app crashes
+  return (
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <ErrorBoundary fallback={null}>
+            <BadgeProvider />
+          </ErrorBoundary>
+          <SessionManager />
+          <ErrorBoundary fallback={null}>
+            <NativeAndroidInitializer />
+          </ErrorBoundary>
+          <ErrorBoundary fallback={null}>
+            <WidgetDataManager />
+          </ErrorBoundary>
+          <ErrorBoundary fallback={null}>
+            <WidgetIntentHandler />
+          </ErrorBoundary>
+          <Toaster />
+          <Sonner />
+          <SafeAreaLayout className="w-full overflow-x-hidden">
+            <BrowserRouter
+              future={{
+                v7_startTransition: true,
+                v7_relativeSplatPath: true,
+              }}
+            >
+              <ErrorBoundary fallback={null}>
+                <GlobalIncomingCall />
+              </ErrorBoundary>
+              <ErrorBoundary fallback={null}>
+                <GlobalMessageNotifications />
+              </ErrorBoundary>
+              <ErrorBoundary fallback={null}>
+                <GlobalPresenceTracker />
+              </ErrorBoundary>
+              <CookieConsent />
+              <PWAInstallPrompt />
+              <Suspense fallback={<PageLoader />}>
+                <Routes>
                 <Route path="/" element={<Index />} />
                 <Route path="/parent/auth" element={<ParentAuth />} />
                 <Route path="/parent" element={<ParentHome />} />
@@ -213,13 +244,14 @@ const App = () => (
                 <Route path="/error/network" element={<NetworkError />} />
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                 <Route path="*" element={<NotFound />} />
-              </Routes>
-            </Suspense>
-          </BrowserRouter>
-        </SafeAreaLayout>
-      </TooltipProvider>
-    </QueryClientProvider>
-  </ErrorBoundary>
-);
+                </Routes>
+              </Suspense>
+            </BrowserRouter>
+          </SafeAreaLayout>
+        </TooltipProvider>
+      </QueryClientProvider>
+    </ErrorBoundary>
+  );
+};
 
 export default App;

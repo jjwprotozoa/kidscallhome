@@ -33,28 +33,48 @@ if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
-export const supabase = createClient<Database>(
-  SUPABASE_URL || 'https://placeholder.supabase.co',
-  SUPABASE_PUBLISHABLE_KEY || 'placeholder-key',
-  {
-    auth: {
-      storage: localStorage,
-      persistSession: true,
-      autoRefreshToken: true,
-      detectSessionInUrl: false, // Prevent auto-redirect on auth errors
-    },
-    realtime: {
-      params: {
-        eventsPerSecond: 10,
+// Create Supabase client with error handling
+let supabase: ReturnType<typeof createClient<Database>>;
+
+try {
+  supabase = createClient<Database>(
+    SUPABASE_URL || 'https://placeholder.supabase.co',
+    SUPABASE_PUBLISHABLE_KEY || 'placeholder-key',
+    {
+      auth: {
+        storage: typeof window !== 'undefined' ? localStorage : undefined,
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: false, // Prevent auto-redirect on auth errors
       },
-    },
-    global: {
-      headers: {
-        'x-client-info': 'kidscallhome-web',
+      realtime: {
+        params: {
+          eventsPerSecond: 10,
+        },
       },
-    },
-  }
-);
+      global: {
+        headers: {
+          'x-client-info': 'kidscallhome-web',
+        },
+      },
+    }
+  );
+} catch (error) {
+  safeLog.error('❌ [SUPABASE CLIENT] Failed to create client:', error);
+  // Create a minimal client to prevent app crash
+  supabase = createClient<Database>(
+    'https://placeholder.supabase.co',
+    'placeholder-key',
+    {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+      },
+    }
+  );
+}
+
+export { supabase };
 
 // Handle auth errors gracefully - clear invalid tokens
 supabase.auth.onAuthStateChange((event, session) => {
