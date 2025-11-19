@@ -131,6 +131,16 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Skip external API requests that don't support CORS (let browser handle them)
+  const knownExternalAPIs = [
+    'haveibeenpwned.com',
+    'ip-api.com',
+    'ipapi.co'
+  ];
+  if (knownExternalAPIs.some(api => url.hostname.includes(api))) {
+    return; // Don't intercept - let browser handle CORS errors normally
+  }
+
   // Skip Vite HMR and dev server requests during development
   if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
     // For development, let browser handle requests normally to avoid caching issues
@@ -154,7 +164,20 @@ self.addEventListener('fetch', (event) => {
 
       // Fetch from network with error handling
       return fetch(event.request).catch((error) => {
-        console.error('[SW] Fetch failed for:', event.request.url, error);
+        const url = new URL(event.request.url);
+        
+        // Skip logging for known external APIs that don't support CORS (expected to fail)
+        const knownExternalAPIs = [
+          'haveibeenpwned.com',
+          'ip-api.com',
+          'ipapi.co'
+        ];
+        const isKnownExternalAPI = knownExternalAPIs.some(api => url.hostname.includes(api));
+        
+        // Only log errors for internal requests or unexpected failures
+        if (!isKnownExternalAPI) {
+          console.error('[SW] Fetch failed for:', event.request.url, error);
+        }
         
         // For navigation requests, return a basic HTML response
         if (event.request.mode === 'navigate') {
@@ -164,6 +187,12 @@ self.addEventListener('fetch', (event) => {
           });
         }
         
+        // For external API requests that fail (CORS, etc.), let the browser handle it
+        // Re-throw to let the browser handle CORS errors normally
+        if (isKnownExternalAPI) {
+          throw error;
+        }
+        
         // For other requests, return a basic error response
         return new Response('Network error', {
           status: 408,
@@ -171,11 +200,29 @@ self.addEventListener('fetch', (event) => {
         });
       });
     }).catch((error) => {
-      console.error('[SW] Cache match failed:', error);
+      // Only log unexpected errors
+      const url = new URL(event.request.url);
+      const isKnownExternalAPI = ['haveibeenpwned.com', 'ip-api.com', 'ipapi.co'].some(api => 
+        url.hostname.includes(api)
+      );
+      
+      if (!isKnownExternalAPI) {
+        console.error('[SW] Cache match failed:', error);
+      }
+      
       // Try to fetch from network
       return fetch(event.request).catch((fetchError) => {
-        console.error('[SW] Network fetch also failed:', fetchError);
-        // Return a basic error response
+        // Only log if it's not a known external API
+        if (!isKnownExternalAPI) {
+          console.error('[SW] Network fetch also failed:', fetchError);
+        }
+        
+        // For external APIs, let the error propagate (browser will handle CORS)
+        if (isKnownExternalAPI) {
+          throw fetchError;
+        }
+        
+        // Return a basic error response for internal requests
         return new Response('Service unavailable', {
           status: 503,
           headers: { 'Content-Type': 'text/plain' }

@@ -241,10 +241,88 @@ export async function initializeNativeAndroid(): Promise<void> {
       console.log('App state changed. Is active?', isActive);
     });
 
+    // Listen for app URL opens (deep links, widget intents, etc.)
+    App.addListener('appUrlOpen', (data) => {
+      console.log('📱 App opened from URL/intent:', data);
+      // Handle widget intents and deep links
+      handleAppIntent(data);
+    });
+
     // Request notification permissions
     await requestPushNotificationPermission();
   } catch (error) {
     console.error('Failed to initialize native Android features:', error);
+  }
+}
+
+/**
+ * Handle app intents from widgets, deep links, etc.
+ * This will be called when the app is opened from a widget tap or deep link
+ */
+export function handleAppIntent(data: { url: string }): void {
+  if (!isNativePlatform()) {
+    return;
+  }
+
+  try {
+    const url = new URL(data.url);
+    
+    // Handle widget intents (fromWidget=true, widgetAction=quick_call)
+    // Capacitor passes Intent extras as URL parameters
+    const fromWidget = url.searchParams.get('fromWidget') === 'true';
+    const widgetAction = url.searchParams.get('widgetAction');
+    const childId = url.searchParams.get('childId');
+
+    if (fromWidget && widgetAction === 'quick_call') {
+      console.log('📱 Widget quick call action triggered', { childId });
+      // Dispatch custom event that App.tsx can listen to
+      window.dispatchEvent(new CustomEvent('widgetQuickCall', {
+        detail: { action: widgetAction, childId }
+      }));
+    }
+
+    // Handle other deep links
+    if (url.pathname) {
+      console.log('📱 Deep link path:', url.pathname);
+      // Navigate to the path (handled by router in App.tsx)
+      window.location.href = url.pathname + url.search;
+    }
+  } catch (error) {
+    console.error('Failed to handle app intent:', error);
+  }
+}
+
+/**
+ * Sync widget data to native Android SharedPreferences
+ * Uses Capacitor WidgetDataPlugin to bridge React → Android
+ */
+export async function syncWidgetDataToNative(data: {
+  childId: string | null;
+  childName: string;
+  childAvatarColor: string;
+  unreadCount: number;
+  lastCallTime: string | null;
+}): Promise<void> {
+  if (!isNativeAndroid()) {
+    return;
+  }
+
+  try {
+    // Store in localStorage (for web fallback and React access)
+    const widgetData = {
+      ...data,
+      updatedAt: new Date().toISOString(),
+    };
+    localStorage.setItem('widget_data', JSON.stringify(widgetData));
+
+    // Sync to native Android SharedPreferences via Capacitor plugin
+    const { WidgetDataPlugin } = await import('@/plugins/WidgetDataPlugin');
+    await WidgetDataPlugin.syncWidgetData(data);
+    
+    console.log('✅ Widget data synced to native Android');
+  } catch (error) {
+    console.error('Failed to sync widget data to native:', error);
+    // Continue without crashing - widget will use placeholder data
   }
 }
 

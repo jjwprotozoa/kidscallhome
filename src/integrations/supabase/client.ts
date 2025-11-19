@@ -41,6 +41,7 @@ export const supabase = createClient<Database>(
       storage: localStorage,
       persistSession: true,
       autoRefreshToken: true,
+      detectSessionInUrl: false, // Prevent auto-redirect on auth errors
     },
     realtime: {
       params: {
@@ -54,3 +55,50 @@ export const supabase = createClient<Database>(
     },
   }
 );
+
+// Handle auth errors gracefully - clear invalid tokens
+supabase.auth.onAuthStateChange((event, session) => {
+  if (event === 'TOKEN_REFRESHED') {
+    // Token refreshed successfully
+    if (import.meta.env.DEV) {
+      safeLog.log('✅ [AUTH] Token refreshed successfully');
+    }
+  } else if (event === 'SIGNED_OUT') {
+    // User signed out - clear any stale session data
+    if (import.meta.env.DEV) {
+      safeLog.log('🔓 [AUTH] User signed out');
+    }
+  }
+});
+
+// Global error handler for auth refresh failures
+// This catches errors that occur during automatic token refresh
+if (typeof window !== 'undefined') {
+  // Listen for unhandled promise rejections from Supabase auth
+  const originalErrorHandler = window.onerror;
+  window.addEventListener('unhandledrejection', (event) => {
+    const error = event.reason;
+    // Check if it's a Supabase auth error with invalid refresh token
+    if (error?.message?.includes('Invalid Refresh Token') || 
+        error?.message?.includes('Refresh Token Not Found')) {
+      // Clear invalid session data
+      if (import.meta.env.DEV) {
+        safeLog.debug('🔄 [AUTH] Clearing invalid refresh token');
+      }
+      
+      // Clear Supabase auth data from localStorage
+      const supabaseKeys = Object.keys(localStorage).filter(key => 
+        key.startsWith('sb-') && key.includes('auth-token')
+      );
+      supabaseKeys.forEach(key => localStorage.removeItem(key));
+      
+      // Prevent the error from showing in console
+      event.preventDefault();
+      
+      // Optionally sign out to clear all session data
+      supabase.auth.signOut({ scope: 'local' }).catch(() => {
+        // Ignore errors during cleanup
+      });
+    }
+  });
+}

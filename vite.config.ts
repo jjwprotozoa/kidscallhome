@@ -91,6 +91,70 @@ export default defineConfig(({ mode }) => {
       esbuild: {
         drop: mode === 'production' ? ['console', 'debugger'] : [],
       },
+      // Manual chunking strategy to reduce bundle size
+      rollupOptions: {
+        output: {
+          manualChunks: (id) => {
+            // Vendor chunks - split large libraries
+            if (id.includes('node_modules')) {
+              // React and React DOM - core framework
+              if (id.includes('react') || id.includes('react-dom')) {
+                return 'vendor-react';
+              }
+              
+              // Recharts - large charting library (only used in some pages)
+              if (id.includes('recharts')) {
+                return 'vendor-recharts';
+              }
+              
+              // Supabase client - large SDK
+              if (id.includes('@supabase')) {
+                return 'vendor-supabase';
+              }
+              
+              // Capacitor plugins - native features (only needed on mobile)
+              if (id.includes('@capacitor')) {
+                return 'vendor-capacitor';
+              }
+              
+              // Radix UI components - UI library
+              if (id.includes('@radix-ui')) {
+                return 'vendor-radix';
+              }
+              
+              // React Query - data fetching
+              if (id.includes('@tanstack/react-query')) {
+                return 'vendor-react-query';
+              }
+              
+              // React Router - routing
+              if (id.includes('react-router')) {
+                return 'vendor-router';
+              }
+              
+              // Date utilities
+              if (id.includes('date-fns')) {
+                return 'vendor-date';
+              }
+              
+              // Form handling
+              if (id.includes('react-hook-form') || id.includes('@hookform')) {
+                return 'vendor-forms';
+              }
+              
+              // Other large dependencies
+              if (id.includes('lucide-react')) {
+                return 'vendor-icons';
+              }
+              
+              // All other node_modules
+              return 'vendor-other';
+            }
+          },
+        },
+      },
+      // Increase chunk size warning limit (we're handling it with manual chunks)
+      chunkSizeWarningLimit: 600,
     },
   };
 });

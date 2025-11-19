@@ -4,36 +4,52 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { SafeAreaLayout } from "@/components/layout/SafeAreaLayout";
-import { useEffect } from "react";
+import { useEffect, lazy, Suspense } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import Index from "./pages/Index";
-import NotFound from "./pages/NotFound";
-import ServerError from "./pages/ServerError";
-import NetworkError from "./pages/NetworkError";
-import ParentAuth from "./pages/ParentAuth";
-import ParentDashboard from "./pages/ParentDashboard";
-import ParentHome from "./pages/ParentHome";
-import ParentChildrenList from "./pages/ParentChildrenList";
-import ParentCallScreen from "./pages/ParentCallScreen";
-import DeviceManagement from "./pages/DeviceManagement";
-import Upgrade from "./pages/Upgrade";
-import AccountSettings from "./pages/AccountSettings";
-import ChildLogin from "./pages/ChildLogin";
-import ChildDashboard from "./pages/ChildDashboard";
-import ChildHome from "./pages/ChildHome";
-import ChildParentsList from "./pages/ChildParentsList";
-import ChildCallScreen from "./pages/ChildCallScreen";
-import VideoCall from "./pages/VideoCall";
-import Chat from "./pages/Chat";
-import Info from "./pages/Info";
 import { useBadgeInitialization } from "@/hooks/useBadgeInitialization";
 import { useBadgeRealtime } from "@/hooks/useBadgeRealtime";
 import { GlobalIncomingCall } from "@/components/GlobalIncomingCall";
 import { GlobalMessageNotifications } from "@/components/GlobalMessageNotifications";
 import { GlobalPresenceTracker } from "@/components/GlobalPresenceTracker";
 import { CookieConsent } from "@/components/CookieConsent";
-import { initializeNativeAndroid } from "@/utils/nativeAndroid";
+import { initializeNativeAndroid, isNativeAndroid } from "@/utils/nativeAndroid";
+import { useNavigate } from "react-router-dom";
+import { useWidgetData } from "@/hooks/useWidgetData";
+
+// Keep small/essential pages as regular imports (needed immediately)
+import Index from "./pages/Index";
+import NotFound from "./pages/NotFound";
+import ServerError from "./pages/ServerError";
+import NetworkError from "./pages/NetworkError";
+
+// Lazy load all other pages for code splitting
+const ParentAuth = lazy(() => import("./pages/ParentAuth"));
+const ParentDashboard = lazy(() => import("./pages/ParentDashboard"));
+const ParentHome = lazy(() => import("./pages/ParentHome"));
+const ParentChildrenList = lazy(() => import("./pages/ParentChildrenList"));
+const ParentCallScreen = lazy(() => import("./pages/ParentCallScreen"));
+const DeviceManagement = lazy(() => import("./pages/DeviceManagement"));
+const Upgrade = lazy(() => import("./pages/Upgrade"));
+const AccountSettings = lazy(() => import("./pages/AccountSettings"));
+const ChildLogin = lazy(() => import("./pages/ChildLogin"));
+const ChildDashboard = lazy(() => import("./pages/ChildDashboard"));
+const ChildHome = lazy(() => import("./pages/ChildHome"));
+const ChildParentsList = lazy(() => import("./pages/ChildParentsList"));
+const ChildCallScreen = lazy(() => import("./pages/ChildCallScreen"));
+const VideoCall = lazy(() => import("./pages/VideoCall"));
+const Chat = lazy(() => import("./pages/Chat"));
+const Info = lazy(() => import("./pages/Info"));
+
+// Loading fallback component
+const PageLoader = () => (
+  <div className="flex items-center justify-center min-h-[100dvh]">
+    <div className="text-center">
+      <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]" />
+      <p className="mt-4 text-sm text-muted-foreground">Loading...</p>
+    </div>
+  </div>
+);
 
 const queryClient = new QueryClient();
 
@@ -51,6 +67,58 @@ const NativeAndroidInitializer = () => {
       console.error('Failed to initialize native Android features:', error);
     });
   }, []);
+  return null;
+};
+
+// Component to handle widget intents and deep links
+const WidgetIntentHandler = () => {
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!isNativeAndroid()) {
+      return;
+    }
+
+    // Listen for widget quick call events
+    const handleWidgetQuickCall = async (event: CustomEvent) => {
+      console.log('📱 Widget quick call received:', event.detail);
+      
+      const { childId } = event.detail || {};
+      
+      // Use childId from event if available (from widget URI)
+      if (childId) {
+        console.log('📱 Routing to child from widget:', childId);
+        navigate(`/parent/call/${childId}`);
+        return;
+      }
+      
+      // Fallback: Try to load widget data to get last-called child
+      const { loadWidgetData } = await import('@/utils/widgetData');
+      const widgetData = loadWidgetData();
+      
+      if (widgetData?.childId) {
+        // Route directly to last-called child's call screen
+        console.log('📱 Routing to last-called child:', widgetData.childId);
+        navigate(`/parent/call/${widgetData.childId}`);
+      } else {
+        // Fallback to parent dashboard
+        navigate('/parent/dashboard');
+      }
+    };
+
+    window.addEventListener('widgetQuickCall', handleWidgetQuickCall as EventListener);
+
+    return () => {
+      window.removeEventListener('widgetQuickCall', handleWidgetQuickCall as EventListener);
+    };
+  }, [navigate]);
+
+  return null;
+};
+
+// Component to manage widget data updates
+const WidgetDataManager = () => {
+  useWidgetData();
   return null;
 };
 
@@ -104,6 +172,8 @@ const App = () => (
         <BadgeProvider />
         <SessionManager />
         <NativeAndroidInitializer />
+        <WidgetDataManager />
+        <WidgetIntentHandler />
         <Toaster />
         <Sonner />
         <SafeAreaLayout className="w-full overflow-x-hidden">
@@ -117,30 +187,32 @@ const App = () => (
             <GlobalMessageNotifications />
             <GlobalPresenceTracker />
             <CookieConsent />
-            <Routes>
-              <Route path="/" element={<Index />} />
-              <Route path="/parent/auth" element={<ParentAuth />} />
-              <Route path="/parent" element={<ParentHome />} />
-              <Route path="/parent/children" element={<ParentChildrenList />} />
-              <Route path="/parent/call/:childId" element={<ParentCallScreen />} />
-              <Route path="/parent/dashboard" element={<ParentDashboard />} />
-              <Route path="/parent/devices" element={<DeviceManagement />} />
-              <Route path="/parent/upgrade" element={<Upgrade />} />
-              <Route path="/parent/settings" element={<AccountSettings />} />
-              <Route path="/child/login" element={<ChildLogin />} />
-              <Route path="/child" element={<ChildHome />} />
-              <Route path="/child/parents" element={<ChildParentsList />} />
-              <Route path="/child/call/:parentId" element={<ChildCallScreen />} />
-              <Route path="/child/dashboard" element={<ChildDashboard />} />
-              <Route path="/call/:childId" element={<VideoCall />} />
-              <Route path="/chat/:childId" element={<Chat />} />
-              <Route path="/info" element={<Info />} />
-              {/* Error pages */}
-              <Route path="/error/server" element={<ServerError />} />
-              <Route path="/error/network" element={<NetworkError />} />
-              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-              <Route path="*" element={<NotFound />} />
-            </Routes>
+            <Suspense fallback={<PageLoader />}>
+              <Routes>
+                <Route path="/" element={<Index />} />
+                <Route path="/parent/auth" element={<ParentAuth />} />
+                <Route path="/parent" element={<ParentHome />} />
+                <Route path="/parent/children" element={<ParentChildrenList />} />
+                <Route path="/parent/call/:childId" element={<ParentCallScreen />} />
+                <Route path="/parent/dashboard" element={<ParentDashboard />} />
+                <Route path="/parent/devices" element={<DeviceManagement />} />
+                <Route path="/parent/upgrade" element={<Upgrade />} />
+                <Route path="/parent/settings" element={<AccountSettings />} />
+                <Route path="/child/login" element={<ChildLogin />} />
+                <Route path="/child" element={<ChildHome />} />
+                <Route path="/child/parents" element={<ChildParentsList />} />
+                <Route path="/child/call/:parentId" element={<ChildCallScreen />} />
+                <Route path="/child/dashboard" element={<ChildDashboard />} />
+                <Route path="/call/:childId" element={<VideoCall />} />
+                <Route path="/chat/:childId" element={<Chat />} />
+                <Route path="/info" element={<Info />} />
+                {/* Error pages */}
+                <Route path="/error/server" element={<ServerError />} />
+                <Route path="/error/network" element={<NetworkError />} />
+                {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </Suspense>
           </BrowserRouter>
         </SafeAreaLayout>
       </TooltipProvider>

@@ -1,0 +1,1 @@
+function i(){if(typeof window<"u"&&window.Capacitor||typeof window<"u"&&window.cordova||typeof window<"u"&&window.ReactNativeWebView)return!0;if(typeof window<"u"){const e=navigator.userAgent.toLowerCase();if(e.includes("capacitor")||e.includes("cordova")||e.includes("ionic"))return!0}return!1}function n(){return!i()}export{n as i};

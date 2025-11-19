@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- android/app/src/main/res/xml/kids_call_home_widget_info.xml -->
+<!-- Android home screen widget provider configuration -->
+<!-- Purpose: Defines widget metadata and behavior -->
+
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="180dp"
+    android:minHeight="64dp"
+    android:updatePeriodMillis="0"
+    android:initialLayout="@layout/widget_kids_call_home"
+    android:resizeMode="horizontal|vertical"
+    android:widgetCategory="home_screen"
+    android:previewImage="@mipmap/ic_launcher"
+    android:autoAdvanceViewId="@+id/widget_root">
+
+</appwidget-provider>
+

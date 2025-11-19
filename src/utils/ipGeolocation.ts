@@ -117,12 +117,13 @@ export async function getIPGeolocation(ipAddress: string | null): Promise<IPGeol
       // Handle 403/429 responses silently - these are rate limits, not errors
       if (response.status === 403 || response.status === 429) {
         // Rate limited - disable IP geolocation for this session to avoid repeated calls
+        localStorage.setItem('kch_disable_ip_geolocation', 'true');
+        // Only log in dev mode with a debug message (not a warning)
         if (import.meta.env.DEV) {
-          console.warn(
+          console.debug(
             '[IP Geolocation] Rate limited by ip-api.com. Disabling for this session. Set VITE_DISABLE_IP_GEOLOCATION=true to disable permanently.'
           );
         }
-        localStorage.setItem('kch_disable_ip_geolocation', 'true');
         // Silently fall through to fallback - don't throw, don't log
         throw new Error('Rate limited');
       }
