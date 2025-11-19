@@ -91,64 +91,14 @@ export default defineConfig(({ mode }) => {
       esbuild: {
         drop: mode === 'production' ? ['console', 'debugger'] : [],
       },
-      // Manual chunking strategy to reduce bundle size
+      // Disable manual chunking to avoid loading order issues
+      // Let Vite handle chunking automatically - it will create optimal chunks
+      // while ensuring proper dependency order
       rollupOptions: {
         output: {
-          // Ensure proper chunk loading order by using entryFileNames
-          entryFileNames: 'assets/[name]-[hash].js',
-          chunkFileNames: 'assets/[name]-[hash].js',
-          manualChunks: (id) => {
-            // Simplified chunking strategy - be conservative to avoid loading order issues
-            // Only split out very large libraries that are clearly independent
-            if (id.includes('node_modules')) {
-              // Keep React and all React-dependent libraries in main bundle
-              // This ensures proper loading order and avoids vendor-other errors
-              if (id.includes('react') || 
-                  id.includes('react-dom') ||
-                  id.includes('react-router') ||
-                  id.includes('react-hook-form') ||
-                  id.includes('react-day-picker') ||
-                  id.includes('react-resizable-panels') ||
-                  id.includes('embla-carousel-react') ||
-                  id.includes('input-otp') ||
-                  id.includes('@tanstack/react-query') ||
-                  id.includes('@radix-ui') ||
-                  id.includes('next-themes') ||
-                  id.includes('zustand') ||
-                  id.includes('sonner') ||
-                  id.includes('vaul') ||
-                  id.includes('cmdk') ||
-                  id.includes('class-variance-authority') ||
-                  id.includes('clsx') ||
-                  id.includes('tailwind-merge') ||
-                  id.includes('lucide-react') ||
-                  id.includes('date-fns') ||
-                  id.includes('zod')) {
-                // Keep in main entry chunk for proper loading order
-                return undefined;
-              }
-              
-              // Keep Supabase in main - it's used everywhere and might have initialization issues
-              if (id.includes('@supabase')) {
-                return undefined;
-              }
-              
-              // Only split out very large, clearly independent libraries
-              // Recharts - large charting library (only used in some pages)
-              if (id.includes('recharts')) {
-                return 'vendor-recharts';
-              }
-              
-              // Capacitor plugins - native features (only needed on mobile)
-              if (id.includes('@capacitor')) {
-                return 'vendor-capacitor';
-              }
-              
-              // All other node_modules go to vendor-other
-              // This should now be very small (mostly build tools and dev dependencies)
-              return 'vendor-other';
-            }
-          },
+          // Let Vite automatically chunk based on dependencies
+          // This ensures proper loading order
+          manualChunks: undefined,
         },
       },
       // Increase chunk size warning limit (we're handling it with manual chunks)
