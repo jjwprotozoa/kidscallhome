@@ -434,10 +434,18 @@ export const GlobalIncomingCall = () => {
         navigate(`/call/${incomingCall.child_id}?callId=${callId}`);
       } else if (incomingCall.parent_id) {
         // Child answering parent's call - need child ID from session
-        const childSession = localStorage.getItem("childSession");
-        if (childSession) {
-          const childData = JSON.parse(childSession);
-          navigate(`/call/${childData.id}?callId=${callId}`);
+        if (typeof window !== 'undefined' && window.localStorage) {
+          const childSession = localStorage.getItem("childSession");
+          if (childSession) {
+            try {
+              const childData = JSON.parse(childSession);
+              if (childData?.id) {
+                navigate(`/call/${childData.id}?callId=${callId}`);
+              }
+            } catch (error) {
+              console.error("❌ [GLOBAL INCOMING CALL] Invalid child session data in handleAnswerCall:", error);
+            }
+          }
         }
       }
       
