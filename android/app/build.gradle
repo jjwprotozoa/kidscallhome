@@ -3,22 +3,43 @@ apply plugin: 'com.android.application'
 apply from: '../capacitor-cordova-android-plugins/cordova.variables.gradle'
 apply from: 'capacitor.build.gradle'
 
+// Load keystore properties if file exists
+def keystorePropertiesFile = rootProject.file("keystore.properties")
+def keystoreProperties = new Properties()
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
+
 android {
     namespace "com.kidscallhome.app"
-    compileSdk 34
+    compileSdk 35
     
     defaultConfig {
         applicationId "com.kidscallhome.app"
         minSdk 22
-        targetSdk 34
+        targetSdk 35
         versionCode 1
         versionName "1.0"
+    }
+    
+    signingConfigs {
+        release {
+            if (keystorePropertiesFile.exists()) {
+                keyAlias keystoreProperties['keyAlias']
+                keyPassword keystoreProperties['keyPassword']
+                storeFile file("${rootProject.projectDir}/${keystoreProperties['storeFile']}")
+                storePassword keystoreProperties['storePassword']
+            }
+        }
     }
     
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            if (keystorePropertiesFile.exists()) {
+                signingConfig signingConfigs.release
+            }
         }
     }
     

@@ -33,3 +33,10 @@ ngrok.yml
 
 # Android local properties (machine-specific SDK paths)
 android/local.properties
+
+# Android keystore files (NEVER commit these!)
+android/keystore.properties
+android/app/*.jks
+android/app/*.keystore
+android/**/*.jks
+android/**/*.keystore
