@@ -10,18 +10,19 @@ import { endCall as endCallUtil } from "@/features/calls/utils/callEnding";
 import { HelpBubble } from "@/features/onboarding/HelpBubble";
 import { OnboardingTour } from "@/features/onboarding/OnboardingTour";
 import { useChildrenPresence } from "@/features/presence/useChildrenPresence";
+import { useParentData } from "@/hooks/useParentData";
+import { useParentIncomingCallSubscription } from "@/hooks/useParentIncomingCallSubscription";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import {
-  useBadgeStore,
   useTotalMissedBadge,
   useTotalUnreadBadge,
 } from "@/stores/badgeStore";
+import { clearAllNotifications } from "@/utils/clearAllNotifications";
 import { isPWA } from "@/utils/platformDetection";
-import type { RealtimeChannel } from "@supabase/supabase-js";
 import { BellOff, Copy, Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
 interface Child {
   id: string;
@@ -37,25 +38,12 @@ interface IncomingCall {
   child_avatar_color: string;
 }
 
-interface CallRecord {
-  id: string;
-  child_id: string;
-  parent_id: string;
-  caller_type: string;
-  status: string;
-  created_at: string;
-  ended_at?: string | null;
-}
 
 const ParentDashboard = () => {
   const [children, setChildren] = useState<Child[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddChild, setShowAddChild] = useState(false);
   const [incomingCall, setIncomingCall] = useState<IncomingCall | null>(null);
-  const [parentName, setParentName] = useState<string | null>(null);
-  const [familyCode, setFamilyCode] = useState<string | null>(null);
-  const [allowedChildren, setAllowedChildren] = useState<number | null>(null);
-  const [canAddMoreChildren, setCanAddMoreChildren] = useState<boolean>(true);
   const [showCodeDialog, setShowCodeDialog] = useState<{ child: Child } | null>(
     null
   );
@@ -64,18 +52,23 @@ const ParentDashboard = () => {
   const [isUpdatingCode, setIsUpdatingCode] = useState(false);
   const [printViewChild, setPrintViewChild] = useState<Child | null>(null);
   const incomingCallRef = useRef<IncomingCall | null>(null); // Ref to track latest incomingCall for subscription callbacks
-  const channelRef = useRef<RealtimeChannel | null>(null);
   const isAnsweringRef = useRef(false); // Track if user is answering to prevent auto-decline
   const navigate = useNavigate();
-  const location = useLocation();
   const { toast } = useToast();
-  const { handleIncomingCall, stopIncomingCall } = useIncomingCallNotifications(
-    {
-      enabled: true,
-      volume: 0.7,
-    }
-  );
-  const handleIncomingCallRef = useRef(handleIncomingCall); // Ref to track latest handleIncomingCall for subscription callbacks
+  const { stopIncomingCall } = useIncomingCallNotifications({
+    enabled: true,
+    volume: 0.7,
+  });
+
+  // Use parent data hook
+  const {
+    parentName,
+    familyCode,
+    allowedChildren,
+    canAddMoreChildren,
+    checkAuth,
+    refreshCanAddMoreChildren,
+  } = useParentData();
 
   // Track children's online presence
   // Memoize childIds to prevent unnecessary re-subscriptions
@@ -102,85 +95,10 @@ const ParentDashboard = () => {
   const totalMissedCalls = useTotalMissedBadge();
   const hasNotifications = totalUnreadMessages > 0 || totalMissedCalls > 0;
 
-  const checkAuth = useCallback(async () => {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    if (!session) {
-      navigate("/parent/auth");
-      return;
-    }
-    // Fetch parent name, family code, and subscription info from database
-    const { data: parentData, error: parentError } = await supabase
-      .from("parents")
-      .select("name, family_code, allowed_children")
-      .eq("id", session.user.id)
-      .maybeSingle();
-
-    if (parentError) {
-      // Check if it's a column doesn't exist error
-      if (
-        parentError.code === "42703" ||
-        parentError.message?.includes("does not exist")
-      ) {
-        console.error(
-          "❌ [PARENT DASHBOARD] Migration not run. Family code column doesn't exist."
-        );
-        console.error(
-          "Please run: supabase/migrations/20250121000000_add_family_code.sql"
-        );
-      } else {
-        console.error("Error fetching parent data:", parentError);
-      }
-    }
-
-    if (parentData) {
-      setParentName((parentData as { name?: string })?.name || null);
-      setFamilyCode(
-        (parentData as { family_code?: string })?.family_code || null
-      );
-      setAllowedChildren(
-        (parentData as { allowed_children?: number })?.allowed_children || 1
-      );
-    }
-
-    // Check if parent can add more children (if function exists)
-    try {
-      // Type assertion needed because custom RPC function not in generated types
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: canAdd } = await (supabase.rpc as any)("can_add_child", {
-        p_parent_id: session.user.id,
-      });
-      setCanAddMoreChildren(canAdd === true);
-    } catch (error) {
-      // Function might not exist if migration hasn't been run
-      console.warn("Subscription check function not available:", error);
-      setCanAddMoreChildren(true); // Default to allowing if check fails
-    }
-  }, [navigate]);
-
   const fetchChildren = useCallback(async () => {
     try {
       // Refresh subscription check after adding/removing children
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (user) {
-        try {
-          // Type assertion needed because custom RPC function not in generated types
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const { data: canAdd } = await (supabase.rpc as any)(
-            "can_add_child",
-            {
-              p_parent_id: user.id,
-            }
-          );
-          setCanAddMoreChildren(canAdd === true);
-        } catch (error) {
-          // Function might not exist if migration hasn't been run
-          console.warn("Subscription check function not available:", error);
-        }
-      }
+      await refreshCanAddMoreChildren();
 
       const { data, error } = await supabase
         .from("children")
@@ -200,7 +118,7 @@ const ParentDashboard = () => {
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, [toast, refreshCanAddMoreChildren]);
 
   useEffect(() => {
     // Clear childSession if it exists - parents should not have childSession
@@ -215,226 +133,26 @@ const ParentDashboard = () => {
 
     checkAuth();
     fetchChildren();
+  }, [checkAuth, fetchChildren]);
 
-    let lastCheckedCallId: string | null = null;
-    let pollInterval: NodeJS.Timeout | null = null;
+  // Use incoming call subscription hook
+  useParentIncomingCallSubscription({
+    onIncomingCall: (call) => {
+      setIncomingCall(call);
+      incomingCallRef.current = call;
+    },
+    onCallCleared: () => {
+      setIncomingCall(null);
+      incomingCallRef.current = null;
+    },
+    currentIncomingCall: incomingCall,
+    enabled: true,
+  });
 
-    const setupSubscription = async () => {
-      // Use getSession() instead of getUser() - lighter weight, no auth endpoint call
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!session?.user?.id) return;
-      const userId = session.user.id; // Cache user ID to avoid repeated calls
-
-      // Function to handle incoming call notification
-      const handleIncomingCallNotification = async (call: CallRecord) => {
-        // Skip if we already showed this call
-        if (call.id === lastCheckedCallId) return;
-
-        // IMPORTANT: Don't show incoming call notification if user is already on the call page
-        // This prevents showing notifications for calls the parent initiated
-        if (location.pathname.startsWith("/call/")) {
-          return;
-        }
-
-        lastCheckedCallId = call.id;
-
-        const { data: childData } = await supabase
-          .from("children")
-          .select("name, avatar_color")
-          .eq("id", call.child_id)
-          .single();
-
-        if (childData) {
-          if (import.meta.env.DEV) {
-            console.log("📞 [PARENT DASHBOARD] Incoming call:", childData.name);
-          }
-          setIncomingCall({
-            id: call.id,
-            child_id: call.child_id,
-            child_name: childData.name,
-            child_avatar_color: childData.avatar_color,
-          });
-          // Handle incoming call with notifications (push notification if tab inactive, ringtone if active)
-          handleIncomingCallRef.current({
-            callId: call.id,
-            callerName: childData.name,
-            callerId: call.child_id,
-            url: `/call/${call.child_id}?callId=${call.id}`,
-          });
-        } else {
-          console.error("Failed to fetch child data for call");
-        }
-      };
-
-      // Check for existing ringing calls from children (in case subscription missed them)
-      // Check calls created in the last 2 minutes to catch calls that might have been created
-      // while the dashboard was loading or subscription was setting up
-      const checkExistingCalls = async () => {
-        const twoMinutesAgo = new Date(
-          Date.now() - 2 * 60 * 1000
-        ).toISOString();
-        const { data: existingCalls } = await supabase
-          .from("calls")
-          .select("*")
-          .eq("parent_id", userId)
-          .eq("caller_type", "child")
-          .eq("status", "ringing")
-          .gte("created_at", twoMinutesAgo)
-          .order("created_at", { ascending: false })
-          .limit(1);
-
-        if (existingCalls && existingCalls.length > 0) {
-          const call = existingCalls[0];
-          if (call.id !== lastCheckedCallId) {
-            await handleIncomingCallNotification(call);
-          }
-        }
-      };
-
-      // Polling function to check for new calls (fallback for realtime)
-      // IMPORTANT: Only check for child-initiated calls, not parent-initiated ones
-      // Use a 1-minute window since we poll every 30 seconds
-      const pollForCalls = async () => {
-        const oneMinuteAgo = new Date(Date.now() - 60 * 1000).toISOString();
-        const { data: newCalls, error: pollError } = await supabase
-          .from("calls")
-          .select("*")
-          .eq("parent_id", userId)
-          .eq("caller_type", "child") // Only child-initiated calls
-          .eq("status", "ringing")
-          .gte("created_at", oneMinuteAgo)
-          .order("created_at", { ascending: false })
-          .limit(1);
-
-        if (pollError) {
-          console.error("❌ [PARENT DASHBOARD] Polling error:", pollError);
-          return;
-        }
-
-        if (newCalls && newCalls.length > 0) {
-          const call = newCalls[0];
-          if (call.id !== lastCheckedCallId) {
-            await handleIncomingCallNotification(call);
-          }
-        }
-      };
-
-      // Check immediately
-      await checkExistingCalls();
-
-      // Set up polling as a fallback (every 60 seconds - reduced frequency to minimize console noise)
-      // Realtime subscriptions should handle most cases, this is just a safety net
-      pollInterval = setInterval(pollForCalls, 60000);
-
-      // Subscribe to new calls from children
-      // Listen to both INSERT and UPDATE events to catch calls that are reset to ringing
-
-      channelRef.current = supabase
-        .channel("parent-incoming-calls")
-        .on(
-          "postgres_changes",
-          {
-            event: "INSERT",
-            schema: "public",
-            table: "calls",
-            filter: `parent_id=eq.${userId}`,
-          },
-          async (payload) => {
-            const call = payload.new as CallRecord;
-
-            // Verify this call is from a child, for this parent, and is ringing
-            // IMPORTANT: Only show incoming call dialog for child-initiated calls, not parent-initiated ones
-            if (
-              call.caller_type === "child" &&
-              call.parent_id === userId &&
-              call.status === "ringing"
-            ) {
-              await handleIncomingCallNotification(call);
-            }
-          }
-        )
-        .on(
-          "postgres_changes",
-          {
-            event: "UPDATE",
-            schema: "public",
-            table: "calls",
-            filter: `parent_id=eq.${userId}`,
-          },
-          async (payload) => {
-            const call = payload.new as CallRecord;
-            const oldCall = payload.old as CallRecord;
-
-            // CRITICAL: Always ignore parent-initiated calls - they should never show notifications
-            // Parent-initiated calls are handled by the call page, not the dashboard
-            if (call.caller_type === "parent") {
-              return; // Early return - don't process parent-initiated calls at all
-            }
-
-            // Don't process updates if user is on the call page
-            if (location.pathname.startsWith("/call/")) {
-              return;
-            }
-
-            // Clear incoming call if it was answered or ended
-            // Use ref to get latest value without needing to re-run subscription
-            if (
-              incomingCallRef.current &&
-              incomingCallRef.current.id === call.id
-            ) {
-              if (call.status === "active" || call.status === "ended") {
-                setIncomingCall(null);
-                incomingCallRef.current = null;
-              }
-            }
-
-            // Check if status changed to "ringing" for a child-initiated call
-            // IMPORTANT: Only show incoming call dialog for child-initiated calls
-            if (
-              call.caller_type === "child" &&
-              call.parent_id === userId &&
-              call.status === "ringing" &&
-              oldCall.status !== "ringing"
-            ) {
-              await handleIncomingCallNotification(call);
-            }
-          }
-        )
-        .subscribe((status, err) => {
-          if (err) {
-            console.error(
-              "❌ [PARENT DASHBOARD] Realtime subscription error:",
-              err
-            );
-          }
-          // Silent subscription success - only log errors
-        });
-    };
-
-    setupSubscription();
-
-    return () => {
-      if (channelRef.current) {
-        supabase.removeChannel(channelRef.current);
-      }
-      if (pollInterval) {
-        clearInterval(pollInterval);
-      }
-    };
-    // checkAuth and fetchChildren are stable useCallback hooks, so they won't cause unnecessary re-runs
-    // Only re-run subscription when location changes (e.g., navigating between pages)
-  }, [checkAuth, fetchChildren, location.pathname]);
-
-  // Keep refs in sync with state/hooks so subscription callbacks always have latest values
+  // Keep ref in sync with state so we can check it in handlers
   useEffect(() => {
     incomingCallRef.current = incomingCall;
   }, [incomingCall]);
-
-  useEffect(() => {
-    handleIncomingCallRef.current = handleIncomingCall;
-  }, [handleIncomingCall]);
 
   // Stop notifications when incoming call is cleared
   useEffect(() => {
@@ -513,94 +231,18 @@ const ParentDashboard = () => {
     if (!hasNotifications) return;
 
     try {
-      const { acknowledgeMissedCalls } = await import(
-        "@/utils/acknowledgeMissedCalls"
-      );
-
-      // Clear all badges for all children
-      const badgeStore = useBadgeStore.getState();
-      let clearedMessageCount = 0;
-      let clearedCallCount = 0;
-
-      for (const childId of childIds) {
-        // Mark unread messages as read in database (parent receives messages from children)
-        const unreadCount = badgeStore.unreadMessagesByChild[childId] ?? 0;
-        if (unreadCount > 0) {
-          try {
-            // Get all unread messages from this child
-            const { data: unreadMessages, error: fetchError } = await supabase
-              .from("messages")
-              .select("id")
-              .eq("child_id", childId)
-              .eq("sender_type", "child")
-              .is("read_at", null);
-
-            if (!fetchError && unreadMessages && unreadMessages.length > 0) {
-              const unreadMessageIds = unreadMessages.map((msg) => msg.id);
-              const readAt = new Date().toISOString();
-
-              // Mark messages as read in database
-              const { error: updateError } = await supabase
-                .from("messages")
-                .update({ read_at: readAt } as Record<string, unknown>)
-                .in("id", unreadMessageIds);
-
-              if (!updateError) {
-                clearedMessageCount += unreadMessageIds.length;
-                console.log(
-                  `✅ Marked ${unreadMessageIds.length} messages as read for child ${childId}`
-                );
-              } else {
-                console.error(
-                  `Error marking messages as read for child ${childId}:`,
-                  updateError
-                );
-              }
-            }
-
-            // Clear badge regardless of DB update success
-            badgeStore.clearUnreadForChild(childId);
-          } catch (error) {
-            console.error(
-              `Error processing messages for child ${childId}:`,
-              error
-            );
-            // Still clear the badge locally even if DB update fails
-            badgeStore.clearUnreadForChild(childId);
-          }
-        }
-
-        // Acknowledge missed calls (updates database and clears badge)
-        const missedCount = badgeStore.missedCallsByChild[childId] ?? 0;
-        if (missedCount > 0) {
-          // Clear badge immediately for instant UI feedback (before DB update)
-          // This ensures the UI updates right away, even if DB is slow or out of sync
-          badgeStore.clearMissedForChild(childId);
-          clearedCallCount += missedCount;
-
-          // Then update database (realtime will sync across devices)
-          try {
-            await acknowledgeMissedCalls(childId, "child");
-          } catch (error) {
-            console.error(
-              `Error acknowledging missed calls for child ${childId}:`,
-              error
-            );
-            // Badge already cleared above, so no need to clear again
-          }
-        }
-      }
+      const result = await clearAllNotifications(childIds);
 
       const messageText =
-        clearedMessageCount > 0
-          ? `${clearedMessageCount} unread message${
-              clearedMessageCount !== 1 ? "s" : ""
+        result.clearedMessageCount > 0
+          ? `${result.clearedMessageCount} unread message${
+              result.clearedMessageCount !== 1 ? "s" : ""
             }`
           : "";
       const callText =
-        clearedCallCount > 0
-          ? `${clearedCallCount} missed call${
-              clearedCallCount !== 1 ? "s" : ""
+        result.clearedCallCount > 0
+          ? `${result.clearedCallCount} missed call${
+              result.clearedCallCount !== 1 ? "s" : ""
             }`
           : "";
       const description = [messageText, callText].filter(Boolean).join(" and ");
