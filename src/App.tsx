@@ -1,10 +1,10 @@
+import React, { useEffect, lazy, Suspense } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { SafeAreaLayout } from "@/components/layout/SafeAreaLayout";
-import { useEffect, lazy, Suspense } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { useBadgeInitialization } from "@/hooks/useBadgeInitialization";
@@ -13,6 +13,7 @@ import { GlobalIncomingCall } from "@/components/GlobalIncomingCall";
 import { GlobalMessageNotifications } from "@/components/GlobalMessageNotifications";
 import { GlobalPresenceTracker } from "@/components/GlobalPresenceTracker";
 import { CookieConsent } from "@/components/CookieConsent";
+import { PWAInstallPrompt } from "@/components/PWAInstallPrompt";
 import { initializeNativeAndroid, isNativeAndroid } from "@/utils/nativeAndroid";
 import { useNavigate } from "react-router-dom";
 import { useWidgetData } from "@/hooks/useWidgetData";
@@ -187,6 +188,7 @@ const App = () => (
             <GlobalMessageNotifications />
             <GlobalPresenceTracker />
             <CookieConsent />
+            <PWAInstallPrompt />
             <Suspense fallback={<PageLoader />}>
               <Routes>
                 <Route path="/" element={<Index />} />

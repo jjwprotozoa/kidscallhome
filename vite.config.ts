@@ -97,9 +97,25 @@ export default defineConfig(({ mode }) => {
           manualChunks: (id) => {
             // Vendor chunks - split large libraries
             if (id.includes('node_modules')) {
-              // React and React DOM - core framework
+              // React and React DOM - core framework (MUST load first)
+              // Keep React in main entry or ensure it loads before other chunks
               if (id.includes('react') || id.includes('react-dom')) {
                 return 'vendor-react';
+              }
+              
+              // React Router - depends on React, load early
+              if (id.includes('react-router')) {
+                return 'vendor-router';
+              }
+              
+              // React Query - depends on React, load early
+              if (id.includes('@tanstack/react-query')) {
+                return 'vendor-react-query';
+              }
+              
+              // Radix UI components - UI library (depends on React)
+              if (id.includes('@radix-ui')) {
+                return 'vendor-radix';
               }
               
               // Recharts - large charting library (only used in some pages)
@@ -117,21 +133,6 @@ export default defineConfig(({ mode }) => {
                 return 'vendor-capacitor';
               }
               
-              // Radix UI components - UI library
-              if (id.includes('@radix-ui')) {
-                return 'vendor-radix';
-              }
-              
-              // React Query - data fetching
-              if (id.includes('@tanstack/react-query')) {
-                return 'vendor-react-query';
-              }
-              
-              // React Router - routing
-              if (id.includes('react-router')) {
-                return 'vendor-router';
-              }
-              
               // Date utilities
               if (id.includes('date-fns')) {
                 return 'vendor-date';
@@ -147,7 +148,7 @@ export default defineConfig(({ mode }) => {
                 return 'vendor-icons';
               }
               
-              // All other node_modules
+              // All other node_modules (but ensure React loads first via dependencies)
               return 'vendor-other';
             }
           },

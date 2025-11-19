@@ -16,9 +16,30 @@ export const CookieConsent = () => {
 
   useEffect(() => {
     // Check if user has already given consent
-    const consentData = localStorage.getItem(CONSENT_STORAGE_KEY);
-    if (!consentData) {
+    const consentDataStr = localStorage.getItem(CONSENT_STORAGE_KEY);
+    if (!consentDataStr) {
       // Show banner after a short delay to avoid blocking initial page load
+      const timer = setTimeout(() => {
+        setShowBanner(true);
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+
+    // Parse and validate consent data
+    try {
+      const consentData = JSON.parse(consentDataStr);
+      // Check if consent was given (accepted or declined) and version matches
+      if (consentData.version === CONSENT_VERSION && consentData.timestamp) {
+        // User has already responded, don't show banner
+        return;
+      }
+      // Policy version changed, show banner again
+      const timer = setTimeout(() => {
+        setShowBanner(true);
+      }, 1000);
+      return () => clearTimeout(timer);
+    } catch (error) {
+      // Invalid data, show banner
       const timer = setTimeout(() => {
         setShowBanner(true);
       }, 1000);

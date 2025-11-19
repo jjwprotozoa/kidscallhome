@@ -70,6 +70,22 @@ export default function middleware(request: Request) {
   const url = new URL(request.url);
   const path = url.pathname;
   
+  // Skip middleware for static files (manifest, service worker, icons, etc.)
+  const staticFilePatterns = [
+    '/manifest.json',
+    '/sw.js',
+    '/icon-',
+    '/og-image.png',
+    '/robots.txt',
+    '/favicon.ico',
+    '/assets/',
+  ];
+  
+  if (staticFilePatterns.some(pattern => path.includes(pattern))) {
+    // Let Vercel serve static files normally
+    return new Response(null, { status: 200 });
+  }
+  
   // SECURITY: CORS headers (adjust for your domain)
   const origin = request.headers.get('origin');
   const allowedOrigins = [
