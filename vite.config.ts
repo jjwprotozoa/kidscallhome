@@ -29,14 +29,20 @@ export default defineConfig(({ mode }) => {
       transform(code: string, id: string) {
         // Only remove console logs in production builds
         const isSourceFile = id.endsWith(".ts") || id.endsWith(".tsx") || id.endsWith(".js") || id.endsWith(".jsx");
-        if (mode === "production" && isSourceFile) {
+        // Skip node_modules files
+        if (mode === "production" && isSourceFile && !id.includes("node_modules")) {
           // Remove console.log, console.debug, console.info
           // Keep console.warn and console.error for critical errors
+          // Use a more careful regex that handles multi-line and template literals
+          let transformed = code;
+          
+          // Remove single-line console.log statements
+          transformed = transformed.replace(/console\.log\([^;]*?\);?\s*/g, "");
+          transformed = transformed.replace(/console\.debug\([^;]*?\);?\s*/g, "");
+          transformed = transformed.replace(/console\.info\([^;]*?\);?\s*/g, "");
+          
           return {
-            code: code
-              .replace(/console\.log\([^)]*\);?/g, "")
-              .replace(/console\.debug\([^)]*\);?/g, "")
-              .replace(/console\.info\([^)]*\);?/g, ""),
+            code: transformed,
             map: null,
           };
         }
@@ -64,11 +70,19 @@ export default defineConfig(({ mode }) => {
       react(), 
       htmlPlugin(),
       mode === "development" && componentTagger(),
-      mode === "production" && removeConsolePlugin()
+      // Console removal plugin disabled - regex-based removal is too aggressive and breaks builds
+      // TODO: Implement proper AST-based console removal if needed
+      // mode === "production" && removeConsolePlugin()
     ].filter(Boolean),
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "./src"),
+      },
+    },
+    build: {
+      commonjsOptions: {
+        include: [/node_modules/],
+        transformMixedEsModules: true,
       },
     },
   };

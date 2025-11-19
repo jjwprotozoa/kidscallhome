@@ -40,29 +40,24 @@ export const handleParentCall = async (
       });
 
       // If it's an incoming call from child with an offer, ANSWER IT
-      if (specificCall.caller_type === "child" && specificCall.offer) {
-        // Only answer if status is ringing or active (not ended)
-        if (
-          specificCall.status === "ringing" ||
-          specificCall.status === "active"
-        ) {
-          console.log(
-            "📞 [PARENT CALL] Answering incoming call from child (status:",
-            specificCall.status + ", hasOffer: true)"
-          );
-          // Use this as the incoming call - skip existing call check
-          setCallId(specificCall.id);
-          // Continue to incoming call handling below (after existing call check)
-        } else {
-          console.log(
-            "📞 [PARENT CALL] Specific call is ended (status:",
-            specificCall.status + "), cannot answer."
-          );
-          specificCall = null; // Don't use this call
+      if (specificCall.caller_type === "child") {
+        if (specificCall.offer) {
+          // Only answer if status is ringing or active (not ended)
+          if (
+            specificCall.status === "ringing" ||
+            specificCall.status === "active"
+          ) {
+            console.log(`📞 [PARENT CALL] Answering incoming call from child (status: ${specificCall.status}, hasOffer: true)`);
+            // Use this as the incoming call - skip existing call check
+            setCallId(specificCall.id);
+            // Continue to incoming call handling below (after existing call check)
+          } else {
+            console.log(`📞 [PARENT CALL] Specific call is ended (status: ${specificCall.status}), cannot answer.`);
+            specificCall = null; // Don't use this call
+          }
         }
-      }
-      // If it's a parent-initiated call, handle it normally (continue to existing call check)
-      else if (
+      } else if (
+        // If it's a parent-initiated call, handle it normally (continue to existing call check)
         specificCall.caller_type === "parent" &&
         (specificCall.status === "ringing" || specificCall.status === "active")
       ) {
