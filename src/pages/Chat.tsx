@@ -256,11 +256,26 @@ const Chat = () => {
     // Poll every 3 seconds as fallback if realtime isn't working
     const pollInterval = setInterval(async () => {
       try {
-        const { data, error } = await supabase
-          .from("messages")
-          .select("*")
-          .eq("child_id", targetChildId)
-          .order("created_at", { ascending: true });
+        let data, error;
+        
+        // If viewing as child, use secure RPC function with token validation
+        if (isChild && childData?.token) {
+          const result = await supabase.rpc("get_child_messages", {
+            p_token: childData.token,
+            p_child_id: targetChildId,
+          });
+          data = result.data;
+          error = result.error;
+        } else {
+          // Parents use direct table access with RLS
+          const result = await supabase
+            .from("messages")
+            .select("*")
+            .eq("child_id", targetChildId)
+            .order("created_at", { ascending: true });
+          data = result.data;
+          error = result.error;
+        }
 
         if (!error && data) {
           setMessages((current) => {
@@ -293,11 +308,26 @@ const Chat = () => {
   };
 
   const fetchMessages = async (id: string) => {
-    const { data, error } = await supabase
-      .from("messages")
-      .select("*")
-      .eq("child_id", id)
-      .order("created_at", { ascending: true });
+    let data, error;
+    
+    // If viewing as child, use secure RPC function with token validation
+    if (isChild && childData?.token) {
+      const result = await supabase.rpc("get_child_messages", {
+        p_token: childData.token,
+        p_child_id: id,
+      });
+      data = result.data;
+      error = result.error;
+    } else {
+      // Parents use direct table access with RLS
+      const result = await supabase
+        .from("messages")
+        .select("*")
+        .eq("child_id", id)
+        .order("created_at", { ascending: true });
+      data = result.data;
+      error = result.error;
+    }
 
     if (error) {
       toast({
@@ -374,7 +404,34 @@ const Chat = () => {
         sender_id_matches_auth_uid: isChild ? "N/A (anon)" : (senderId === authUid),
       });
 
-      const { data, error } = await supabase.from("messages").insert(payload).select().single();
+      let data, error;
+      
+      // If sending as child, use secure RPC function with token validation
+      if (isChild && childData?.token) {
+        const result = await supabase.rpc("send_child_message", {
+          p_token: childData.token,
+          p_child_id: targetChildId,
+          p_content: newMessage.trim(),
+        });
+        
+        if (!result.error) {
+          // RPC returns message ID, fetch the full message
+          const messageResult = await supabase
+            .from("messages")
+            .select("*")
+            .eq("id", result.data)
+            .single();
+          data = messageResult.data;
+          error = messageResult.error;
+        } else {
+          error = result.error;
+        }
+      } else {
+        // Parents use direct table access with RLS
+        const result = await supabase.from("messages").insert(payload).select().single();
+        data = result.data;
+        error = result.error;
+      }
 
       if (error) {
         console.error("❌ [MESSAGE INSERT] Error:", {

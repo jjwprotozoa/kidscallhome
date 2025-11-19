@@ -207,6 +207,22 @@ export type Database = {
       }
       cleanup_expired_child_sessions: { Args: never; Returns: number }
       generate_unique_login_code: { Args: never; Returns: string }
+      get_child_calls: {
+        Args: { p_child_id: string; p_token: string }
+        Returns: {
+          answer: Json
+          caller_type: string
+          child_ice_candidates: Json
+          child_id: string
+          created_at: string
+          ended_at: string
+          id: string
+          offer: Json
+          parent_ice_candidates: Json
+          parent_id: string
+          status: string
+        }[]
+      }
       get_child_id_from_token: { Args: { p_token: string }; Returns: string }
       get_child_messages: {
         Args: { p_child_id: string; p_token: string }
