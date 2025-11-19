@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Kids Call Home</string>
+    <string name="shortcut_add_kid_long">Add a new child</string>
+    <string name="shortcut_add_kid_short">Add Kid</string>
+    <string name="shortcut_info_long">View app information</string>
+    <string name="shortcut_info_short">Info</string>
+    <string name="shortcut_start_call_long">Start a video call</string>
+    <string name="shortcut_start_call_short">Start Call</string>
+    <string name="widget_call_home">Call Home</string>
+    <string name="widget_description">Quick access to call home or view last contact</string>
+    <string name="widget_last_contact">Last Contact</string>
+    <style name="AppTheme" parent="android:Theme.Material.Light.NoActionBar">
+        
+        <item name="android:colorPrimary">#FFFFFF</item>
+        <item name="android:colorPrimaryDark">#000000</item>
+        <item name="android:colorAccent">#3B82F6</item>
+        <item name="android:windowBackground">@android:color/white</item>
+    </style>
+</resources>

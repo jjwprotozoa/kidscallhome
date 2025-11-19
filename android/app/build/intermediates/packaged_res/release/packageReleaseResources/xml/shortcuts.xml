@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- android/app/src/main/res/xml/shortcuts.xml -->
+<!-- Android app shortcuts configuration -->
+<!-- Purpose: Provides quick actions from app icon (long-press) -->
+
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+  <!-- Start Call shortcut -->
+  <shortcut
+    android:shortcutId="start_call"
+    android:enabled="true"
+    android:icon="@mipmap/ic_launcher"
+    android:shortcutShortLabel="@string/shortcut_start_call_short"
+    android:shortcutLongLabel="@string/shortcut_start_call_long">
+    <intent
+      android:action="android.intent.action.VIEW"
+      android:targetPackage="com.kidscallhome.app"
+      android:targetClass="com.kidscallhome.app.MainActivity"
+      android:data="kidscallhome://parent/dashboard" />
+    <categories android:name="android.shortcut.conversation" />
+  </shortcut>
+
+  <!-- Open Info shortcut -->
+  <shortcut
+    android:shortcutId="open_info"
+    android:enabled="true"
+    android:icon="@mipmap/ic_launcher"
+    android:shortcutShortLabel="@string/shortcut_info_short"
+    android:shortcutLongLabel="@string/shortcut_info_long">
+    <intent
+      android:action="android.intent.action.VIEW"
+      android:targetPackage="com.kidscallhome.app"
+      android:targetClass="com.kidscallhome.app.MainActivity"
+      android:data="kidscallhome://info" />
+    <categories android:name="android.shortcut.conversation" />
+  </shortcut>
+
+  <!-- Add Kid shortcut (for parents) -->
+  <shortcut
+    android:shortcutId="add_kid"
+    android:enabled="true"
+    android:icon="@mipmap/ic_launcher"
+    android:shortcutShortLabel="@string/shortcut_add_kid_short"
+    android:shortcutLongLabel="@string/shortcut_add_kid_long">
+    <intent
+      android:action="android.intent.action.VIEW"
+      android:targetPackage="com.kidscallhome.app"
+      android:targetClass="com.kidscallhome.app.MainActivity"
+      android:data="kidscallhome://parent/children" />
+    <categories android:name="android.shortcut.conversation" />
+  </shortcut>
+</shortcuts>
+

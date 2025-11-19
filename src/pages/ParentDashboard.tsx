@@ -1,4 +1,6 @@
 import AddChildDialog from "@/components/AddChildDialog";
+import { ChildCallButton, ChildChatButton } from "@/components/ChildActionButtons";
+import { IncomingCallDialog } from "@/components/IncomingCallDialog";
 import Navigation from "@/components/Navigation";
 import {
   AlertDialog,
@@ -22,10 +24,8 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import {
   useBadgeStore,
-  useMissedBadgeForChild,
   useTotalMissedBadge,
   useTotalUnreadBadge,
-  useUnreadBadgeForChild,
 } from "@/stores/badgeStore";
 import { isPWA } from "@/utils/platformDetection";
 import type { RealtimeChannel } from "@supabase/supabase-js";
@@ -34,13 +34,10 @@ import {
   Copy,
   Edit,
   ExternalLink,
-  MessageCircle,
-  Phone,
   Plus,
   Printer,
   QrCode,
   Trash2,
-  Video,
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -69,69 +66,6 @@ interface CallRecord {
   created_at: string;
   ended_at?: string | null;
 }
-
-// CLS: Badges reserve space with invisible class when count is 0 to prevent button width changes
-// Component for Call button with missed call badge
-const ChildCallButton = ({
-  childId,
-  onCall,
-}: {
-  childId: string;
-  onCall: () => void;
-}) => {
-  const missedCallCount = useMissedBadgeForChild(childId);
-
-  return (
-    <Button
-      onClick={onCall}
-      className="flex-1 relative"
-      variant="secondary"
-      data-tour="parent-call-button"
-    >
-      <Video className="mr-2 h-4 w-4" />
-      Call
-      {/* CLS: Reserve space for badge to prevent layout shift */}
-      <span
-        className={`ml-2 bg-destructive text-destructive-foreground text-xs font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 ${
-          missedCallCount === 0 ? "invisible" : ""
-        }`}
-      >
-        {missedCallCount > 99 ? "99+" : missedCallCount}
-      </span>
-    </Button>
-  );
-};
-
-// Component for Chat button with unread message badge
-const ChildChatButton = ({
-  childId,
-  onChat,
-}: {
-  childId: string;
-  onChat: () => void;
-}) => {
-  const unreadMessageCount = useUnreadBadgeForChild(childId);
-
-  return (
-    <Button
-      onClick={onChat}
-      className="flex-1 relative bg-chat-accent text-chat-accent-foreground hover:bg-chat-accent/90"
-      variant="default"
-      data-tour="parent-messages"
-    >
-      <MessageCircle className="mr-2 h-4 w-4" />
-      Chat
-      {/* CLS: Reserve space for badge to prevent layout shift */}
-      <span
-        className={`ml-2 bg-destructive text-destructive-foreground text-xs font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 ${
-          unreadMessageCount === 0 ? "invisible" : ""
-        }`}
-      >
-        {unreadMessageCount > 99 ? "99+" : unreadMessageCount}
-      </span>
-    </Button>
-  );
-};
 
 const ParentDashboard = () => {
   const [children, setChildren] = useState<Child[]>([]);
@@ -1273,62 +1207,13 @@ const ParentDashboard = () => {
         </AlertDialog>
 
         {/* Incoming Call Dialog */}
-        <AlertDialog
-          open={!!incomingCall}
-          onOpenChange={(open) => {
-            // Only decline if dialog is being closed AND user didn't click Answer
-            // Don't decline if user is answering (isAnsweringRef will be true)
-            if (!open && incomingCall && !isAnsweringRef.current) {
-              handleDeclineCall();
-            }
-          }}
-        >
-          <AlertDialogContent className="sm:max-w-md">
-            <AlertDialogHeader>
-              <div className="flex items-center gap-3 mb-2">
-                <div
-                  className="w-12 h-12 rounded-full flex items-center justify-center text-2xl font-bold text-white"
-                  style={{
-                    backgroundColor:
-                      incomingCall?.child_avatar_color || "#3B82F6",
-                  }}
-                >
-                  {incomingCall?.child_name[0]}
-                </div>
-                <div>
-                  <AlertDialogTitle className="text-xl">
-                    Incoming Call
-                  </AlertDialogTitle>
-                  <p className="text-base font-normal text-muted-foreground">
-                    {incomingCall?.child_name} is calling...
-                  </p>
-                </div>
-              </div>
-              <div className="pt-4">
-                <AlertDialogDescription className="sr-only">
-                  Incoming call from {incomingCall?.child_name}
-                </AlertDialogDescription>
-                <div className="flex items-center justify-center gap-2 text-4xl animate-pulse">
-                  <Phone className="h-12 w-12" />
-                </div>
-              </div>
-            </AlertDialogHeader>
-            <AlertDialogFooter className="sm:justify-center gap-2">
-              <AlertDialogCancel
-                onClick={handleDeclineCall}
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              >
-                Decline
-              </AlertDialogCancel>
-              <AlertDialogAction
-                onClick={handleAnswerCall}
-                className="bg-green-600 hover:bg-green-700"
-              >
-                Answer
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+        <IncomingCallDialog
+          incomingCall={incomingCall}
+          isAnsweringRef={isAnsweringRef}
+          onAnswer={handleAnswerCall}
+          onDecline={handleDeclineCall}
+          onOpenChange={() => {}}
+        />
 
         {/* Print View Modal (Mobile) */}
         {printViewChild && (

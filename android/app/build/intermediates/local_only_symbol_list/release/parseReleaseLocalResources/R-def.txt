@@ -1,0 +1,25 @@
+R_DEF: Internal format may change without notice
+local
+drawable ic_launcher_background
+drawable ic_launcher_foreground
+id widget_icon
+id widget_subtitle
+id widget_title
+layout widget_layout
+mipmap ic_launcher
+mipmap ic_launcher_round
+string app_name
+string shortcut_add_kid_long
+string shortcut_add_kid_short
+string shortcut_info_long
+string shortcut_info_short
+string shortcut_start_call_long
+string shortcut_start_call_short
+string widget_call_home
+string widget_description
+string widget_last_contact
+style AppTheme
+xml config
+xml file_paths
+xml shortcuts
+xml widget_info
