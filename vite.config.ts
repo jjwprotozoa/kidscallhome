@@ -107,10 +107,15 @@ export default defineConfig(({ mode }) => {
                 return undefined;
               }
               
-              // Libraries that use React.createContext - must load after React
-              // Keep them in main entry or ensure React loads first
-              if (id.includes('next-themes')) {
-                // next-themes uses React.createContext, keep in main entry
+              // Libraries that use React.createContext or depend heavily on React
+              // Keep them in main entry to ensure React loads first
+              if (id.includes('next-themes') || 
+                  id.includes('zustand') ||
+                  id.includes('sonner') ||
+                  id.includes('vaul') ||
+                  id.includes('cmdk')) {
+                // These libraries use React.createContext or have React dependencies
+                // Keep in main entry to ensure proper loading order
                 return undefined;
               }
               
