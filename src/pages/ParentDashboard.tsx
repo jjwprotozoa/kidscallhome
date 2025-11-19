@@ -131,8 +131,10 @@ const ParentDashboard = () => {
       localStorage.removeItem("childSession");
     }
 
-    checkAuth();
-    fetchChildren();
+    // Run auth check and fetch children in parallel for faster loading
+    Promise.all([checkAuth(), fetchChildren()]).catch((error) => {
+      console.error("Error initializing dashboard:", error);
+    });
   }, [checkAuth, fetchChildren]);
 
   // Use incoming call subscription hook

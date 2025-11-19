@@ -46,11 +46,26 @@ export const useParentIncomingCallSubscription = ({
   });
   const handleIncomingCallRef = useRef(handleIncomingCall);
   const lastCheckedCallIdRef = useRef<string | null>(null);
+  const currentIncomingCallRef = useRef<IncomingCall | null>(null);
+  const onIncomingCallRef = useRef(onIncomingCall);
+  const onCallClearedRef = useRef(onCallCleared);
 
-  // Keep ref in sync with latest handleIncomingCall
+  // Keep refs in sync with latest values
   useEffect(() => {
     handleIncomingCallRef.current = handleIncomingCall;
   }, [handleIncomingCall]);
+
+  useEffect(() => {
+    currentIncomingCallRef.current = currentIncomingCall;
+  }, [currentIncomingCall]);
+
+  useEffect(() => {
+    onIncomingCallRef.current = onIncomingCall;
+  }, [onIncomingCall]);
+
+  useEffect(() => {
+    onCallClearedRef.current = onCallCleared;
+  }, [onCallCleared]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -94,7 +109,7 @@ export const useParentIncomingCallSubscription = ({
             child_name: childData.name,
             child_avatar_color: childData.avatar_color,
           };
-          onIncomingCall(incomingCall);
+          onIncomingCallRef.current(incomingCall);
           // Handle incoming call with notifications (push notification if tab inactive, ringtone if active)
           handleIncomingCallRef.current({
             callId: call.id,
@@ -217,13 +232,13 @@ export const useParentIncomingCallSubscription = ({
             }
 
             // Clear incoming call if it was answered or ended
-            // Use currentIncomingCall to check if this is the call we're tracking
+            // Use ref to check if this is the call we're tracking (avoids dependency issues)
             if (
-              currentIncomingCall &&
-              currentIncomingCall.id === call.id &&
+              currentIncomingCallRef.current &&
+              currentIncomingCallRef.current.id === call.id &&
               (call.status === "active" || call.status === "ended")
             ) {
-              onCallCleared(call.id);
+              onCallClearedRef.current(call.id);
             }
 
             // Check if status changed to "ringing" for a child-initiated call
@@ -260,7 +275,8 @@ export const useParentIncomingCallSubscription = ({
       }
     };
     // Only re-run subscription when location changes (e.g., navigating between pages)
+    // We use refs for callbacks and currentIncomingCall to avoid recreating subscription
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, location.pathname, currentIncomingCall, onIncomingCall, onCallCleared]);
+  }, [enabled, location.pathname]);
 };
 
