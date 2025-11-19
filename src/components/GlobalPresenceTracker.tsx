@@ -42,6 +42,10 @@ export const GlobalPresenceTracker = () => {
         setParentName(parentData?.name || null);
       } else {
         // Check for child session
+        if (typeof window === 'undefined' || !window.localStorage) {
+          return;
+        }
+        
         const childSession = localStorage.getItem("childSession");
         if (childSession) {
           try {

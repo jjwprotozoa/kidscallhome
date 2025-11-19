@@ -20,6 +20,11 @@ export function useBadgeReconciliation(options: UseBadgeReconciliationOptions = 
 
     const reconcileBadges = async () => {
       try {
+        // Check if localStorage is available
+        if (typeof window === 'undefined' || !window.localStorage) {
+          return;
+        }
+        
         const childSession = localStorage.getItem("childSession");
         const isChild = !!childSession;
 
