@@ -213,7 +213,18 @@ export const GlobalIncomingCall = () => {
         const oneMinuteAgo = new Date(Date.now() - 60 * 1000).toISOString();
         
         if (isChild) {
-          const childData = JSON.parse(childSession!);
+          let childData;
+          try {
+            childData = JSON.parse(childSession!);
+          } catch (error) {
+            console.error("❌ [GLOBAL INCOMING CALL] Invalid child session data in poll:", error);
+            return;
+          }
+          
+          if (!childData?.id) {
+            return;
+          }
+          
           const { data: newCalls } = await supabase
             .from("calls")
             .select("*")
@@ -263,7 +274,19 @@ export const GlobalIncomingCall = () => {
 
       // Set up realtime subscription
       if (isChild) {
-        const childData = JSON.parse(childSession!);
+        let childData;
+        try {
+          childData = JSON.parse(childSession!);
+        } catch (error) {
+          console.error("❌ [GLOBAL INCOMING CALL] Invalid child session data in subscription:", error);
+          return;
+        }
+        
+        if (!childData?.id) {
+          console.error("❌ [GLOBAL INCOMING CALL] Child session missing id in subscription");
+          return;
+        }
+        
         channelRef.current = supabase
           .channel("global-child-incoming-calls")
           .on(
