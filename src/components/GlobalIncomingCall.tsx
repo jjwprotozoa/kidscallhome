@@ -68,6 +68,11 @@ export const GlobalIncomingCall = () => {
     let cachedUserId: string | null = null; // Cache user ID to avoid repeated getUser() calls
 
     const setupSubscription = async () => {
+      // Check if localStorage is available
+      if (typeof window === 'undefined' || !window.localStorage) {
+        return;
+      }
+      
       // Check if user is authenticated (parent) or has child session (child)
       const { data: { session } } = await supabase.auth.getSession();
       const childSession = localStorage.getItem("childSession");
@@ -147,7 +152,19 @@ export const GlobalIncomingCall = () => {
         const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
         
         if (isChild) {
-          const childData = JSON.parse(childSession!);
+          let childData;
+          try {
+            childData = JSON.parse(childSession!);
+          } catch (error) {
+            console.error("❌ [GLOBAL INCOMING CALL] Invalid child session data:", error);
+            return;
+          }
+          
+          if (!childData?.id) {
+            console.error("❌ [GLOBAL INCOMING CALL] Child session missing id");
+            return;
+          }
+          
           const { data: existingCalls } = await supabase
             .from("calls")
             .select("*")

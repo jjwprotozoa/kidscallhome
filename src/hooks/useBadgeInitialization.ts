@@ -22,12 +22,29 @@ export function useBadgeInitialization() {
           useBadgeStore.getState().setInitialMissed(cachedState.missedCallsByChild);
         }
 
+        // Check if localStorage is available
+        if (typeof window === 'undefined' || !window.localStorage) {
+          return;
+        }
+        
         const childSession = localStorage.getItem("childSession");
         const isChild = !!childSession;
 
         if (isChild) {
           // Child: fetch their own unread messages and missed calls
-          const childData = JSON.parse(childSession);
+          let childData;
+          try {
+            childData = JSON.parse(childSession);
+          } catch (error) {
+            console.error("❌ [BADGE INIT] Invalid child session data:", error);
+            return;
+          }
+          
+          if (!childData?.id) {
+            console.error("❌ [BADGE INIT] Child session missing id");
+            return;
+          }
+          
           const childId = childData.id;
 
           // Get last cleared timestamps - only count NEW messages/calls

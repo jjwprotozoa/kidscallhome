@@ -2,6 +2,17 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [
     {
+      "source": "/manifest.json",
+      "destination": "/manifest.json",
+      "has": [
+        {
+          "type": "header",
+          "key": "accept",
+          "value": "application/manifest\\+json"
+        }
+      ]
+    },
+    {
       "source": "/((?!manifest\\.json|sw\\.js|icon-.*\\.png|og-image\\.png|robots\\.txt|favicon\\.ico|assets/).*)",
       "destination": "/index.html"
     }

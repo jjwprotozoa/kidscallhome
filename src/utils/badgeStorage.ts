@@ -29,6 +29,15 @@ export function loadBadgeState(): {
   };
 } {
   try {
+    // Check if localStorage is available
+    if (typeof window === 'undefined' || !window.localStorage) {
+      return { 
+        unreadMessagesByChild: {}, 
+        missedCallsByChild: {},
+        lastClearedTimestamps: { messages: {}, calls: {} }
+      };
+    }
+    
     const stored = localStorage.getItem(BADGE_STORAGE_KEY);
     if (!stored) {
       return { 
@@ -78,6 +87,11 @@ export function saveBadgeState(
   }
 ): void {
   try {
+    // Check if localStorage is available
+    if (typeof window === 'undefined' || !window.localStorage) {
+      return;
+    }
+    
     // Load existing timestamps if not provided
     const existing = loadBadgeState();
     const timestamps = lastClearedTimestamps || existing.lastClearedTimestamps;
@@ -144,6 +158,10 @@ export function getLastClearedTimestamp(childId: string, type: "messages" | "cal
  */
 export function clearBadgeState(): void {
   try {
+    // Check if localStorage is available
+    if (typeof window === 'undefined' || !window.localStorage) {
+      return;
+    }
     localStorage.removeItem(BADGE_STORAGE_KEY);
   } catch (error) {
     console.error("❌ [BADGE STORAGE] Error clearing badge state:", error);

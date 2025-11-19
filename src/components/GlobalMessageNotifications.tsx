@@ -43,6 +43,11 @@ export const GlobalMessageNotifications = () => {
     const CHILDREN_CACHE_TTL = 5 * 60 * 1000; // Refresh children list every 5 minutes
 
     const setupSubscription = async () => {
+      // Check if localStorage is available
+      if (typeof window === 'undefined' || !window.localStorage) {
+        return;
+      }
+      
       // Check if user is authenticated (parent) or has child session (child)
       const { data: { session } } = await supabase.auth.getSession();
       const childSession = localStorage.getItem("childSession");

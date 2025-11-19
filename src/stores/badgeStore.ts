@@ -26,8 +26,15 @@ type BadgeState = {
   reset: () => void;
 };
 
-// Load initial state from local storage
-const initialState = loadBadgeState();
+// Load initial state from local storage (with safe fallback)
+// This runs at module load time, so we need to check if window is available
+const initialState = typeof window !== 'undefined' && window.localStorage 
+  ? loadBadgeState() 
+  : { 
+      unreadMessagesByChild: {}, 
+      missedCallsByChild: {},
+      lastClearedTimestamps: { messages: {}, calls: {} }
+    };
 
 export const useBadgeStore = create<BadgeState>((set, get) => ({
   unreadMessagesByChild: initialState.unreadMessagesByChild,

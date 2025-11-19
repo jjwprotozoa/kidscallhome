@@ -141,6 +141,11 @@ const WidgetDataManager = () => {
 // Component to handle session clearing when "Stay signed in" is unchecked
 const SessionManager = () => {
   useEffect(() => {
+    // Check if sessionStorage is available
+    if (typeof window === 'undefined' || !window.sessionStorage) {
+      return;
+    }
+    
     // Check if we should clear session on browser close
     const shouldClearOnClose = sessionStorage.getItem("clearSessionOnClose");
     

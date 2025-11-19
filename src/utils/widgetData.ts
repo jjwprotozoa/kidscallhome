@@ -95,6 +95,11 @@ export async function fetchWidgetData(): Promise<WidgetData | null> {
  * Store widget data in localStorage (for web) and prepare for native storage
  */
 export function storeWidgetData(data: WidgetData | null): void {
+  // Check if localStorage is available
+  if (typeof window === 'undefined' || !window.localStorage) {
+    return;
+  }
+  
   if (!data) {
     localStorage.removeItem("widget_data");
     return;
