@@ -98,73 +98,47 @@ export default defineConfig(({ mode }) => {
           entryFileNames: 'assets/[name]-[hash].js',
           chunkFileNames: 'assets/[name]-[hash].js',
           manualChunks: (id) => {
-            // Vendor chunks - split large libraries
+            // Simplified chunking strategy - be conservative to avoid loading order issues
+            // Only split out very large libraries that are clearly independent
             if (id.includes('node_modules')) {
-              // React and React DOM - MUST be in main entry or load first
-              // Don't split React out - keep it in main bundle for proper loading order
-              if (id.includes('react') || id.includes('react-dom')) {
-                // Return undefined to keep React in main entry chunk
-                return undefined;
-              }
-              
-              // Libraries that use React.createContext or depend heavily on React
-              // Keep them in main entry to ensure React loads first
-              if (id.includes('next-themes') || 
+              // Keep React and all React-dependent libraries in main bundle
+              // This ensures proper loading order and avoids vendor-other errors
+              if (id.includes('react') || 
+                  id.includes('react-dom') ||
+                  id.includes('react-router') ||
+                  id.includes('@tanstack/react-query') ||
+                  id.includes('@radix-ui') ||
+                  id.includes('next-themes') ||
                   id.includes('zustand') ||
                   id.includes('sonner') ||
                   id.includes('vaul') ||
-                  id.includes('cmdk')) {
-                // These libraries use React.createContext or have React dependencies
-                // Keep in main entry to ensure proper loading order
+                  id.includes('cmdk') ||
+                  id.includes('class-variance-authority') ||
+                  id.includes('clsx') ||
+                  id.includes('tailwind-merge')) {
+                // Keep in main entry chunk for proper loading order
                 return undefined;
               }
               
-              // React Router - depends on React, load early
-              if (id.includes('react-router')) {
-                return 'vendor-router';
-              }
-              
-              // React Query - depends on React, load early
-              if (id.includes('@tanstack/react-query')) {
-                return 'vendor-react-query';
-              }
-              
-              // Radix UI components - UI library (depends on React)
-              if (id.includes('@radix-ui')) {
-                return 'vendor-radix';
-              }
-              
+              // Only split out very large, clearly independent libraries
               // Recharts - large charting library (only used in some pages)
               if (id.includes('recharts')) {
                 return 'vendor-recharts';
               }
               
-              // Supabase client - large SDK
-              if (id.includes('@supabase')) {
-                return 'vendor-supabase';
-              }
+              // Supabase client - large SDK, but used everywhere
+              // Keep in main for now to avoid issues
+              // if (id.includes('@supabase')) {
+              //   return 'vendor-supabase';
+              // }
               
               // Capacitor plugins - native features (only needed on mobile)
               if (id.includes('@capacitor')) {
                 return 'vendor-capacitor';
               }
               
-              // Date utilities
-              if (id.includes('date-fns')) {
-                return 'vendor-date';
-              }
-              
-              // Form handling
-              if (id.includes('react-hook-form') || id.includes('@hookform')) {
-                return 'vendor-forms';
-              }
-              
-              // Other large dependencies
-              if (id.includes('lucide-react')) {
-                return 'vendor-icons';
-              }
-              
-              // All other node_modules (but ensure React loads first via dependencies)
+              // All other node_modules go to vendor-other
+              // This is now much smaller since we kept most things in main
               return 'vendor-other';
             }
           },
