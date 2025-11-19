@@ -202,9 +202,6 @@ const App = () => {
           <ErrorBoundary fallback={null}>
             <WidgetDataManager />
           </ErrorBoundary>
-          <ErrorBoundary fallback={null}>
-            <WidgetIntentHandler />
-          </ErrorBoundary>
           <Toaster />
           <Sonner />
           <SafeAreaLayout className="w-full overflow-x-hidden">
@@ -214,6 +211,9 @@ const App = () => {
                 v7_relativeSplatPath: true,
               }}
             >
+              <ErrorBoundary fallback={null}>
+                <WidgetIntentHandler />
+              </ErrorBoundary>
               <ErrorBoundary fallback={null}>
                 <GlobalIncomingCall />
               </ErrorBoundary>
