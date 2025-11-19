@@ -1,24 +1,14 @@
 import AddChildDialog from "@/components/AddChildDialog";
-import { ChildCallButton, ChildChatButton } from "@/components/ChildActionButtons";
+import { ChildCard } from "@/components/ChildCard";
+import { CodeManagementDialogs } from "@/components/CodeManagementDialogs";
 import { IncomingCallDialog } from "@/components/IncomingCallDialog";
 import Navigation from "@/components/Navigation";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useIncomingCallNotifications } from "@/features/calls/hooks/useIncomingCallNotifications";
 import { endCall as endCallUtil } from "@/features/calls/utils/callEnding";
 import { HelpBubble } from "@/features/onboarding/HelpBubble";
 import { OnboardingTour } from "@/features/onboarding/OnboardingTour";
-import { StatusIndicator } from "@/features/presence/StatusIndicator";
 import { useChildrenPresence } from "@/features/presence/useChildrenPresence";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -29,17 +19,7 @@ import {
 } from "@/stores/badgeStore";
 import { isPWA } from "@/utils/platformDetection";
 import type { RealtimeChannel } from "@supabase/supabase-js";
-import {
-  BellOff,
-  Copy,
-  Edit,
-  ExternalLink,
-  Plus,
-  Printer,
-  QrCode,
-  Trash2,
-  X,
-} from "lucide-react";
+import { BellOff, Copy, Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
@@ -933,118 +913,21 @@ const ParentDashboard = () => {
           ) : (
             <div className="grid gap-4 md:grid-cols-2">
               {children.map((child, index) => (
-                <Card
+                <ChildCard
                   key={child.id}
-                  className="p-6 space-y-4 min-h-[220px]"
-                  style={{
-                    borderLeft: `4px solid ${child.avatar_color}`,
-                  }}
-                >
-                  <div className="space-y-2">
-                    <div
-                      className="flex items-center gap-2"
-                      data-tour={
-                        index === 0 ? "parent-child-name-status" : undefined
-                      }
-                    >
-                      <h3 className="text-2xl sm:text-3xl font-bold">
-                        {child.name}
-                      </h3>
-                      <StatusIndicator
-                        isOnline={isChildOnline(child.id)}
-                        size="md"
-                        showPulse={isChildOnline(child.id)}
-                      />
-                    </div>
-                    <div
-                      className="bg-muted p-3 rounded-lg relative"
-                      data-tour={index === 0 ? "parent-login-code" : undefined}
-                    >
-                      <p className="text-xs text-muted-foreground mb-1">
-                        Login Code
-                      </p>
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="text-xl sm:text-2xl font-mono font-bold tracking-wider flex-1">
-                          {getFullLoginCode(child)}
-                        </p>
-                        <Button
-                          onClick={() => setChildToEditCode(child)}
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          title="Generate new login code"
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                    <div className="flex gap-2 flex-wrap">
-                      <Button
-                        onClick={() => handleCopyCode(getFullLoginCode(child))}
-                        variant="outline"
-                        size="sm"
-                        className="flex-1"
-                        data-tour={index === 0 ? "parent-copy-code" : undefined}
-                      >
-                        <Copy className="mr-2 h-4 w-4" />
-                        Copy Code
-                      </Button>
-                      <Button
-                        onClick={() => handleCopyMagicLink(child)}
-                        variant="outline"
-                        size="sm"
-                        className="flex-1"
-                        data-tour={index === 0 ? "parent-copy-link" : undefined}
-                      >
-                        <ExternalLink className="mr-2 h-4 w-4" />
-                        Copy Link
-                      </Button>
-                      <Button
-                        onClick={() => handlePrintCode(child)}
-                        variant="outline"
-                        size="sm"
-                        className="flex-1"
-                        data-tour={
-                          index === 0 ? "parent-print-code" : undefined
-                        }
-                      >
-                        <Printer className="mr-2 h-4 w-4" />
-                        Print
-                      </Button>
-                      <Button
-                        onClick={() => setShowCodeDialog({ child })}
-                        variant="outline"
-                        size="sm"
-                        className="flex-1"
-                        data-tour={index === 0 ? "parent-view-qr" : undefined}
-                      >
-                        <QrCode className="mr-2 h-4 w-4" />
-                        View QR
-                      </Button>
-                    </div>
-                  </div>
-
-                  <div className="flex gap-2">
-                    <ChildCallButton
-                      childId={child.id}
-                      onCall={() => handleCall(child.id)}
-                    />
-                    <ChildChatButton
-                      childId={child.id}
-                      onChat={() => handleChat(child.id)}
-                    />
-                    <Button
-                      onClick={() => setChildToDelete(child)}
-                      variant="destructive"
-                      size="icon"
-                      data-tour={
-                        index === 0 ? "parent-delete-child" : undefined
-                      }
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </Card>
+                  child={child}
+                  index={index}
+                  isOnline={isChildOnline(child.id)}
+                  fullLoginCode={getFullLoginCode(child)}
+                  onEditCode={() => setChildToEditCode(child)}
+                  onCopyCode={() => handleCopyCode(getFullLoginCode(child))}
+                  onCopyMagicLink={() => handleCopyMagicLink(child)}
+                  onPrintCode={() => handlePrintCode(child)}
+                  onViewQR={() => setShowCodeDialog({ child })}
+                  onCall={() => handleCall(child.id)}
+                  onChat={() => handleChat(child.id)}
+                  onDelete={() => setChildToDelete(child)}
+                />
               ))}
             </div>
           )}
@@ -1056,155 +939,25 @@ const ParentDashboard = () => {
           onChildAdded={fetchChildren}
         />
 
-        {/* Code View Dialog */}
-        {showCodeDialog && (
-          <AlertDialog
-            open={!!showCodeDialog}
-            onOpenChange={(open) => !open && setShowCodeDialog(null)}
-          >
-            <AlertDialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-md">
-              <button
-                onClick={() => setShowCodeDialog(null)}
-                className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none"
-              >
-                <X className="h-4 w-4" />
-                <span className="sr-only">Close</span>
-              </button>
-              <AlertDialogHeader>
-                <AlertDialogTitle className="text-lg sm:text-xl">
-                  {showCodeDialog.child.name}'s Login Code
-                </AlertDialogTitle>
-                <AlertDialogDescription className="text-sm">
-                  Share this code or QR code with your child to log in
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <div className="space-y-4 py-4">
-                <div className="bg-muted p-3 sm:p-4 rounded-lg text-center">
-                  <p className="text-xs text-muted-foreground mb-2">
-                    Login Code
-                  </p>
-                  <p className="text-2xl sm:text-3xl font-mono font-bold break-all">
-                    {getFullLoginCode(showCodeDialog.child)}
-                  </p>
-                </div>
-                <div className="flex justify-center">
-                  <img
-                    src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
-                      `${
-                        window.location.origin
-                      }/child/login?code=${encodeURIComponent(
-                        getFullLoginCode(showCodeDialog.child)
-                      )}`
-                    )}`}
-                    alt="QR Code"
-                    className="border-2 border-muted rounded-lg w-[200px] h-[200px] sm:w-[250px] sm:h-[250px] object-contain"
-                  />
-                </div>
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <Button
-                    onClick={() =>
-                      handleCopyCode(getFullLoginCode(showCodeDialog.child))
-                    }
-                    variant="outline"
-                    className="flex-1 w-full sm:w-auto"
-                  >
-                    <Copy className="mr-2 h-4 w-4" />
-                    Copy Code
-                  </Button>
-                  <Button
-                    onClick={() => handleCopyMagicLink(showCodeDialog.child)}
-                    variant="outline"
-                    className="flex-1 w-full sm:w-auto"
-                  >
-                    <ExternalLink className="mr-2 h-4 w-4" />
-                    Copy Link
-                  </Button>
-                  <Button
-                    onClick={() => handlePrintCode(showCodeDialog.child)}
-                    variant="outline"
-                    className="flex-1 w-full sm:w-auto"
-                  >
-                    <Printer className="mr-2 h-4 w-4" />
-                    Print
-                  </Button>
-                </div>
-              </div>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Close</AlertDialogCancel>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        )}
-
-        {/* Edit Login Code Confirmation Dialog */}
-        <AlertDialog
-          open={!!childToEditCode}
-          onOpenChange={(open) => !open && setChildToEditCode(null)}
-        >
-          <AlertDialogContent>
-            <button
-              onClick={() => setChildToEditCode(null)}
-              className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none"
-              disabled={isUpdatingCode}
-            >
-              <X className="h-4 w-4" />
-              <span className="sr-only">Close</span>
-            </button>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Generate New Login Code</AlertDialogTitle>
-              <AlertDialogDescription>
-                Are you sure you want to generate a new login code for{" "}
-                {childToEditCode?.name}? The current code (
-                {childToEditCode?.login_code}) will no longer work. Make sure to
-                share the new code with your child.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel disabled={isUpdatingCode}>
-                Cancel
-              </AlertDialogCancel>
-              <AlertDialogAction
-                onClick={handleUpdateLoginCode}
-                disabled={isUpdatingCode}
-              >
-                {isUpdatingCode ? "Generating..." : "Generate New Code"}
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-
-        {/* Delete Child Confirmation Dialog */}
-        <AlertDialog
-          open={!!childToDelete}
-          onOpenChange={(open) => !open && setChildToDelete(null)}
-        >
-          <AlertDialogContent>
-            <button
-              onClick={() => setChildToDelete(null)}
-              className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none"
-            >
-              <X className="h-4 w-4" />
-              <span className="sr-only">Close</span>
-            </button>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Remove Child</AlertDialogTitle>
-              <AlertDialogDescription>
-                Are you sure you want to remove {childToDelete?.name}? This
-                action cannot be undone and will delete all associated data
-                including messages and call history.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={handleDeleteChild}
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              >
-                Remove
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+        {/* Code Management Dialogs */}
+        <CodeManagementDialogs
+          showCodeDialog={showCodeDialog}
+          onCloseCodeDialog={() => setShowCodeDialog(null)}
+          getFullLoginCode={getFullLoginCode}
+          onCopyCode={handleCopyCode}
+          onCopyMagicLink={handleCopyMagicLink}
+          onPrintCode={handlePrintCode}
+          childToEditCode={childToEditCode}
+          onCloseEditCode={() => setChildToEditCode(null)}
+          onUpdateLoginCode={handleUpdateLoginCode}
+          isUpdatingCode={isUpdatingCode}
+          childToDelete={childToDelete}
+          onCloseDelete={() => setChildToDelete(null)}
+          onDeleteChild={handleDeleteChild}
+          printViewChild={printViewChild}
+          onClosePrintView={() => setPrintViewChild(null)}
+          onPrintFromModal={handlePrintFromModal}
+        />
 
         {/* Incoming Call Dialog */}
         <IncomingCallDialog
@@ -1214,70 +967,6 @@ const ParentDashboard = () => {
           onDecline={handleDeclineCall}
           onOpenChange={() => {}}
         />
-
-        {/* Print View Modal (Mobile) */}
-        {printViewChild && (
-          <AlertDialog
-            open={!!printViewChild}
-            onOpenChange={(open) => !open && setPrintViewChild(null)}
-          >
-            <AlertDialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-md print:hidden">
-              <button
-                onClick={() => setPrintViewChild(null)}
-                className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none print:hidden"
-              >
-                <X className="h-4 w-4" />
-                <span className="sr-only">Close</span>
-              </button>
-              <AlertDialogHeader>
-                <AlertDialogTitle className="text-lg sm:text-xl">
-                  {printViewChild.name}'s Login Code
-                </AlertDialogTitle>
-                <AlertDialogDescription className="text-sm">
-                  Print or share this code with your child
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <div className="space-y-4 py-4">
-                <div className="bg-muted p-3 sm:p-4 rounded-lg text-center print:border-2 print:border-gray-800">
-                  <p className="text-xs text-muted-foreground mb-2 print:text-gray-600">
-                    Login Code
-                  </p>
-                  <p className="text-2xl sm:text-3xl font-mono font-bold break-all print:text-3xl">
-                    {getFullLoginCode(printViewChild)}
-                  </p>
-                </div>
-                <div className="flex justify-center print:my-4">
-                  <img
-                    src={`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(
-                      `${
-                        window.location.origin
-                      }/child/login?code=${encodeURIComponent(
-                        getFullLoginCode(printViewChild)
-                      )}`
-                    )}`}
-                    alt="QR Code"
-                    className="border-2 border-muted rounded-lg w-[250px] h-[250px] sm:w-[300px] sm:h-[300px] object-contain print:border-gray-800"
-                  />
-                </div>
-                <div className="instructions print:mt-4 print:text-sm print:text-gray-600">
-                  <p>Scan the QR code or use the code above to log in</p>
-                  <p>Visit: {window.location.origin}/child/login</p>
-                </div>
-              </div>
-              <AlertDialogFooter className="print:hidden">
-                <Button
-                  onClick={handlePrintFromModal}
-                  variant="default"
-                  className="flex-1"
-                >
-                  <Printer className="mr-2 h-4 w-4" />
-                  Print
-                </Button>
-                <AlertDialogCancel>Close</AlertDialogCancel>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        )}
       </div>
     </div>
   );
