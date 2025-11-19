@@ -3,8 +3,15 @@ rootProject.name = "android"
 include ':app'
 apply from: 'capacitor.settings.gradle'
 
-// Configure Java toolchain to use Java 11+ (required for AGP 8.2.1)
+// Configure Java toolchain to use Java 11+ (required for AGP 8.11.2)
 // This ensures all projects use Java 17 for compilation
 // Note: The Gradle wrapper scripts check Java version before execution
 // For buildscript classpath resolution, ensure JAVA_HOME points to Java 11+
+// 
+// IMPORTANT: If you see "Dependency requires at least JVM runtime version 11" error:
+// 1. Install Java 11+ (JDK 17 recommended) if not already installed
+// 2. Set JAVA_HOME environment variable to point to the JDK installation
+//    Windows: setx JAVA_HOME "C:\Program Files\Java\jdk-17"
+//    Or uncomment and set org.gradle.java.home in gradle.properties
+// 3. Restart your IDE/terminal after setting JAVA_HOME
 

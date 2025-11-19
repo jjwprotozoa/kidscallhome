@@ -5,6 +5,7 @@ import { useRef, useState, useCallback, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
 import { endCall as endCallUtil } from "../utils/callEnding";
+import { safeLog } from "@/utils/security";
 
 interface UseWebRTCReturn {
   peerConnection: RTCPeerConnection | null;
@@ -41,7 +42,7 @@ export const useWebRTC = (
   useEffect(() => {
     currentCallIdRef.current = callId;
     if (callId) {
-      console.log("📞 [CALL ID] CallId updated in useWebRTC:", callId);
+      safeLog.log("📞 [CALL ID] CallId updated in useWebRTC:", callId);
     }
   }, [callId]);
 
@@ -81,7 +82,7 @@ export const useWebRTC = (
       // Handle "Device in use" errors gracefully (e.g., when testing on same device with multiple browsers)
       let stream: MediaStream;
       try {
-        console.log("🎥 [MEDIA] Requesting camera and microphone access...");
+        safeLog.log("🎥 [MEDIA] Requesting camera and microphone access...");
         stream = await navigator.mediaDevices.getUserMedia({
           video: {
             width: { ideal: 1280 },
@@ -95,7 +96,7 @@ export const useWebRTC = (
           },
         });
         
-        console.log("✅ [MEDIA] Media stream obtained:", {
+        safeLog.log("✅ [MEDIA] Media stream obtained:", {
           audioTracks: stream.getAudioTracks().map(t => ({
             id: t.id,
             enabled: t.enabled,
@@ -114,7 +115,7 @@ export const useWebRTC = (
         
         // [KCH] Telemetry: Log media tracks after getUserMedia
         const role = isChild ? 'child' : 'parent';
-        console.log('[KCH]', role, 'media tracks', {
+        safeLog.log('[KCH]', role, 'media tracks', {
           audio: stream.getAudioTracks().length,
           video: stream.getVideoTracks().length,
         });
@@ -122,24 +123,24 @@ export const useWebRTC = (
         // Verify tracks are actually working
         stream.getAudioTracks().forEach(track => {
           if (track.muted) {
-            console.warn("⚠️ [MEDIA] Local audio track is muted");
+            safeLog.warn("⚠️ [MEDIA] Local audio track is muted");
           }
         });
         stream.getVideoTracks().forEach(track => {
           if (track.muted) {
-            console.warn("⚠️ [MEDIA] Local video track is muted");
+            safeLog.warn("⚠️ [MEDIA] Local video track is muted");
           }
         });
       } catch (mediaError: unknown) {
         const error = mediaError as DOMException;
-        console.error("❌ [MEDIA] Media device access error:", {
+        safeLog.error("❌ [MEDIA] Media device access error:", {
           name: error.name,
           message: error.message,
           code: (error as any).code,
         });
         
         if (error.name === "NotReadableError" || error.name === "NotAllowedError") {
-          console.warn("⚠️ [MEDIA] Media device access denied or in use, trying audio-only fallback...");
+          safeLog.warn("⚠️ [MEDIA] Media device access denied or in use, trying audio-only fallback...");
           // Try with audio only as fallback
           try {
             stream = await navigator.mediaDevices.getUserMedia({
@@ -150,10 +151,10 @@ export const useWebRTC = (
                 autoGainControl: true,
               },
             });
-            console.log("✅ [MEDIA] Fell back to audio-only stream");
+            safeLog.log("✅ [MEDIA] Fell back to audio-only stream");
           } catch (fallbackError) {
             const fallbackErr = fallbackError as DOMException;
-            console.error("❌ [MEDIA] Audio-only fallback also failed:", {
+            safeLog.error("❌ [MEDIA] Audio-only fallback also failed:", {
               name: fallbackErr.name,
               message: fallbackErr.message,
             });
@@ -179,7 +180,7 @@ export const useWebRTC = (
         localVideoRef.current.srcObject = stream;
         // Local video should play immediately (no autoplay restrictions for local video)
         localVideoRef.current.play().catch((error) => {
-          console.error("Error playing local video:", error);
+          safeLog.error("Error playing local video:", error);
         });
       }
 
@@ -216,9 +217,9 @@ export const useWebRTC = (
         
         // [KCH] Telemetry: Connection state
         const role = isChild ? 'child' : 'parent';
-        console.log('[KCH]', role, 'connectionState', state);
+        safeLog.log('[KCH]', role, 'connectionState', state);
         
-        console.log("🔵 [CONNECTION STATE] Peer connection state changed:", {
+        safeLog.log("🔵 [CONNECTION STATE] Peer connection state changed:", {
           connectionState: state,
           iceConnectionState: iceState,
           signalingState: signalingState,
@@ -226,8 +227,8 @@ export const useWebRTC = (
         });
 
         if (state === "connected") {
-          console.log("✅ [CONNECTION STATE] Peer connection is now connected!");
-          console.log("📊 [CONNECTION STATE] Connection details:", {
+          safeLog.log("✅ [CONNECTION STATE] Peer connection is now connected!");
+          safeLog.log("📊 [CONNECTION STATE] Connection details:", {
             connectionState: state,
             iceConnectionState: iceState,
             signalingState: signalingState,
@@ -240,7 +241,7 @@ export const useWebRTC = (
           if (remoteStreamRef.current) {
             const audioTracks = remoteStreamRef.current.getAudioTracks();
             const videoTracks = remoteStreamRef.current.getVideoTracks();
-            console.log("📊 [CONNECTION STATE] Remote stream tracks when connected:", {
+            safeLog.log("📊 [CONNECTION STATE] Remote stream tracks when connected:", {
               audioTracks: audioTracks.map(t => ({
                 id: t.id,
                 enabled: t.enabled,
@@ -258,7 +259,7 @@ export const useWebRTC = (
             // Warn if tracks are muted
             audioTracks.forEach(track => {
               if (track.muted) {
-                console.error("❌ [CONNECTION STATE] Audio track is muted when connected!");
+                safeLog.error("❌ [CONNECTION STATE] Audio track is muted when connected!");
               }
             });
             videoTracks.forEach(track => {
@@ -266,7 +267,7 @@ export const useWebRTC = (
                 // This is a warning, not necessarily an error - tracks can be muted by user
                 // Only log as warning if track is actually receiving data
                 if (track.readyState === 'live') {
-                  console.warn("⚠️ [CONNECTION STATE] Video track is muted when connected (user may have muted it)", {
+                  safeLog.warn("⚠️ [CONNECTION STATE] Video track is muted when connected (user may have muted it)", {
                     trackId: track.id,
                     readyState: track.readyState,
                     enabled: track.enabled,
@@ -280,7 +281,7 @@ export const useWebRTC = (
           state === "closed" ||
           state === "disconnected"
         ) {
-          console.error("❌ [CONNECTION STATE] Connection problem detected:", {
+          safeLog.error("❌ [CONNECTION STATE] Connection problem detected:", {
             connectionState: state,
             iceConnectionState: iceState,
             signalingState: signalingState,
@@ -317,9 +318,9 @@ export const useWebRTC = (
         
         // [KCH] Telemetry: ICE connection state
         const role = isChild ? 'child' : 'parent';
-        console.log('[KCH]', role, 'iceConnectionState', iceState);
+        safeLog.log('[KCH]', role, 'iceConnectionState', iceState);
         
-        console.log("🧊 [ICE STATE] ICE connection state changed:", {
+        safeLog.log("🧊 [ICE STATE] ICE connection state changed:", {
           iceConnectionState: iceState,
           connectionState: pc.connectionState,
           signalingState: pc.signalingState,
@@ -334,7 +335,7 @@ export const useWebRTC = (
         iceStateStartTime = Date.now();
 
         if (iceState === "connected" || iceState === "completed") {
-          console.log("✅ [ICE STATE] ICE connection established - media should flow now!");
+          safeLog.log("✅ [ICE STATE] ICE connection established - media should flow now!");
           
           // CRITICAL: Mark as connected only when ICE is actually connected
           setIsConnected(true);
@@ -348,7 +349,7 @@ export const useWebRTC = (
             
             // Ensure stream is set to video element
             if (video.srcObject !== stream) {
-              console.log("🎬 [ICE STATE] Setting remote stream to video element");
+              safeLog.log("🎬 [ICE STATE] Setting remote stream to video element");
               video.srcObject = stream;
             }
             
@@ -356,7 +357,7 @@ export const useWebRTC = (
             const audioTracks = stream.getAudioTracks();
             const videoTracks = stream.getVideoTracks();
             
-            console.log("📊 [ICE STATE] Tracks after ICE connected:", {
+            safeLog.log("📊 [ICE STATE] Tracks after ICE connected:", {
               audioTracks: audioTracks.length,
               videoTracks: videoTracks.length,
               audioMuted: audioTracks.filter(t => t.muted).length,
@@ -369,13 +370,13 @@ export const useWebRTC = (
             audioTracks.forEach(track => {
               track.enabled = true;
               if (track.muted) {
-                console.warn("⚠️ [ICE STATE] Audio track is muted after ICE connected");
+                safeLog.warn("⚠️ [ICE STATE] Audio track is muted after ICE connected");
               }
             });
             videoTracks.forEach(track => {
               track.enabled = true;
               if (track.muted) {
-                console.warn("⚠️ [ICE STATE] Video track is muted after ICE connected");
+                safeLog.warn("⚠️ [ICE STATE] Video track is muted after ICE connected");
               }
             });
 
@@ -383,19 +384,19 @@ export const useWebRTC = (
             // Don't wait for readyState - WebRTC streams can play even with low readyState
             const attemptPlay = () => {
               if (video && video.srcObject && video.paused) {
-                console.log("🎬 [ICE STATE] Attempting to play video after ICE connection");
+                safeLog.log("🎬 [ICE STATE] Attempting to play video after ICE connection");
                 video.play()
                   .then(() => {
-                    console.log("✅ [ICE STATE] Video started playing after ICE connected");
+                    safeLog.log("✅ [ICE STATE] Video started playing after ICE connected");
                   })
                   .catch(err => {
-                    console.warn("⏳ [ICE STATE] Play failed, will retry:", err.name);
+                    safeLog.warn("⏳ [ICE STATE] Play failed, will retry:", err.name);
                     // Retry after short delay
                     setTimeout(() => {
                       if (video && video.srcObject && video.paused) {
                         video.play().catch(retryErr => {
                           if (retryErr.name !== 'AbortError') {
-                            console.error("❌ [ICE STATE] Retry play failed:", retryErr);
+                            safeLog.error("❌ [ICE STATE] Retry play failed:", retryErr);
                           }
                         });
                       }
@@ -423,7 +424,7 @@ export const useWebRTC = (
               const stillMutedVideo = stream.getVideoTracks().filter(t => t.muted).length;
               
               if (stillMutedAudio > 0 || stillMutedVideo > 0) {
-                console.error("❌ [ICE STATE] CRITICAL: Tracks still muted after ICE connected!", {
+                safeLog.error("❌ [ICE STATE] CRITICAL: Tracks still muted after ICE connected!", {
                   mutedAudio: stillMutedAudio,
                   mutedVideo: stillMutedVideo,
                   totalAudio: audioTracks.length,
@@ -438,7 +439,7 @@ export const useWebRTC = (
             }, 1000);
           }
         } else if (iceState === "failed" || iceState === "disconnected" || iceState === "closed") {
-          console.error("❌ [ICE STATE] ICE connection problem:", {
+          safeLog.error("❌ [ICE STATE] ICE connection problem:", {
             iceConnectionState: iceState,
             connectionState: pc.connectionState,
             reason: "ICE connection failed or disconnected",
@@ -465,12 +466,12 @@ export const useWebRTC = (
           // Still connecting - don't mark as connected yet
           setIsConnected(false);
           setIsConnecting(true);
-          console.log("⏳ [ICE STATE] ICE connection checking - waiting for connection (this is normal)...");
+          safeLog.log("⏳ [ICE STATE] ICE connection checking - waiting for connection (this is normal)...");
           
           // Warn if stuck in "checking" for too long - this might indicate ICE candidates aren't being processed correctly
           setTimeout(() => {
             if (pc.iceConnectionState === "checking" && pc.signalingState !== "closed") {
-              console.warn("⚠️ [ICE STATE] ICE stuck in 'checking' state for 30+ seconds - this may indicate:", {
+              safeLog.warn("⚠️ [ICE STATE] ICE stuck in 'checking' state for 30+ seconds - this may indicate:", {
                 issue: "ICE candidates may not be exchanging properly or connection is failing",
                 hasLocalDescription: !!pc.localDescription,
                 hasRemoteDescription: !!pc.remoteDescription,
@@ -482,7 +483,7 @@ export const useWebRTC = (
               // Log current state for debugging
               const senders = pc.getSenders();
               const receivers = pc.getReceivers();
-              console.warn("⚠️ [ICE STATE] Current peer connection state:", {
+              safeLog.warn("⚠️ [ICE STATE] Current peer connection state:", {
                 senders: senders.length,
                 receivers: receivers.length,
                 localDescription: pc.localDescription ? {
@@ -497,7 +498,7 @@ export const useWebRTC = (
             }
           }, ICE_STUCK_TIMEOUT);
         } else if (iceState === "new") {
-          console.log("🆕 [ICE STATE] ICE connection new - connection starting (this is normal)...");
+          safeLog.log("🆕 [ICE STATE] ICE connection new - connection starting (this is normal)...");
           
           // Still connecting - don't mark as connected yet
           setIsConnected(false);
@@ -506,7 +507,7 @@ export const useWebRTC = (
           // Warn if stuck in "new" for too long - this might indicate ICE candidates aren't being exchanged
           setTimeout(() => {
             if (pc.iceConnectionState === "new" && pc.signalingState !== "closed") {
-              console.warn("⚠️ [ICE STATE] ICE stuck in 'new' state for 30+ seconds - this may indicate:", {
+              safeLog.warn("⚠️ [ICE STATE] ICE stuck in 'new' state for 30+ seconds - this may indicate:", {
                 issue: "ICE candidates may not be exchanging properly",
                 hasLocalDescription: !!pc.localDescription,
                 hasRemoteDescription: !!pc.remoteDescription,
@@ -520,7 +521,7 @@ export const useWebRTC = (
 
       // Monitor ICE gathering state
       pc.onicegatheringstatechange = () => {
-        console.log("🧊 [ICE GATHERING] ICE gathering state:", {
+        safeLog.log("🧊 [ICE GATHERING] ICE gathering state:", {
           iceGatheringState: pc.iceGatheringState,
           timestamp: new Date().toISOString(),
         });
@@ -528,9 +529,9 @@ export const useWebRTC = (
 
       // Monitor signaling state changes
       pc.onsignalingstatechange = () => {
-        console.log("Signaling state changed to:", pc.signalingState);
+        safeLog.log("Signaling state changed to:", pc.signalingState);
         if (pc.signalingState === "closed") {
-          console.error("Signaling state is closed!");
+          safeLog.error("Signaling state is closed!");
         }
       };
 
@@ -547,7 +548,7 @@ export const useWebRTC = (
 
       // Handle remote stream
       pc.ontrack = (event) => {
-        console.log("📹 [REMOTE TRACK] Received remote track:", {
+        safeLog.log("📹 [REMOTE TRACK] Received remote track:", {
           kind: event.track.kind,
           id: event.track.id,
           enabled: event.track.enabled,
@@ -561,7 +562,7 @@ export const useWebRTC = (
 
         // Monitor track state changes
         event.track.onmute = () => {
-          console.warn("⚠️ [REMOTE TRACK] Track muted:", {
+          safeLog.warn("⚠️ [REMOTE TRACK] Track muted:", {
             kind: event.track.kind,
             id: event.track.id,
             reason: "Track is muted - no data being received",
@@ -571,7 +572,7 @@ export const useWebRTC = (
         };
 
         event.track.onunmute = () => {
-          console.log("✅ [REMOTE TRACK] Track unmuted - MEDIA IS FLOWING!", {
+          safeLog.log("✅ [REMOTE TRACK] Track unmuted - MEDIA IS FLOWING!", {
             kind: event.track.kind,
             id: event.track.id,
             reason: "Track is receiving data - media should be visible/audible now",
@@ -584,7 +585,7 @@ export const useWebRTC = (
           if (event.track.kind === "video" && remoteVideoRef.current) {
             const video = remoteVideoRef.current;
             if (video.srcObject) {
-              console.log("🎬 [REMOTE TRACK] Video track unmuted - ensuring video plays", {
+              safeLog.log("🎬 [REMOTE TRACK] Video track unmuted - ensuring video plays", {
                 readyState: video.readyState,
                 paused: video.paused,
                 muted: video.muted,
@@ -594,18 +595,18 @@ export const useWebRTC = (
               if (video.paused) {
                 video.play()
                   .then(() => {
-                    console.log("✅ [REMOTE TRACK] Video started playing after track unmute");
+                    safeLog.log("✅ [REMOTE TRACK] Video started playing after track unmute");
                   })
                   .catch(err => {
                     // Only log if it's not an AbortError (which happens during cleanup)
                     if (err.name !== 'AbortError') {
-                      console.error("❌ [REMOTE TRACK] Error playing video after track unmute:", err);
+                      safeLog.error("❌ [REMOTE TRACK] Error playing video after track unmute:", err);
                       // Retry after short delay
                       setTimeout(() => {
                         if (video && video.srcObject && video.paused) {
                           video.play().catch((retryErr) => {
                             if (retryErr.name !== 'AbortError') {
-                              console.error("❌ [REMOTE TRACK] Retry play failed:", retryErr);
+                              safeLog.error("❌ [REMOTE TRACK] Retry play failed:", retryErr);
                             }
                           });
                         }
@@ -613,10 +614,10 @@ export const useWebRTC = (
                     }
                   });
               } else {
-                console.log("✅ [REMOTE TRACK] Video is already playing");
+                safeLog.log("✅ [REMOTE TRACK] Video is already playing");
               }
             } else {
-              console.warn("⚠️ [REMOTE TRACK] Video track unmuted but video element has no srcObject - setting it now");
+              safeLog.warn("⚠️ [REMOTE TRACK] Video track unmuted but video element has no srcObject - setting it now");
               // Set srcObject if it's missing
               if (remoteVideoRef.current && remoteStreamRef.current) {
                 remoteVideoRef.current.srcObject = remoteStreamRef.current;
@@ -625,7 +626,7 @@ export const useWebRTC = (
                   if (remoteVideoRef.current && remoteVideoRef.current.paused) {
                     remoteVideoRef.current.play().catch(err => {
                       if (err.name !== 'AbortError') {
-                        console.error("❌ [REMOTE TRACK] Error playing after setting srcObject:", err);
+                        safeLog.error("❌ [REMOTE TRACK] Error playing after setting srcObject:", err);
                       }
                     });
                   }
@@ -637,7 +638,7 @@ export const useWebRTC = (
 
         event.track.onended = () => {
           // Track ended is expected when call ends - log as info, not error
-          console.log("ℹ️ [REMOTE TRACK] Track ended (expected when call ends):", {
+          safeLog.log("ℹ️ [REMOTE TRACK] Track ended (expected when call ends):", {
             kind: event.track.kind,
             id: event.track.id,
             reason: "Track has ended - this is normal when call is terminated",
@@ -646,7 +647,7 @@ export const useWebRTC = (
 
         // Skip if we've already processed this track
         if (processedTrackIds.current.has(event.track.id)) {
-          console.log("Track already processed, skipping:", event.track.id);
+          safeLog.log("Track already processed, skipping:", event.track.id);
           return;
         }
         processedTrackIds.current.add(event.track.id);
@@ -671,7 +672,7 @@ export const useWebRTC = (
             );
             if (!existingTrack) {
               currentStream.addTrack(event.track);
-              console.log("Added track to existing stream:", event.track.kind);
+              safeLog.log("Added track to existing stream:", event.track.kind);
             }
           }
         } else {
@@ -679,7 +680,7 @@ export const useWebRTC = (
           if (!currentStream) {
             currentStream = new MediaStream([event.track]);
             remoteStreamRef.current = currentStream;
-            console.log("Created new stream for track:", event.track.kind);
+            safeLog.log("Created new stream for track:", event.track.kind);
           } else {
             // Add track to existing stream
             const existingTrack = currentStream.getTracks().find(
@@ -687,7 +688,7 @@ export const useWebRTC = (
             );
             if (!existingTrack) {
               currentStream.addTrack(event.track);
-              console.log("Added track to existing stream:", event.track.kind);
+              safeLog.log("Added track to existing stream:", event.track.kind);
             }
           }
         }
@@ -698,9 +699,9 @@ export const useWebRTC = (
               track.enabled = true;
               // Force unmute if possible (though muted state is usually controlled by the sender)
               if (track.muted && pc.iceConnectionState === "connected") {
-                console.warn("⚠️ [REMOTE TRACK] Audio track is muted even though ICE is connected - this may indicate no data");
+                safeLog.warn("⚠️ [REMOTE TRACK] Audio track is muted even though ICE is connected - this may indicate no data");
               }
-              console.log("✅ [REMOTE TRACK] Enabled remote audio track:", {
+              safeLog.log("✅ [REMOTE TRACK] Enabled remote audio track:", {
                 id: track.id,
                 enabled: track.enabled,
                 muted: track.muted,
@@ -712,9 +713,9 @@ export const useWebRTC = (
               track.enabled = true;
               // Force unmute if possible (though muted state is usually controlled by the sender)
               if (track.muted && pc.iceConnectionState === "connected") {
-                console.warn("⚠️ [REMOTE TRACK] Video track is muted even though ICE is connected - this may indicate no data");
+                safeLog.warn("⚠️ [REMOTE TRACK] Video track is muted even though ICE is connected - this may indicate no data");
               }
-              console.log("✅ [REMOTE TRACK] Enabled remote video track:", {
+              safeLog.log("✅ [REMOTE TRACK] Enabled remote video track:", {
                 id: track.id,
                 enabled: track.enabled,
                 muted: track.muted,
@@ -728,7 +729,7 @@ export const useWebRTC = (
               const mutedAudio = currentStream.getAudioTracks().filter(t => t.muted).length;
               const mutedVideo = currentStream.getVideoTracks().filter(t => t.muted).length;
               if (mutedAudio > 0 || mutedVideo > 0) {
-                console.error("❌ [REMOTE TRACK] CRITICAL: Tracks are muted even though ICE is connected!", {
+                safeLog.error("❌ [REMOTE TRACK] CRITICAL: Tracks are muted even though ICE is connected!", {
                   mutedAudioTracks: mutedAudio,
                   mutedVideoTracks: mutedVideo,
                   totalAudioTracks: currentStream.getAudioTracks().length,
@@ -740,7 +741,7 @@ export const useWebRTC = (
               }
             }
 
-          console.log("Remote stream updated:", {
+          safeLog.log("Remote stream updated:", {
             id: currentStream.id,
             audioTracks: currentStream.getAudioTracks().length,
             videoTracks: currentStream.getVideoTracks().length,
@@ -756,7 +757,7 @@ export const useWebRTC = (
             
             if (needsUpdate) {
               video.srcObject = currentStream;
-              console.log("✅ [REMOTE STREAM] Remote stream srcObject set", {
+              safeLog.log("✅ [REMOTE STREAM] Remote stream srcObject set", {
                 streamId: currentStream.id,
                 audioTracks: currentStream.getAudioTracks().length,
                 videoTracks: currentStream.getVideoTracks().length,
@@ -765,7 +766,7 @@ export const useWebRTC = (
               });
             } else {
               // Stream already set - just ensure it's still set (don't refresh)
-              console.log("✅ [REMOTE STREAM] Stream already set, ensuring playback", {
+              safeLog.log("✅ [REMOTE STREAM] Stream already set, ensuring playback", {
                 streamId: currentStream.id,
                 audioTracks: currentStream.getAudioTracks().length,
                 videoTracks: currentStream.getVideoTracks().length,
@@ -776,11 +777,11 @@ export const useWebRTC = (
             // Tracks may be muted initially but will unmute when media flows
             const attemptPlay = () => {
               if (!video || !video.srcObject) {
-                console.warn("⚠️ [REMOTE STREAM] Video or srcObject not ready for play");
+                safeLog.warn("⚠️ [REMOTE STREAM] Video or srcObject not ready for play");
                 return;
               }
               
-              console.log("🎬 [REMOTE STREAM] Attempting to play video with tracks", {
+              safeLog.log("🎬 [REMOTE STREAM] Attempting to play video with tracks", {
                 readyState: video.readyState,
                 paused: video.paused,
                 muted: video.muted,
@@ -795,13 +796,13 @@ export const useWebRTC = (
               if (video.paused) {
                 video.play()
                   .then(() => {
-                    console.log("✅ [REMOTE STREAM] Video started playing");
+                    safeLog.log("✅ [REMOTE STREAM] Video started playing");
                     // Verify tracks after play starts
                     setTimeout(() => {
                       const audioMuted = currentStream.getAudioTracks().filter(t => t.muted).length;
                       const videoMuted = currentStream.getVideoTracks().filter(t => t.muted).length;
                       if (audioMuted > 0 || videoMuted > 0) {
-                        console.warn("⚠️ [REMOTE STREAM] Some tracks still muted after play - they should unmute when media flows", {
+                        safeLog.warn("⚠️ [REMOTE STREAM] Some tracks still muted after play - they should unmute when media flows", {
                           audioMuted,
                           videoMuted,
                           iceConnectionState: pc.iceConnectionState,
@@ -810,20 +811,20 @@ export const useWebRTC = (
                     }, 1000);
                   })
                   .catch((error) => {
-                    console.log("⏳ [REMOTE STREAM] Play failed, will retry:", error.name);
+                    safeLog.log("⏳ [REMOTE STREAM] Play failed, will retry:", error.name);
                     // Retry after short delay
                     setTimeout(() => {
                       if (video && video.srcObject && video.paused) {
                         video.play().catch((retryError) => {
                           if (retryError.name !== 'AbortError') {
-                            console.log("⏳ [REMOTE STREAM] Retry play failed:", retryError.name);
+                            safeLog.log("⏳ [REMOTE STREAM] Retry play failed:", retryError.name);
                           }
                         });
                       }
                     }, 200);
                   });
               } else {
-                console.log("✅ [REMOTE STREAM] Video is already playing");
+                safeLog.log("✅ [REMOTE STREAM] Video is already playing");
               }
             };
             
@@ -839,7 +840,7 @@ export const useWebRTC = (
               }
             }, 100);
           } else {
-            console.warn("⚠️ [REMOTE STREAM] remoteVideoRef.current is null - video element not ready");
+            safeLog.warn("⚠️ [REMOTE STREAM] remoteVideoRef.current is null - video element not ready");
           }
         }
       };
@@ -853,7 +854,7 @@ export const useWebRTC = (
         const activeCallId = currentCallIdRef.current;
         
         if (!activeCallId) {
-          console.warn("⚠️ [ICE CANDIDATE] No callId available yet, candidate will be queued");
+          safeLog.warn("⚠️ [ICE CANDIDATE] No callId available yet, candidate will be queued");
           // Store candidate temporarily - will be sent when callId is available
           return;
         }
@@ -862,8 +863,8 @@ export const useWebRTC = (
           // Handle null candidate - this means ICE gathering is complete
           // This is critical for the remote peer to know when to stop waiting for more candidates
           if (event.candidate === null) {
-            console.log("🧊 [ICE CANDIDATE] ICE gathering complete (null candidate received)");
-            console.log("🧊 [ICE CANDIDATE] Total candidates processed:", processedCandidateIds.size);
+            safeLog.log("🧊 [ICE CANDIDATE] ICE gathering complete (null candidate received)");
+            safeLog.log("🧊 [ICE CANDIDATE] Total candidates processed:", processedCandidateIds.size);
             // The null candidate event indicates gathering is complete
             // The remote peer should have received all candidates by now
             // No need to update database - just log for debugging
@@ -885,7 +886,7 @@ export const useWebRTC = (
             const currentCount = processedCandidateIds.size;
             const role = isChild ? "child" : "parent";
             if (currentCount === 1) {
-              console.log("🧊 [ICE CANDIDATE] ICE gathering started:", {
+              safeLog.log("🧊 [ICE CANDIDATE] ICE gathering started:", {
                 role,
                 callId: activeCallId,
                 isChild,
@@ -900,7 +901,7 @@ export const useWebRTC = (
             
             // Verify role is correct (log first candidate only)
             if (currentCount === 1) {
-              console.log("🔍 [ICE CANDIDATE] Role verification:", {
+              safeLog.log("🔍 [ICE CANDIDATE] Role verification:", {
                 isChild,
                 role,
                 candidateField,
@@ -917,7 +918,7 @@ export const useWebRTC = (
               .maybeSingle();
 
             if (selectError) {
-              console.error(`❌ [ICE CANDIDATE] Error reading ${candidateField}:`, selectError);
+              safeLog.error(`❌ [ICE CANDIDATE] Error reading ${candidateField}:`, selectError);
               return;
             }
 
@@ -942,31 +943,31 @@ export const useWebRTC = (
                   .eq("id", activeCallId);
 
                 if (updateError) {
-                  console.error(`❌ [ICE CANDIDATE] Error updating ${candidateField}:`, updateError);
+                  safeLog.error(`❌ [ICE CANDIDATE] Error updating ${candidateField}:`, updateError);
                   // If column doesn't exist, log helpful message
                   if (updateError.message?.includes("column") || updateError.code === "PGRST204") {
-                    console.error(`❌ [ICE CANDIDATE] Database column ${candidateField} may not exist. Run fix_ice_candidates_schema.sql migration!`);
+                    safeLog.error(`❌ [ICE CANDIDATE] Database column ${candidateField} may not exist. Run fix_ice_candidates_schema.sql migration!`);
                   }
                 } else {
                   // Only log first few and every 20th candidate to reduce spam
                   const candidateNum = updatedCandidates.length;
                   if (candidateNum <= 3 || candidateNum % 20 === 0) {
-                    console.log(`✅ [ICE CANDIDATE] Candidate #${candidateNum} sent to ${candidateField}`);
+                    safeLog.log(`✅ [ICE CANDIDATE] Candidate #${candidateNum} sent to ${candidateField}`);
                   }
                 }
               }
               // Silently skip duplicates - no need to log
             } else {
-              console.warn(`⚠️ [ICE CANDIDATE] Call ${activeCallId} not found in database`);
+              safeLog.warn(`⚠️ [ICE CANDIDATE] Call ${activeCallId} not found in database`);
             }
           }
         } catch (error) {
-          console.error("❌ [ICE CANDIDATE] Error handling ICE candidate:", error);
+          safeLog.error("❌ [ICE CANDIDATE] Error handling ICE candidate:", error);
           // Don't throw - ICE candidate failures shouldn't break the call
         }
       };
     } catch (error) {
-      console.error("Error initializing WebRTC connection:", error);
+      safeLog.error("Error initializing WebRTC connection:", error);
       throw error;
     }
   }, [callId, localVideoRef, remoteVideoRef, isChild]);
@@ -976,7 +977,7 @@ export const useWebRTC = (
     const iceState = pc?.iceConnectionState;
     const connectionState = pc?.connectionState;
     
-    console.log("🧹 [CLEANUP] Cleaning up WebRTC resources...", {
+    safeLog.log("🧹 [CLEANUP] Cleaning up WebRTC resources...", {
       timestamp: new Date().toISOString(),
       connectionState: connectionState,
       iceConnectionState: iceState,
@@ -995,16 +996,16 @@ export const useWebRTC = (
       const isStuckInNew = iceState === "new" && timeSinceNew < 5000;
       
       if ((iceState === "new" && isStuckInNew) || iceState === "checking") {
-        console.warn("⚠️ [CLEANUP] Skipping cleanup - ICE connection still establishing (state:", iceState, ")");
-        console.warn("⚠️ [CLEANUP] Use force=true to cleanup during explicit hangup");
+        safeLog.warn("⚠️ [CLEANUP] Skipping cleanup - ICE connection still establishing (state:", iceState, ")");
+        safeLog.warn("⚠️ [CLEANUP] Use force=true to cleanup during explicit hangup");
         return;
       }
       
       if (iceState === "new" && !isStuckInNew) {
-        console.warn("⚠️ [CLEANUP] ICE stuck in 'new' for 5+ seconds - allowing cleanup (connection likely failed)");
+        safeLog.warn("⚠️ [CLEANUP] ICE stuck in 'new' for 5+ seconds - allowing cleanup (connection likely failed)");
       }
     } else {
-      console.log("✅ [CLEANUP] Force cleanup requested (explicit hangup) - cleaning up regardless of ICE state");
+      safeLog.log("✅ [CLEANUP] Force cleanup requested (explicit hangup) - cleaning up regardless of ICE state");
     }
 
     // Stop all tracks from local stream
@@ -1012,7 +1013,7 @@ export const useWebRTC = (
     if (streamToCleanup) {
       streamToCleanup.getTracks().forEach((track) => {
         track.stop();
-        console.log("Stopped track:", track.kind);
+        safeLog.log("Stopped track:", track.kind);
       });
       localStreamRef.current = null;
       setLocalStream(null);
@@ -1023,7 +1024,7 @@ export const useWebRTC = (
       const stream = localVideoRef.current.srcObject as MediaStream;
       stream.getTracks().forEach((track) => {
         track.stop();
-        console.log("Stopped track from video element:", track.kind);
+        safeLog.log("Stopped track from video element:", track.kind);
       });
       localVideoRef.current.srcObject = null;
     }
@@ -1036,7 +1037,7 @@ export const useWebRTC = (
     // Close peer connection
     if (pc) {
       if (pc.signalingState !== "closed") {
-        console.log(
+        safeLog.log(
           "Closing peer connection, current state:",
           pc.signalingState
         );
@@ -1055,18 +1056,18 @@ export const useWebRTC = (
   const playRemoteVideo = useCallback(() => {
     const video = remoteVideoRef.current;
     if (!video) {
-      console.log("Video element not ready yet");
+      safeLog.log("Video element not ready yet");
       return;
     }
 
     // Get the stream to use
     const streamToUse = remoteStreamRef.current || remoteStream;
     if (!streamToUse) {
-      console.log("Remote stream not available yet");
+      safeLog.log("Remote stream not available yet");
       return;
     }
 
-    console.log("playRemoteVideo called", {
+    safeLog.log("playRemoteVideo called", {
       hasVideo: !!video,
       hasStream: !!streamToUse,
       currentSrcObject: !!video.srcObject,
@@ -1078,7 +1079,7 @@ export const useWebRTC = (
 
     // Only set srcObject if it's different (to avoid interrupting play)
     if (video.srcObject !== streamToUse) {
-      console.log("Setting remote video srcObject");
+      safeLog.log("Setting remote video srcObject");
       video.srcObject = streamToUse;
     }
 
@@ -1086,7 +1087,7 @@ export const useWebRTC = (
     // CRITICAL: Wait for readyState >= 2 (have_current_data) before playing
     // This ensures tracks are actually receiving data, not just received/unmuted
     const attemptPlay = () => {
-      console.log("🎬 [VIDEO PLAY] Attempting to play video:", {
+      safeLog.log("🎬 [VIDEO PLAY] Attempting to play video:", {
         hasSrcObject: !!video.srcObject,
         readyState: video.readyState,
         paused: video.paused,
@@ -1095,7 +1096,7 @@ export const useWebRTC = (
       });
 
       if (!video.srcObject) {
-        console.log("⏳ [VIDEO PLAY] Video srcObject not set, retrying...");
+        safeLog.log("⏳ [VIDEO PLAY] Video srcObject not set, retrying...");
         setTimeout(attemptPlay, 50); // Faster retry
         return;
       }
@@ -1109,17 +1110,17 @@ export const useWebRTC = (
       );
       
       if (video.readyState < 2 && !hasUnmutedTracks) {
-        console.log("⏳ [VIDEO PLAY] Waiting for video readyState >= 2 or unmuted tracks (current:", video.readyState, ")");
+        safeLog.log("⏳ [VIDEO PLAY] Waiting for video readyState >= 2 or unmuted tracks (current:", video.readyState, ")");
         const onReady = () => {
           const nowHasUnmuted = stream && (
             stream.getAudioTracks().some(t => !t.muted && t.readyState === 'live') ||
             stream.getVideoTracks().some(t => !t.muted && t.readyState === 'live')
           );
           if (video.readyState >= 2 || nowHasUnmuted) {
-            console.log("✅ [VIDEO PLAY] Video ready, readyState:", video.readyState, "- attempting play");
+            safeLog.log("✅ [VIDEO PLAY] Video ready, readyState:", video.readyState, "- attempting play");
             if (video.paused) {
               video.play().catch((retryError) => {
-                console.error("❌ [VIDEO PLAY] Play failed after ready:", retryError);
+                safeLog.error("❌ [VIDEO PLAY] Play failed after ready:", retryError);
               });
             }
           }
@@ -1134,9 +1135,9 @@ export const useWebRTC = (
             const nowHasUnmuted = stream.getAudioTracks().some(t => !t.muted && t.readyState === 'live') ||
                                  stream.getVideoTracks().some(t => !t.muted && t.readyState === 'live');
             if (nowHasUnmuted && video.paused) {
-              console.log("✅ [VIDEO PLAY] Tracks unmuted, attempting play");
+              safeLog.log("✅ [VIDEO PLAY] Tracks unmuted, attempting play");
               video.play().catch((retryError) => {
-                console.error("❌ [VIDEO PLAY] Play failed after track unmute:", retryError);
+                safeLog.error("❌ [VIDEO PLAY] Play failed after track unmute:", retryError);
               });
             }
           };
@@ -1150,19 +1151,19 @@ export const useWebRTC = (
       
       // If we have unmuted tracks, try to play even with low readyState
       if (hasUnmutedTracks && video.readyState < 2) {
-        console.log("🎬 [VIDEO PLAY] Tracks are unmuted, attempting play despite low readyState:", video.readyState);
+        safeLog.log("🎬 [VIDEO PLAY] Tracks are unmuted, attempting play despite low readyState:", video.readyState);
       }
 
       // Video is ready (readyState >= 2) - safe to play
       if (video.paused) {
-        console.log("🎬 [VIDEO PLAY] Video ready (readyState:", video.readyState, "), attempting play");
+        safeLog.log("🎬 [VIDEO PLAY] Video ready (readyState:", video.readyState, "), attempting play");
         const playPromise = video.play();
         
         if (playPromise !== undefined) {
           playPromise
             .then(() => {
-              console.log("✅ [VIDEO PLAY] Remote video playing successfully!");
-              console.log("📊 [VIDEO PLAY] Video state:", {
+              safeLog.log("✅ [VIDEO PLAY] Remote video playing successfully!");
+              safeLog.log("📊 [VIDEO PLAY] Video state:", {
                 paused: video.paused,
                 muted: video.muted,
                 volume: video.volume,
@@ -1172,23 +1173,23 @@ export const useWebRTC = (
             .catch((error) => {
               // If play fails, retry after short delay
               if (error.name === 'NotAllowedError') {
-                console.error("❌ [VIDEO PLAY] Autoplay not allowed - need user interaction");
+                safeLog.error("❌ [VIDEO PLAY] Autoplay not allowed - need user interaction");
               } else if (error.name !== 'AbortError') {
-                console.log("⏳ [VIDEO PLAY] Play failed, retrying after delay:", error.name);
+                safeLog.log("⏳ [VIDEO PLAY] Play failed, retrying after delay:", error.name);
                 setTimeout(() => {
                   if (video.readyState >= 2 && video.paused) {
                     video.play().catch((retryError) => {
-                      console.error("❌ [VIDEO PLAY] Retry play failed:", retryError);
+                      safeLog.error("❌ [VIDEO PLAY] Retry play failed:", retryError);
                     });
                   }
                 }, 100);
               } else {
-                console.log("✅ [VIDEO PLAY] Play was interrupted (likely by another play call) - this is OK");
+                safeLog.log("✅ [VIDEO PLAY] Play was interrupted (likely by another play call) - this is OK");
               }
             });
         }
       } else {
-        console.log("✅ [VIDEO PLAY] Remote video is already playing");
+        safeLog.log("✅ [VIDEO PLAY] Remote video is already playing");
       }
     };
 
@@ -1204,17 +1205,17 @@ export const useWebRTC = (
       // Only update srcObject if it's different to avoid interrupting playback
       if (remoteVideoRef.current.srcObject !== remoteStream) {
         remoteVideoRef.current.srcObject = remoteStream;
-        console.log("✅ [REMOTE STREAM] Remote stream srcObject updated in useEffect");
+        safeLog.log("✅ [REMOTE STREAM] Remote stream srcObject updated in useEffect");
         
         // Try to play immediately - user has already clicked Answer
         requestAnimationFrame(() => {
           if (remoteVideoRef.current && remoteVideoRef.current.srcObject === remoteStream) {
             remoteVideoRef.current.play()
               .then(() => {
-                console.log("✅ [REMOTE STREAM] Video started playing in useEffect");
+                safeLog.log("✅ [REMOTE STREAM] Video started playing in useEffect");
               })
               .catch((error) => {
-                console.log("⏳ [REMOTE STREAM] Play failed in useEffect (will retry):", error.name);
+                safeLog.log("⏳ [REMOTE STREAM] Play failed in useEffect (will retry):", error.name);
               });
           }
         });
@@ -1244,7 +1245,7 @@ export const useWebRTC = (
 
         if (isProblematic) {
           // Only log actual problems, not normal connection states
-          console.warn("⚠️ [MONITOR] Connection issue detected:", {
+          safeLog.warn("⚠️ [MONITOR] Connection issue detected:", {
             iceConnectionState: iceState,
             connectionState: connectionState,
             videoPaused: isPaused,
@@ -1262,7 +1263,7 @@ export const useWebRTC = (
       }, 5000); // Check every 5 seconds (reduced frequency)
 
       // Log stream info for debugging
-      console.log("📹 [REMOTE STREAM] Remote stream in useEffect:", {
+      safeLog.log("📹 [REMOTE STREAM] Remote stream in useEffect:", {
         id: remoteStream.id,
         audioTracks: remoteStream.getAudioTracks().map(t => ({
           id: t.id,

@@ -1,9 +1,10 @@
 // src/features/presence/useChildrenPresence.ts
 // Hook for parents to subscribe to their children's online presence
 
-import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { safeLog } from "@/utils/security";
 import type { RealtimeChannel } from "@supabase/supabase-js";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 interface PresenceMetadata {
   userId: string;
@@ -44,10 +45,7 @@ export function useChildrenPresence({
   }, [onStatusChange]);
 
   // Create stable string key for dependency comparison
-  const childIdsKey = useMemo(
-    () => [...childIds].sort().join(","),
-    [childIds]
-  );
+  const childIdsKey = useMemo(() => [...childIds].sort().join(","), [childIds]);
 
   // Initialize presence state for all children as offline
   useEffect(() => {
@@ -80,15 +78,15 @@ export function useChildrenPresence({
     // Subscribe to each child's presence channel
     childIds.forEach((childId) => {
       const channelName = `presence:child:${childId}`;
-      
+
       // Log in development
       if (import.meta.env.DEV) {
-        console.log("👀 [CHILDREN PRESENCE] Subscribing to child presence", {
+        safeLog.debug("👀 [CHILDREN PRESENCE] Subscribing to child presence", {
           childId,
           channelName,
         });
       }
-      
+
       // Create channel for subscribing to presence
       // Note: Subscribers need to enable presence config to receive presence events
       const channel = supabase.channel(channelName, {
@@ -102,13 +100,19 @@ export function useChildrenPresence({
       channel
         .on("presence", { event: "sync" }, () => {
           const state = channel.presenceState<PresenceMetadata>();
-          const isOnline = childId in state && Array.isArray(state[childId]) && state[childId].length > 0;
-          
+          const isOnline =
+            childId in state &&
+            Array.isArray(state[childId]) &&
+            state[childId].length > 0;
+
           // Get the most recent presence metadata
-          const childPresences = state[childId] as PresenceMetadata[] | undefined;
-          const latestPresence = childPresences && childPresences.length > 0 
-            ? childPresences[0] 
-            : undefined;
+          const childPresences = state[childId] as
+            | PresenceMetadata[]
+            | undefined;
+          const latestPresence =
+            childPresences && childPresences.length > 0
+              ? childPresences[0]
+              : undefined;
           const newLastSeen = isOnline
             ? latestPresence?.lastSeen || new Date().toISOString()
             : null;
@@ -116,22 +120,22 @@ export function useChildrenPresence({
           setPresence((prev) => {
             const wasOnline = prev[childId]?.isOnline || false;
             const prevLastSeen = prev[childId]?.lastSeen || null;
-            
+
             // Only update state if something actually changed
             // This prevents unnecessary re-renders and reduces message spam
             if (wasOnline === isOnline && prevLastSeen === newLastSeen) {
               return prev; // No change, return previous state
             }
-            
+
             // Log in development only when status changes
             if (import.meta.env.DEV && wasOnline !== isOnline) {
-              console.log("🔄 [CHILDREN PRESENCE] Status changed", {
+              safeLog.debug("🔄 [CHILDREN PRESENCE] Status changed", {
                 childId,
                 isOnline,
                 wasOnline,
               });
             }
-            
+
             const newState = {
               ...prev,
               [childId]: {
@@ -141,7 +145,11 @@ export function useChildrenPresence({
             };
 
             // Notify callback only on actual status change
-            if (wasOnline !== isOnline && onStatusChangeRef.current && prev[childId] !== undefined) {
+            if (
+              wasOnline !== isOnline &&
+              onStatusChangeRef.current &&
+              prev[childId] !== undefined
+            ) {
               onStatusChangeRef.current(childId, isOnline);
             }
 
@@ -151,7 +159,7 @@ export function useChildrenPresence({
         .on("presence", { event: "join" }, ({ key, newPresences }) => {
           // Log in development
           if (import.meta.env.DEV) {
-            console.log("👋 [CHILDREN PRESENCE] Child joined presence", {
+            safeLog.debug("👋 [CHILDREN PRESENCE] Child joined presence", {
               childId,
               key,
               matches: key === childId,
@@ -162,15 +170,20 @@ export function useChildrenPresence({
           // Only update if this is the child we're tracking
           if (key !== childId) {
             if (import.meta.env.DEV) {
-              console.log("⏭️ [CHILDREN PRESENCE] Skipping join - different child", {
-                expected: childId,
-                received: key,
-              });
+              safeLog.debug(
+                "⏭️ [CHILDREN PRESENCE] Skipping join - different child",
+                {
+                  expected: childId,
+                  received: key,
+                }
+              );
             }
             return;
           }
 
-          const metadata = newPresences[0] as PresenceMetadata | undefined;
+          const metadata = newPresences[0] as unknown as
+            | PresenceMetadata
+            | undefined;
           setPresence((prev) => {
             const wasOnline = prev[childId]?.isOnline || false;
             const newState = {
@@ -187,11 +200,14 @@ export function useChildrenPresence({
 
             // Log in development
             if (import.meta.env.DEV) {
-              console.log("🟢 [CHILDREN PRESENCE] Child marked as online via join", {
-                childId,
-                wasOnline,
-                lastSeen: metadata?.lastSeen,
-              });
+              safeLog.debug(
+                "🟢 [CHILDREN PRESENCE] Child marked as online via join",
+                {
+                  childId,
+                  wasOnline,
+                  lastSeen: metadata?.lastSeen,
+                }
+              );
             }
 
             return newState;
@@ -226,21 +242,27 @@ export function useChildrenPresence({
           if (status === "SUBSCRIBED") {
             // Log in development
             if (import.meta.env.DEV) {
-              console.log("✅ [CHILDREN PRESENCE] Subscribed to child presence", {
-                childId,
-                channelName,
-              });
+              safeLog.debug(
+                "✅ [CHILDREN PRESENCE] Subscribed to child presence",
+                {
+                  childId,
+                  channelName,
+                }
+              );
             }
-            
+
             // Check initial presence state after subscription
             // This handles the case where child was already online before parent subscribed
             setTimeout(() => {
               const state = channel.presenceState<PresenceMetadata>();
-              const isOnline = childId in state && Array.isArray(state[childId]) && state[childId].length > 0;
-              
+              const isOnline =
+                childId in state &&
+                Array.isArray(state[childId]) &&
+                state[childId].length > 0;
+
               // Log in development
               if (import.meta.env.DEV) {
-                console.log("🔍 [CHILDREN PRESENCE] Initial presence check", {
+                safeLog.debug("🔍 [CHILDREN PRESENCE] Initial presence check", {
                   childId,
                   channelName,
                   state,
@@ -248,24 +270,28 @@ export function useChildrenPresence({
                   isOnline,
                 });
               }
-              
+
               if (isOnline) {
-                const childPresences = state[childId] as PresenceMetadata[] | undefined;
-                const latestPresence = childPresences && childPresences.length > 0 
-                  ? childPresences[0] 
-                  : undefined;
-                
+                const childPresences = state[childId] as
+                  | PresenceMetadata[]
+                  | undefined;
+                const latestPresence =
+                  childPresences && childPresences.length > 0
+                    ? childPresences[0]
+                    : undefined;
+
                 setPresence((prev) => ({
                   ...prev,
                   [childId]: {
                     isOnline: true,
-                    lastSeen: latestPresence?.lastSeen || new Date().toISOString(),
+                    lastSeen:
+                      latestPresence?.lastSeen || new Date().toISOString(),
                   },
                 }));
-                
+
                 // Log in development
                 if (import.meta.env.DEV) {
-                  console.log("🟢 [CHILDREN PRESENCE] Child is online", {
+                  safeLog.debug("🟢 [CHILDREN PRESENCE] Child is online", {
                     childId,
                     lastSeen: latestPresence?.lastSeen,
                   });
@@ -273,14 +299,14 @@ export function useChildrenPresence({
               } else {
                 // Log in development
                 if (import.meta.env.DEV) {
-                  console.log("⚪ [CHILDREN PRESENCE] Child is offline", {
+                  safeLog.debug("⚪ [CHILDREN PRESENCE] Child is offline", {
                     childId,
                   });
                 }
               }
             }, 500); // Small delay to ensure presence state is synced
           } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-            console.error("❌ [CHILDREN PRESENCE] Subscription error", {
+            safeLog.error("❌ [CHILDREN PRESENCE] Subscription error", {
               childId,
               status,
               error: err,
@@ -301,7 +327,7 @@ export function useChildrenPresence({
       channels.clear();
       channelRefsRef.current.clear();
     };
-  }, [childIdsKey, enabled]);
+  }, [childIdsKey, enabled, childIds]);
 
   const getChildStatus = useCallback(
     (childId: string) => {
@@ -316,4 +342,3 @@ export function useChildrenPresence({
     isChildOnline: (childId: string) => presence[childId]?.isOnline || false,
   };
 }
-

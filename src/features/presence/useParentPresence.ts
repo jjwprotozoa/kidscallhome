@@ -1,9 +1,10 @@
 // src/features/presence/useParentPresence.ts
 // Hook for children to subscribe to their parent's online presence
 
-import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { safeLog } from "@/utils/security";
 import type { RealtimeChannel } from "@supabase/supabase-js";
+import { useEffect, useRef, useState } from "react";
 
 interface PresenceMetadata {
   userId: string;
@@ -46,15 +47,15 @@ export function useParentPresence({
     if (!enabled || !parentId) return;
 
     const channelName = `presence:parent:${parentId}`;
-    
+
     // Log in development
     if (import.meta.env.DEV) {
-      console.log("👀 [PARENT PRESENCE] Subscribing to parent presence", {
+      safeLog.debug("👀 [PARENT PRESENCE] Subscribing to parent presence", {
         parentId,
         channelName,
       });
     }
-    
+
     // Create channel for subscribing to presence
     const channel = supabase.channel(channelName, {
       config: {
@@ -67,14 +68,20 @@ export function useParentPresence({
     channel
       .on("presence", { event: "sync" }, () => {
         const state = channel.presenceState<PresenceMetadata>();
-        
+
         // Check if parent is present
-        const isOnline = parentId in state && Array.isArray(state[parentId]) && state[parentId].length > 0;
-        
-        const parentPresences = state[parentId] as PresenceMetadata[] | undefined;
-        const latestPresence = parentPresences && parentPresences.length > 0 
-          ? parentPresences[0] 
-          : undefined;
+        const isOnline =
+          parentId in state &&
+          Array.isArray(state[parentId]) &&
+          state[parentId].length > 0;
+
+        const parentPresences = state[parentId] as
+          | PresenceMetadata[]
+          | undefined;
+        const latestPresence =
+          parentPresences && parentPresences.length > 0
+            ? parentPresences[0]
+            : undefined;
         const newLastSeen = isOnline
           ? latestPresence?.lastSeen || new Date().toISOString()
           : null;
@@ -82,29 +89,33 @@ export function useParentPresence({
         setPresence((prev) => {
           const wasOnline = prev.isOnline;
           const prevLastSeen = prev.lastSeen || null;
-          
+
           // Only update state if something actually changed
           // This prevents unnecessary re-renders and reduces message spam
           if (wasOnline === isOnline && prevLastSeen === newLastSeen) {
             return prev; // No change, return previous state
           }
-          
+
           // Log in development only when there's an actual change
           if (import.meta.env.DEV && wasOnline !== isOnline) {
-            console.log("🔄 [PARENT PRESENCE] Presence status changed", {
+            safeLog.debug("🔄 [PARENT PRESENCE] Presence status changed", {
               parentId,
               isOnline,
               wasOnline,
             });
           }
-          
+
           const newState = {
             isOnline,
             lastSeen: newLastSeen || prevLastSeen,
           };
 
           // Notify if status changed
-          if (wasOnline !== isOnline && onStatusChangeRef.current && prev.lastSeen !== null) {
+          if (
+            wasOnline !== isOnline &&
+            onStatusChangeRef.current &&
+            prev.lastSeen !== null
+          ) {
             onStatusChangeRef.current(isOnline);
           }
 
@@ -119,7 +130,7 @@ export function useParentPresence({
 
         // Log in development
         if (import.meta.env.DEV) {
-          console.log("👋 [PARENT PRESENCE] Parent joined presence", {
+          safeLog.debug("👋 [PARENT PRESENCE] Parent joined presence", {
             parentId,
             key,
             matches: key === parentId,
@@ -127,7 +138,9 @@ export function useParentPresence({
           });
         }
 
-        const metadata = newPresences[0] as PresenceMetadata | undefined;
+        const metadata = newPresences[0] as unknown as
+          | PresenceMetadata
+          | undefined;
         setPresence((prev) => {
           const wasOnline = prev.isOnline;
           const newState = {
@@ -141,11 +154,14 @@ export function useParentPresence({
 
           // Log in development
           if (import.meta.env.DEV) {
-            console.log("🟢 [PARENT PRESENCE] Parent marked as online via join", {
-              parentId,
-              wasOnline,
-              lastSeen: metadata?.lastSeen,
-            });
+            safeLog.debug(
+              "🟢 [PARENT PRESENCE] Parent marked as online via join",
+              {
+                parentId,
+                wasOnline,
+                lastSeen: metadata?.lastSeen,
+              }
+            );
           }
 
           return newState;
@@ -175,20 +191,26 @@ export function useParentPresence({
         if (status === "SUBSCRIBED") {
           // Log in development
           if (import.meta.env.DEV) {
-            console.log("✅ [PARENT PRESENCE] Subscribed to parent presence", {
-              parentId,
-              channelName,
-            });
+            safeLog.debug(
+              "✅ [PARENT PRESENCE] Subscribed to parent presence",
+              {
+                parentId,
+                channelName,
+              }
+            );
           }
-          
+
           // Check initial presence state after subscription
           setTimeout(() => {
             const state = channel.presenceState<PresenceMetadata>();
-            const isOnline = parentId in state && Array.isArray(state[parentId]) && state[parentId].length > 0;
-            
+            const isOnline =
+              parentId in state &&
+              Array.isArray(state[parentId]) &&
+              state[parentId].length > 0;
+
             // Log in development
             if (import.meta.env.DEV) {
-              console.log("🔍 [PARENT PRESENCE] Initial presence check", {
+              safeLog.debug("🔍 [PARENT PRESENCE] Initial presence check", {
                 parentId,
                 channelName,
                 state,
@@ -196,21 +218,24 @@ export function useParentPresence({
                 isOnline,
               });
             }
-            
+
             if (isOnline) {
-              const parentPresences = state[parentId] as PresenceMetadata[] | undefined;
-              const latestPresence = parentPresences && parentPresences.length > 0 
-                ? parentPresences[0] 
-                : undefined;
-              
+              const parentPresences = state[parentId] as
+                | PresenceMetadata[]
+                | undefined;
+              const latestPresence =
+                parentPresences && parentPresences.length > 0
+                  ? parentPresences[0]
+                  : undefined;
+
               setPresence({
                 isOnline: true,
                 lastSeen: latestPresence?.lastSeen || new Date().toISOString(),
               });
-              
+
               // Log in development
               if (import.meta.env.DEV) {
-                console.log("🟢 [PARENT PRESENCE] Parent is online", {
+                safeLog.debug("🟢 [PARENT PRESENCE] Parent is online", {
                   parentId,
                   lastSeen: latestPresence?.lastSeen,
                 });
@@ -218,14 +243,14 @@ export function useParentPresence({
             } else {
               // Log in development
               if (import.meta.env.DEV) {
-                console.log("⚪ [PARENT PRESENCE] Parent is offline", {
+                safeLog.debug("⚪ [PARENT PRESENCE] Parent is offline", {
                   parentId,
                 });
               }
             }
           }, 500); // Small delay to ensure presence state is synced
         } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-          console.error("❌ [PARENT PRESENCE] Subscription error", {
+          safeLog.error("❌ [PARENT PRESENCE] Subscription error", {
             parentId,
             status,
             error: err,
@@ -249,4 +274,3 @@ export function useParentPresence({
     lastSeen: presence.lastSeen,
   };
 }
-

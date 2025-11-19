@@ -1,3 +1,15 @@
+// Check Java version before buildscript resolution
+// AGP 8.11.2 requires Java 11+ - fail early with clear error message
+def javaVersion = JavaVersion.current()
+if (javaVersion < JavaVersion.VERSION_11) {
+    throw new GradleException(
+        "Java ${javaVersion} is not supported. " +
+        "Android Gradle Plugin 8.11.2 requires Java 11 or higher. " +
+        "Please set JAVA_HOME to a Java 11+ installation. " +
+        "Current JAVA_HOME: ${System.getenv('JAVA_HOME') ?: 'not set'}"
+    )
+}
+
 buildscript {
     repositories { google(); mavenCentral() }
     dependencies { classpath 'com.android.tools.build:gradle:8.11.2' }
@@ -7,7 +19,7 @@ allprojects {
     repositories { google(); mavenCentral() }
 }
 
-// Ensure Java 11+ is used - AGP 8.2.1 requires Java 11+
+// Ensure Java 11+ is used - AGP 8.11.2 requires Java 11+
 // This is enforced via JAVA_HOME in CI/CD (Codemagic sets java: 17)
 // For local development, ensure JAVA_HOME points to Java 11+
 // Java toolchain is configured in settings.gradle

@@ -10,6 +10,7 @@ import { useWebRTC } from "./useWebRTC";
 import { handleParentCall } from "../utils/callHandlers";
 import { handleChildCall } from "../utils/childCallHandler";
 import { endCall as endCallUtil, isCallTerminal } from "../utils/callEnding";
+import { safeLog } from "@/utils/security";
 import type { ChildSession } from "../types/call";
 
 export const useVideoCall = () => {
@@ -61,7 +62,7 @@ export const useVideoCall = () => {
   const terminationChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   // CRITICAL: Log role to verify it's correct
-  console.log("🔍 [ROLE DETECTION] useVideoCall role:", {
+  safeLog.debug("🔍 [ROLE DETECTION] useVideoCall role:", {
     isChild,
     route: window.location.pathname,
     isChildRoute,
@@ -94,11 +95,11 @@ export const useVideoCall = () => {
   useEffect(() => {
     if (isConnecting && !remoteStream && callId) {
       // Outgoing call - play ringtone while waiting for answer
-      console.log("🔔 [AUDIO] Outgoing call - starting ringtone");
+      safeLog.debug("🔔 [AUDIO] Outgoing call - starting ringtone");
       playRingtone();
     } else if (remoteStream || !isConnecting) {
       // Call answered or connection established - stop ringtone
-      console.log("🔇 [AUDIO] Call answered or connected - stopping ringtone");
+      safeLog.log("🔇 [AUDIO] Call answered or connected - stopping ringtone");
       stopRingtone();
       if (remoteStream && !playAttemptedRef.current) {
         // Play answered sound when remote stream first appears
@@ -125,7 +126,7 @@ export const useVideoCall = () => {
       // Don't rely on isConnecting flag alone - use actual ICE state
       const callIsConnected = isConnected && !!remoteStream;
       
-      console.log("🎬 [VIDEO PLAY] Attempting to play remote video:", {
+      safeLog.debug("🎬 [VIDEO PLAY] Attempting to play remote video:", {
         hasRemoteStream: !!remoteStream,
         hasVideoElement: !!video,
         iceState,
@@ -144,15 +145,15 @@ export const useVideoCall = () => {
         // This ensures tracks are actually receiving data, not just received/unmuted
         if (video.readyState >= 2) {
           playAttemptedRef.current = true;
-          console.log("🎬 [VIDEO PLAY] Stream available, call connected, ICE connected, video ready (readyState:", video.readyState, ")");
+          safeLog.debug("🎬 [VIDEO PLAY] Stream available, call connected, ICE connected, video ready (readyState:", video.readyState, ")");
           playRemoteVideo();
         } else {
-          console.log("⏳ [VIDEO PLAY] Waiting for video readyState >= 2 (current:", video.readyState, ")");
+          safeLog.debug("⏳ [VIDEO PLAY] Waiting for video readyState >= 2 (current:", video.readyState, ")");
           // Wait for video to be ready
           const onReady = () => {
             if (video.readyState >= 2 && !playAttemptedRef.current) {
               playAttemptedRef.current = true;
-              console.log("✅ [VIDEO PLAY] Video ready (readyState:", video.readyState, "), attempting play");
+              safeLog.log("✅ [VIDEO PLAY] Video ready (readyState:", video.readyState, "), attempting play");
               playRemoteVideo();
             }
           };
@@ -163,19 +164,19 @@ export const useVideoCall = () => {
       } else if (callIsConnected && (iceState === "new" || iceState === "checking")) {
         // Call is connected but ICE is still establishing - try to play anyway
         // This is important for parent-to-child calls where ICE might be slow
-        console.log("⏳ [VIDEO PLAY] Call connected but ICE still establishing - attempting play anyway (state:", iceState, ")");
+        safeLog.log("⏳ [VIDEO PLAY] Call connected but ICE still establishing - attempting play anyway (state:", iceState, ")");
         
         // Try to play immediately - tracks might already be unmuted
         if (video.readyState >= 2) {
           playAttemptedRef.current = true;
-          console.log("🎬 [VIDEO PLAY] Video ready, attempting play (ICE still:", iceState, ")");
+          safeLog.log("🎬 [VIDEO PLAY] Video ready, attempting play (ICE still:", iceState, ")");
           playRemoteVideo();
         } else {
           // Wait for video to be ready, but don't wait too long
           const onReady = () => {
             if (video.readyState >= 2 && !playAttemptedRef.current) {
               playAttemptedRef.current = true;
-              console.log("✅ [VIDEO PLAY] Video ready, attempting play (ICE still:", iceState, ")");
+              safeLog.log("✅ [VIDEO PLAY] Video ready, attempting play (ICE still:", iceState, ")");
               playRemoteVideo();
             }
           };
@@ -191,7 +192,7 @@ export const useVideoCall = () => {
               clearInterval(checkICE);
               if (!playAttemptedRef.current && video.readyState >= 2) {
                 playAttemptedRef.current = true;
-                console.log("✅ [VIDEO PLAY] ICE connected, video ready, attempting play");
+                safeLog.log("✅ [VIDEO PLAY] ICE connected, video ready, attempting play");
                 playRemoteVideo();
               }
             }
@@ -201,7 +202,7 @@ export const useVideoCall = () => {
           setTimeout(() => {
             clearInterval(checkICE);
             if (!playAttemptedRef.current) {
-              console.warn("⚠️ [VIDEO PLAY] Timeout waiting for video readyState, attempting play anyway");
+              safeLog.warn("⚠️ [VIDEO PLAY] Timeout waiting for video readyState, attempting play anyway");
               playAttemptedRef.current = true;
               playRemoteVideo();
             }
@@ -210,7 +211,7 @@ export const useVideoCall = () => {
           return () => clearInterval(checkICE);
         }
       } else if (!callIsConnected && (iceState === "new" || iceState === "checking")) {
-        console.log("⏳ [VIDEO PLAY] Waiting for call to connect and ICE connection - current state:", iceState);
+        safeLog.log("⏳ [VIDEO PLAY] Waiting for call to connect and ICE connection - current state:", iceState);
         // Wait for call to connect, then wait for ICE to connect, then wait for video readyState >= 2
         const checkConnection = setInterval(() => {
           const currentPC = peerConnectionRef.current;
@@ -222,13 +223,13 @@ export const useVideoCall = () => {
             // Now wait for video readyState >= 2
             if (video.readyState >= 2 && !playAttemptedRef.current) {
               playAttemptedRef.current = true;
-              console.log("✅ [VIDEO PLAY] Call connected, ICE connected, video ready (readyState:", video.readyState, "), attempting play");
+              safeLog.log("✅ [VIDEO PLAY] Call connected, ICE connected, video ready (readyState:", video.readyState, "), attempting play");
               playRemoteVideo();
             } else if (!playAttemptedRef.current) {
               const onReady = () => {
                 if (video.readyState >= 2 && !playAttemptedRef.current) {
                   playAttemptedRef.current = true;
-                  console.log("✅ [VIDEO PLAY] Video ready after call and ICE connected (readyState:", video.readyState, ")");
+                  safeLog.log("✅ [VIDEO PLAY] Video ready after call and ICE connected (readyState:", video.readyState, ")");
                   playRemoteVideo();
                 }
               };
@@ -238,7 +239,7 @@ export const useVideoCall = () => {
             }
           } else if (currentICEState === "failed" || currentICEState === "closed") {
             clearInterval(checkConnection);
-            console.error("❌ [VIDEO PLAY] ICE connection failed, cannot play media");
+            safeLog.error("❌ [VIDEO PLAY] ICE connection failed, cannot play media");
           }
         }, 500);
         
@@ -246,7 +247,7 @@ export const useVideoCall = () => {
         setTimeout(() => {
           clearInterval(checkConnection);
           if (!playAttemptedRef.current && video.readyState >= 2) {
-            console.warn("⚠️ [VIDEO PLAY] Connection timeout but video is ready, attempting play");
+            safeLog.warn("⚠️ [VIDEO PLAY] Connection timeout but video is ready, attempting play");
             playAttemptedRef.current = true;
             playRemoteVideo();
           }
@@ -255,7 +256,7 @@ export const useVideoCall = () => {
         return () => clearInterval(checkConnection);
       } else {
         // ICE is in failed/disconnected/closed state - log but don't attempt play
-        console.error("❌ [VIDEO PLAY] ICE connection in terminal state:", iceState);
+        safeLog.error("❌ [VIDEO PLAY] ICE connection in terminal state:", iceState);
       }
     }
   }, [remoteStream, playRemoteVideo, isConnecting]);
@@ -281,7 +282,7 @@ export const useVideoCall = () => {
         // We're on a call page with childSession - definitely a child
         const isChildUser = true;
         if (isChildUser !== isChild) {
-          console.warn("⚠️ [ROLE DETECTION] Role mismatch detected (correcting to child):", {
+          safeLog.warn("⚠️ [ROLE DETECTION] Role mismatch detected (correcting to child):", {
             isChildState: isChild,
             isChildUser,
             route: window.location.pathname,
@@ -296,7 +297,7 @@ export const useVideoCall = () => {
       const isChildUser = !session && !!childSession;
       // isChild is already set synchronously above, but verify it matches
       if (isChildUser !== isChild) {
-        console.warn("⚠️ [ROLE DETECTION] Role mismatch detected:", {
+        safeLog.warn("⚠️ [ROLE DETECTION] Role mismatch detected:", {
           isChildState: isChild,
           isChildUser,
           route: window.location.pathname,
@@ -313,7 +314,7 @@ export const useVideoCall = () => {
 
       initializeCall(isChildUser).catch((error) => {
         if (isMounted) {
-          console.error("Call initialization error:", error);
+          safeLog.error("Call initialization error:", error);
           initializationRef.current = false; // Allow retry on error
           const errorMessage =
             error instanceof Error ? error.message : "Unknown error occurred";
@@ -338,7 +339,7 @@ export const useVideoCall = () => {
         }
       });
     }).catch((error) => {
-      console.error("Error determining user type:", error);
+      safeLog.error("Error determining user type:", error);
     });
 
     return () => {
@@ -350,7 +351,7 @@ export const useVideoCall = () => {
   }, [childId]);
 
   const initializeCall = async (isChildUser: boolean) => {
-    console.log("🚀 [INITIALIZE CALL] ===== INITIALIZE CALL ENTRY =====", {
+    safeLog.log("🚀 [INITIALIZE CALL] ===== INITIALIZE CALL ENTRY =====", {
       isChildUser,
       childId,
       timestamp: new Date().toISOString(),
@@ -358,7 +359,7 @@ export const useVideoCall = () => {
     
     try {
       // Initialize WebRTC connection
-      console.log("🚀 [INITIALIZE CALL] Initializing WebRTC connection...");
+      safeLog.log("🚀 [INITIALIZE CALL] Initializing WebRTC connection...");
       await initializeConnection();
 
       const pc = peerConnectionRef.current;
@@ -366,7 +367,7 @@ export const useVideoCall = () => {
         throw new Error("Failed to create peer connection");
       }
       
-      console.log("🚀 [INITIALIZE CALL] WebRTC connection initialized:", {
+      safeLog.log("🚀 [INITIALIZE CALL] WebRTC connection initialized:", {
         signalingState: pc.signalingState,
         senders: pc.getSenders().length,
         tracks: pc.getSenders().map(s => s.track).filter(Boolean).length,
@@ -375,14 +376,14 @@ export const useVideoCall = () => {
       // Set up call based on role
       let channel: any;
       if (isChildUser) {
-        console.log("🚀 [INITIALIZE CALL] Setting up child call flow...");
+        safeLog.log("🚀 [INITIALIZE CALL] Setting up child call flow...");
         channel = await handleChildCallFlow(pc);
       } else {
-        console.log("🚀 [INITIALIZE CALL] Setting up parent call flow...");
+        safeLog.log("🚀 [INITIALIZE CALL] Setting up parent call flow...");
         channel = await handleParentCallFlow(pc);
       }
       
-      console.log("🚀 [INITIALIZE CALL] Call flow setup complete:", {
+      safeLog.log("🚀 [INITIALIZE CALL] Call flow setup complete:", {
         hasChannel: !!channel,
         isChildUser,
       });
@@ -405,7 +406,7 @@ export const useVideoCall = () => {
   };
 
   const handleParentCallFlow = async (pc: RTCPeerConnection) => {
-    console.log("🚀 [PARENT CALL FLOW] ===== PARENT CALL FLOW ENTRY =====", {
+    safeLog.log("🚀 [PARENT CALL FLOW] ===== PARENT CALL FLOW ENTRY =====", {
       childId,
       timestamp: new Date().toISOString(),
       signalingState: pc.signalingState,
@@ -419,14 +420,14 @@ export const useVideoCall = () => {
         error: authError,
       } = await supabase.auth.getUser();
       
-      console.log("🚀 [PARENT CALL FLOW] Auth check complete:", {
+      safeLog.log("🚀 [PARENT CALL FLOW] Auth check complete:", {
         hasUser: !!user,
         userId: user?.id,
         hasAuthError: !!authError,
       });
       
       if (authError) {
-        console.error("Auth error in parent call flow:", authError);
+        safeLog.error("Auth error in parent call flow:", authError);
         // Don't throw - just show error and let user stay on page
         // They can manually navigate if needed
         toast({
@@ -440,7 +441,7 @@ export const useVideoCall = () => {
       }
       
       if (!user || !childId) {
-        console.error("Missing user or childId in parent call flow");
+        safeLog.error("Missing user or childId in parent call flow");
         toast({
           title: "Error",
           description: "Unable to start call. Please try again.",
@@ -449,7 +450,7 @@ export const useVideoCall = () => {
         return null;
       }
 
-      console.log("🚀 [PARENT CALL FLOW] Calling handleParentCall...", {
+      safeLog.log("🚀 [PARENT CALL FLOW] Calling handleParentCall...", {
         childId,
         userId: user.id,
         timestamp: new Date().toISOString(),
@@ -463,7 +464,7 @@ export const useVideoCall = () => {
         childId,
         user.id,
         (id: string) => {
-          console.log("🚀 [PARENT CALL FLOW] CallId set:", id);
+          safeLog.log("🚀 [PARENT CALL FLOW] CallId set:", id);
           setCallId(id);
           // Set up termination listener after callId is set
           const terminationChannel = setupCallTerminationListener(id);
@@ -476,7 +477,7 @@ export const useVideoCall = () => {
         urlCallId // Pass the callId from URL if present
       );
       
-      console.log("🚀 [PARENT CALL FLOW] handleParentCall returned:", {
+      safeLog.log("🚀 [PARENT CALL FLOW] handleParentCall returned:", {
         hasChannel: !!channel,
         timestamp: new Date().toISOString(),
       });
@@ -511,11 +512,11 @@ export const useVideoCall = () => {
       if (!childSession) {
         // If answering a call but no session, try to get child ID from URL
         if (isAnsweringCall && childId) {
-          console.warn("⚠️ [CHILD CALL FLOW] No child session but answering call - attempting to continue with childId from URL");
+          safeLog.warn("⚠️ [CHILD CALL FLOW] No child session but answering call - attempting to continue with childId from URL");
           // Don't navigate away - let the call handler try to work with the callId
           // The call handler might be able to find the call and continue
         } else {
-          console.error("❌ [CHILD CALL FLOW] No child session and not answering call - redirecting to login");
+          safeLog.error("❌ [CHILD CALL FLOW] No child session and not answering call - redirecting to login");
           navigate("/child/login");
           return;
         }
@@ -525,19 +526,19 @@ export const useVideoCall = () => {
       
       // If we don't have a valid child object but we're answering a call, try to continue
       if (!child.id && isAnsweringCall && childId) {
-        console.warn("⚠️ [CHILD CALL FLOW] Invalid child session but answering call - using childId from URL");
+        safeLog.warn("⚠️ [CHILD CALL FLOW] Invalid child session but answering call - using childId from URL");
         // Create a minimal child object from URL param
         (child as any).id = childId;
       }
       
       if (!child.id) {
-        console.error("❌ [CHILD CALL FLOW] No valid child ID found");
+        safeLog.error("❌ [CHILD CALL FLOW] No valid child ID found");
         if (!isAnsweringCall) {
           navigate("/child/login");
           return;
         } else {
           // If answering call, try to continue anyway
-          console.warn("⚠️ [CHILD CALL FLOW] Continuing call without valid child ID");
+          safeLog.warn("⚠️ [CHILD CALL FLOW] Continuing call without valid child ID");
         }
       }
 
@@ -551,7 +552,7 @@ export const useVideoCall = () => {
         .single();
 
       if (childError || !childData) {
-        console.error("Child not found in database:", childError);
+        safeLog.error("Child not found in database:", childError);
         // CRITICAL: Don't navigate away if we're answering an incoming call
         // The call handler can work with just the callId
         if (!callId && !isAnsweringCall) {
@@ -566,7 +567,7 @@ export const useVideoCall = () => {
         } else {
           // If call is active or we're answering, just log the error but don't navigate
           // Use cached parent_id from child session if available
-          console.warn("⚠️ [CHILD CALL FLOW] Child verification failed but continuing call", {
+          safeLog.warn("⚠️ [CHILD CALL FLOW] Child verification failed but continuing call", {
             isAnsweringCall,
             hasCallId: !!callId,
             reason: "Call is active or answering - don't navigate away",
@@ -581,11 +582,11 @@ export const useVideoCall = () => {
       // If parent_id not in database response, try to get it from child session (for backward compatibility)
       if (!parentId && (child as any).parent_id) {
         parentId = (child as any).parent_id;
-        console.warn("⚠️ [CHILD CALL FLOW] Using parent_id from child session cache");
+        safeLog.warn("⚠️ [CHILD CALL FLOW] Using parent_id from child session cache");
       }
       
       if (!parentId) {
-        console.error("❌ [CHILD CALL FLOW] Unable to determine parent ID", {
+        safeLog.error("❌ [CHILD CALL FLOW] Unable to determine parent ID", {
           hasChildData: !!childData,
           hasChildSession: !!child,
           childId: child.id,
@@ -595,13 +596,13 @@ export const useVideoCall = () => {
           throw new Error("Unable to determine parent ID for call. Please log in again.");
         } else {
           // If answering a call, try to continue - the call handler might have the parent_id
-          console.warn("⚠️ [CHILD CALL FLOW] Continuing call without parent_id - call handler may have it");
+          safeLog.warn("⚠️ [CHILD CALL FLOW] Continuing call without parent_id - call handler may have it");
         }
       }
 
       // If we don't have parentId but we're answering a call, try to get it from the call record
       if (!parentId && urlCallId) {
-        console.log("⚠️ [CHILD CALL FLOW] No parentId but answering call - fetching from call record");
+        safeLog.log("⚠️ [CHILD CALL FLOW] No parentId but answering call - fetching from call record");
         try {
           const { data: callData } = await supabase
             .from("calls")
@@ -611,10 +612,10 @@ export const useVideoCall = () => {
           
           if (callData?.parent_id) {
             parentId = callData.parent_id;
-            console.log("✅ [CHILD CALL FLOW] Got parentId from call record:", parentId);
+            safeLog.log("✅ [CHILD CALL FLOW] Got parentId from call record:", parentId);
           }
         } catch (err) {
-          console.warn("⚠️ [CHILD CALL FLOW] Could not fetch parentId from call record:", err);
+          safeLog.warn("⚠️ [CHILD CALL FLOW] Could not fetch parentId from call record:", err);
         }
       }
       
@@ -650,7 +651,7 @@ export const useVideoCall = () => {
       const urlCallId = searchParams.get("callId");
       const isAnsweringCall = !!urlCallId;
       
-      console.error("❌ [CHILD CALL FLOW] Error in handleChildCallFlow:", {
+      safeLog.error("❌ [CHILD CALL FLOW] Error in handleChildCallFlow:", {
         errorMessage,
         isAnsweringCall,
         urlCallId,
@@ -730,7 +731,7 @@ export const useVideoCall = () => {
             // Skip logging if oldStatus is undefined (initial state) and status hasn't meaningfully changed
             const statusChanged = oldCall?.status !== undefined && oldCall.status !== updatedCall.status;
             if (statusChanged) {
-              console.log("📞 [CALL LIFECYCLE] Call status update received:", {
+              safeLog.log("📞 [CALL LIFECYCLE] Call status update received:", {
                 callId: updatedCall.id,
                 oldStatus: oldCall?.status,
                 newStatus: updatedCall.status,
@@ -754,7 +755,7 @@ export const useVideoCall = () => {
             // 2. We have a previous state (oldCall is not undefined)
             // 3. Previous state was NOT terminal (wasTerminal === false)
             // 4. This is the current call we're handling
-            console.log("🔍 [TERMINATION LISTENER] Checking termination conditions:", {
+            safeLog.log("🔍 [TERMINATION LISTENER] Checking termination conditions:", {
               isTerminal,
               hasOldCall: oldCall !== undefined,
               wasTerminal,
@@ -774,7 +775,7 @@ export const useVideoCall = () => {
               const pc = peerConnectionRef.current;
               const iceState = pc?.iceConnectionState;
               
-              console.info("🛑 [CALL LIFECYCLE] Call ended by remote party - cleaning up", {
+              safeLog.log("🛑 [CALL LIFECYCLE] Call ended by remote party - cleaning up", {
                 callId: currentCallId,
                 oldStatus: oldCall?.status,
                 newStatus: updatedCall.status,
@@ -795,7 +796,7 @@ export const useVideoCall = () => {
               
               // Always cleanup when call is ended, regardless of ICE state
               // The call was explicitly ended by the other party, so we should respond immediately
-              console.log("🛑 [CALL LIFECYCLE] Call ended by remote party - cleaning up immediately", {
+              safeLog.log("🛑 [CALL LIFECYCLE] Call ended by remote party - cleaning up immediately", {
                 iceState,
                 reason: "Call reached terminal state - cleaning up regardless of ICE state",
               });
@@ -837,7 +838,7 @@ export const useVideoCall = () => {
                 isChildUser = !session && !!childSession;
               }
               
-              console.log("🔍 [USER TYPE DETECTION] Termination listener - determining user type:", {
+              safeLog.log("🔍 [USER TYPE DETECTION] Termination listener - determining user type:", {
                 hasAuthSession: !!session,
                 hasChildSession: !!childSession,
                 isChildUser,
@@ -857,7 +858,7 @@ export const useVideoCall = () => {
               }
             }
           } catch (error) {
-            console.error("❌ [CALL LIFECYCLE] Error in termination listener:", error);
+            safeLog.error("❌ [CALL LIFECYCLE] Error in termination listener:", error);
             // Don't navigate on errors - just log
           }
         }
@@ -874,7 +875,7 @@ export const useVideoCall = () => {
   useEffect(() => {
     if (isConnected && remoteStream && callId && !callStartTimeRef.current) {
       callStartTimeRef.current = Date.now();
-      console.log("📞 [CALL LIFECYCLE] Call started (ICE connected)", {
+      safeLog.log("📞 [CALL LIFECYCLE] Call started (ICE connected)", {
         callId,
         timestamp: new Date().toISOString(),
         iceState: peerConnectionRef.current?.iceConnectionState,
@@ -888,7 +889,7 @@ export const useVideoCall = () => {
   useEffect(() => {
     if (!isConnecting && callId && !callStartTimeRef.current && !isConnected) {
       // Only log if not already logged by isConnected check
-      console.log("📞 [CALL LIFECYCLE] Call signaling complete (waiting for ICE)", {
+      safeLog.log("📞 [CALL LIFECYCLE] Call signaling complete (waiting for ICE)", {
         callId: callId,
         timestamp: new Date().toISOString(),
       });
@@ -900,7 +901,7 @@ export const useVideoCall = () => {
       ? Date.now() - callStartTimeRef.current 
       : null;
 
-    console.log("🛑 [USER ACTION] User ended call", {
+    safeLog.log("🛑 [USER ACTION] User ended call", {
       callId: callId,
       callDurationMs: callDuration,
       callDurationSeconds: callDuration ? Math.round(callDuration / 1000) : null,
@@ -913,7 +914,7 @@ export const useVideoCall = () => {
 
     // Warn if call is ended very quickly (less than 5 seconds)
     if (callDuration && callDuration < 5000) {
-      console.warn("⚠️ [USER ACTION] Call ended very quickly - might be accidental", {
+      safeLog.warn("⚠️ [USER ACTION] Call ended very quickly - might be accidental", {
         durationMs: callDuration,
         durationSeconds: Math.round(callDuration / 1000),
       });
@@ -928,7 +929,7 @@ export const useVideoCall = () => {
     const isChildUser = !session && !!childSession;
     const by = isChildUser ? 'child' : 'parent';
     
-    console.log("🔍 [USER TYPE DETECTION] End call - determining user type:", {
+    safeLog.log("🔍 [USER TYPE DETECTION] End call - determining user type:", {
       hasAuthSession: !!session,
       hasChildSession: !!childSession,
       isChildUser,
@@ -943,7 +944,7 @@ export const useVideoCall = () => {
       try {
         await endCallUtil({ callId, by, reason: 'hangup' });
       } catch (error) {
-        console.error("❌ [USER ACTION] Error ending call:", error);
+        safeLog.error("❌ [USER ACTION] Error ending call:", error);
         // Continue with cleanup even if DB update fails
       }
     }

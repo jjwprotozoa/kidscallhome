@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
 import type { CallRecord, ChildSession } from "../types/call";
 import { isCallTerminal } from "./callEnding";
+import { safeLog } from "@/utils/security";
 
 export const handleChildCall = async (
   pc: RTCPeerConnection,
@@ -17,7 +18,7 @@ export const handleChildCall = async (
 ) => {
   // If a specific callId is provided (e.g., from URL param when answering), use that first
   if (specificCallId) {
-    console.log("📞 [CHILD CALL] Looking for specific call:", specificCallId);
+    safeLog.log("📞 [CHILD CALL] Looking for specific call:", specificCallId);
     const { data: specificCall, error: specificCallError } = await supabase
       .from("calls")
       .select("*")
@@ -26,11 +27,11 @@ export const handleChildCall = async (
       .maybeSingle();
 
     if (specificCallError) {
-      console.error("Error fetching specific call:", specificCallError);
+      safeLog.error("Error fetching specific call:", specificCallError);
     }
 
     if (specificCall) {
-      console.log("📞 [CHILD CALL] Found specific call:", {
+      safeLog.log("📞 [CHILD CALL] Found specific call:", {
         id: specificCall.id,
         caller_type: specificCall.caller_type,
         status: specificCall.status,
@@ -46,7 +47,7 @@ export const handleChildCall = async (
           specificCall.status === "ringing" ||
           specificCall.status === "active"
         ) {
-          console.log(
+          safeLog.log(
             "📞 [CHILD CALL] Answering incoming call from parent (status:",
             specificCall.status + ", hasOffer: true)"
           );
@@ -58,7 +59,7 @@ export const handleChildCall = async (
             iceCandidatesQueue
           );
         } else {
-          console.log(
+          safeLog.log(
             "📞 [CHILD CALL] Specific call is ended (status:",
             specificCall.status + "), cannot answer. Creating new call instead."
           );
@@ -69,7 +70,7 @@ export const handleChildCall = async (
         specificCall.caller_type === "child" &&
         (specificCall.status === "ringing" || specificCall.status === "active")
       ) {
-        console.log("📞 [CHILD CALL] Using existing child-initiated call");
+        safeLog.log("📞 [CHILD CALL] Using existing child-initiated call");
         return handleExistingCall(
           pc,
           specificCall as unknown as CallRecord,
@@ -80,7 +81,7 @@ export const handleChildCall = async (
       }
       // If specific call is ended or doesn't match, continue to check for other incoming calls
       if (isCallTerminal(specificCall)) {
-        console.log(
+        safeLog.log(
           "📞 [CHILD CALL] Specific call is ended, checking for other incoming calls..."
         );
       }
@@ -104,12 +105,12 @@ export const handleChildCall = async (
     .maybeSingle();
 
   if (incomingCallError) {
-    console.error("Error checking for incoming call:", incomingCallError);
+    safeLog.error("Error checking for incoming call:", incomingCallError);
   }
 
   if (incomingCallData) {
     if (incomingCallData.offer && incomingCallData.status === "ringing") {
-      console.log(
+      safeLog.log(
         "📞 [CHILD CALL] Found incoming RINGING call from parent with offer:",
         {
           callId: incomingCallData.id,
@@ -128,13 +129,13 @@ export const handleChildCall = async (
     } else {
       // Offer not ready yet or call is not ringing, wait for it or create new call
       if (incomingCallData.status !== "ringing") {
-        console.log(
+        safeLog.log(
           "📞 [CHILD CALL] Found call from parent but status is",
           incomingCallData.status + ", not ringing. Creating new call instead."
         );
         // Don't wait for offer if call is not ringing - create new call instead
       } else {
-        console.log(
+        safeLog.log(
           "📞 [CHILD CALL] Found incoming call from parent but offer not ready yet, waiting...",
           incomingCallData.id
         );
@@ -154,7 +155,7 @@ export const handleChildCall = async (
             async (payload) => {
               const updatedCall = payload.new as CallRecord;
               if (updatedCall.offer && pc.remoteDescription === null) {
-                console.log(
+                safeLog.log(
                   "📞 [CHILD CALL] Offer received, answering incoming call from parent"
                 );
                 // Unsubscribe from this channel and handle the call
@@ -189,7 +190,7 @@ export const handleChildCall = async (
     .maybeSingle();
 
   if (existingCall) {
-    console.log(
+    safeLog.log(
       "📞 [CHILD CALL] Found existing child-initiated call, continuing it:",
       existingCall.id
     );
@@ -204,7 +205,7 @@ export const handleChildCall = async (
 
   // CRITICAL: Only create new call if NO incoming parent call exists
   // This prevents creating a new call when we should be answering an existing one
-  console.log(
+  safeLog.log(
     "📞 [CHILD CALL] No existing or incoming call found - child initiating new call"
   );
   return handleChildInitiatedCall(
@@ -224,14 +225,14 @@ const handleExistingCall = async (
   setIsConnecting: (value: boolean) => void,
   iceCandidatesQueue: React.MutableRefObject<RTCIceCandidateInit[]>
 ) => {
-  console.log("Using existing call:", existingCall.id);
+  safeLog.log("Using existing call:", existingCall.id);
   setCallId(existingCall.id);
 
   // If the call is ended or active (meaning it was already connected), reset it to ringing
   // This ensures the parent sees it as a new incoming call when child reconnects
   let wasReset = false;
   if (existingCall.status === "ended" || existingCall.status === "active") {
-    console.log(
+    safeLog.log(
       "Resetting existing call to ringing status (was:",
       existingCall.status,
       ")..."
@@ -249,7 +250,7 @@ const handleExistingCall = async (
       .eq("id", existingCall.id);
 
     if (resetError) {
-      console.error("Error resetting call status:", resetError);
+      safeLog.error("Error resetting call status:", resetError);
     } else {
       // Update the existingCall object for the rest of the function
       existingCall.status = "ringing";
@@ -262,7 +263,7 @@ const handleExistingCall = async (
   // If we reset the call, we need to create a fresh offer
   // Don't try to reuse old offers/answers as they won't match the new peer connection
   if (wasReset) {
-    console.log("Call was reset, creating fresh offer...");
+    safeLog.log("Call was reset, creating fresh offer...");
     // Create a new offer for the reset call
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
@@ -274,11 +275,11 @@ const handleExistingCall = async (
       .eq("id", existingCall.id);
 
     if (updateError) {
-      console.error("Error updating call with new offer:", updateError);
+      safeLog.error("Error updating call with new offer:", updateError);
       throw new Error(`Failed to create offer: ${updateError.message}`);
     }
 
-    console.log("Fresh offer created and set for reset call");
+    safeLog.log("Fresh offer created and set for reset call");
     // Continue to set up listener below - don't process old answers/offers
   } else if (existingCall.answer && pc.remoteDescription === null) {
     // If the existing call has an answer from parent, handle it
@@ -286,7 +287,7 @@ const handleExistingCall = async (
     if (pc.localDescription === null) {
       // No local offer exists - we need to create one first
       // This happens when child reconnects to an existing call that already has an answer
-      console.log(
+      safeLog.log(
         "Existing call has answer but no local offer - creating offer first..."
       );
 
@@ -300,7 +301,7 @@ const handleExistingCall = async (
         .update({ offer: offerData as Json })
         .eq("id", existingCall.id);
 
-      console.log("Created and set local offer, now setting remote answer");
+      safeLog.log("Created and set local offer, now setting remote answer");
     }
 
     // Now we can set the remote answer (peer connection should be in "have-local-offer" state)
@@ -318,7 +319,7 @@ const handleExistingCall = async (
     // Call has an offer, but we're using a new peer connection
     // Old offers from previous peer connections won't work - create a fresh one
     // This happens when child navigates back to call page with a new peer connection
-    console.log(
+    safeLog.log(
       "Existing call has offer, but creating fresh offer for new peer connection..."
     );
 
@@ -334,17 +335,17 @@ const handleExistingCall = async (
         .eq("id", existingCall.id);
 
       if (updateError) {
-        console.error("Error updating call with fresh offer:", updateError);
+        safeLog.error("Error updating call with fresh offer:", updateError);
         throw new Error(`Failed to create offer: ${updateError.message}`);
       }
 
-      console.log("Fresh offer created and set for existing call");
+      safeLog.log("Fresh offer created and set for existing call");
     } else {
-      console.log("Peer connection already has local description, skipping");
+      safeLog.log("Peer connection already has local description, skipping");
     }
   } else {
     // No offer exists - child needs to create one
-    console.log("Existing call has no offer, creating one...");
+    safeLog.log("Existing call has no offer, creating one...");
 
     // Verify call still exists and is in correct state
     const { data: verifyCall, error: verifyError } = await supabase
@@ -354,7 +355,7 @@ const handleExistingCall = async (
       .single();
 
     if (verifyError || !verifyCall) {
-      console.error("Call verification failed:", verifyError);
+      safeLog.error("Call verification failed:", verifyError);
       throw new Error(
         `Call ${existingCall.id} no longer exists or cannot be accessed`
       );
@@ -368,7 +369,7 @@ const handleExistingCall = async (
     await pc.setLocalDescription(offer);
 
     const offerData = { type: offer.type, sdp: offer.sdp };
-    console.log("Updating call with offer:", {
+    safeLog.log("Updating call with offer:", {
       callId: existingCall.id,
       offerData,
     });
@@ -380,17 +381,17 @@ const handleExistingCall = async (
       .eq("id", existingCall.id)
       .select();
 
-    console.log("Update response:", { data: updateData, error: updateError });
+    safeLog.log("Update response:", { data: updateData, error: updateError });
 
     if (updateError) {
-      console.error("Error updating call with offer:", updateError);
-      console.error("Error code:", updateError.code);
-      console.error("Error message:", updateError.message);
-      console.error("Error details:", JSON.stringify(updateError, null, 2));
-      console.error("Call ID:", existingCall.id);
-      console.error("Offer data:", offerData);
-      console.error("Offer data type:", typeof offerData);
-      console.error("Offer data JSON:", JSON.stringify(offerData));
+      safeLog.error("Error updating call with offer:", updateError);
+      safeLog.error("Error code:", updateError.code);
+      safeLog.error("Error message:", updateError.message);
+      safeLog.error("Error details:", JSON.stringify(updateError, null, 2));
+      safeLog.error("Call ID:", existingCall.id);
+      safeLog.error("Offer data:", offerData);
+      safeLog.error("Offer data type:", typeof offerData);
+      safeLog.error("Offer data JSON:", JSON.stringify(offerData));
 
       // Check if it's a schema cache issue
       if (
@@ -428,7 +429,7 @@ const handleExistingCall = async (
       );
     }
 
-    console.log("Offer created and sent for existing call");
+    safeLog.log("Offer created and sent for existing call");
   }
 
   // Set up listener for this existing call
@@ -456,7 +457,7 @@ const handleExistingCall = async (
           // Only process if we have a previous state and it was NOT terminal
           if (isTerminal && oldCall !== undefined && wasTerminal === false) {
             const iceState = pc.iceConnectionState;
-            console.info(
+            safeLog.log(
               "🛑 [CALL LIFECYCLE] Call ended by remote party (child handler - existing call)",
               {
                 callId: updatedCall.id,
@@ -472,7 +473,7 @@ const handleExistingCall = async (
             );
             // Always close when call is ended - don't wait for ICE state
             // The call was explicitly ended, so we should close immediately
-            console.log(
+            safeLog.log(
               "🛑 [CALL LIFECYCLE] Call ended - closing peer connection immediately",
               {
                 iceState,
@@ -489,14 +490,14 @@ const handleExistingCall = async (
 
           // If status changed to "active", that means parent answered
           if (updatedCall.status === "active" && oldCall?.status !== "active") {
-            console.log(
+            safeLog.log(
               "Call status changed to active - parent answered the call!"
             );
           }
 
           // Process answer if received and not already set
           if (updatedCall.answer && pc.remoteDescription === null) {
-            console.log(
+            safeLog.log(
               "Received answer from parent, setting remote description..."
             );
             const answerDesc =
@@ -506,7 +507,7 @@ const handleExistingCall = async (
               await pc.setRemoteDescription(
                 new RTCSessionDescription(answerDesc)
               );
-              console.log("Remote description set successfully");
+              safeLog.log("Remote description set successfully");
 
               // Process queued ICE candidates
               for (const candidate of iceCandidatesQueue.current) {
@@ -518,9 +519,9 @@ const handleExistingCall = async (
               }
               iceCandidatesQueue.current = [];
               setIsConnecting(false);
-              console.log("Call connected!");
+              safeLog.log("Call connected!");
             } catch (error) {
-              console.error("Error setting remote description:", error);
+              safeLog.error("Error setting remote description:", error);
             }
           }
 
@@ -535,7 +536,7 @@ const handleExistingCall = async (
             // Only log summary periodically (every 10th batch)
             const processedCount = candidatesToProcess.length;
             if (processedCount > 0 && processedCount % 10 === 0) {
-              console.log(
+              safeLog.log(
                 "🧊 [CHILD HANDLER] Processing ICE candidates (from parent):",
                 {
                   count: processedCount,
@@ -548,7 +549,7 @@ const handleExistingCall = async (
               try {
                 // Validate candidate before adding
                 if (!candidate.candidate) {
-                  console.warn(
+                  safeLog.warn(
                     "⚠️ [CHILD HANDLER] Skipping invalid candidate (no candidate field)"
                   );
                   continue;
@@ -571,7 +572,7 @@ const handleExistingCall = async (
                 ) {
                   // Silently handle duplicate candidates
                 } else {
-                  console.error(
+                  safeLog.error(
                     "❌ [CHILD HANDLER] Error adding ICE candidate:",
                     error.message
                   );
@@ -580,7 +581,7 @@ const handleExistingCall = async (
             }
           }
         } catch (error) {
-          console.error("Error in call update handler:", error);
+          safeLog.error("Error in call update handler:", error);
         }
       }
     )
@@ -595,7 +596,7 @@ const handleIncomingCallFromParent = async (
   iceCandidatesQueue: React.MutableRefObject<RTCIceCandidateInit[]>
 ) => {
   // Answer incoming call from parent
-  console.log("✅ [CHILD HANDLER] Answering incoming call from parent:", {
+  safeLog.log("✅ [CHILD HANDLER] Answering incoming call from parent:", {
     callId: call.id,
     hasOffer: !!call.offer,
     offerType: (call.offer as any)?.type,
@@ -607,7 +608,7 @@ const handleIncomingCallFromParent = async (
   }
 
   const offerDesc = call.offer as unknown as RTCSessionDescriptionInit;
-  console.log(
+  safeLog.log(
     "✅ [CHILD HANDLER] Setting remote description with parent's offer..."
   );
 
@@ -640,7 +641,7 @@ const handleIncomingCallFromParent = async (
     .getSenders()
     .map((s) => s.track)
     .filter(Boolean);
-  console.log("📹 [CHILD HANDLER] Tracks in peer connection before answer:", {
+  safeLog.log("📹 [CHILD HANDLER] Tracks in peer connection before answer:", {
     audioTracks: senderTracks.filter((t) => t?.kind === "audio").length,
     videoTracks: senderTracks.filter((t) => t?.kind === "video").length,
     totalTracks: senderTracks.length,
@@ -658,7 +659,7 @@ const handleIncomingCallFromParent = async (
   if (senderTracks.length === 0) {
     const errorMsg =
       "❌ [CHILD HANDLER] NO TRACKS FOUND in peer connection! This will cause no video/audio. Make sure initializeConnection() was called and tracks were added.";
-    console.error(errorMsg);
+    safeLog.error(errorMsg);
     throw new Error(
       "Cannot create answer: no media tracks found. Please ensure camera/microphone permissions are granted."
     );
@@ -669,11 +670,11 @@ const handleIncomingCallFromParent = async (
   const videoTracks = senderTracks.filter((t) => t?.kind === "video");
   if (audioTracks.length === 0 && videoTracks.length === 0) {
     const errorMsg = "❌ [CHILD HANDLER] No audio or video tracks found!";
-    console.error(errorMsg);
+    safeLog.error(errorMsg);
     throw new Error("Cannot create answer: no media tracks available.");
   }
 
-  console.log(
+  safeLog.log(
     "✅ [CHILD HANDLER] Creating answer, current state:",
     pc.signalingState
   );
@@ -685,9 +686,9 @@ const handleIncomingCallFromParent = async (
   });
 
   // [KCH] Telemetry: Created answer
-  console.log("[KCH]", "child", "created answer", !!answer?.sdp);
+  safeLog.log("[KCH]", "child", "created answer", !!answer?.sdp);
 
-  console.log(
+  safeLog.log(
     "✅ [CHILD HANDLER] Answer created, setting local description..."
   );
   await pc.setLocalDescription(answer);
@@ -695,7 +696,7 @@ const handleIncomingCallFromParent = async (
   // CRITICAL FIX: Verify answer SDP includes media tracks
   const hasAudio = answer.sdp?.includes("m=audio");
   const hasVideo = answer.sdp?.includes("m=video");
-  console.log("📋 [CHILD HANDLER] Answer SDP verification:", {
+  safeLog.log("📋 [CHILD HANDLER] Answer SDP verification:", {
     type: answer.type,
     sdpLength: answer.sdp?.length,
     hasAudio,
@@ -704,7 +705,7 @@ const handleIncomingCallFromParent = async (
   });
 
   if (!hasAudio && !hasVideo) {
-    console.error(
+    safeLog.error(
       "❌ [CHILD HANDLER] CRITICAL: Answer SDP has no media tracks! This will cause no video/audio."
     );
     throw new Error(
@@ -712,13 +713,13 @@ const handleIncomingCallFromParent = async (
     );
   }
 
-  console.log("✅ [CHILD HANDLER] Updating call with answer...", {
+  safeLog.log("✅ [CHILD HANDLER] Updating call with answer...", {
     callId: call.id,
     answerType: answer.type,
   });
 
   // [KCH] Telemetry: Saving answer to Supabase
-  console.log("[KCH]", "child", "saving answer for call", call.id);
+  safeLog.log("[KCH]", "child", "saving answer for call", call.id);
 
   const { error: updateError } = await supabase
     .from("calls")
@@ -730,19 +731,19 @@ const handleIncomingCallFromParent = async (
     .eq("id", call.id);
 
   if (updateError) {
-    console.error(
+    safeLog.error(
       "❌ [CHILD HANDLER] Error updating call with answer:",
       updateError
     );
     throw new Error(`Failed to send answer: ${updateError.message}`);
   }
 
-  console.log("✅ [CHILD HANDLER] Answer sent successfully to parent");
+  safeLog.log("✅ [CHILD HANDLER] Answer sent successfully to parent");
 
   // Process any queued ICE candidates that arrived before remote description was set
   const queuedCount = iceCandidatesQueue.current.length;
   if (queuedCount > 0) {
-    console.log(
+    safeLog.log(
       `✅ [CHILD HANDLER] Processing ${queuedCount} queued ICE candidates after answer`
     );
     for (const candidate of iceCandidatesQueue.current) {
@@ -755,7 +756,7 @@ const handleIncomingCallFromParent = async (
           !error.message?.includes("duplicate") &&
           !error.message?.includes("already")
         ) {
-          console.error(
+          safeLog.error(
             "❌ [CHILD HANDLER] Error processing queued ICE candidate:",
             error.message
           );
@@ -766,7 +767,7 @@ const handleIncomingCallFromParent = async (
   }
 
   setIsConnecting(false);
-  console.log(
+  safeLog.log(
     "✅ [CHILD HANDLER] Call connected! Child answered parent's call."
   );
 
@@ -791,7 +792,7 @@ const handleIncomingCallFromParent = async (
           Array.isArray(existingCandidates) &&
           existingCandidates.length > 0
         ) {
-          console.log(
+          safeLog.log(
             "🧊 [CHILD HANDLER] Processing existing ICE candidates from parent (immediate):",
             {
               count: existingCandidates.length,
@@ -806,7 +807,7 @@ const handleIncomingCallFromParent = async (
               if (pc.remoteDescription) {
                 // CRITICAL: Await to ensure candidate is added properly
                 await pc.addIceCandidate(new RTCIceCandidate(candidate));
-                console.log(
+                safeLog.log(
                   "✅ [CHILD HANDLER] Added existing ICE candidate from parent"
                 );
               } else {
@@ -818,7 +819,7 @@ const handleIncomingCallFromParent = async (
                 !error.message?.includes("duplicate") &&
                 !error.message?.includes("already")
               ) {
-                console.error(
+                safeLog.error(
                   "❌ [CHILD HANDLER] Error adding existing ICE candidate:",
                   error.message
                 );
@@ -828,7 +829,7 @@ const handleIncomingCallFromParent = async (
         }
       }
     } catch (err) {
-      console.error(
+      safeLog.error(
         "❌ [CHILD HANDLER] Error fetching existing ICE candidates:",
         err
       );
@@ -861,7 +862,7 @@ const handleIncomingCallFromParent = async (
         // Only process if we have a previous state and it was NOT terminal
         if (isTerminal && oldCall !== undefined && wasTerminal === false) {
           const iceState = pc.iceConnectionState;
-          console.info(
+          safeLog.log(
             "🛑 [CALL LIFECYCLE] Call ended by remote party (child handler - incoming call)",
             {
               callId: updatedCall.id,
@@ -877,7 +878,7 @@ const handleIncomingCallFromParent = async (
           );
           // Always close when call is ended - don't wait for ICE state
           // The call was explicitly ended, so we should close immediately
-          console.log(
+          safeLog.log(
             "🛑 [CALL LIFECYCLE] Call ended - closing peer connection immediately",
             {
               iceState,
@@ -905,7 +906,7 @@ const handleIncomingCallFromParent = async (
 
           // Only log summary periodically to reduce console spam (every 10th batch)
           if (processedCount > 0 && processedCount % 10 === 0) {
-            console.log(
+            safeLog.log(
               "🧊 [CHILD HANDLER] Processing ICE candidates (incoming call, from parent):",
               {
                 count: processedCount,
@@ -950,7 +951,7 @@ const handleIncomingCallFromParent = async (
                 !error.message?.includes("duplicate") &&
                 !error.message?.includes("already")
               ) {
-                console.error(
+                safeLog.error(
                   "❌ [CHILD HANDLER] Error adding ICE candidate:",
                   error.message
                 );
@@ -964,7 +965,7 @@ const handleIncomingCallFromParent = async (
             processedCandidates.size > 0 &&
             processedCandidates.size % 10 === 0
           ) {
-            console.log(
+            safeLog.log(
               "✅ [CHILD HANDLER] Processed",
               processedCandidates.size,
               "ICE candidates from parent",
@@ -987,7 +988,7 @@ const handleChildInitiatedCall = async (
   setIsConnecting: (value: boolean) => void,
   iceCandidatesQueue: React.MutableRefObject<RTCIceCandidateInit[]>
 ) => {
-  console.log(
+  safeLog.log(
     "📞 [CHILD CALL] Creating call for child:",
     child.id,
     "parent:",
@@ -1003,7 +1004,7 @@ const handleChildInitiatedCall = async (
     .single();
 
   if (childCheckError || !childData) {
-    console.error("❌ [CHILD CALL] Child verification failed:", {
+    safeLog.error("❌ [CHILD CALL] Child verification failed:", {
       childId: child.id,
       parentId: parentId,
       error: childCheckError,
@@ -1016,7 +1017,7 @@ const handleChildInitiatedCall = async (
     );
   }
 
-  console.log("✅ [CHILD CALL] Child verified, attempting insert:", {
+  safeLog.log("✅ [CHILD CALL] Child verified, attempting insert:", {
     childId: child.id,
     parentId: parentId,
     childData,
@@ -1034,7 +1035,7 @@ const handleChildInitiatedCall = async (
     .single();
 
   if (callError) {
-    console.error("❌ [CHILD CALL] Call creation error:", {
+    safeLog.error("❌ [CHILD CALL] Call creation error:", {
       error: callError,
       code: callError.code,
       message: callError.message,
@@ -1054,7 +1055,7 @@ const handleChildInitiatedCall = async (
     throw new Error("Failed to create call: No call data returned");
   }
 
-  console.log("✅ [CHILD CALL] Call created successfully:", {
+  safeLog.log("✅ [CHILD CALL] Call created successfully:", {
     callId: call.id,
     childId: call.child_id,
     parentId: call.parent_id,
@@ -1081,7 +1082,7 @@ const handleChildInitiatedCall = async (
     .getSenders()
     .map((s) => s.track)
     .filter(Boolean);
-  console.log("📹 [CHILD CALL] Tracks in peer connection before offer:", {
+  safeLog.log("📹 [CHILD CALL] Tracks in peer connection before offer:", {
     audioTracks: senderTracks.filter((t) => t?.kind === "audio").length,
     videoTracks: senderTracks.filter((t) => t?.kind === "video").length,
     totalTracks: senderTracks.length,
@@ -1099,7 +1100,7 @@ const handleChildInitiatedCall = async (
   if (senderTracks.length === 0) {
     const errorMsg =
       "❌ [CHILD CALL] NO TRACKS FOUND in peer connection! This will cause no video/audio. Make sure initializeConnection() was called and tracks were added.";
-    console.error(errorMsg);
+    safeLog.error(errorMsg);
     throw new Error(
       "Cannot create offer: no media tracks found. Please ensure camera/microphone permissions are granted."
     );
@@ -1110,25 +1111,25 @@ const handleChildInitiatedCall = async (
   const videoTracks = senderTracks.filter((t) => t?.kind === "video");
   if (audioTracks.length === 0 && videoTracks.length === 0) {
     const errorMsg = "❌ [CHILD CALL] No audio or video tracks found!";
-    console.error(errorMsg);
+    safeLog.error(errorMsg);
     throw new Error("Cannot create offer: no media tracks available.");
   }
 
   // Create and set offer with media constraints
   // CRITICAL: Ensure offer includes media tracks by explicitly requesting them
-  console.log("Creating offer, current signaling state:", pc.signalingState);
+  safeLog.log("Creating offer, current signaling state:", pc.signalingState);
   const offer = await pc.createOffer({
     offerToReceiveAudio: true,
     offerToReceiveVideo: true,
   });
 
   // [KCH] Telemetry: Created offer
-  console.log("[KCH]", "child", "created offer", !!offer?.sdp);
+  safeLog.log("[KCH]", "child", "created offer", !!offer?.sdp);
 
   // CRITICAL FIX: Verify SDP includes media tracks
   const hasAudio = offer.sdp?.includes("m=audio");
   const hasVideo = offer.sdp?.includes("m=video");
-  console.log("📋 [CHILD CALL] Offer SDP verification:", {
+  safeLog.log("📋 [CHILD CALL] Offer SDP verification:", {
     hasAudio,
     hasVideo,
     sdpLength: offer.sdp?.length,
@@ -1136,21 +1137,21 @@ const handleChildInitiatedCall = async (
   });
 
   if (!hasAudio && !hasVideo) {
-    console.error(
+    safeLog.error(
       "❌ [CHILD CALL] CRITICAL: Offer SDP has no media tracks! This will cause no video/audio."
     );
     throw new Error(
       "Offer SDP missing media tracks - ensure tracks are added before creating offer"
     );
   }
-  console.log("Offer created, setting local description...");
+  safeLog.log("Offer created, setting local description...");
   await pc.setLocalDescription(offer);
 
   const offerData = { type: offer.type, sdp: offer.sdp };
-  console.log("Updating call with offer:", { callId: call.id, offerData });
+  safeLog.log("Updating call with offer:", { callId: call.id, offerData });
 
   // [KCH] Telemetry: Saving offer to Supabase
-  console.log("[KCH]", "child", "saving offer for call", call.id);
+  safeLog.log("[KCH]", "child", "saving offer for call", call.id);
 
   // Try update without select first to avoid potential issues
   const { data: updateData, error: updateError } = await supabase
@@ -1159,17 +1160,17 @@ const handleChildInitiatedCall = async (
     .eq("id", call.id)
     .select();
 
-  console.log("Update response:", { data: updateData, error: updateError });
+  safeLog.log("Update response:", { data: updateData, error: updateError });
 
   if (updateError) {
-    console.error("Error updating call with offer:", updateError);
-    console.error("Error code:", updateError.code);
-    console.error("Error message:", updateError.message);
-    console.error("Error details:", JSON.stringify(updateError, null, 2));
-    console.error("Call ID:", call.id);
-    console.error("Offer data:", offerData);
-    console.error("Offer data type:", typeof offerData);
-    console.error("Offer data JSON:", JSON.stringify(offerData));
+    safeLog.error("Error updating call with offer:", updateError);
+    safeLog.error("Error code:", updateError.code);
+    safeLog.error("Error message:", updateError.message);
+    safeLog.error("Error details:", JSON.stringify(updateError, null, 2));
+    safeLog.error("Call ID:", call.id);
+    safeLog.error("Offer data:", offerData);
+    safeLog.error("Offer data type:", typeof offerData);
+    safeLog.error("Offer data JSON:", JSON.stringify(offerData));
 
     // Check if it's a schema cache issue
     if (
@@ -1207,7 +1208,7 @@ const handleChildInitiatedCall = async (
     );
   }
 
-  console.log("Offer sent successfully");
+  safeLog.log("Offer sent successfully");
 
   // Listen for answer from parent
   return supabase
@@ -1234,7 +1235,7 @@ const handleChildInitiatedCall = async (
         // Only process if we have a previous state and it was NOT terminal
         if (isTerminal && oldCall !== undefined && wasTerminal === false) {
           const iceState = pc.iceConnectionState;
-          console.info(
+          safeLog.log(
             "🛑 [CALL LIFECYCLE] Call ended by remote party (child handler - child initiated)",
             {
               callId: updatedCall.id,
@@ -1250,7 +1251,7 @@ const handleChildInitiatedCall = async (
           );
           // Always close when call is ended - don't wait for ICE state
           // The call was explicitly ended, so we should close immediately
-          console.log(
+          safeLog.log(
             "🛑 [CALL LIFECYCLE] Call ended - closing peer connection immediately",
             {
               iceState,
@@ -1268,7 +1269,7 @@ const handleChildInitiatedCall = async (
         // Check if parent answered the call - CRITICAL: Process answer before ICE candidates
         if (updatedCall.answer && pc.remoteDescription === null) {
           try {
-            console.log(
+            safeLog.log(
               "✅ [CHILD HANDLER] Received answer from parent, setting remote description...",
               {
                 callId: updatedCall.id,
@@ -1282,7 +1283,7 @@ const handleChildInitiatedCall = async (
             await pc.setRemoteDescription(
               new RTCSessionDescription(answerDesc)
             );
-            console.log(
+            safeLog.log(
               "✅ [CHILD HANDLER] Remote description set successfully from parent's answer"
             );
 
@@ -1296,7 +1297,7 @@ const handleChildInitiatedCall = async (
                   !error.message?.includes("duplicate") &&
                   !error.message?.includes("already")
                 ) {
-                  console.error(
+                  safeLog.error(
                     "❌ [CHILD HANDLER] Error adding queued ICE candidate:",
                     error.message
                   );
@@ -1305,7 +1306,7 @@ const handleChildInitiatedCall = async (
             }
             iceCandidatesQueue.current = [];
             setIsConnecting(false);
-            console.log(
+            safeLog.log(
               "✅ [CHILD HANDLER] Call connected! Child received answer from parent."
             );
             
@@ -1330,7 +1331,7 @@ const handleChildInitiatedCall = async (
                     Array.isArray(existingCandidates) &&
                     existingCandidates.length > 0
                   ) {
-                    console.log(
+                    safeLog.log(
                       "🧊 [CHILD HANDLER] Processing existing ICE candidates from parent (immediate after answer):",
                       {
                         count: existingCandidates.length,
@@ -1354,20 +1355,20 @@ const handleChildInitiatedCall = async (
                           !error.message?.includes("duplicate") &&
                           !error.message?.includes("already")
                         ) {
-                          console.error(
+                          safeLog.error(
                             "❌ [CHILD HANDLER] Error adding existing ICE candidate:",
                             error.message
                           );
                         }
                       }
                     }
-                    console.log(
+                    safeLog.log(
                       "✅ [CHILD HANDLER] Finished processing existing ICE candidates from parent"
                     );
                   }
                 }
               } catch (error) {
-                console.error(
+                safeLog.error(
                   "❌ [CHILD HANDLER] Error fetching existing ICE candidates:",
                   error
                 );
@@ -1375,7 +1376,7 @@ const handleChildInitiatedCall = async (
               }
             })(); // IIFE - runs in background without blocking
           } catch (error: unknown) {
-            console.error(
+            safeLog.error(
               "❌ [CHILD HANDLER] Error setting remote description from answer:",
               error
             );
@@ -1397,7 +1398,7 @@ const handleChildInitiatedCall = async (
 
           if (processedCount > 0 && processedCount % 10 === 0) {
             // Log every 10th batch to reduce spam
-            console.log(
+            safeLog.log(
               "🧊 [CHILD HANDLER] Processing ICE candidates (child initiated, from parent):",
               {
                 count: processedCount,
@@ -1428,7 +1429,7 @@ const handleChildInitiatedCall = async (
                 !error.message?.includes("duplicate") &&
                 !error.message?.includes("already")
               ) {
-                console.error(
+                safeLog.error(
                   "❌ [CHILD HANDLER] Error adding ICE candidate:",
                   error.message
                 );
