@@ -9,6 +9,7 @@
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
+    "lint:security": "node scripts/scan-console-logs.js",
     "preview": "vite preview",
     "tunnel": "ngrok start dev-server --config ngrok.yml",
     "tunnel:ngrok": "ngrok start dev-server --config ngrok.yml",

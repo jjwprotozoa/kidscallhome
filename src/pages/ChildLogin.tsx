@@ -1,14 +1,26 @@
 // src/pages/ChildLogin.tsx
 // Purpose: Kid-friendly login page with visual color/animal selection and number keypad
 
-import { useState, useEffect, useRef } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { Smile, Delete, Sparkles, ChevronLeft, ChevronRight } from "lucide-react";
-import { isDeviceAuthorized, authorizeDevice, getAuthorizedChildId } from "@/utils/deviceAuthorization";
+import { supabase } from "@/integrations/supabase/client";
+import {
+  authorizeDevice,
+  getAuthorizedChildId,
+  isDeviceAuthorized,
+} from "@/utils/deviceAuthorization";
+import { logDeviceTracking } from "@/utils/deviceTrackingLog";
+import { safeLog, sanitizeError } from "@/utils/security";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Delete,
+  Smile,
+  Sparkles,
+} from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 // Kid-friendly login code options (must match AddChildDialog)
 const colors = [
@@ -47,19 +59,29 @@ const KEYPAD_BLOCKS = [
   { id: 0, label: "A-I", chars: ["A", "B", "C", "D", "E", "F", "G", "H", "I"] },
   { id: 1, label: "J-R", chars: ["J", "K", "L", "M", "N", "O", "P", "Q", "R"] },
   { id: 2, label: "S-Z", chars: ["S", "T", "U", "V", "W", "X", "Y", "Z"] },
-  { id: 3, label: "0-9", chars: ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"] },
+  {
+    id: 3,
+    label: "0-9",
+    chars: ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"],
+  },
 ];
 
 const ChildLogin = () => {
   const [searchParams] = useSearchParams();
-  const [step, setStep] = useState<"familyCode" | "select" | "number" | "success">("familyCode");
+  const [step, setStep] = useState<
+    "familyCode" | "select" | "number" | "success"
+  >("familyCode");
   const [familyCode, setFamilyCode] = useState<string>("");
   const [currentBlock, setCurrentBlock] = useState<number>(0); // Default to Block 1 (A-I)
   const [codeType, setCodeType] = useState<"color" | "animal">("color");
   const [selectedOption, setSelectedOption] = useState<string>("");
   const [number, setNumber] = useState<string>("");
   const [loading, setLoading] = useState(false);
-  const [childData, setChildData] = useState<{ id: string; name: string; avatar_color: string } | null>(null);
+  const [childData, setChildData] = useState<{
+    id: string;
+    name: string;
+    avatar_color: string;
+  } | null>(null);
   const [skipFamilyCode, setSkipFamilyCode] = useState(false); // Skip family code if device is authorized
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -89,12 +111,13 @@ const ChildLogin = () => {
         .maybeSingle();
 
       if (error) {
-        console.error("Login error:", error);
-        console.error("Error details:", JSON.stringify(error, null, 2));
-        console.error("Attempted code:", normalizedCode);
+        // SECURITY: Never log login codes - they are sensitive credentials
+        safeLog.error("Login error:", sanitizeError(error));
+        // Do not log the attempted code - it's sensitive
         toast({
           title: "Login error",
-          description: error.message || "Failed to verify login code. Please try again.",
+          description:
+            error.message || "Failed to verify login code. Please try again.",
           variant: "destructive",
         });
         setNumber("");
@@ -105,7 +128,8 @@ const ChildLogin = () => {
       }
 
       if (!data) {
-        console.error("No data returned for code:", normalizedCode);
+        // SECURITY: Never log login codes - they are sensitive credentials
+        safeLog.error("No data returned for login code (code redacted)");
         toast({
           title: "Code not found",
           description: "Please check your code and try again",
@@ -130,7 +154,14 @@ const ChildLogin = () => {
       // Track device on child login (for parent's device management)
       if (data.parent_id) {
         try {
-          const { generateDeviceIdentifierAsync, detectDeviceType, getDeviceName, getClientIP, getDeviceMacAddress, getCountryFromIP } = await import("@/utils/deviceTracking");
+          const {
+            generateDeviceIdentifierAsync,
+            detectDeviceType,
+            getDeviceName,
+            getClientIP,
+            getDeviceMacAddress,
+            getCountryFromIP,
+          } = await import("@/utils/deviceTracking");
           const deviceIdentifier = await generateDeviceIdentifierAsync();
           const deviceType = detectDeviceType();
           const deviceName = getDeviceName();
@@ -138,36 +169,56 @@ const ChildLogin = () => {
           const ipAddress = await getClientIP();
           const macAddress = await getDeviceMacAddress();
           const countryCode = await getCountryFromIP(ipAddress);
-          
-          console.log("🔍 [DEVICE TRACKING] Attempting to track device:", {
+
+          await logDeviceTracking("info", "Attempting to track device", {
             parent_id: data.parent_id,
             child_id: data.id,
             device_identifier: deviceIdentifier,
-            device_type: deviceType,
-            device_name: deviceName,
-            is_native: deviceIdentifier.startsWith('native-') || deviceIdentifier.startsWith('cordova-') || deviceIdentifier.startsWith('mac-'),
-            mac_address: macAddress || 'not available',
-            country_code: countryCode || 'not available',
+            metadata: {
+              device_type: deviceType,
+              device_name: deviceName,
+              is_native:
+                deviceIdentifier.startsWith("native-") ||
+                deviceIdentifier.startsWith("cordova-") ||
+                deviceIdentifier.startsWith("mac-"),
+            },
           });
-          
+
           // Try calling with country_code first (if migration 20250122000012 has been applied)
-          let { data: deviceData, error: deviceError } = await supabase.rpc("update_device_login", {
-            p_parent_id: data.parent_id,
-            p_device_identifier: deviceIdentifier,
-            p_device_name: deviceName,
-            p_device_type: deviceType,
-            p_user_agent: userAgent,
-            p_ip_address: ipAddress || null,
-            p_mac_address: macAddress || null,
-            p_country_code: countryCode || null,
-            p_child_id: data.id,
-          });
-          
+          let { data: deviceData, error: deviceError } = await supabase.rpc(
+            "update_device_login",
+            {
+              p_parent_id: data.parent_id,
+              p_device_identifier: deviceIdentifier,
+              p_device_name: deviceName,
+              p_device_type: deviceType,
+              p_user_agent: userAgent,
+              p_ip_address: ipAddress || null,
+              p_mac_address: macAddress || null,
+              p_country_code: countryCode || null,
+              p_child_id: data.id,
+            }
+          );
+
           // If error suggests function signature mismatch, try without country_code
           // This handles the case where migration 20250122000012 hasn't been applied yet
-          if (deviceError && (deviceError.code === '42883' || deviceError.message?.includes('function') || deviceError.message?.includes('does not exist'))) {
-            console.warn("⚠️ [DEVICE TRACKING] Function signature mismatch, trying without country_code:", deviceError.message);
-            
+          if (
+            deviceError &&
+            (deviceError.code === "42883" ||
+              deviceError.message?.includes("function") ||
+              deviceError.message?.includes("does not exist"))
+          ) {
+            await logDeviceTracking(
+              "warn",
+              "Function signature mismatch, trying without country_code",
+              {
+                parent_id: data.parent_id,
+                child_id: data.id,
+                device_identifier: deviceIdentifier,
+                error: deviceError,
+              }
+            );
+
             // Fallback: try without country_code parameter (for older function signature)
             const fallbackResult = await supabase.rpc("update_device_login", {
               p_parent_id: data.parent_id,
@@ -179,24 +230,52 @@ const ChildLogin = () => {
               p_mac_address: macAddress || null,
               p_child_id: data.id,
             });
-            
+
             if (fallbackResult.error) {
-              console.error("❌ [DEVICE TRACKING] Error (fallback also failed):", fallbackResult.error);
+              await logDeviceTracking("error", "Error (fallback also failed)", {
+                parent_id: data.parent_id,
+                child_id: data.id,
+                device_identifier: deviceIdentifier,
+                error: fallbackResult.error,
+              });
               throw fallbackResult.error;
             }
-            
+
             deviceData = fallbackResult.data;
             deviceError = null;
-            console.log("✅ [DEVICE TRACKING] Device tracked successfully (without country_code):", deviceData);
+            await logDeviceTracking(
+              "success",
+              "Device tracked successfully (without country_code)",
+              {
+                parent_id: data.parent_id,
+                child_id: data.id,
+                device_identifier: deviceIdentifier,
+                device_id: deviceData,
+              }
+            );
           } else if (deviceError) {
-            console.error("❌ [DEVICE TRACKING] Error:", deviceError);
+            await logDeviceTracking("error", "Device tracking error", {
+              parent_id: data.parent_id,
+              child_id: data.id,
+              device_identifier: deviceIdentifier,
+              error: deviceError,
+            });
             throw deviceError;
           } else {
-            console.log("✅ [DEVICE TRACKING] Device tracked successfully:", deviceData);
+            await logDeviceTracking("success", "Device tracked successfully", {
+              parent_id: data.parent_id,
+              child_id: data.id,
+              device_identifier: deviceIdentifier,
+              device_id: deviceData,
+            });
           }
         } catch (error) {
           // Log error but don't break login
-          console.error("❌ [DEVICE TRACKING] Failed to track device:", error);
+          await logDeviceTracking("error", "Failed to track device", {
+            parent_id: data.parent_id,
+            child_id: data.id,
+            error: error instanceof Error ? error : { message: String(error) },
+          });
         }
       }
 
@@ -204,11 +283,14 @@ const ChildLogin = () => {
       setTimeout(() => {
         navigate("/child/dashboard");
       }, 2000);
-    } catch (error: any) {
-      console.error("Login exception:", error);
+    } catch (error: unknown) {
+      safeLog.error("Login exception:", sanitizeError(error));
       toast({
         title: "Error",
-        description: error.message || "An error occurred during login",
+        description:
+          error instanceof Error
+            ? error.message
+            : "An error occurred during login",
         variant: "destructive",
       });
       setStep("familyCode");
@@ -243,7 +325,7 @@ const ChildLogin = () => {
             .select("login_code")
             .eq("id", authorizedChildId)
             .maybeSingle();
-          
+
           if (childRecord?.login_code) {
             // Parse login code to extract color/animal and number
             const parts = childRecord.login_code.split("-");
@@ -258,7 +340,10 @@ const ChildLogin = () => {
             }
           }
         } catch (error) {
-          console.warn("Failed to fetch child data for authorized device:", error);
+          console.warn(
+            "Failed to fetch child data for authorized device:",
+            error
+          );
           // Continue with normal login flow
         }
       }
@@ -275,10 +360,17 @@ const ChildLogin = () => {
       // This prevents re-processing if user navigates back
       const decodedCode = decodeURIComponent(codeParam.trim());
       const parts = decodedCode.split("-");
-      
+
       if (parts.length === 3) {
         const [famCode, option, num] = parts;
-        if (famCode && option && num && famCode.length > 0 && option.length > 0 && num.length > 0) {
+        if (
+          famCode &&
+          option &&
+          num &&
+          famCode.length > 0 &&
+          option.length > 0 &&
+          num.length > 0
+        ) {
           setFamilyCode(famCode.toUpperCase());
           setSelectedOption(option);
           setNumber(num);
@@ -295,14 +387,16 @@ const ChildLogin = () => {
         } else {
           toast({
             title: "Invalid login code",
-            description: "The login code format is incorrect. Please check and try again.",
+            description:
+              "The login code format is incorrect. Please check and try again.",
             variant: "destructive",
           });
         }
       } else {
         toast({
           title: "Invalid login code",
-          description: "The login code format is incorrect. Expected: familyCode-color/animal-number",
+          description:
+            "The login code format is incorrect. Expected: familyCode-color/animal-number",
           variant: "destructive",
         });
       }
@@ -352,7 +446,10 @@ const ChildLogin = () => {
 
   const handleFamilyCodeChange = (value: string) => {
     // Only allow alphanumeric, uppercase, max 6 characters
-    const cleaned = value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6);
+    const cleaned = value
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, "")
+      .slice(0, 6);
     setFamilyCode(cleaned);
   };
 
@@ -367,13 +464,17 @@ const ChildLogin = () => {
     if (isButtonInteraction.current) {
       return;
     }
-    
+
     // Always track swipe start - buttons will set the flag if they're being clicked
     // This allows swipes to work even if they start near buttons
     touchStartX.current = e.touches[0].clientX;
     touchStartTime.current = Date.now();
     const target = e.target as HTMLElement;
-    console.log('🔄 [SWIPE] Start:', { x: touchStartX.current, target: target.tagName, isButton: target.closest('button') !== null });
+    safeLog.debug("🔄 [SWIPE] Start:", {
+      x: touchStartX.current,
+      target: target.tagName,
+      isButton: target.closest("button") !== null,
+    });
   };
 
   const handleSwipeMove = (e: React.TouchEvent) => {
@@ -381,7 +482,7 @@ const ChildLogin = () => {
     if (touchStartX.current === 0) {
       return;
     }
-    
+
     // Update end position during swipe (even if it passes over buttons)
     // Don't check button flag here - allow swipes to continue even if they pass over buttons
     touchEndX.current = e.touches[0].clientX;
@@ -398,7 +499,7 @@ const ChildLogin = () => {
     const minSwipeDistance = 30; // Minimum distance for a swipe
     const maxSwipeDuration = 600; // Maximum duration for a swipe
 
-    console.log('🔄 [SWIPE] End:', {
+    safeLog.debug("🔄 [SWIPE] End:", {
       distance: Math.abs(swipeDistance),
       duration: swipeDuration,
       startX: touchStartX.current,
@@ -411,7 +512,7 @@ const ChildLogin = () => {
     // If it's a significant swipe, process it even if button flag is set
     // (button flag only prevents small taps from triggering swipes)
     const isSignificantSwipe = Math.abs(swipeDistance) > minSwipeDistance;
-    
+
     // Only trigger swipe if:
     // 1. Distance is significant enough
     // 2. Duration is reasonable
@@ -425,11 +526,11 @@ const ChildLogin = () => {
     ) {
       if (swipeDistance > 0) {
         // Swipe left - go to next block
-        console.log('➡️ [SWIPE] Moving to next block');
+        safeLog.debug("➡️ [SWIPE] Moving to next block");
         handleBlockChange(Math.min(currentBlock + 1, KEYPAD_BLOCKS.length - 1));
       } else {
         // Swipe right - go to previous block
-        console.log('⬅️ [SWIPE] Moving to previous block');
+        safeLog.debug("⬅️ [SWIPE] Moving to previous block");
         handleBlockChange(Math.max(currentBlock - 1, 0));
       }
     }
@@ -443,7 +544,7 @@ const ChildLogin = () => {
   const handleLogin = async () => {
     // If device is authorized, we can skip family code
     let loginCode: string;
-    
+
     if (skipFamilyCode && selectedOption && number) {
       // Authorized device - get full login code from database
       const authorizedChildId = getAuthorizedChildId();
@@ -454,13 +555,14 @@ const ChildLogin = () => {
             .select("login_code")
             .eq("id", authorizedChildId)
             .maybeSingle();
-          
+
           if (childRecord?.login_code) {
             loginCode = childRecord.login_code;
           } else {
             toast({
               title: "Error",
-              description: "Could not find your login code. Please enter your family code.",
+              description:
+                "Could not find your login code. Please enter your family code.",
               variant: "destructive",
             });
             setStep("familyCode");
@@ -470,7 +572,8 @@ const ChildLogin = () => {
         } catch (error) {
           toast({
             title: "Error",
-            description: "Could not verify your login code. Please enter your family code.",
+            description:
+              "Could not verify your login code. Please enter your family code.",
             variant: "destructive",
           });
           setStep("familyCode");
@@ -480,7 +583,8 @@ const ChildLogin = () => {
       } else {
         toast({
           title: "Incomplete code",
-          description: "Please enter your family code, select a color/animal, and enter your number",
+          description:
+            "Please enter your family code, select a color/animal, and enter your number",
           variant: "destructive",
         });
         return;
@@ -490,7 +594,8 @@ const ChildLogin = () => {
       if (!familyCode || !selectedOption || !number) {
         toast({
           title: "Incomplete code",
-          description: "Please enter your family code, select a color/animal, and enter your number",
+          description:
+            "Please enter your family code, select a color/animal, and enter your number",
           variant: "destructive",
         });
         return;
@@ -533,7 +638,14 @@ const ChildLogin = () => {
       // Track device on child login (for parent's device management)
       if (data.parent_id) {
         try {
-          const { generateDeviceIdentifierAsync, detectDeviceType, getDeviceName, getClientIP, getDeviceMacAddress, getCountryFromIP } = await import("@/utils/deviceTracking");
+          const {
+            generateDeviceIdentifierAsync,
+            detectDeviceType,
+            getDeviceName,
+            getClientIP,
+            getDeviceMacAddress,
+            getCountryFromIP,
+          } = await import("@/utils/deviceTracking");
           const deviceIdentifier = await generateDeviceIdentifierAsync();
           const deviceType = detectDeviceType();
           const deviceName = getDeviceName();
@@ -541,36 +653,56 @@ const ChildLogin = () => {
           const ipAddress = await getClientIP();
           const macAddress = await getDeviceMacAddress();
           const countryCode = await getCountryFromIP(ipAddress);
-          
-          console.log("🔍 [DEVICE TRACKING] Attempting to track device:", {
+
+          await logDeviceTracking("info", "Attempting to track device", {
             parent_id: data.parent_id,
             child_id: data.id,
             device_identifier: deviceIdentifier,
-            device_type: deviceType,
-            device_name: deviceName,
-            is_native: deviceIdentifier.startsWith('native-') || deviceIdentifier.startsWith('cordova-') || deviceIdentifier.startsWith('mac-'),
-            mac_address: macAddress || 'not available',
-            country_code: countryCode || 'not available',
+            metadata: {
+              device_type: deviceType,
+              device_name: deviceName,
+              is_native:
+                deviceIdentifier.startsWith("native-") ||
+                deviceIdentifier.startsWith("cordova-") ||
+                deviceIdentifier.startsWith("mac-"),
+            },
           });
-          
+
           // Try calling with country_code first (if migration 20250122000012 has been applied)
-          let { data: deviceData, error: deviceError } = await supabase.rpc("update_device_login", {
-            p_parent_id: data.parent_id,
-            p_device_identifier: deviceIdentifier,
-            p_device_name: deviceName,
-            p_device_type: deviceType,
-            p_user_agent: userAgent,
-            p_ip_address: ipAddress || null,
-            p_mac_address: macAddress || null,
-            p_country_code: countryCode || null,
-            p_child_id: data.id,
-          });
-          
+          let { data: deviceData, error: deviceError } = await supabase.rpc(
+            "update_device_login",
+            {
+              p_parent_id: data.parent_id,
+              p_device_identifier: deviceIdentifier,
+              p_device_name: deviceName,
+              p_device_type: deviceType,
+              p_user_agent: userAgent,
+              p_ip_address: ipAddress || null,
+              p_mac_address: macAddress || null,
+              p_country_code: countryCode || null,
+              p_child_id: data.id,
+            }
+          );
+
           // If error suggests function signature mismatch, try without country_code
           // This handles the case where migration 20250122000012 hasn't been applied yet
-          if (deviceError && (deviceError.code === '42883' || deviceError.message?.includes('function') || deviceError.message?.includes('does not exist'))) {
-            console.warn("⚠️ [DEVICE TRACKING] Function signature mismatch, trying without country_code:", deviceError.message);
-            
+          if (
+            deviceError &&
+            (deviceError.code === "42883" ||
+              deviceError.message?.includes("function") ||
+              deviceError.message?.includes("does not exist"))
+          ) {
+            await logDeviceTracking(
+              "warn",
+              "Function signature mismatch, trying without country_code",
+              {
+                parent_id: data.parent_id,
+                child_id: data.id,
+                device_identifier: deviceIdentifier,
+                error: deviceError,
+              }
+            );
+
             // Fallback: try without country_code parameter (for older function signature)
             const fallbackResult = await supabase.rpc("update_device_login", {
               p_parent_id: data.parent_id,
@@ -582,24 +714,52 @@ const ChildLogin = () => {
               p_mac_address: macAddress || null,
               p_child_id: data.id,
             });
-            
+
             if (fallbackResult.error) {
-              console.error("❌ [DEVICE TRACKING] Error (fallback also failed):", fallbackResult.error);
+              await logDeviceTracking("error", "Error (fallback also failed)", {
+                parent_id: data.parent_id,
+                child_id: data.id,
+                device_identifier: deviceIdentifier,
+                error: fallbackResult.error,
+              });
               throw fallbackResult.error;
             }
-            
+
             deviceData = fallbackResult.data;
             deviceError = null;
-            console.log("✅ [DEVICE TRACKING] Device tracked successfully (without country_code):", deviceData);
+            await logDeviceTracking(
+              "success",
+              "Device tracked successfully (without country_code)",
+              {
+                parent_id: data.parent_id,
+                child_id: data.id,
+                device_identifier: deviceIdentifier,
+                device_id: deviceData,
+              }
+            );
           } else if (deviceError) {
-            console.error("❌ [DEVICE TRACKING] Error:", deviceError);
+            await logDeviceTracking("error", "Device tracking error", {
+              parent_id: data.parent_id,
+              child_id: data.id,
+              device_identifier: deviceIdentifier,
+              error: deviceError,
+            });
             throw deviceError;
           } else {
-            console.log("✅ [DEVICE TRACKING] Device tracked successfully:", deviceData);
+            await logDeviceTracking("success", "Device tracked successfully", {
+              parent_id: data.parent_id,
+              child_id: data.id,
+              device_identifier: deviceIdentifier,
+              device_id: deviceData,
+            });
           }
         } catch (error) {
           // Log error but don't break login
-          console.error("❌ [DEVICE TRACKING] Failed to track device:", error);
+          await logDeviceTracking("error", "Failed to track device", {
+            parent_id: data.parent_id,
+            child_id: data.id,
+            error: error instanceof Error ? error : { message: String(error) },
+          });
         }
       }
 
@@ -607,10 +767,14 @@ const ChildLogin = () => {
       setTimeout(() => {
         navigate("/child/dashboard");
       }, 2000);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      safeLog.error("Login exception:", sanitizeError(error));
       toast({
         title: "Error",
-        description: error.message,
+        description:
+          error instanceof Error
+            ? error.message
+            : "An error occurred during login",
         variant: "destructive",
       });
       setNumber("");
@@ -649,9 +813,10 @@ const ChildLogin = () => {
 
   // Number entry screen
   if (step === "number") {
-    const selectedItem = codeType === "color"
-      ? colors.find((c) => c.name === selectedOption)
-      : animals.find((a) => a.name === selectedOption);
+    const selectedItem =
+      codeType === "color"
+        ? colors.find((c) => c.name === selectedOption)
+        : animals.find((a) => a.name === selectedOption);
 
     return (
       <div className="min-h-[100dvh] flex items-center justify-center bg-primary/5 p-4">
@@ -665,17 +830,24 @@ const ChildLogin = () => {
               ← Back
             </Button>
             <div className="flex items-center justify-center gap-3">
-              {codeType === "color" && selectedItem ? (
+              {codeType === "color" &&
+              selectedItem &&
+              "color" in selectedItem ? (
                 <div
                   className="w-16 h-16 rounded-full border-4 border-primary"
                   style={{ backgroundColor: selectedItem.color }}
                 />
-              ) : selectedItem ? (
+              ) : selectedItem && "emoji" in selectedItem ? (
                 <div className="text-6xl">{selectedItem.emoji}</div>
               ) : null}
               <div>
-                <h2 className="text-2xl font-bold capitalize">{selectedOption}</h2>
-                <p className="text-muted-foreground">Family: <span className="font-mono font-semibold">{familyCode}</span></p>
+                <h2 className="text-2xl font-bold capitalize">
+                  {selectedOption}
+                </h2>
+                <p className="text-muted-foreground">
+                  Family:{" "}
+                  <span className="font-mono font-semibold">{familyCode}</span>
+                </p>
                 <p className="text-muted-foreground">Now enter your number</p>
               </div>
             </div>
@@ -818,7 +990,7 @@ const ChildLogin = () => {
             <div
               ref={keypadRef}
               className="relative overflow-hidden"
-              style={{ touchAction: 'pan-x' }}
+              style={{ touchAction: "pan-x" }}
             >
               {/* Swipe zones on edges - always swipeable (behind buttons but functional) */}
               <div
@@ -834,88 +1006,100 @@ const ChildLogin = () => {
                 onTouchEnd={(e) => handleSwipeEnd(e)}
               />
               {/* Center area with buttons - gaps between buttons are swipeable */}
-              <div 
+              <div
                 className="relative z-10"
                 onTouchStart={handleSwipeStart}
                 onTouchMove={handleSwipeMove}
                 onTouchEnd={(e) => handleSwipeEnd(e)}
               >
-              {KEYPAD_BLOCKS.map((block, blockIndex) => (
-                <div
-                  key={block.id}
-                  className={`grid grid-cols-3 gap-3 transition-all duration-300 ease-in-out ${
-                    blockIndex === currentBlock
-                      ? "opacity-100 translate-x-0 pointer-events-auto"
-                      : blockIndex < currentBlock
-                      ? "opacity-0 -translate-x-full absolute inset-0 pointer-events-none"
-                      : "opacity-0 translate-x-full absolute inset-0 pointer-events-none"
-                  }`}
-                >
-                  {block.chars.map((char) => (
-                    <Button
-                      key={char}
-                      onClick={() => handleFamilyCodeChange(familyCode + char)}
-                      onTouchStart={(e) => {
-                        // Track button touch start position and time
-                        buttonTouchStartX.current = e.touches[0].clientX;
-                        buttonTouchStartTime.current = Date.now();
-                        // Don't set flag yet - wait to see if it's a click or swipe
-                      }}
-                      onTouchMove={(e) => {
-                        // If finger moves significantly, it's a swipe, not a button click
-                        const moveDistance = Math.abs(e.touches[0].clientX - buttonTouchStartX.current);
-                        if (moveDistance > 10) {
-                          // It's a swipe, don't mark as button interaction
-                          isButtonInteraction.current = false;
-                        } else {
-                          // Small movement, likely a button click
-                          isButtonInteraction.current = true;
+                {KEYPAD_BLOCKS.map((block, blockIndex) => (
+                  <div
+                    key={block.id}
+                    className={`grid grid-cols-3 gap-3 transition-all duration-300 ease-in-out ${
+                      blockIndex === currentBlock
+                        ? "opacity-100 translate-x-0 pointer-events-auto"
+                        : blockIndex < currentBlock
+                        ? "opacity-0 -translate-x-full absolute inset-0 pointer-events-none"
+                        : "opacity-0 translate-x-full absolute inset-0 pointer-events-none"
+                    }`}
+                  >
+                    {block.chars.map((char) => (
+                      <Button
+                        key={char}
+                        onClick={() =>
+                          handleFamilyCodeChange(familyCode + char)
                         }
-                      }}
-                      onTouchEnd={(e) => {
-                        // Check if it was a click (small movement) or swipe
-                        const moveDistance = Math.abs(e.changedTouches[0].clientX - buttonTouchStartX.current);
-                        const touchDuration = Date.now() - buttonTouchStartTime.current;
-                        
-                        if (moveDistance < 10 && touchDuration < 300) {
-                          // It's a button click - prevent swipe
-                          isButtonInteraction.current = true;
-                          setTimeout(() => {
+                        onTouchStart={(e) => {
+                          // Track button touch start position and time
+                          buttonTouchStartX.current = e.touches[0].clientX;
+                          buttonTouchStartTime.current = Date.now();
+                          // Don't set flag yet - wait to see if it's a click or swipe
+                        }}
+                        onTouchMove={(e) => {
+                          // If finger moves significantly, it's a swipe, not a button click
+                          const moveDistance = Math.abs(
+                            e.touches[0].clientX - buttonTouchStartX.current
+                          );
+                          if (moveDistance > 10) {
+                            // It's a swipe, don't mark as button interaction
                             isButtonInteraction.current = false;
-                          }, 100);
-                        } else {
-                          // It was a swipe - allow it
+                          } else {
+                            // Small movement, likely a button click
+                            isButtonInteraction.current = true;
+                          }
+                        }}
+                        onTouchEnd={(e) => {
+                          // Check if it was a click (small movement) or swipe
+                          const moveDistance = Math.abs(
+                            e.changedTouches[0].clientX -
+                              buttonTouchStartX.current
+                          );
+                          const touchDuration =
+                            Date.now() - buttonTouchStartTime.current;
+
+                          if (moveDistance < 10 && touchDuration < 300) {
+                            // It's a button click - prevent swipe
+                            isButtonInteraction.current = true;
+                            setTimeout(() => {
+                              isButtonInteraction.current = false;
+                            }, 100);
+                          } else {
+                            // It was a swipe - allow it
+                            isButtonInteraction.current = false;
+                          }
+                        }}
+                        onTouchCancel={(e) => {
+                          // Handle touch cancel
                           isButtonInteraction.current = false;
-                        }
-                      }}
-                      onTouchCancel={(e) => {
-                        // Handle touch cancel
-                        isButtonInteraction.current = false;
-                        buttonTouchStartX.current = 0;
-                        buttonTouchStartTime.current = 0;
-                      }}
-                      size="lg"
-                      variant="outline"
-                      className="h-14 sm:h-16 text-xl sm:text-2xl font-bold rounded-xl hover:bg-primary hover:text-primary-foreground transition-all active:scale-95 border-2 pointer-events-auto relative z-10"
-                      disabled={familyCode.length >= 6}
-                      aria-label={`Enter ${char}`}
-                      style={{ touchAction: 'manipulation', WebkitTouchCallout: 'none', WebkitUserSelect: 'none' }}
-                    >
-                      {char}
-                    </Button>
-                  ))}
-                  {/* Fill empty slots in last row for consistent grid (S-Z block has 8 chars) */}
-                  {block.chars.length % 3 === 1 && (
-                    <>
+                          buttonTouchStartX.current = 0;
+                          buttonTouchStartTime.current = 0;
+                        }}
+                        size="lg"
+                        variant="outline"
+                        className="h-14 sm:h-16 text-xl sm:text-2xl font-bold rounded-xl hover:bg-primary hover:text-primary-foreground transition-all active:scale-95 border-2 pointer-events-auto relative z-10"
+                        disabled={familyCode.length >= 6}
+                        aria-label={`Enter ${char}`}
+                        style={{
+                          touchAction: "manipulation",
+                          WebkitTouchCallout: "none",
+                          WebkitUserSelect: "none",
+                        }}
+                      >
+                        {char}
+                      </Button>
+                    ))}
+                    {/* Fill empty slots in last row for consistent grid (S-Z block has 8 chars) */}
+                    {block.chars.length % 3 === 1 && (
+                      <>
+                        <div className="col-span-1" />
+                        <div className="col-span-1" />
+                      </>
+                    )}
+                    {block.chars.length % 3 === 2 && (
                       <div className="col-span-1" />
-                      <div className="col-span-1" />
-                    </>
-                  )}
-                  {block.chars.length % 3 === 2 && (
-                    <div className="col-span-1" />
-                  )}
-                </div>
-              ))}
+                    )}
+                  </div>
+                ))}
               </div>
             </div>
 
@@ -961,7 +1145,12 @@ const ChildLogin = () => {
           </Button>
           <Smile className="h-20 w-20 text-primary mx-auto" />
           <h1 className="text-4xl font-bold text-primary">Hi There!</h1>
-          <p className="text-xl">Family Code: <span className="font-mono font-bold text-primary">{familyCode}</span></p>
+          <p className="text-xl">
+            Family Code:{" "}
+            <span className="font-mono font-bold text-primary">
+              {familyCode}
+            </span>
+          </p>
           <p className="text-lg">Pick your color or animal</p>
         </div>
 
@@ -1009,7 +1198,9 @@ const ChildLogin = () => {
                   className="h-20 rounded-xl border-2 border-transparent hover:border-primary transition-all flex flex-col items-center justify-center hover:scale-105 hover:bg-muted"
                 >
                   <span className="text-3xl">{a.emoji}</span>
-                  <span className="text-xs font-medium capitalize mt-1">{a.name}</span>
+                  <span className="text-xs font-medium capitalize mt-1">
+                    {a.name}
+                  </span>
                 </button>
               ))}
             </div>

@@ -139,3 +139,4 @@ console.log(supabase.realtime.isConnected());
 **No backend workers needed** - everything happens client-side via WebSockets!
 
 
+

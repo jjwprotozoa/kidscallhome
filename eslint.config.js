@@ -21,6 +21,10 @@ export default tseslint.config(
       ...reactHooks.configs.recommended.rules,
       "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
       "@typescript-eslint/no-unused-vars": "off",
+      // Security: Warn about direct console.log usage (use safeLog instead)
+      "no-console": ["warn", { 
+        allow: ["warn", "error"] // Allow console.warn and console.error for critical errors
+      }],
     },
   },
 );

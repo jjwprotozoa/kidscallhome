@@ -7,6 +7,7 @@ import { App } from '@capacitor/app';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { PushNotifications, Token, ActionPerformed, PushNotificationSchema } from '@capacitor/push-notifications';
 import { LocalNotifications } from '@capacitor/local-notifications';
+import { safeLog } from '@/utils/security';
 
 /**
  * Check if running on native Android platform
@@ -96,7 +97,8 @@ export async function showIncomingCallNotification(
 
     // Register push notification listeners (one-time setup)
     PushNotifications.addListener('registration', (token: Token) => {
-      console.log('Push registration success, token: ' + token.value);
+      // SECURITY: Never log push tokens - they are sensitive credentials
+      safeLog.log('Push registration success, token: [REDACTED]');
     });
 
     PushNotifications.addListener('registrationError', (error: any) => {
@@ -211,7 +213,8 @@ export async function initializeNativeAndroid(): Promise<void> {
   try {
     // Register push notification listeners
     PushNotifications.addListener('registration', (token: Token) => {
-      console.log('📱 Push registration success, token: ' + token.value);
+      // SECURITY: Never log push tokens - they are sensitive credentials
+      safeLog.log('📱 Push registration success, token: [REDACTED]');
       // Store token in your backend for sending push notifications
     });
 

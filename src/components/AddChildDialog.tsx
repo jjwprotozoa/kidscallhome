@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { RefreshCw, Check } from "lucide-react";
+import { safeLog, sanitizeError } from "@/utils/security";
 
 interface AddChildDialogProps {
   open: boolean;
@@ -80,13 +81,45 @@ const AddChildDialog = ({ open, onOpenChange, onChildAdded }: AddChildDialogProp
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from("parents")
         .select("family_code")
         .eq("id", user.id)
         .single();
 
-      if (error) {
+      // If parent record doesn't exist (PGRST116 = no rows found), create it
+      if (error && error.code === 'PGRST116') {
+        safeLog.log("📝 [FAMILY CODE] Parent record not found, creating it...");
+        
+        // Upsert parent record - the database trigger/function will generate family_code if needed
+        const { error: upsertError } = await supabase
+          .from("parents")
+          .upsert({
+            id: user.id,
+            email: user.email || '',
+            name: user.user_metadata?.name || '',
+          }, {
+            onConflict: 'id'
+          });
+
+        if (upsertError) {
+          safeLog.error("❌ [FAMILY CODE] Failed to create parent record:", sanitizeError(upsertError));
+          throw upsertError;
+        }
+
+        // Fetch again after creating the record
+        const { data: newData, error: newError } = await supabase
+          .from("parents")
+          .select("family_code")
+          .eq("id", user.id)
+          .single();
+
+        if (newError) {
+          throw newError;
+        }
+
+        data = newData;
+      } else if (error) {
         // Check if it's a column doesn't exist error
         if (error.code === '42703' || error.message?.includes('does not exist')) {
           toast({
@@ -95,7 +128,7 @@ const AddChildDialog = ({ open, onOpenChange, onChildAdded }: AddChildDialogProp
             variant: "destructive",
             duration: 10000, // Show for 10 seconds
           });
-          console.error("❌ [FAMILY CODE] Migration not run. Error:", error);
+          safeLog.error("❌ [FAMILY CODE] Migration not run. Error:", sanitizeError(error));
           return;
         }
         throw error;
@@ -104,16 +137,45 @@ const AddChildDialog = ({ open, onOpenChange, onChildAdded }: AddChildDialogProp
       if (data?.family_code) {
         setFamilyCode(data.family_code);
       } else {
-        // Family code is null - might need to generate one
-        console.warn("⚠️ [FAMILY CODE] Parent exists but family_code is null");
+        // Family code is null - might need to generate one via RPC
+        safeLog.warn("⚠️ [FAMILY CODE] Parent exists but family_code is null, attempting to generate...");
+        
+        // Try to generate family code via RPC if available
+        try {
+          const { data: rpcData, error: rpcError } = await supabase.rpc('generate_unique_family_code');
+          
+          if (!rpcError && rpcData) {
+            // Update parent with generated family code
+            const { error: updateError } = await supabase
+              .from("parents")
+              .update({ family_code: rpcData })
+              .eq("id", user.id);
+
+            if (!updateError) {
+              setFamilyCode(rpcData);
+              // SECURITY: Don't log family codes - they are sensitive
+              safeLog.log("✅ [FAMILY CODE] Generated and set family code (code redacted)");
+              return;
+            } else {
+              safeLog.error("❌ [FAMILY CODE] Failed to update parent with family code:", sanitizeError(updateError));
+            }
+          } else {
+            safeLog.error("❌ [FAMILY CODE] RPC call failed:", sanitizeError(rpcError));
+          }
+        } catch (rpcErr) {
+          safeLog.error("❌ [FAMILY CODE] Exception calling RPC:", sanitizeError(rpcErr));
+        }
+        
+        // If we get here, we couldn't generate the family code
         toast({
           title: "Family Code Missing",
-          description: "Your account doesn't have a family code yet. Please contact support or refresh the page after running the migration.",
+          description: "Your account doesn't have a family code yet. The system will attempt to generate one. Please refresh the page in a moment.",
           variant: "destructive",
+          duration: 8000,
         });
       }
     } catch (error: any) {
-      console.error("Failed to fetch family code:", error);
+      safeLog.error("Failed to fetch family code:", sanitizeError(error));
       toast({
         title: "Error Loading Family Code",
         description: error.message || "Please refresh and try again. If the problem persists, ensure the database migration has been run.",
@@ -243,7 +305,7 @@ const AddChildDialog = ({ open, onOpenChange, onChildAdded }: AddChildDialogProp
       );
 
       if (canAddError) {
-        console.error("Error checking subscription limit:", canAddError);
+        safeLog.error("Error checking subscription limit:", sanitizeError(canAddError));
         // Continue anyway - don't block if check fails
       } else if (canAdd === false) {
         toast({

@@ -8,13 +8,14 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Phone, MessageCircle } from "lucide-react";
+import { Phone, MessageCircle, Plus } from "lucide-react";
 import Navigation from "@/components/Navigation";
 import { useUnreadBadgeForChild } from "@/stores/badgeStore";
 import { StatusIndicator } from "@/features/presence/StatusIndicator";
 import { useChildrenPresence } from "@/features/presence/useChildrenPresence";
 import { OnboardingTour } from "@/features/onboarding/OnboardingTour";
 import { HelpBubble } from "@/features/onboarding/HelpBubble";
+import AddChildDialog from "@/components/AddChildDialog";
 
 interface Child {
   id: string;
@@ -95,6 +96,7 @@ const ChildCard = ({
 const ParentChildrenList = () => {
   const [children, setChildren] = useState<Child[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showAddChild, setShowAddChild] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -192,16 +194,40 @@ const ParentChildrenList = () => {
       <HelpBubble role="parent" pageKey="parent_children_list" />
       <div className="p-4" style={{ paddingTop: 'calc(1rem + 64px + var(--safe-area-inset-top) * 0.15)' }}>
         <div className="max-w-4xl mx-auto">
-          <div className="mb-8 mt-8">
-            <h1 className="text-3xl font-bold">Your Children</h1>
-            <p className="text-muted-foreground mt-2">
-              View and call your children
-            </p>
+          <div className="mb-8 mt-8 flex items-center justify-between flex-wrap gap-4">
+            <div>
+              <h1 className="text-3xl font-bold">Your Children</h1>
+              <p className="text-muted-foreground mt-2">
+                View and call your children
+              </p>
+            </div>
+            <Button
+              onClick={() => setShowAddChild(true)}
+              className="flex-shrink-0"
+              size="lg"
+              data-tour="parent-children-list-add-child"
+            >
+              <Plus className="mr-2 h-5 w-5" />
+              Add Child
+            </Button>
           </div>
 
           {children.length === 0 ? (
-            <Card className="p-6">
-              <p className="text-muted-foreground">No children added yet.</p>
+            <Card className="p-12 text-center">
+              <p className="text-muted-foreground mb-4 text-lg">
+                No children added yet.
+              </p>
+              <p className="text-sm text-muted-foreground mb-6">
+                Click "Add Child" above to create a profile and login code for your child.
+              </p>
+              <Button
+                onClick={() => setShowAddChild(true)}
+                size="lg"
+                className="mx-auto"
+              >
+                <Plus className="mr-2 h-5 w-5" />
+                Add Your First Child
+              </Button>
             </Card>
           ) : (
             <div className="grid gap-4">
@@ -219,6 +245,12 @@ const ParentChildrenList = () => {
           )}
         </div>
       </div>
+
+      <AddChildDialog
+        open={showAddChild}
+        onOpenChange={setShowAddChild}
+        onChildAdded={fetchChildren}
+      />
     </div>
   );
 };

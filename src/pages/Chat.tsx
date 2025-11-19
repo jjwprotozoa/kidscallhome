@@ -77,7 +77,7 @@ const Chat = () => {
                 .single()
                 .then(({ data: childRecord, error: childError }) => {
                   if (childError || !childRecord) {
-                    console.error("Error fetching child record:", childError);
+                    safeLog.error("Error fetching child record:", sanitizeError(childError));
                     return;
                   }
                   // Now fetch parent data
@@ -92,14 +92,14 @@ const Chat = () => {
                     setParentName(result.data.name);
                     setParentData({ name: result.data.name, id: result.data.id });
                   } else if (result?.error) {
-                    console.error("Error fetching parent data:", result.error);
+                    safeLog.error("Error fetching parent data:", sanitizeError(result.error));
                   }
                 })
                 .catch((error) => {
-                  console.error("Error fetching parent data:", error);
+                  safeLog.error("Error fetching parent data:", sanitizeError(error));
                 });
             } catch (error) {
-              console.error("Error parsing childSession:", error);
+              safeLog.error("Error parsing childSession:", sanitizeError(error));
               navigate("/");
               return;
             }
@@ -114,21 +114,21 @@ const Chat = () => {
           }
         }
       } catch (error) {
-        console.error("Error checking auth session:", error);
+        safeLog.error("Error checking auth session:", sanitizeError(error));
         navigate("/");
         return;
       }
 
       // Set up realtime subscription
       if (targetChildId) {
-        console.log("📡 [CHAT] Setting up realtime subscription for messages", {
+        safeLog.log("📡 [CHAT] Setting up realtime subscription for messages", {
           childId: targetChildId,
           isChild,
           timestamp: new Date().toISOString(),
         });
 
         const channelName = `messages-${targetChildId}`;
-        console.log("📡 [CHAT] Creating realtime channel:", {
+        safeLog.log("📡 [CHAT] Creating realtime channel:", {
           channelName,
           targetChildId,
           filter: `child_id=eq.${targetChildId}`,
@@ -146,7 +146,8 @@ const Chat = () => {
               filter: `child_id=eq.${targetChildId}`,
             },
             (payload) => {
-              console.log("📨 [CHAT] Received new message via realtime:", {
+              // SECURITY: Only log message metadata, never content
+              safeLog.log("📨 [CHAT] Received new message via realtime:", {
                 messageId: payload.new.id,
                 senderType: payload.new.sender_type,
                 childId: payload.new.child_id,
@@ -161,13 +162,13 @@ const Chat = () => {
                   // Check for duplicates (shouldn't happen, but safety check)
                   const exists = current.some((m) => m.id === payload.new.id);
                   if (exists) {
-                    console.warn("⚠️ [CHAT] Duplicate message detected, ignoring:", payload.new.id);
+                    safeLog.warn("⚠️ [CHAT] Duplicate message detected, ignoring:", payload.new.id);
                     return current;
                   }
                   return [...current, payload.new as Message];
                 });
               } else {
-                console.warn("⚠️ [CHAT] Received message for different child_id, ignoring:", {
+                safeLog.warn("⚠️ [CHAT] Received message for different child_id, ignoring:", {
                   received: payload.new.child_id,
                   expected: targetChildId,
                 });
@@ -175,31 +176,31 @@ const Chat = () => {
             }
           )
           .subscribe((status, err) => {
-            console.log("📡 [CHAT] Realtime subscription status:", {
+            safeLog.log("📡 [CHAT] Realtime subscription status:", {
               status,
               channel: channelName,
               childId: targetChildId,
               isChild,
-              error: err,
+              error: err ? sanitizeError(err) : undefined,
               timestamp: new Date().toISOString(),
             });
             
             if (status === "SUBSCRIBED") {
-              console.log("✅ [CHAT] Successfully subscribed to messages");
-              console.log("✅ [CHAT] Will receive INSERT events for child_id:", targetChildId);
+              safeLog.log("✅ [CHAT] Successfully subscribed to messages");
+              safeLog.log("✅ [CHAT] Will receive INSERT events for child_id:", targetChildId);
             } else if (status === "CHANNEL_ERROR") {
-              console.error("❌ [CHAT] Realtime subscription error:", err);
-              console.error("❌ [CHAT] This usually means:");
-              console.error("   1. RLS policies are blocking SELECT access");
-              console.error("   2. Realtime is not enabled for messages table");
-              console.error("   3. WebSocket connection failed");
-              console.error("❌ [CHAT] Falling back to polling (checking every 3 seconds)");
+              safeLog.error("❌ [CHAT] Realtime subscription error:", err ? sanitizeError(err) : "Unknown error");
+              safeLog.error("❌ [CHAT] This usually means:");
+              safeLog.error("   1. RLS policies are blocking SELECT access");
+              safeLog.error("   2. Realtime is not enabled for messages table");
+              safeLog.error("   3. WebSocket connection failed");
+              safeLog.error("❌ [CHAT] Falling back to polling (checking every 3 seconds)");
             } else if (status === "TIMED_OUT") {
-              console.warn("⚠️ [CHAT] Realtime subscription timed out - using polling fallback");
+              safeLog.warn("⚠️ [CHAT] Realtime subscription timed out - using polling fallback");
             } else if (status === "CLOSED") {
-              console.warn("⚠️ [CHAT] Realtime subscription closed - using polling fallback");
+              safeLog.warn("⚠️ [CHAT] Realtime subscription closed - using polling fallback");
             } else {
-              console.log("ℹ️ [CHAT] Realtime subscription status:", status);
+              safeLog.log("ℹ️ [CHAT] Realtime subscription status:", status);
             }
           });
       }
@@ -209,7 +210,7 @@ const Chat = () => {
 
     return () => {
       if (channelRef.current) {
-        console.log("🧹 [CHAT] Cleaning up realtime subscription");
+        safeLog.log("🧹 [CHAT] Cleaning up realtime subscription");
         supabase.removeChannel(channelRef.current);
         channelRef.current = null;
       }
@@ -231,11 +232,11 @@ const Chat = () => {
         const targetChildId = isChild ? childData.id : childId;
 
         if (!targetChildId) {
-          console.log("⚠️ [CHAT READ] No targetChildId, skipping mark as read");
+          safeLog.log("⚠️ [CHAT READ] No targetChildId, skipping mark as read");
           return;
         }
 
-        console.log("📖 [CHAT READ] Starting mark as read process", {
+        safeLog.log("📖 [CHAT READ] Starting mark as read process", {
           targetChildId,
           isChild,
           timestamp: new Date().toISOString(),
@@ -259,19 +260,19 @@ const Chat = () => {
         const { data: unreadMessages, error: fetchError } = await query;
 
         if (fetchError) {
-          console.error("❌ [CHAT READ] Error fetching unread messages:", fetchError);
+          safeLog.error("❌ [CHAT READ] Error fetching unread messages:", sanitizeError(fetchError));
           return;
         }
 
         if (!unreadMessages || unreadMessages.length === 0) {
-          console.log("✅ [CHAT READ] No unread messages found");
+          safeLog.log("✅ [CHAT READ] No unread messages found");
           // Clear badge anyway to ensure UI is in sync
           useBadgeStore.getState().clearUnreadForChild(targetChildId);
           return;
         }
 
         const unreadMessageIds = unreadMessages.map((msg) => msg.id);
-        console.log(`📖 [CHAT READ] Found ${unreadMessageIds.length} unread messages to mark as read`, {
+        safeLog.log(`📖 [CHAT READ] Found ${unreadMessageIds.length} unread messages to mark as read`, {
           messageIds: unreadMessageIds.slice(0, 5), // Log first 5 IDs
           totalCount: unreadMessageIds.length,
         });
@@ -284,11 +285,11 @@ const Chat = () => {
           .in("id", unreadMessageIds);
 
         if (error) {
-          console.error("❌ [CHAT READ] Error marking messages as read:", error);
+          safeLog.error("❌ [CHAT READ] Error marking messages as read:", sanitizeError(error));
           return;
         }
 
-        console.log(`✅ [CHAT READ] Successfully marked ${unreadMessageIds.length} messages as read`, {
+        safeLog.log(`✅ [CHAT READ] Successfully marked ${unreadMessageIds.length} messages as read`, {
           readAt,
         });
 
@@ -304,13 +305,13 @@ const Chat = () => {
         // IMMEDIATELY clear badge count optimistically (before realtime events)
         // This ensures instant UI feedback when user navigates away
         useBadgeStore.getState().clearUnreadForChild(targetChildId);
-        console.log(`✅ [CHAT READ] Badge cleared immediately for child ${targetChildId}`);
+        safeLog.log(`✅ [CHAT READ] Badge cleared immediately for child ${targetChildId}`);
 
         // Note: Realtime subscription (useBadgeRealtime) will also handle decrements
         // This ensures all devices receive the update and badge counts stay in sync
         // The immediate clear above provides instant feedback, realtime syncs across devices
       } catch (error) {
-        console.error("❌ [CHAT READ] Error in markMessagesAsRead:", error);
+        safeLog.error("❌ [CHAT READ] Error in markMessagesAsRead:", sanitizeError(error));
       }
     };
 
@@ -327,7 +328,7 @@ const Chat = () => {
       const targetChildId = isChild ? (childData?.id || null) : childId;
 
       if (targetChildId) {
-        console.log("🧹 [CHAT CLEANUP] Clearing badge on chat exit", { targetChildId });
+        safeLog.log("🧹 [CHAT CLEANUP] Clearing badge on chat exit", { targetChildId });
         // Force clear badge on exit to ensure UI reflects cleared state
         useBadgeStore.getState().clearUnreadForChild(targetChildId);
       }
@@ -357,14 +358,14 @@ const Chat = () => {
             const newMessages = data.filter((m) => !currentIds.has(m.id));
             
             if (newMessages.length > 0) {
-              console.log("📨 [CHAT] Polling found new messages:", newMessages.length);
+              safeLog.log("📨 [CHAT] Polling found new messages:", newMessages.length);
               return [...current, ...newMessages] as Message[];
             }
             return current;
           });
         }
       } catch (error) {
-        console.error("❌ [CHAT] Polling error:", error);
+        safeLog.error("❌ [CHAT] Polling error:", sanitizeError(error));
       }
     }, 15000); // Poll every 15 seconds (fallback for realtime)
 

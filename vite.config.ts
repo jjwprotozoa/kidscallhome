@@ -22,6 +22,29 @@ export default defineConfig(({ mode }) => {
     };
   };
 
+  // Plugin to remove console logs in production builds (security best practice)
+  const removeConsolePlugin = () => {
+    return {
+      name: "remove-console",
+      transform(code: string, id: string) {
+        // Only remove console logs in production builds
+        const isSourceFile = id.endsWith(".ts") || id.endsWith(".tsx") || id.endsWith(".js") || id.endsWith(".jsx");
+        if (mode === "production" && isSourceFile) {
+          // Remove console.log, console.debug, console.info
+          // Keep console.warn and console.error for critical errors
+          return {
+            code: code
+              .replace(/console\.log\([^)]*\);?/g, "")
+              .replace(/console\.debug\([^)]*\);?/g, "")
+              .replace(/console\.info\([^)]*\);?/g, ""),
+            map: null,
+          };
+        }
+        return null;
+      },
+    };
+  };
+
   return {
     server: {
       host: "0.0.0.0", // Bind to all network interfaces
@@ -40,7 +63,8 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(), 
       htmlPlugin(),
-      mode === "development" && componentTagger()
+      mode === "development" && componentTagger(),
+      mode === "production" && removeConsolePlugin()
     ].filter(Boolean),
     resolve: {
       alias: {

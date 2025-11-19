@@ -1,3 +1,4 @@
+import { Captcha } from "@/components/Captcha";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -5,24 +6,38 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { LogIn, UserPlus, AlertCircle, Shield, Loader2, AlertTriangle, CheckCircle2 } from "lucide-react";
-import { useEffect, useState, useRef } from "react";
-import { useNavigate } from "react-router-dom";
-import { safeLog, sanitizeError } from "@/utils/security";
+import { logAuditEvent } from "@/utils/auditLog";
+import {
+  detectBot,
+  getBehaviorTracker,
+  initBehaviorTracking,
+} from "@/utils/botDetection";
+import { getCSRFToken } from "@/utils/csrf";
+import { isValidEmail, sanitizeAndValidate } from "@/utils/inputValidation";
+import {
+  checkEmailBreach,
+  validatePasswordWithBreachCheck,
+} from "@/utils/passwordBreachCheck";
 import {
   checkRateLimit,
-  recordRateLimit,
-  recordFailedLogin,
   clearFailedLogins,
-  isEmailLocked,
   getRateLimitKey,
+  isEmailLocked,
+  recordFailedLogin,
+  recordRateLimit,
 } from "@/utils/rateLimiting";
-import { detectBot, initBehaviorTracking, getBehaviorTracker } from "@/utils/botDetection";
-import { sanitizeAndValidate } from "@/utils/inputValidation";
-import { validatePasswordWithBreachCheck } from "@/utils/passwordBreachCheck";
-import { logAuditEvent } from "@/utils/auditLog";
-import { getCSRFToken } from "@/utils/csrf";
-import { Captcha } from "@/components/Captcha";
+import { safeLog, sanitizeError } from "@/utils/security";
+import {
+  AlertCircle,
+  AlertTriangle,
+  CheckCircle2,
+  Loader2,
+  LogIn,
+  Shield,
+  UserPlus,
+} from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 // Cookie utility functions
 const setCookie = (name: string, value: string, days: number = 365) => {
@@ -52,51 +67,69 @@ const ParentAuth = () => {
   const [parentName, setParentName] = useState<string | null>(null);
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const [showCaptcha, setShowCaptcha] = useState(false);
-  const [lockoutInfo, setLockoutInfo] = useState<{ locked: boolean; lockedUntil?: number; attemptsRemaining?: number } | null>(null);
+  const [lockoutInfo, setLockoutInfo] = useState<{
+    locked: boolean;
+    lockedUntil?: number;
+    attemptsRemaining?: number;
+  } | null>(null);
   const [checkingBreach, setCheckingBreach] = useState(false);
-  const [passwordBreachStatus, setPasswordBreachStatus] = useState<'checking' | 'safe' | 'breached' | null>(null);
+  const [passwordBreachStatus, setPasswordBreachStatus] = useState<
+    "checking" | "safe" | "breached" | null
+  >(null);
+  const [checkingEmailBreach, setCheckingEmailBreach] = useState(false);
+  const [emailBreachInfo, setEmailBreachInfo] = useState<{
+    isPwned: boolean;
+    breachCount?: number;
+    breaches?: Array<{ Name: string; BreachDate: string }>;
+  } | null>(null);
   const navigate = useNavigate();
   const { toast } = useToast();
   const passwordInputRef = useRef<HTMLInputElement>(null);
-  
+
   // Cloudflare Turnstile site key (set in environment variables)
-  const CAPTCHA_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || '';
+  const CAPTCHA_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || "";
 
   // Initialize security features
   useEffect(() => {
     // Initialize behavior tracking
     initBehaviorTracking();
-    
+
     // Check for bot
     const botDetection = detectBot();
     if (botDetection.isBot) {
       safeLog.warn("Bot detected:", botDetection);
-      logAuditEvent('bot_detected', {
-        metadata: { reasons: botDetection.reasons, confidence: botDetection.confidence },
-        severity: 'high',
+      logAuditEvent("bot_detected", {
+        metadata: {
+          reasons: botDetection.reasons,
+          confidence: botDetection.confidence,
+        },
+        severity: "high",
       });
     }
-    
+
     // Load saved preference and parent name from cookie
     const savedPreference = localStorage.getItem("staySignedIn");
     if (savedPreference !== null) {
       setStaySignedIn(savedPreference === "true");
     }
-    
+
     const savedParentName = getCookie("parentName");
     if (savedParentName) {
       setParentName(savedParentName);
     }
   }, []);
-  
+
   // Check lockout status when email changes
   useEffect(() => {
     if (isLogin && email) {
       const lockout = isEmailLocked(email);
       setLockoutInfo(lockout);
-      
+
       // Show CAPTCHA after 2 failed attempts
-      if (lockout.attemptsRemaining !== undefined && lockout.attemptsRemaining <= 3) {
+      if (
+        lockout.attemptsRemaining !== undefined &&
+        lockout.attemptsRemaining <= 3
+      ) {
         setShowCaptcha(true);
       }
     } else {
@@ -107,7 +140,7 @@ const ParentAuth = () => {
 
   // Real-time password breach checking (debounced) for signup
   useEffect(() => {
-    if (isLogin || !password || password.length < 6) {
+    if (isLogin || !password || password.length < 8) {
       setPasswordBreachStatus(null);
       return;
     }
@@ -115,14 +148,14 @@ const ParentAuth = () => {
     // Debounce the breach check
     const timeoutId = setTimeout(async () => {
       setCheckingBreach(true);
-      setPasswordBreachStatus('checking');
+      setPasswordBreachStatus("checking");
       try {
         const breachCheck = await validatePasswordWithBreachCheck(password);
         setCheckingBreach(false);
         if (breachCheck.isPwned) {
-          setPasswordBreachStatus('breached');
+          setPasswordBreachStatus("breached");
         } else if (breachCheck.valid) {
-          setPasswordBreachStatus('safe');
+          setPasswordBreachStatus("safe");
         } else {
           setPasswordBreachStatus(null);
         }
@@ -135,6 +168,46 @@ const ParentAuth = () => {
 
     return () => clearTimeout(timeoutId);
   }, [password, isLogin]);
+
+  // Real-time email breach checking (debounced) for signup
+  // NOTE: This is completely non-blocking - if API fails or rate-limited, signup proceeds normally
+  useEffect(() => {
+    if (isLogin || !email || !isValidEmail(email)) {
+      setEmailBreachInfo(null);
+      return;
+    }
+
+    // Debounce the email breach check (longer delay to respect rate limits)
+    const timeoutId = setTimeout(async () => {
+      setCheckingEmailBreach(true);
+      try {
+        // Optional: Get API key from environment if available (requires subscription)
+        const apiKey = import.meta.env.VITE_HIBP_API_KEY;
+        const emailCheck = await checkEmailBreach(email, apiKey);
+        setCheckingEmailBreach(false);
+
+        // Only show breach info if email was actually found in breaches
+        // If API failed/rate-limited, emailCheck.isPwned will be false (fail-open)
+        if (emailCheck.isPwned) {
+          setEmailBreachInfo({
+            isPwned: true,
+            breachCount: emailCheck.breachCount,
+            breaches: emailCheck.breaches,
+          });
+        } else {
+          // Email not breached OR API unavailable/rate-limited - either way, allow signup
+          setEmailBreachInfo({ isPwned: false });
+        }
+      } catch (error) {
+        // Any error: silently fail - never block signup
+        setCheckingEmailBreach(false);
+        setEmailBreachInfo(null);
+        // Don't show any error to user - signup proceeds normally
+      }
+    }, 2000); // 2 second debounce to respect rate limits
+
+    return () => clearTimeout(timeoutId);
+  }, [email, isLogin]);
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -168,10 +241,11 @@ const ParentAuth = () => {
       // to ensure the password is still valid at submission time
       if (!isLogin) {
         // If we already know the password is breached, block submission
-        if (passwordBreachStatus === 'breached') {
+        if (passwordBreachStatus === "breached") {
           toast({
             title: "Password Security Issue",
-            description: "This password has been found in data breaches and is unsafe to use. Please choose a unique password with a mix of letters, numbers, and symbols.",
+            description:
+              "This password has been found in data breaches and is unsafe to use. Please choose a unique password with a mix of letters, numbers, and symbols.",
             variant: "destructive",
             duration: 8000,
           });
@@ -180,19 +254,22 @@ const ParentAuth = () => {
 
         // If password is already marked safe, proceed
         // Otherwise, do a final check (in case real-time check didn't complete)
-        if (passwordBreachStatus !== 'safe') {
+        if (passwordBreachStatus !== "safe") {
           setCheckingBreach(true);
-          setPasswordBreachStatus('checking');
+          setPasswordBreachStatus("checking");
           try {
-            const breachCheck = await validatePasswordWithBreachCheck(sanitizedPassword);
+            const breachCheck = await validatePasswordWithBreachCheck(
+              sanitizedPassword
+            );
             setCheckingBreach(false);
-            
+
             if (!breachCheck.valid) {
               if (breachCheck.isPwned) {
-                setPasswordBreachStatus('breached');
+                setPasswordBreachStatus("breached");
                 toast({
                   title: "Password Security Issue",
-                  description: "This password has been found in data breaches and is unsafe to use. Please choose a unique password with a mix of letters, numbers, and symbols.",
+                  description:
+                    "This password has been found in data breaches and is unsafe to use. Please choose a unique password with a mix of letters, numbers, and symbols.",
                   variant: "destructive",
                   duration: 8000,
                 });
@@ -201,13 +278,14 @@ const ParentAuth = () => {
                 const firstError = breachCheck.errors[0];
                 toast({
                   title: "Password Validation Error",
-                  description: firstError || "Please choose a stronger password",
+                  description:
+                    firstError || "Please choose a stronger password",
                   variant: "destructive",
                 });
               }
               return;
             } else {
-              setPasswordBreachStatus('safe');
+              setPasswordBreachStatus("safe");
             }
           } catch (error) {
             setCheckingBreach(false);
@@ -219,20 +297,22 @@ const ParentAuth = () => {
       }
 
       // SECURITY: Check rate limiting
-      const rateLimitKey = getRateLimitKey(sanitizedEmail, 'login');
-      const rateLimitCheck = checkRateLimit(rateLimitKey, 'login');
-      
+      const rateLimitKey = getRateLimitKey(sanitizedEmail, "login");
+      const rateLimitCheck = checkRateLimit(rateLimitKey, "login");
+
       if (!rateLimitCheck.allowed) {
         if (rateLimitCheck.lockedUntil) {
-          const minutes = Math.ceil((rateLimitCheck.lockedUntil - Date.now()) / 60000);
+          const minutes = Math.ceil(
+            (rateLimitCheck.lockedUntil - Date.now()) / 60000
+          );
           toast({
             title: "Account Temporarily Locked",
             description: `Too many login attempts. Please try again in ${minutes} minute(s).`,
             variant: "destructive",
           });
-          logAuditEvent('login_locked', {
+          logAuditEvent("login_locked", {
             email: sanitizedEmail,
-            severity: 'high',
+            severity: "high",
           });
           return;
         } else {
@@ -241,9 +321,9 @@ const ParentAuth = () => {
             description: "Please wait before trying again.",
             variant: "destructive",
           });
-          logAuditEvent('rate_limit_exceeded', {
+          logAuditEvent("rate_limit_exceeded", {
             email: sanitizedEmail,
-            severity: 'medium',
+            severity: "medium",
           });
           return;
         }
@@ -260,9 +340,9 @@ const ParentAuth = () => {
             variant: "destructive",
           });
           setLockoutInfo(lockout);
-          logAuditEvent('account_locked', {
+          logAuditEvent("account_locked", {
             email: sanitizedEmail,
-            severity: 'high',
+            severity: "high",
           });
           return;
         }
@@ -283,31 +363,31 @@ const ParentAuth = () => {
       if (botDetection.isBot && botDetection.confidence > 50) {
         const behaviorTracker = getBehaviorTracker();
         const behaviorAnalysis = behaviorTracker?.analyzeBehavior();
-        
+
         if (behaviorAnalysis?.isSuspicious) {
           toast({
             title: "Security Check Failed",
             description: "Unable to verify you're human. Please try again.",
             variant: "destructive",
           });
-          logAuditEvent('bot_detected', {
+          logAuditEvent("bot_detected", {
             email: sanitizedEmail,
             metadata: {
               botReasons: botDetection.reasons,
               behaviorReasons: behaviorAnalysis.reasons,
             },
-            severity: 'high',
+            severity: "high",
           });
           return;
         }
       }
 
       // Record rate limit attempt
-      recordRateLimit(rateLimitKey, 'login');
+      recordRateLimit(rateLimitKey, "login");
 
       // Store preference for session persistence
       localStorage.setItem("staySignedIn", staySignedIn.toString());
-      
+
       // If "Stay signed in" is unchecked, use sessionStorage for this session
       if (!staySignedIn) {
         sessionStorage.setItem("clearSessionOnClose", "true");
@@ -317,33 +397,38 @@ const ParentAuth = () => {
 
       if (isLogin) {
         // SECURITY: Log login attempt
-        logAuditEvent('login_attempt', {
+        logAuditEvent("login_attempt", {
           email: sanitizedEmail,
-          severity: 'low',
+          severity: "low",
         });
 
         // SECURITY: Never log passwords - Supabase handles auth securely
-        const { data: { user }, error } = await supabase.auth.signInWithPassword({
+        const {
+          data: { user },
+          error,
+        } = await supabase.auth.signInWithPassword({
           email: sanitizedEmail,
           password: sanitizedPassword,
         });
-        
+
         if (error) {
           // SECURITY: Record failed login
           const failedLogin = recordFailedLogin(sanitizedEmail);
-          
+
           // SECURITY: Sanitize error before logging
           safeLog.error("Auth error:", sanitizeError(error));
-          
-          logAuditEvent('login_failed', {
+
+          logAuditEvent("login_failed", {
             email: sanitizedEmail,
             metadata: { attempts: failedLogin.attempts },
-            severity: 'medium',
+            severity: "medium",
           });
 
           // Show lockout message if locked
           if (failedLogin.locked && failedLogin.lockedUntil) {
-            const minutes = Math.ceil((failedLogin.lockedUntil - Date.now()) / 60000);
+            const minutes = Math.ceil(
+              (failedLogin.lockedUntil - Date.now()) / 60000
+            );
             toast({
               title: "Account Locked",
               description: `Too many failed attempts. Account locked for ${minutes} minute(s).`,
@@ -353,39 +438,40 @@ const ParentAuth = () => {
               locked: true,
               lockedUntil: failedLogin.lockedUntil,
             });
-            logAuditEvent('account_locked', {
+            logAuditEvent("account_locked", {
               email: sanitizedEmail,
-              severity: 'high',
+              severity: "high",
             });
           } else {
             const remaining = 5 - failedLogin.attempts;
             toast({
               title: "Login Failed",
-              description: remaining > 0 
-                ? `Invalid credentials. ${remaining} attempt(s) remaining.`
-                : "Invalid credentials.",
+              description:
+                remaining > 0
+                  ? `Invalid credentials. ${remaining} attempt(s) remaining.`
+                  : "Invalid credentials.",
               variant: "destructive",
             });
-            
+
             // Show CAPTCHA after 2 failed attempts
             if (failedLogin.attempts >= 2) {
               setShowCaptcha(true);
             }
           }
-          
+
           throw error;
         }
-        
+
         // SECURITY: Clear failed logins on success
         clearFailedLogins(sanitizedEmail);
-        
+
         // SECURITY: Log successful login
-        logAuditEvent('login_success', {
+        logAuditEvent("login_success", {
           userId: user?.id,
           email: sanitizedEmail,
-          severity: 'low',
+          severity: "low",
         });
-        
+
         // Fetch parent name and store in cookie
         if (user) {
           const { data: parentData } = await supabase
@@ -393,14 +479,21 @@ const ParentAuth = () => {
             .select("name")
             .eq("id", user.id)
             .maybeSingle();
-          
+
           if (parentData?.name) {
             setCookie("parentName", parentData.name, 365); // Store for 1 year
           }
-          
+
           // Track device on login
           try {
-            const { generateDeviceIdentifierAsync, detectDeviceType, getDeviceName, getClientIP, getDeviceMacAddress, getCountryFromIP } = await import("@/utils/deviceTracking");
+            const {
+              generateDeviceIdentifierAsync,
+              detectDeviceType,
+              getDeviceName,
+              getClientIP,
+              getDeviceMacAddress,
+              getCountryFromIP,
+            } = await import("@/utils/deviceTracking");
             const deviceIdentifier = await generateDeviceIdentifierAsync();
             const deviceType = detectDeviceType();
             const deviceName = getDeviceName();
@@ -408,7 +501,7 @@ const ParentAuth = () => {
             const ipAddress = await getClientIP();
             const macAddress = await getDeviceMacAddress();
             const countryCode = await getCountryFromIP(ipAddress);
-            
+
             await supabase.rpc("update_device_login", {
               p_parent_id: user.id,
               p_device_identifier: deviceIdentifier,
@@ -424,21 +517,21 @@ const ParentAuth = () => {
             // Silently fail - device tracking shouldn't break login
             console.warn("Device tracking failed:", error);
           }
-          
+
           // Write presence status to database on login (major state change)
           // Note: This is optional - presence is managed via WebSocket/Realtime
           // Only writes to DB if you need login history/analytics
           // import { writePresenceOnLogin } from "@/features/presence/presenceDb";
           // await writePresenceOnLogin(user.id, "parent");
         }
-        
+
         toast({ title: "Welcome back!" });
         navigate("/parent/children");
       } else {
         // SECURITY: Log signup attempt
-        logAuditEvent('signup', {
+        logAuditEvent("signup", {
           email: sanitizedEmail,
-          severity: 'low',
+          severity: "low",
         });
 
         // SECURITY: Never log passwords - Supabase handles auth securely
@@ -450,23 +543,23 @@ const ParentAuth = () => {
             emailRedirectTo: `${window.location.origin}/parent/children`,
           },
         });
-        
+
         if (error) {
           // SECURITY: Sanitize error before logging
           safeLog.error("Signup error:", sanitizeError(error));
-          logAuditEvent('signup', {
+          logAuditEvent("signup", {
             email: sanitizedEmail,
             metadata: { error: error.message },
-            severity: 'medium',
+            severity: "medium",
           });
           throw error;
         }
-        
+
         // Store name in cookie for new signups
         if (validation.sanitized.name || name) {
           setCookie("parentName", validation.sanitized.name || name, 365);
         }
-        
+
         toast({ title: "Account created! Welcome!" });
         navigate("/parent/children");
       }
@@ -474,9 +567,9 @@ const ParentAuth = () => {
       // SECURITY: Sanitize error before logging - never log passwords
       const sanitizedError = sanitizeError(error);
       safeLog.error("Auth operation failed:", sanitizedError);
-      
+
       // Error toast is handled above for specific cases
-      if (!(error instanceof Error && error.message.includes('locked'))) {
+      if (!(error instanceof Error && error.message.includes("locked"))) {
         toast({
           title: "Error",
           description:
@@ -501,17 +594,17 @@ const ParentAuth = () => {
       <Card className="w-full max-w-md p-8 space-y-6">
         <div className="text-center space-y-2">
           <div className="flex justify-center">
-            <img 
-              src="/icon-192x192.png" 
-              alt="Kids Call Home" 
+            <img
+              src="/icon-192x192.png"
+              alt="Kids Call Home"
               className="h-12 w-12"
             />
           </div>
           <h1 className="text-3xl font-bold">Kids Call Home</h1>
           <p className="text-muted-foreground">
-            {isLogin 
-              ? parentName 
-                ? `Welcome back, ${parentName}!` 
+            {isLogin
+              ? parentName
+                ? `Welcome back, ${parentName}!`
                 : "Welcome back, parent!"
               : "Create your parent account"}
           </p>
@@ -533,13 +626,70 @@ const ParentAuth = () => {
 
           <div className="space-y-2">
             <label className="text-sm font-medium">Email</label>
-            <Input
-              type="email"
-              placeholder="parent@email.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
+            <div className="relative">
+              <Input
+                type="email"
+                placeholder="parent@email.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+              {!isLogin && (
+                <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                  {checkingEmailBreach && (
+                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                  )}
+                  {!checkingEmailBreach && emailBreachInfo?.isPwned && (
+                    <AlertTriangle className="h-4 w-4 text-amber-500" />
+                  )}
+                  {!checkingEmailBreach &&
+                    emailBreachInfo?.isPwned === false &&
+                    isValidEmail(email) && (
+                      <CheckCircle2 className="h-4 w-4 text-green-500" />
+                    )}
+                </div>
+              )}
+            </div>
+            {!isLogin && checkingEmailBreach && (
+              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                Checking email security...
+              </p>
+            )}
+            {!isLogin && emailBreachInfo?.isPwned && (
+              <div className="text-xs text-amber-600 dark:text-amber-400 space-y-1">
+                <p className="flex items-start gap-1">
+                  <AlertTriangle className="h-3 w-3 mt-0.5 flex-shrink-0" />
+                  <span className="font-medium">
+                    This email was found in{" "}
+                    {emailBreachInfo.breachCount || "multiple"} data breach(es).
+                  </span>
+                </p>
+                <p className="pl-4 text-muted-foreground">
+                  Your email was exposed in:{" "}
+                  {emailBreachInfo.breaches
+                    ?.slice(0, 3)
+                    .map((b) => b.Name)
+                    .join(", ")}
+                  {emailBreachInfo.breachCount &&
+                  emailBreachInfo.breachCount > 3
+                    ? ` and ${emailBreachInfo.breachCount - 3} more`
+                    : ""}
+                </p>
+                <p className="pl-4 text-muted-foreground">
+                  <strong>Security tip:</strong> Use a strong, unique password
+                  and consider enabling two-factor authentication if available.
+                </p>
+              </div>
+            )}
+            {!isLogin &&
+              emailBreachInfo?.isPwned === false &&
+              isValidEmail(email) && (
+                <p className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
+                  <CheckCircle2 className="h-3 w-3" />
+                  Email not found in known breaches
+                </p>
+              )}
           </div>
 
           <div className="space-y-2">
@@ -561,9 +711,9 @@ const ParentAuth = () => {
                 minLength={6}
                 autoComplete={isLogin ? "current-password" : "new-password"}
                 className={
-                  !isLogin && passwordBreachStatus === 'breached'
+                  !isLogin && passwordBreachStatus === "breached"
                     ? "pr-10 border-destructive focus-visible:ring-destructive"
-                    : !isLogin && passwordBreachStatus === 'safe'
+                    : !isLogin && passwordBreachStatus === "safe"
                     ? "pr-10 border-green-500 focus-visible:ring-green-500"
                     : ""
                 }
@@ -578,12 +728,14 @@ const ParentAuth = () => {
                   {checkingBreach && (
                     <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                   )}
-                  {!checkingBreach && passwordBreachStatus === 'breached' && (
+                  {!checkingBreach && passwordBreachStatus === "breached" && (
                     <AlertTriangle className="h-4 w-4 text-destructive" />
                   )}
-                  {!checkingBreach && passwordBreachStatus === 'safe' && password.length >= 6 && (
-                    <CheckCircle2 className="h-4 w-4 text-green-500" />
-                  )}
+                  {!checkingBreach &&
+                    passwordBreachStatus === "safe" &&
+                    password.length >= 8 && (
+                      <CheckCircle2 className="h-4 w-4 text-green-500" />
+                    )}
                 </div>
               )}
             </div>
@@ -593,18 +745,21 @@ const ParentAuth = () => {
                 Checking password security...
               </p>
             )}
-            {!isLogin && passwordBreachStatus === 'breached' && (
+            {!isLogin && passwordBreachStatus === "breached" && (
               <p className="text-xs text-destructive flex items-start gap-1">
                 <AlertTriangle className="h-3 w-3 mt-0.5 flex-shrink-0" />
-                This password has been compromised in data breaches. Choose a unique password that you haven't used elsewhere.
+                This password has been compromised in data breaches. Choose a
+                unique password that you haven't used elsewhere.
               </p>
             )}
-            {!isLogin && passwordBreachStatus === 'safe' && password.length >= 6 && (
-              <p className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
-                <CheckCircle2 className="h-3 w-3" />
-                Password looks secure!
-              </p>
-            )}
+            {!isLogin &&
+              passwordBreachStatus === "safe" &&
+              password.length >= 8 && (
+                <p className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
+                  <CheckCircle2 className="h-3 w-3" />
+                  Password looks secure!
+                </p>
+              )}
           </div>
 
           {isLogin && (
@@ -614,27 +769,38 @@ const ParentAuth = () => {
                 <div className="flex items-start gap-2 p-3 bg-destructive/10 border border-destructive/20 rounded-md">
                   <AlertCircle className="h-5 w-5 text-destructive mt-0.5" />
                   <div className="flex-1">
-                    <p className="text-sm font-medium text-destructive">Account Locked</p>
+                    <p className="text-sm font-medium text-destructive">
+                      Account Locked
+                    </p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      Too many failed login attempts. Please try again in{' '}
-                      {Math.ceil((lockoutInfo.lockedUntil - Date.now()) / 60000)} minute(s).
+                      Too many failed login attempts. Please try again in{" "}
+                      {Math.ceil(
+                        (lockoutInfo.lockedUntil - Date.now()) / 60000
+                      )}{" "}
+                      minute(s).
                     </p>
                   </div>
                 </div>
               )}
-              
+
               {/* SECURITY: Show attempts remaining warning */}
-              {lockoutInfo && !lockoutInfo.locked && lockoutInfo.attemptsRemaining !== undefined && lockoutInfo.attemptsRemaining < 5 && (
-                <div className="flex items-start gap-2 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-md">
-                  <Shield className="h-5 w-5 text-yellow-600 mt-0.5" />
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-yellow-700">Security Notice</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {lockoutInfo.attemptsRemaining} attempt(s) remaining before account lockout.
-                    </p>
+              {lockoutInfo &&
+                !lockoutInfo.locked &&
+                lockoutInfo.attemptsRemaining !== undefined &&
+                lockoutInfo.attemptsRemaining < 5 && (
+                  <div className="flex items-start gap-2 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-md">
+                    <Shield className="h-5 w-5 text-yellow-600 mt-0.5" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-yellow-700">
+                        Security Notice
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {lockoutInfo.attemptsRemaining} attempt(s) remaining
+                        before account lockout.
+                      </p>
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
               {/* SECURITY: CAPTCHA after failed attempts */}
               {showCaptcha && CAPTCHA_SITE_KEY && (
@@ -663,7 +829,9 @@ const ParentAuth = () => {
                 <Checkbox
                   id="staySignedIn"
                   checked={staySignedIn}
-                  onCheckedChange={(checked) => setStaySignedIn(checked === true)}
+                  onCheckedChange={(checked) =>
+                    setStaySignedIn(checked === true)
+                  }
                 />
                 <Label
                   htmlFor="staySignedIn"
@@ -678,7 +846,11 @@ const ParentAuth = () => {
           {/* SECURITY: Hidden CSRF token */}
           <input type="hidden" name="csrf_token" value={getCSRFToken()} />
 
-          <Button type="submit" className="w-full" disabled={loading || (isLogin && lockoutInfo?.locked)}>
+          <Button
+            type="submit"
+            className="w-full"
+            disabled={loading || (isLogin && lockoutInfo?.locked)}
+          >
             {loading ? (
               "Processing..."
             ) : isLogin ? (

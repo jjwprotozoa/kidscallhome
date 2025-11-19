@@ -40,3 +40,4 @@ dependencies {
     implementation project(':capacitor-status-bar')
 }
 
+
