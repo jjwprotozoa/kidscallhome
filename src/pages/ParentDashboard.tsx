@@ -137,16 +137,21 @@ const ParentDashboard = () => {
     });
   }, [checkAuth, fetchChildren]);
 
+  // Stable callbacks for incoming call subscription
+  const handleIncomingCall = useCallback((call: IncomingCall) => {
+    setIncomingCall(call);
+    incomingCallRef.current = call;
+  }, []);
+
+  const handleCallCleared = useCallback(() => {
+    setIncomingCall(null);
+    incomingCallRef.current = null;
+  }, []);
+
   // Use incoming call subscription hook
   useParentIncomingCallSubscription({
-    onIncomingCall: (call) => {
-      setIncomingCall(call);
-      incomingCallRef.current = call;
-    },
-    onCallCleared: () => {
-      setIncomingCall(null);
-      incomingCallRef.current = null;
-    },
+    onIncomingCall: handleIncomingCall,
+    onCallCleared: handleCallCleared,
     currentIncomingCall: incomingCall,
     enabled: true,
   });
