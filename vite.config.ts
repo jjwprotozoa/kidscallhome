@@ -94,13 +94,24 @@ export default defineConfig(({ mode }) => {
       // Manual chunking strategy to reduce bundle size
       rollupOptions: {
         output: {
+          // Ensure proper chunk loading order by using entryFileNames
+          entryFileNames: 'assets/[name]-[hash].js',
+          chunkFileNames: 'assets/[name]-[hash].js',
           manualChunks: (id) => {
             // Vendor chunks - split large libraries
             if (id.includes('node_modules')) {
-              // React and React DOM - core framework (MUST load first)
-              // Keep React in main entry or ensure it loads before other chunks
+              // React and React DOM - MUST be in main entry or load first
+              // Don't split React out - keep it in main bundle for proper loading order
               if (id.includes('react') || id.includes('react-dom')) {
-                return 'vendor-react';
+                // Return undefined to keep React in main entry chunk
+                return undefined;
+              }
+              
+              // Libraries that use React.createContext - must load after React
+              // Keep them in main entry or ensure React loads first
+              if (id.includes('next-themes')) {
+                // next-themes uses React.createContext, keep in main entry
+                return undefined;
               }
               
               // React Router - depends on React, load early
