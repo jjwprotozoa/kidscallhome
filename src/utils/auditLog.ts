@@ -1,6 +1,9 @@
 // src/utils/auditLog.ts
 // Purpose: Audit logging for security events and user actions
 
+import { supabase } from "@/integrations/supabase/client";
+import { safeLog, sanitizeObject } from "@/utils/security";
+
 export type AuditEventType =
   | 'login_attempt'
   | 'login_success'
@@ -28,6 +31,22 @@ export interface AuditLogEntry {
 }
 
 /**
+ * Sanitize audit log entry for console logging (masks sensitive data)
+ */
+function sanitizeAuditEntry(entry: AuditLogEntry): Partial<AuditLogEntry> {
+  return {
+    type: entry.type,
+    userId: entry.userId ? `${entry.userId.substring(0, 8)}...` : undefined,
+    email: entry.email ? `${entry.email.substring(0, 3)}***@***` : undefined,
+    ip: entry.ip ? '[REDACTED]' : undefined,
+    userAgent: entry.userAgent ? '[REDACTED]' : undefined,
+    timestamp: entry.timestamp,
+    metadata: entry.metadata ? sanitizeObject(entry.metadata) : undefined,
+    severity: entry.severity,
+  };
+}
+
+/**
  * Log audit event (client-side logging - should be sent to server in production)
  */
 export function logAuditEvent(
@@ -50,13 +69,14 @@ export function logAuditEvent(
     severity: options.severity || getDefaultSeverity(type),
   };
 
-  // In production, send to server
-  // For now, log to console in dev mode only
+  // SECURITY: Never log sensitive data to console - use safeLog with sanitization
   if (import.meta.env.DEV) {
-    console.log('[AUDIT]', entry);
+    const sanitized = sanitizeAuditEntry(entry);
+    safeLog.log('[AUDIT]', sanitized);
   }
 
   // Store in localStorage for client-side tracking (limited storage)
+  // Note: Full entry is stored locally, but never logged to console
   try {
     const logs = getStoredAuditLogs();
     logs.push(entry);
@@ -71,27 +91,84 @@ export function logAuditEvent(
     // Ignore storage errors
   }
 
-  // In production, send to server endpoint
-  if (import.meta.env.PROD) {
-    sendAuditLogToServer(entry).catch(() => {
-      // Silently fail - audit logging shouldn't break the app
-    });
-  }
+  // Send to server via Supabase RPC (if available)
+  // Falls back silently if RPC function doesn't exist
+  sendAuditLogToServer(entry).catch(() => {
+    // Silently fail - audit logging shouldn't break the app
+  });
 }
 
 /**
- * Send audit log to server (implement server endpoint)
+ * Send audit log to server via Supabase RPC function
+ * Similar to device tracking - gracefully handles missing RPC function
  */
 async function sendAuditLogToServer(entry: AuditLogEntry): Promise<void> {
   try {
-    // TODO: Implement server endpoint for audit logs
-    // await fetch('/api/audit', {
-    //   method: 'POST',
-    //   headers: { 'Content-Type': 'application/json' },
-    //   body: JSON.stringify(entry),
-    // });
-  } catch {
-    // Silently fail
+    // Try to send via Supabase RPC function (if it exists)
+    // NOTE: The RPC function may not exist yet - 404 errors are expected and handled gracefully
+    const result = await supabase.rpc('log_audit_event', {
+      p_event_type: entry.type,
+      p_user_id: entry.userId || null,
+      p_email: entry.email || null,
+      p_ip: entry.ip || null,
+      p_user_agent: entry.userAgent || null,
+      p_timestamp: new Date(entry.timestamp).toISOString(),
+      p_metadata: entry.metadata || null,
+      p_severity: entry.severity,
+    });
+
+    const { error } = result;
+
+    // If RPC call succeeded, we're done
+    if (!error) {
+      return;
+    }
+
+    // Check if error is because RPC function doesn't exist
+    const isFunctionNotFound = 
+      error.code === '42883' || 
+      error.code === 'P0001' ||
+      error.code === 'PGRST301' ||
+      error.code === 'PGRST202' || // PostgREST function not found in schema cache
+      (error as any).status === 404 ||
+      error.message?.includes('does not exist') ||
+      error.message?.includes('Could not find the function') ||
+      (error.message?.includes('function') && error.message?.includes('not found')) ||
+      error.message?.includes('404') ||
+      error.message?.includes('Not Found') ||
+      error.message?.includes('no matches were found in the schema cache');
+
+    // If function doesn't exist, that's expected - silently fail
+    // The function may not be deployed yet
+    if (isFunctionNotFound) {
+      // Expected behavior - RPC function may not exist yet
+      return;
+    }
+
+    // For other errors, log a warning (but don't break the app)
+    if (import.meta.env.DEV) {
+      safeLog.warn('[AUDIT] RPC error (non-critical):', sanitizeObject(error));
+    }
+  } catch (error) {
+    // Network error or other exception - check if it's a 404 (function not found)
+    const errorObj = error as any;
+    const is404 = errorObj?.status === 404 || 
+                 errorObj?.code === 'PGRST301' ||
+                 errorObj?.code === 'PGRST202' ||
+                 errorObj?.message?.includes('404') ||
+                 errorObj?.message?.includes('Not Found') ||
+                 errorObj?.message?.includes('Could not find the function') ||
+                 errorObj?.message?.includes('no matches were found in the schema cache');
+    
+    if (is404) {
+      // Function doesn't exist - this is expected, silently fail
+      return;
+    }
+
+    // For other network errors, log in dev mode only
+    if (import.meta.env.DEV) {
+      safeLog.warn('[AUDIT] Failed to send to server:', sanitizeObject(errorObj));
+    }
   }
 }
 

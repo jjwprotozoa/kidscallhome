@@ -1,9 +1,17 @@
+// src/pages/ParentAuth.tsx
+// Parent authentication page (login/signup) with security features
+
 import { Captcha } from "@/components/Captcha";
+import { EmailInputWithBreachCheck } from "@/components/auth/EmailInputWithBreachCheck";
+import { LockoutWarning } from "@/components/auth/LockoutWarning";
+import { PasswordInputWithBreachCheck } from "@/components/auth/PasswordInputWithBreachCheck";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useAccountLockout } from "@/hooks/useAccountLockout";
+import { usePasswordBreachCheck } from "@/hooks/usePasswordBreachCheck";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { logAuditEvent } from "@/utils/auditLog";
@@ -12,50 +20,20 @@ import {
   getBehaviorTracker,
   initBehaviorTracking,
 } from "@/utils/botDetection";
+import { getCookie, setCookie } from "@/utils/cookies";
 import { getCSRFToken } from "@/utils/csrf";
-import { isValidEmail, sanitizeAndValidate } from "@/utils/inputValidation";
-import {
-  checkEmailBreach,
-  validatePasswordWithBreachCheck,
-} from "@/utils/passwordBreachCheck";
+import { sanitizeAndValidate } from "@/utils/inputValidation";
 import {
   checkRateLimit,
   clearFailedLogins,
   getRateLimitKey,
-  isEmailLocked,
   recordFailedLogin,
   recordRateLimit,
 } from "@/utils/rateLimiting";
 import { safeLog, sanitizeError } from "@/utils/security";
-import {
-  AlertCircle,
-  AlertTriangle,
-  CheckCircle2,
-  Loader2,
-  LogIn,
-  Shield,
-  UserPlus,
-} from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { LogIn, UserPlus } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-
-// Cookie utility functions
-const setCookie = (name: string, value: string, days: number = 365) => {
-  const expires = new Date();
-  expires.setTime(expires.getTime() + days * 24 * 60 * 60 * 1000);
-  document.cookie = `${name}=${value};expires=${expires.toUTCString()};path=/`;
-};
-
-const getCookie = (name: string): string | null => {
-  const nameEQ = name + "=";
-  const ca = document.cookie.split(";");
-  for (let i = 0; i < ca.length; i++) {
-    let c = ca[i];
-    while (c.charAt(0) === " ") c = c.substring(1, c.length);
-    if (c.indexOf(nameEQ) === 0) return c.substring(nameEQ.length, c.length);
-  }
-  return null;
-};
 
 const ParentAuth = () => {
   const [isLogin, setIsLogin] = useState(true);
@@ -66,28 +44,19 @@ const ParentAuth = () => {
   const [loading, setLoading] = useState(false);
   const [parentName, setParentName] = useState<string | null>(null);
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
-  const [showCaptcha, setShowCaptcha] = useState(false);
-  const [lockoutInfo, setLockoutInfo] = useState<{
-    locked: boolean;
-    lockedUntil?: number;
-    attemptsRemaining?: number;
-  } | null>(null);
-  const [checkingBreach, setCheckingBreach] = useState(false);
-  const [passwordBreachStatus, setPasswordBreachStatus] = useState<
-    "checking" | "safe" | "breached" | null
-  >(null);
-  const [checkingEmailBreach, setCheckingEmailBreach] = useState(false);
-  const [emailBreachInfo, setEmailBreachInfo] = useState<{
-    isPwned: boolean;
-    breachCount?: number;
-    breaches?: Array<{ Name: string; BreachDate: string }>;
-  } | null>(null);
   const navigate = useNavigate();
   const { toast } = useToast();
-  const passwordInputRef = useRef<HTMLInputElement>(null);
 
   // Cloudflare Turnstile site key (set in environment variables)
   const CAPTCHA_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || "";
+
+  // Custom hooks for security features
+  const { lockoutInfo, showCaptcha, setShowCaptcha, updateLockoutInfo } =
+    useAccountLockout(email, isLogin);
+  const { breachStatus, performFinalCheck } = usePasswordBreachCheck(
+    password,
+    isLogin
+  );
 
   // Initialize security features
   useEffect(() => {
@@ -119,95 +88,6 @@ const ParentAuth = () => {
     }
   }, []);
 
-  // Check lockout status when email changes
-  useEffect(() => {
-    if (isLogin && email) {
-      const lockout = isEmailLocked(email);
-      setLockoutInfo(lockout);
-
-      // Show CAPTCHA after 2 failed attempts
-      if (
-        lockout.attemptsRemaining !== undefined &&
-        lockout.attemptsRemaining <= 3
-      ) {
-        setShowCaptcha(true);
-      }
-    } else {
-      setLockoutInfo(null);
-      setShowCaptcha(false);
-    }
-  }, [email, isLogin]);
-
-  // Real-time password breach checking (debounced) for signup
-  useEffect(() => {
-    if (isLogin || !password || password.length < 8) {
-      setPasswordBreachStatus(null);
-      return;
-    }
-
-    // Debounce the breach check
-    const timeoutId = setTimeout(async () => {
-      setCheckingBreach(true);
-      setPasswordBreachStatus("checking");
-      try {
-        const breachCheck = await validatePasswordWithBreachCheck(password);
-        setCheckingBreach(false);
-        if (breachCheck.isPwned) {
-          setPasswordBreachStatus("breached");
-        } else if (breachCheck.valid) {
-          setPasswordBreachStatus("safe");
-        } else {
-          setPasswordBreachStatus(null);
-        }
-      } catch (error) {
-        setCheckingBreach(false);
-        setPasswordBreachStatus(null);
-        // Silently fail - don't show error for real-time checks
-      }
-    }, 800); // 800ms debounce
-
-    return () => clearTimeout(timeoutId);
-  }, [password, isLogin]);
-
-  // Real-time email breach checking (debounced) for signup
-  // NOTE: This is completely non-blocking - if API fails or rate-limited, signup proceeds normally
-  useEffect(() => {
-    if (isLogin || !email || !isValidEmail(email)) {
-      setEmailBreachInfo(null);
-      return;
-    }
-
-    // Debounce the email breach check (longer delay to respect rate limits)
-    const timeoutId = setTimeout(async () => {
-      setCheckingEmailBreach(true);
-      try {
-        // Optional: Get API key from environment if available (requires subscription)
-        const apiKey = import.meta.env.VITE_HIBP_API_KEY;
-        const emailCheck = await checkEmailBreach(email, apiKey);
-        setCheckingEmailBreach(false);
-
-        // Only show breach info if email was actually found in breaches
-        // If API failed/rate-limited, emailCheck.isPwned will be false (fail-open)
-        if (emailCheck.isPwned) {
-          setEmailBreachInfo({
-            isPwned: true,
-            breachCount: emailCheck.breachCount,
-            breaches: emailCheck.breaches,
-          });
-        } else {
-          // Email not breached OR API unavailable/rate-limited - either way, allow signup
-          setEmailBreachInfo({ isPwned: false });
-        }
-      } catch (error) {
-        // Any error: silently fail - never block signup
-        setCheckingEmailBreach(false);
-        setEmailBreachInfo(null);
-        // Don't show any error to user - signup proceeds normally
-      }
-    }, 2000); // 2 second debounce to respect rate limits
-
-    return () => clearTimeout(timeoutId);
-  }, [email, isLogin]);
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -237,11 +117,11 @@ const ParentAuth = () => {
       const sanitizedPassword = validation.sanitized.password || password;
 
       // SECURITY: Final password validation check (only for signup/password change)
-      // Note: Real-time checking happens in useEffect, but we do a final check here
+      // Note: Real-time checking happens in hook, but we do a final check here
       // to ensure the password is still valid at submission time
       if (!isLogin) {
         // If we already know the password is breached, block submission
-        if (passwordBreachStatus === "breached") {
+        if (breachStatus === "breached") {
           toast({
             title: "Password Security Issue",
             description:
@@ -249,49 +129,24 @@ const ParentAuth = () => {
             variant: "destructive",
             duration: 8000,
           });
+          setLoading(false);
           return;
         }
 
         // If password is already marked safe, proceed
         // Otherwise, do a final check (in case real-time check didn't complete)
-        if (passwordBreachStatus !== "safe") {
-          setCheckingBreach(true);
-          setPasswordBreachStatus("checking");
-          try {
-            const breachCheck = await validatePasswordWithBreachCheck(
-              sanitizedPassword
-            );
-            setCheckingBreach(false);
-
-            if (!breachCheck.valid) {
-              if (breachCheck.isPwned) {
-                setPasswordBreachStatus("breached");
-                toast({
-                  title: "Password Security Issue",
-                  description:
-                    "This password has been found in data breaches and is unsafe to use. Please choose a unique password with a mix of letters, numbers, and symbols.",
-                  variant: "destructive",
-                  duration: 8000,
-                });
-              } else {
-                // Other validation errors
-                const firstError = breachCheck.errors[0];
-                toast({
-                  title: "Password Validation Error",
-                  description:
-                    firstError || "Please choose a stronger password",
-                  variant: "destructive",
-                });
-              }
-              return;
-            } else {
-              setPasswordBreachStatus("safe");
-            }
-          } catch (error) {
-            setCheckingBreach(false);
-            setPasswordBreachStatus(null);
-            // If breach check fails, allow password but log warning
-            safeLog.warn("Breach check failed:", sanitizeError(error));
+        if (breachStatus !== "safe") {
+          const isValid = await performFinalCheck(sanitizedPassword);
+          if (!isValid) {
+            toast({
+              title: "Password Security Issue",
+              description:
+                "This password has been found in data breaches and is unsafe to use. Please choose a unique password with a mix of letters, numbers, and symbols.",
+              variant: "destructive",
+              duration: 8000,
+            });
+            setLoading(false);
+            return;
           }
         }
       }
@@ -331,19 +186,20 @@ const ParentAuth = () => {
 
       // SECURITY: Check account lockout
       if (isLogin) {
-        const lockout = isEmailLocked(sanitizedEmail);
-        if (lockout.locked && lockout.lockedUntil) {
-          const minutes = Math.ceil((lockout.lockedUntil - Date.now()) / 60000);
+        if (lockoutInfo?.locked && lockoutInfo.lockedUntil) {
+          const minutes = Math.ceil(
+            (lockoutInfo.lockedUntil - Date.now()) / 60000
+          );
           toast({
             title: "Account Locked",
             description: `Account is locked due to multiple failed attempts. Try again in ${minutes} minute(s).`,
             variant: "destructive",
           });
-          setLockoutInfo(lockout);
           logAuditEvent("account_locked", {
             email: sanitizedEmail,
             severity: "high",
           });
+          setLoading(false);
           return;
         }
 
@@ -354,6 +210,7 @@ const ParentAuth = () => {
             description: "Please complete the security check below.",
             variant: "destructive",
           });
+          setLoading(false);
           return;
         }
       }
@@ -434,7 +291,7 @@ const ParentAuth = () => {
               description: `Too many failed attempts. Account locked for ${minutes} minute(s).`,
               variant: "destructive",
             });
-            setLockoutInfo({
+            updateLockoutInfo({
               locked: true,
               lockedUntil: failedLogin.lockedUntil,
             });
@@ -581,10 +438,8 @@ const ParentAuth = () => {
       }
     } finally {
       setLoading(false);
-      setCheckingBreach(false);
       // SECURITY: Clear password field after use
       setPassword("");
-      setPasswordBreachStatus(null);
       setCaptchaToken(null);
     }
   };
@@ -624,183 +479,23 @@ const ParentAuth = () => {
             </div>
           )}
 
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Email</label>
-            <div className="relative">
-              <Input
-                type="email"
-                placeholder="parent@email.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-              {!isLogin && (
-                <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                  {checkingEmailBreach && (
-                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                  )}
-                  {!checkingEmailBreach && emailBreachInfo?.isPwned && (
-                    <AlertTriangle className="h-4 w-4 text-amber-500" />
-                  )}
-                  {!checkingEmailBreach &&
-                    emailBreachInfo?.isPwned === false &&
-                    isValidEmail(email) && (
-                      <CheckCircle2 className="h-4 w-4 text-green-500" />
-                    )}
-                </div>
-              )}
-            </div>
-            {!isLogin && checkingEmailBreach && (
-              <p className="text-xs text-muted-foreground flex items-center gap-1">
-                <Loader2 className="h-3 w-3 animate-spin" />
-                Checking email security...
-              </p>
-            )}
-            {!isLogin && emailBreachInfo?.isPwned && (
-              <div className="text-xs text-amber-600 dark:text-amber-400 space-y-1">
-                <p className="flex items-start gap-1">
-                  <AlertTriangle className="h-3 w-3 mt-0.5 flex-shrink-0" />
-                  <span className="font-medium">
-                    This email was found in{" "}
-                    {emailBreachInfo.breachCount || "multiple"} data breach(es).
-                  </span>
-                </p>
-                <p className="pl-4 text-muted-foreground">
-                  Your email was exposed in:{" "}
-                  {emailBreachInfo.breaches
-                    ?.slice(0, 3)
-                    .map((b) => b.Name)
-                    .join(", ")}
-                  {emailBreachInfo.breachCount &&
-                  emailBreachInfo.breachCount > 3
-                    ? ` and ${emailBreachInfo.breachCount - 3} more`
-                    : ""}
-                </p>
-                <p className="pl-4 text-muted-foreground">
-                  <strong>Security tip:</strong> Use a strong, unique password
-                  and consider enabling two-factor authentication if available.
-                </p>
-              </div>
-            )}
-            {!isLogin &&
-              emailBreachInfo?.isPwned === false &&
-              isValidEmail(email) && (
-                <p className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
-                  <CheckCircle2 className="h-3 w-3" />
-                  Email not found in known breaches
-                </p>
-              )}
-          </div>
+          <EmailInputWithBreachCheck
+            email={email}
+            onChange={setEmail}
+            isLogin={isLogin}
+          />
 
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Password</label>
-            <div className="relative">
-              <Input
-                ref={passwordInputRef}
-                type="password"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => {
-                  setPassword(e.target.value);
-                  // Reset breach status when password changes
-                  if (!isLogin) {
-                    setPasswordBreachStatus(null);
-                  }
-                }}
-                required
-                minLength={6}
-                autoComplete={isLogin ? "current-password" : "new-password"}
-                className={
-                  !isLogin && passwordBreachStatus === "breached"
-                    ? "pr-10 border-destructive focus-visible:ring-destructive"
-                    : !isLogin && passwordBreachStatus === "safe"
-                    ? "pr-10 border-green-500 focus-visible:ring-green-500"
-                    : ""
-                }
-                // SECURITY: Ensure password is never exposed in DOM
-                onBlur={() => {
-                  // Clear password from memory after blur (best effort)
-                  // Note: React state will still hold it, but this prevents DOM exposure
-                }}
-              />
-              {!isLogin && (
-                <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                  {checkingBreach && (
-                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                  )}
-                  {!checkingBreach && passwordBreachStatus === "breached" && (
-                    <AlertTriangle className="h-4 w-4 text-destructive" />
-                  )}
-                  {!checkingBreach &&
-                    passwordBreachStatus === "safe" &&
-                    password.length >= 8 && (
-                      <CheckCircle2 className="h-4 w-4 text-green-500" />
-                    )}
-                </div>
-              )}
-            </div>
-            {!isLogin && checkingBreach && (
-              <p className="text-xs text-muted-foreground flex items-center gap-1">
-                <Loader2 className="h-3 w-3 animate-spin" />
-                Checking password security...
-              </p>
-            )}
-            {!isLogin && passwordBreachStatus === "breached" && (
-              <p className="text-xs text-destructive flex items-start gap-1">
-                <AlertTriangle className="h-3 w-3 mt-0.5 flex-shrink-0" />
-                This password has been compromised in data breaches. Choose a
-                unique password that you haven't used elsewhere.
-              </p>
-            )}
-            {!isLogin &&
-              passwordBreachStatus === "safe" &&
-              password.length >= 8 && (
-                <p className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
-                  <CheckCircle2 className="h-3 w-3" />
-                  Password looks secure!
-                </p>
-              )}
-          </div>
+          <PasswordInputWithBreachCheck
+            password={password}
+            onChange={setPassword}
+            isLogin={isLogin}
+            autoComplete={isLogin ? "current-password" : "new-password"}
+          />
 
           {isLogin && (
             <>
               {/* SECURITY: Show lockout warning */}
-              {lockoutInfo?.locked && lockoutInfo.lockedUntil && (
-                <div className="flex items-start gap-2 p-3 bg-destructive/10 border border-destructive/20 rounded-md">
-                  <AlertCircle className="h-5 w-5 text-destructive mt-0.5" />
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-destructive">
-                      Account Locked
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Too many failed login attempts. Please try again in{" "}
-                      {Math.ceil(
-                        (lockoutInfo.lockedUntil - Date.now()) / 60000
-                      )}{" "}
-                      minute(s).
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* SECURITY: Show attempts remaining warning */}
-              {lockoutInfo &&
-                !lockoutInfo.locked &&
-                lockoutInfo.attemptsRemaining !== undefined &&
-                lockoutInfo.attemptsRemaining < 5 && (
-                  <div className="flex items-start gap-2 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-md">
-                    <Shield className="h-5 w-5 text-yellow-600 mt-0.5" />
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-yellow-700">
-                        Security Notice
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {lockoutInfo.attemptsRemaining} attempt(s) remaining
-                        before account lockout.
-                      </p>
-                    </div>
-                  </div>
-                )}
+              {lockoutInfo && <LockoutWarning lockoutInfo={lockoutInfo} />}
 
               {/* SECURITY: CAPTCHA after failed attempts */}
               {showCaptcha && CAPTCHA_SITE_KEY && (

@@ -1,9 +1,22 @@
 import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
+import { safeLog } from "./utils/security";
 
-// Log startup (works in both dev and prod)
-console.log("🚀 [APP INIT] Starting application...", {
+// Disable console in production (fallback - esbuild should remove these)
+if (import.meta.env.PROD) {
+  // Override console methods to prevent any logging in production
+  const noop = () => {};
+  console.log = noop;
+  console.debug = noop;
+  console.info = noop;
+  // Keep console.error and console.warn for critical issues, but they'll be removed by esbuild
+  // console.error = noop;
+  // console.warn = noop;
+}
+
+// Log startup (only in development)
+safeLog.log("🚀 [APP INIT] Starting application...", {
   mode: import.meta.env.MODE,
   dev: import.meta.env.DEV,
   prod: import.meta.env.PROD,
@@ -26,8 +39,8 @@ ${error.message}
   throw error;
 }
 
-// Log environment info for debugging (always log in production too for troubleshooting)
-console.log("🔍 [ENV] Environment variables check:", {
+// Log environment info for debugging (only in development)
+safeLog.log("🔍 [ENV] Environment variables check:", {
   hasSupabaseUrl: !!import.meta.env.VITE_SUPABASE_URL,
   hasSupabaseKey: !!import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
   urlLength: import.meta.env.VITE_SUPABASE_URL?.length || 0,
@@ -35,13 +48,13 @@ console.log("🔍 [ENV] Environment variables check:", {
 });
 
 try {
-  console.log("⚛️ [APP INIT] Creating React root...");
+  safeLog.log("⚛️ [APP INIT] Creating React root...");
   const root = createRoot(rootElement);
-  console.log("⚛️ [APP INIT] Rendering App component...");
+  safeLog.log("⚛️ [APP INIT] Rendering App component...");
   root.render(<App />);
-  console.log("✅ [APP INIT] App rendered successfully");
+  safeLog.log("✅ [APP INIT] App rendered successfully");
 } catch (error) {
-  console.error("❌ [APP INIT] Failed to render app:", error);
+  safeLog.error("❌ [APP INIT] Failed to render app:", error);
   // Show error in the DOM if React fails to render
   rootElement.innerHTML = `
     <div style="padding: 2rem; font-family: system-ui; max-width: 600px; margin: 2rem auto;">

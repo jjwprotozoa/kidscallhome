@@ -1,8 +1,11 @@
 // src/pages/ChildLogin.tsx
 // Purpose: Kid-friendly login page with visual color/animal selection and number keypad
 
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { ColorAnimalSelector } from "@/components/childLogin/ColorAnimalSelector";
+import { FamilyCodeKeypad } from "@/components/childLogin/FamilyCodeKeypad";
+import { NumberEntryScreen } from "@/components/childLogin/NumberEntryScreen";
+import { SuccessScreen } from "@/components/childLogin/SuccessScreen";
+import { colors } from "@/data/childLoginConstants";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -12,59 +15,8 @@ import {
 } from "@/utils/deviceAuthorization";
 import { logDeviceTracking } from "@/utils/deviceTrackingLog";
 import { safeLog, sanitizeError } from "@/utils/security";
-import {
-  ChevronLeft,
-  ChevronRight,
-  Delete,
-  Smile,
-  Sparkles,
-} from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-
-// Kid-friendly login code options (must match AddChildDialog)
-const colors = [
-  { name: "red", color: "#EF4444" },
-  { name: "blue", color: "#3B82F6" },
-  { name: "green", color: "#10B981" },
-  { name: "yellow", color: "#FBBF24" },
-  { name: "orange", color: "#F97316" },
-  { name: "purple", color: "#A855F7" },
-  { name: "pink", color: "#EC4899" },
-  { name: "brown", color: "#92400E" },
-  { name: "black", color: "#1F2937" },
-  { name: "white", color: "#F3F4F6" },
-];
-
-const animals = [
-  { name: "cat", emoji: "🐱" },
-  { name: "dog", emoji: "🐶" },
-  { name: "bird", emoji: "🐦" },
-  { name: "fish", emoji: "🐠" },
-  { name: "bear", emoji: "🐻" },
-  { name: "lion", emoji: "🦁" },
-  { name: "tiger", emoji: "🐯" },
-  { name: "elephant", emoji: "🐘" },
-  { name: "monkey", emoji: "🐵" },
-  { name: "rabbit", emoji: "🐰" },
-  { name: "horse", emoji: "🐴" },
-  { name: "duck", emoji: "🦆" },
-  { name: "cow", emoji: "🐄" },
-  { name: "pig", emoji: "🐷" },
-  { name: "sheep", emoji: "🐑" },
-];
-
-// Keypad blocks configuration
-const KEYPAD_BLOCKS = [
-  { id: 0, label: "A-I", chars: ["A", "B", "C", "D", "E", "F", "G", "H", "I"] },
-  { id: 1, label: "J-R", chars: ["J", "K", "L", "M", "N", "O", "P", "Q", "R"] },
-  { id: 2, label: "S-Z", chars: ["S", "T", "U", "V", "W", "X", "Y", "Z"] },
-  {
-    id: 3,
-    label: "0-9",
-    chars: ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"],
-  },
-];
 
 const ChildLogin = () => {
   const [searchParams] = useSearchParams();
@@ -85,13 +37,6 @@ const ChildLogin = () => {
   const [skipFamilyCode, setSkipFamilyCode] = useState(false); // Skip family code if device is authorized
   const navigate = useNavigate();
   const { toast } = useToast();
-  const keypadRef = useRef<HTMLDivElement>(null);
-  const touchStartX = useRef<number>(0);
-  const touchEndX = useRef<number>(0);
-  const touchStartTime = useRef<number>(0);
-  const isButtonInteraction = useRef<boolean>(false);
-  const buttonTouchStartX = useRef<number>(0);
-  const buttonTouchStartTime = useRef<number>(0);
 
   const handleLoginWithCode = async (fullCode: string) => {
     setLoading(true);
@@ -129,7 +74,8 @@ const ChildLogin = () => {
 
       if (!data) {
         // SECURITY: Never log login codes - they are sensitive credentials
-        safeLog.error("No data returned for login code (code redacted)");
+        // This is expected behavior for invalid codes - log as debug, not error
+        safeLog.debug("Login code not found in database (code redacted)");
         toast({
           title: "Code not found",
           description: "Please check your code and try again",
@@ -355,40 +301,48 @@ const ChildLogin = () => {
   // Handle magic link with code parameter
   useEffect(() => {
     const codeParam = searchParams.get("code");
-    if (codeParam && codeParam.trim() !== "" && step === "familyCode") {
-      // Only process magic link if we're on the initial familyCode step
-      // This prevents re-processing if user navigates back
+    if (codeParam && codeParam.trim() !== "") {
+      // Process magic link regardless of current step (but only once)
       const decodedCode = decodeURIComponent(codeParam.trim());
       const parts = decodedCode.split("-");
 
       if (parts.length === 3) {
         const [famCode, option, num] = parts;
+        // Validate family code is exactly 6 characters
+        const cleanedFamilyCode = famCode
+          ?.toUpperCase()
+          .replace(/[^A-Z0-9]/g, "")
+          .slice(0, 6) || "";
+        
         if (
-          famCode &&
+          cleanedFamilyCode.length === 6 &&
           option &&
           num &&
-          famCode.length > 0 &&
           option.length > 0 &&
           num.length > 0
         ) {
-          setFamilyCode(famCode.toUpperCase());
-          setSelectedOption(option);
+          setFamilyCode(cleanedFamilyCode);
+          setSelectedOption(option.toLowerCase());
           setNumber(num);
           // Determine if it's a color or animal
-          const isColor = colors.some((c) => c.name === option);
+          const isColor = colors.some((c) => c.name === option.toLowerCase());
           setCodeType(isColor ? "color" : "animal");
           // Magic link always requires family code (new device)
           setSkipFamilyCode(false);
-          // Don't change step - let handleLoginWithCode handle navigation
+          // Normalize the code to match database format before auto-login
+          // Format: FAMILYCODE-option-number (uppercase family code, lowercase option)
+          const normalizedMagicCode = `${cleanedFamilyCode}-${option.toLowerCase()}-${num}`;
           // Auto-login if code is provided
           setTimeout(() => {
-            handleLoginWithCode(decodedCode);
+            handleLoginWithCode(normalizedMagicCode);
           }, 500);
         } else {
           toast({
             title: "Invalid login code",
             description:
-              "The login code format is incorrect. Please check and try again.",
+              cleanedFamilyCode.length !== 6
+                ? "Family code must be exactly 6 characters. Please check and try again."
+                : "The login code format is incorrect. Please check and try again.",
             variant: "destructive",
           });
         }
@@ -396,7 +350,7 @@ const ChildLogin = () => {
         toast({
           title: "Invalid login code",
           description:
-            "The login code format is incorrect. Expected: familyCode-color/animal-number",
+            "The login code format is incorrect. Expected: familyCode-color/animal-number (e.g., ABC123-monkey-37)",
           variant: "destructive",
         });
       }
@@ -454,91 +408,7 @@ const ChildLogin = () => {
   };
 
   const handleBlockChange = (newBlock: number) => {
-    if (newBlock >= 0 && newBlock < KEYPAD_BLOCKS.length) {
-      setCurrentBlock(newBlock);
-    }
-  };
-
-  const handleSwipeStart = (e: React.TouchEvent) => {
-    // Check if button interaction flag is set (button was touched first)
-    if (isButtonInteraction.current) {
-      return;
-    }
-
-    // Always track swipe start - buttons will set the flag if they're being clicked
-    // This allows swipes to work even if they start near buttons
-    touchStartX.current = e.touches[0].clientX;
-    touchStartTime.current = Date.now();
-    const target = e.target as HTMLElement;
-    safeLog.debug("🔄 [SWIPE] Start:", {
-      x: touchStartX.current,
-      target: target.tagName,
-      isButton: target.closest("button") !== null,
-    });
-  };
-
-  const handleSwipeMove = (e: React.TouchEvent) => {
-    // Only update if swipe was started
-    if (touchStartX.current === 0) {
-      return;
-    }
-
-    // Update end position during swipe (even if it passes over buttons)
-    // Don't check button flag here - allow swipes to continue even if they pass over buttons
-    touchEndX.current = e.touches[0].clientX;
-  };
-
-  const handleSwipeEnd = (e?: React.TouchEvent) => {
-    // Don't process swipe if touch positions weren't set
-    if (touchStartX.current === 0 || touchEndX.current === 0) {
-      return;
-    }
-
-    const swipeDistance = touchStartX.current - touchEndX.current;
-    const swipeDuration = Date.now() - touchStartTime.current;
-    const minSwipeDistance = 30; // Minimum distance for a swipe
-    const maxSwipeDuration = 600; // Maximum duration for a swipe
-
-    safeLog.debug("🔄 [SWIPE] End:", {
-      distance: Math.abs(swipeDistance),
-      duration: swipeDuration,
-      startX: touchStartX.current,
-      endX: touchEndX.current,
-      buttonFlag: isButtonInteraction.current,
-      meetsDistance: Math.abs(swipeDistance) > minSwipeDistance,
-      meetsDuration: swipeDuration < maxSwipeDuration,
-    });
-
-    // If it's a significant swipe, process it even if button flag is set
-    // (button flag only prevents small taps from triggering swipes)
-    const isSignificantSwipe = Math.abs(swipeDistance) > minSwipeDistance;
-
-    // Only trigger swipe if:
-    // 1. Distance is significant enough
-    // 2. Duration is reasonable
-    // 3. Either it's a significant swipe OR button flag is not set
-    if (
-      isSignificantSwipe &&
-      swipeDuration < maxSwipeDuration &&
-      touchStartX.current !== 0 &&
-      touchEndX.current !== 0 &&
-      (!isButtonInteraction.current || Math.abs(swipeDistance) > 50) // Allow swipes > 50px even if button flag is set
-    ) {
-      if (swipeDistance > 0) {
-        // Swipe left - go to next block
-        safeLog.debug("➡️ [SWIPE] Moving to next block");
-        handleBlockChange(Math.min(currentBlock + 1, KEYPAD_BLOCKS.length - 1));
-      } else {
-        // Swipe right - go to previous block
-        safeLog.debug("⬅️ [SWIPE] Moving to previous block");
-        handleBlockChange(Math.max(currentBlock - 1, 0));
-      }
-    }
-
-    // Reset touch positions
-    touchStartX.current = 0;
-    touchEndX.current = 0;
-    touchStartTime.current = 0;
+    setCurrentBlock(newBlock);
   };
 
   const handleLogin = async () => {
@@ -786,428 +656,54 @@ const ChildLogin = () => {
   // Success animation screen
   if (step === "success" && childData) {
     return (
-      <div className="min-h-[100dvh] flex items-center justify-center bg-primary/5 p-4">
-        <Card className="w-full max-w-md p-8 space-y-6 text-center">
-          <div className="space-y-4 animate-bounce">
-            <div className="flex justify-center">
-              <div
-                className="w-24 h-24 rounded-full flex items-center justify-center text-4xl font-bold text-white shadow-lg"
-                style={{ backgroundColor: childData.avatar_color }}
-              >
-                {childData.name[0].toUpperCase()}
-              </div>
-            </div>
-            <div className="flex justify-center gap-2">
-              <Sparkles className="h-8 w-8 text-yellow-500 animate-pulse" />
-              <h1 className="text-4xl font-bold text-primary">
-                Welcome, {childData.name}!
-              </h1>
-              <Sparkles className="h-8 w-8 text-yellow-500 animate-pulse" />
-            </div>
-            <p className="text-xl text-muted-foreground">You're all set! 🎉</p>
-          </div>
-        </Card>
-      </div>
+      <SuccessScreen
+        childName={childData.name}
+        avatarColor={childData.avatar_color}
+      />
     );
   }
 
   // Number entry screen
   if (step === "number") {
-    const selectedItem =
-      codeType === "color"
-        ? colors.find((c) => c.name === selectedOption)
-        : animals.find((a) => a.name === selectedOption);
-
     return (
-      <div className="min-h-[100dvh] flex items-center justify-center bg-primary/5 p-4">
-        <Card className="w-full max-w-md p-8 space-y-6">
-          <div className="text-center space-y-4">
-            <Button
-              variant="ghost"
-              onClick={handleBack}
-              className="absolute top-4 left-4"
-            >
-              ← Back
-            </Button>
-            <div className="flex items-center justify-center gap-3">
-              {codeType === "color" &&
-              selectedItem &&
-              "color" in selectedItem ? (
-                <div
-                  className="w-16 h-16 rounded-full border-4 border-primary"
-                  style={{ backgroundColor: selectedItem.color }}
-                />
-              ) : selectedItem && "emoji" in selectedItem ? (
-                <div className="text-6xl">{selectedItem.emoji}</div>
-              ) : null}
-              <div>
-                <h2 className="text-2xl font-bold capitalize">
-                  {selectedOption}
-                </h2>
-                <p className="text-muted-foreground">
-                  Family:{" "}
-                  <span className="font-mono font-semibold">{familyCode}</span>
-                </p>
-                <p className="text-muted-foreground">Now enter your number</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-muted p-6 rounded-2xl">
-            <div className="flex justify-center mb-4">
-              <div className="w-32 h-20 rounded-xl bg-card flex items-center justify-center border-2 border-primary/20">
-                <span className="text-5xl font-bold text-primary">
-                  {number || "?"}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-3 gap-3">
-            {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
-              <Button
-                key={num}
-                onClick={() => handleNumberClick(num.toString())}
-                size="lg"
-                variant="outline"
-                className="h-16 text-2xl font-bold rounded-xl"
-              >
-                {num}
-              </Button>
-            ))}
-            <Button
-              onClick={handleDelete}
-              size="lg"
-              variant="outline"
-              className="h-16 rounded-xl col-span-2"
-              disabled={!number}
-            >
-              <Delete className="h-6 w-6 mr-2" />
-              Delete
-            </Button>
-            <Button
-              onClick={() => handleNumberClick("0")}
-              size="lg"
-              variant="outline"
-              className="h-16 text-2xl font-bold rounded-xl"
-            >
-              0
-            </Button>
-          </div>
-
-          <Button
-            onClick={handleLogin}
-            disabled={!number || loading}
-            size="lg"
-            className="w-full text-xl h-14 rounded-xl"
-          >
-            {loading ? "Checking..." : "Go!"}
-          </Button>
-        </Card>
-      </div>
+      <NumberEntryScreen
+        selectedOption={selectedOption}
+        codeType={codeType}
+        familyCode={familyCode}
+        number={number}
+        loading={loading}
+        onBack={handleBack}
+        onNumberClick={handleNumberClick}
+        onDelete={handleDelete}
+        onLogin={handleLogin}
+      />
     );
   }
 
   // Family code entry screen
   if (step === "familyCode") {
-    const currentBlockData = KEYPAD_BLOCKS[currentBlock];
-    const isFirstBlock = currentBlock === 0;
-    const isLastBlock = currentBlock === KEYPAD_BLOCKS.length - 1;
-
     return (
-      <div className="min-h-[100dvh] flex items-center justify-center bg-primary/5 p-4">
-        <Card className="w-full max-w-md p-6 space-y-3">
-          <div className="text-center space-y-2">
-            <Smile className="h-16 w-16 text-primary mx-auto" />
-            <h1 className="text-3xl font-bold text-primary">Hi There!</h1>
-            <p className="text-lg">Enter your family code</p>
-            <p className="text-xs text-muted-foreground">
-              Ask a parent for your 6-character family code
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <div className="bg-muted p-4 rounded-2xl">
-              <div className="flex justify-center">
-                <div className="w-full max-w-xs h-16 rounded-xl bg-card flex items-center justify-center border-2 border-primary/20">
-                  <span className="text-3xl font-bold text-primary font-mono tracking-wider">
-                    {familyCode || "______"}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Block Navigation */}
-            <div className="flex items-center justify-between gap-2">
-              <Button
-                onClick={() => handleBlockChange(currentBlock - 1)}
-                disabled={isFirstBlock}
-                variant="outline"
-                size="sm"
-                className="flex-shrink-0"
-                aria-label="Previous block"
-              >
-                <ChevronLeft className="h-5 w-5" />
-              </Button>
-
-              {/* Block Indicator Dots */}
-              <div className="flex items-center gap-2 flex-1 justify-center">
-                {KEYPAD_BLOCKS.map((block, index) => (
-                  <button
-                    key={block.id}
-                    onClick={() => handleBlockChange(index)}
-                    className={`transition-all duration-200 rounded-full ${
-                      index === currentBlock
-                        ? "w-3 h-3 bg-primary scale-125"
-                        : "w-2 h-2 bg-muted-foreground/30 hover:bg-muted-foreground/50"
-                    }`}
-                    aria-label={`Go to ${block.label} block`}
-                    aria-current={index === currentBlock ? "true" : "false"}
-                  />
-                ))}
-              </div>
-
-              <Button
-                onClick={() => handleBlockChange(currentBlock + 1)}
-                disabled={isLastBlock}
-                variant="outline"
-                size="sm"
-                className="flex-shrink-0"
-                aria-label="Next block"
-              >
-                <ChevronRight className="h-5 w-5" />
-              </Button>
-            </div>
-
-            {/* Block Label */}
-            <div className="text-center -mt-1">
-              <p className="text-xs font-medium text-muted-foreground">
-                {currentBlockData.label}
-              </p>
-            </div>
-
-            {/* Keypad Block */}
-            <div
-              ref={keypadRef}
-              className="relative overflow-hidden"
-              style={{ touchAction: "pan-x" }}
-            >
-              {/* Swipe zones on edges - always swipeable (behind buttons but functional) */}
-              <div
-                className="absolute left-0 top-0 bottom-0 w-16 z-0 pointer-events-auto"
-                onTouchStart={handleSwipeStart}
-                onTouchMove={handleSwipeMove}
-                onTouchEnd={(e) => handleSwipeEnd(e)}
-              />
-              <div
-                className="absolute right-0 top-0 bottom-0 w-16 z-0 pointer-events-auto"
-                onTouchStart={handleSwipeStart}
-                onTouchMove={handleSwipeMove}
-                onTouchEnd={(e) => handleSwipeEnd(e)}
-              />
-              {/* Center area with buttons - gaps between buttons are swipeable */}
-              <div
-                className="relative z-10"
-                onTouchStart={handleSwipeStart}
-                onTouchMove={handleSwipeMove}
-                onTouchEnd={(e) => handleSwipeEnd(e)}
-              >
-                {KEYPAD_BLOCKS.map((block, blockIndex) => (
-                  <div
-                    key={block.id}
-                    className={`grid grid-cols-3 gap-3 transition-all duration-300 ease-in-out ${
-                      blockIndex === currentBlock
-                        ? "opacity-100 translate-x-0 pointer-events-auto"
-                        : blockIndex < currentBlock
-                        ? "opacity-0 -translate-x-full absolute inset-0 pointer-events-none"
-                        : "opacity-0 translate-x-full absolute inset-0 pointer-events-none"
-                    }`}
-                  >
-                    {block.chars.map((char) => (
-                      <Button
-                        key={char}
-                        onClick={() =>
-                          handleFamilyCodeChange(familyCode + char)
-                        }
-                        onTouchStart={(e) => {
-                          // Track button touch start position and time
-                          buttonTouchStartX.current = e.touches[0].clientX;
-                          buttonTouchStartTime.current = Date.now();
-                          // Don't set flag yet - wait to see if it's a click or swipe
-                        }}
-                        onTouchMove={(e) => {
-                          // If finger moves significantly, it's a swipe, not a button click
-                          const moveDistance = Math.abs(
-                            e.touches[0].clientX - buttonTouchStartX.current
-                          );
-                          if (moveDistance > 10) {
-                            // It's a swipe, don't mark as button interaction
-                            isButtonInteraction.current = false;
-                          } else {
-                            // Small movement, likely a button click
-                            isButtonInteraction.current = true;
-                          }
-                        }}
-                        onTouchEnd={(e) => {
-                          // Check if it was a click (small movement) or swipe
-                          const moveDistance = Math.abs(
-                            e.changedTouches[0].clientX -
-                              buttonTouchStartX.current
-                          );
-                          const touchDuration =
-                            Date.now() - buttonTouchStartTime.current;
-
-                          if (moveDistance < 10 && touchDuration < 300) {
-                            // It's a button click - prevent swipe
-                            isButtonInteraction.current = true;
-                            setTimeout(() => {
-                              isButtonInteraction.current = false;
-                            }, 100);
-                          } else {
-                            // It was a swipe - allow it
-                            isButtonInteraction.current = false;
-                          }
-                        }}
-                        onTouchCancel={(e) => {
-                          // Handle touch cancel
-                          isButtonInteraction.current = false;
-                          buttonTouchStartX.current = 0;
-                          buttonTouchStartTime.current = 0;
-                        }}
-                        size="lg"
-                        variant="outline"
-                        className="h-14 sm:h-16 text-xl sm:text-2xl font-bold rounded-xl hover:bg-primary hover:text-primary-foreground transition-all active:scale-95 border-2 pointer-events-auto relative z-10"
-                        disabled={familyCode.length >= 6}
-                        aria-label={`Enter ${char}`}
-                        style={{
-                          touchAction: "manipulation",
-                          WebkitTouchCallout: "none",
-                          WebkitUserSelect: "none",
-                        }}
-                      >
-                        {char}
-                      </Button>
-                    ))}
-                    {/* Fill empty slots in last row for consistent grid (S-Z block has 8 chars) */}
-                    {block.chars.length % 3 === 1 && (
-                      <>
-                        <div className="col-span-1" />
-                        <div className="col-span-1" />
-                      </>
-                    )}
-                    {block.chars.length % 3 === 2 && (
-                      <div className="col-span-1" />
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Delete and Next Buttons - Closer to keypad */}
-            <div className="space-y-2 -mt-1">
-              <Button
-                onClick={() => setFamilyCode(familyCode.slice(0, -1))}
-                size="lg"
-                variant="outline"
-                className="w-full h-11 rounded-xl"
-                disabled={!familyCode}
-              >
-                <Delete className="h-4 w-4 mr-2" />
-                Delete
-              </Button>
-
-              <Button
-                onClick={handleFamilyCodeSubmit}
-                disabled={familyCode.length < 3 || loading}
-                size="lg"
-                className="w-full text-lg h-11 rounded-xl"
-              >
-                {loading ? "Checking..." : "Next"}
-              </Button>
-            </div>
-          </div>
-        </Card>
-      </div>
+      <FamilyCodeKeypad
+        familyCode={familyCode}
+        currentBlock={currentBlock}
+        loading={loading}
+        onFamilyCodeChange={handleFamilyCodeChange}
+        onBlockChange={handleBlockChange}
+        onDelete={() => setFamilyCode(familyCode.slice(0, -1))}
+        onSubmit={handleFamilyCodeSubmit}
+      />
     );
   }
 
   // Initial selection screen
   return (
-    <div className="min-h-[100dvh] flex items-center justify-center bg-primary/5 p-4">
-      <Card className="w-full max-w-2xl p-8 space-y-6">
-        <div className="text-center space-y-4">
-          <Button
-            variant="ghost"
-            onClick={handleBack}
-            className="absolute top-4 left-4"
-          >
-            ← Back
-          </Button>
-          <Smile className="h-20 w-20 text-primary mx-auto" />
-          <h1 className="text-4xl font-bold text-primary">Hi There!</h1>
-          <p className="text-xl">
-            Family Code:{" "}
-            <span className="font-mono font-bold text-primary">
-              {familyCode}
-            </span>
-          </p>
-          <p className="text-lg">Pick your color or animal</p>
-        </div>
-
-        <div className="space-y-4">
-          <div className="flex gap-2">
-            <Button
-              variant={codeType === "color" ? "default" : "outline"}
-              onClick={() => setCodeType("color")}
-              className="flex-1"
-              size="lg"
-            >
-              Colors
-            </Button>
-            <Button
-              variant={codeType === "animal" ? "default" : "outline"}
-              onClick={() => setCodeType("animal")}
-              className="flex-1"
-              size="lg"
-            >
-              Animals
-            </Button>
-          </div>
-
-          {codeType === "color" ? (
-            <div className="grid grid-cols-5 gap-3">
-              {colors.map((c) => (
-                <button
-                  key={c.name}
-                  onClick={() => handleOptionSelect(c.name, "color")}
-                  className="h-20 rounded-xl border-2 border-transparent hover:border-primary transition-all flex items-center justify-center hover:scale-105"
-                  style={{ backgroundColor: c.color }}
-                >
-                  <span className="text-white font-bold text-sm capitalize drop-shadow-lg">
-                    {c.name}
-                  </span>
-                </button>
-              ))}
-            </div>
-          ) : (
-            <div className="grid grid-cols-5 gap-3">
-              {animals.map((a) => (
-                <button
-                  key={a.name}
-                  onClick={() => handleOptionSelect(a.name, "animal")}
-                  className="h-20 rounded-xl border-2 border-transparent hover:border-primary transition-all flex flex-col items-center justify-center hover:scale-105 hover:bg-muted"
-                >
-                  <span className="text-3xl">{a.emoji}</span>
-                  <span className="text-xs font-medium capitalize mt-1">
-                    {a.name}
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      </Card>
-    </div>
+    <ColorAnimalSelector
+      familyCode={familyCode}
+      codeType={codeType}
+      onCodeTypeChange={setCodeType}
+      onOptionSelect={handleOptionSelect}
+      onBack={handleBack}
+    />
   );
 };
 

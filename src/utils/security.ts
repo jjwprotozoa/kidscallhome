@@ -47,6 +47,19 @@ const SENSITIVE_FIELDS = [
   'Credential',
   'Credentials',
   'CREDENTIALS',
+  'email', // Email addresses are sensitive
+  'Email',
+  'EMAIL',
+  'userId', // User IDs can be sensitive
+  'user_id',
+  'userId',
+  'ip', // IP addresses are sensitive
+  'IP',
+  'ipAddress',
+  'ip_address',
+  'userAgent', // User agent can be used for fingerprinting
+  'user_agent',
+  'UserAgent',
 ];
 
 /**
@@ -62,6 +75,12 @@ const SENSITIVE_PATTERNS = [
   /auth/i,
   /session/i,
   /cookie/i,
+  /email/i,
+  /userid/i,
+  /user_id/i,
+  /ip/i,
+  /useragent/i,
+  /user_agent/i,
 ];
 
 /**
@@ -142,43 +161,40 @@ export function sanitizeString(str: string): string {
 
 /**
  * Safe console.log that automatically sanitizes sensitive data
+ * In production, all logging is completely disabled for security and performance
  */
 export const safeLog = {
   log: (...args: any[]) => {
+    // In production, completely disable logging
     if (import.meta.env.PROD) {
-      // In production, only log non-sensitive data
-      const sanitized = args.map((arg) => {
-        if (typeof arg === 'object' && arg !== null) {
-          return sanitizeObject(arg, { maskValue: true, removeField: false });
-        }
-        if (typeof arg === 'string') {
-          return sanitizeString(arg);
-        }
-        return arg;
-      });
-      console.log(...sanitized);
-    } else {
-      // In development, still sanitize but be more verbose
-      const sanitized = args.map((arg) => {
-        if (typeof arg === 'object' && arg !== null) {
-          return sanitizeObject(arg, { maskValue: true, removeField: false });
-        }
-        if (typeof arg === 'string') {
-          return sanitizeString(arg);
-        }
-        return arg;
-      });
-      console.log(...sanitized);
+      return;
     }
+    // In development, sanitize and log
+    const sanitized = args.map((arg) => {
+      if (typeof arg === 'object' && arg !== null) {
+        return sanitizeObject(arg, { maskValue: true, removeField: false });
+      }
+      if (typeof arg === 'string') {
+        return sanitizeString(arg);
+      }
+      return arg;
+    });
+    console.log(...sanitized);
   },
 
   error: (...args: any[]) => {
+    // In production, completely disable error logging to console
+    // Errors should be handled through error tracking services instead
+    if (import.meta.env.PROD) {
+      return;
+    }
+    // In development, sanitize and log
     const sanitized = args.map((arg) => {
       if (arg instanceof Error) {
         return {
           name: arg.name,
           message: arg.message,
-          stack: import.meta.env.DEV ? arg.stack : '[REDACTED]',
+          stack: arg.stack,
         };
       }
       if (typeof arg === 'object' && arg !== null) {
@@ -193,6 +209,11 @@ export const safeLog = {
   },
 
   warn: (...args: any[]) => {
+    // In production, completely disable warning logging
+    if (import.meta.env.PROD) {
+      return;
+    }
+    // In development, sanitize and log
     const sanitized = args.map((arg) => {
       if (typeof arg === 'object' && arg !== null) {
         return sanitizeObject(arg, { maskValue: true, removeField: false });
@@ -206,6 +227,7 @@ export const safeLog = {
   },
 
   debug: (...args: any[]) => {
+    // Debug logs are only available in development
     if (import.meta.env.DEV) {
       const sanitized = args.map((arg) => {
         if (typeof arg === 'object' && arg !== null) {

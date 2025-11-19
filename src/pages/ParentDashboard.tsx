@@ -97,9 +97,6 @@ const ParentDashboard = () => {
 
   const fetchChildren = useCallback(async () => {
     try {
-      // Refresh subscription check after adding/removing children
-      await refreshCanAddMoreChildren();
-
       const { data, error } = await supabase
         .from("children")
         .select("*")
@@ -107,6 +104,11 @@ const ParentDashboard = () => {
 
       if (error) throw error;
       setChildren(data || []);
+      
+      // Refresh subscription check after fetching children (non-blocking)
+      refreshCanAddMoreChildren().catch((err) => {
+        console.warn("Failed to refresh subscription check:", err);
+      });
     } catch (error: unknown) {
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error occurred";
@@ -131,9 +133,14 @@ const ParentDashboard = () => {
       localStorage.removeItem("childSession");
     }
 
-    // Run auth check and fetch children in parallel for faster loading
-    Promise.all([checkAuth(), fetchChildren()]).catch((error) => {
-      console.error("Error initializing dashboard:", error);
+    // Run auth check and fetch children in parallel (non-blocking)
+    // UI renders immediately, only children list shows loading state
+    checkAuth().catch((error) => {
+      console.error("Error checking auth:", error);
+    });
+    
+    fetchChildren().catch((error) => {
+      console.error("Error fetching children:", error);
     });
   }, [checkAuth, fetchChildren]);
 
@@ -386,47 +393,7 @@ const ParentDashboard = () => {
     }
   };
 
-  // CLS: Reserve space for loading state to match final layout structure
-  if (loading) {
-    return (
-      <div className="min-h-[100dvh] bg-background w-full overflow-x-hidden">
-        <Navigation />
-        <div
-          className="p-4"
-          style={{
-            paddingTop: "calc(1rem + 64px + var(--safe-area-inset-top) * 0.15)",
-          }}
-        >
-          <div className="max-w-4xl mx-auto space-y-6">
-            <div className="mt-2">
-              <div className="h-9 w-48 bg-muted rounded animate-pulse mb-2" />
-              <div className="h-6 w-96 bg-muted rounded animate-pulse" />
-            </div>
-            <div className="h-12 w-full bg-muted rounded animate-pulse" />
-            <div className="grid gap-4 md:grid-cols-2">
-              {[1, 2].map((i) => (
-                <Card key={i} className="p-6 space-y-4 min-h-[220px]">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-4">
-                      <div className="w-12 h-12 rounded-full bg-muted animate-pulse" />
-                      <div className="space-y-2">
-                        <div className="h-6 w-32 bg-muted rounded animate-pulse" />
-                        <div className="h-4 w-24 bg-muted rounded animate-pulse" />
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <div className="h-10 flex-1 bg-muted rounded animate-pulse" />
-                    <div className="h-10 flex-1 bg-muted rounded animate-pulse" />
-                  </div>
-                </Card>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // No longer blocking render - show UI immediately with loading states for specific sections
 
   return (
     <div className="min-h-[100dvh] bg-background w-full overflow-x-hidden">
@@ -549,7 +516,27 @@ const ParentDashboard = () => {
             )}
           </div>
 
-          {children.length === 0 ? (
+          {loading ? (
+            <div className="grid gap-4 md:grid-cols-2">
+              {[1, 2].map((i) => (
+                <Card key={i} className="p-6 space-y-4 min-h-[220px]">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-4">
+                      <div className="w-12 h-12 rounded-full bg-muted animate-pulse" />
+                      <div className="space-y-2">
+                        <div className="h-6 w-32 bg-muted rounded animate-pulse" />
+                        <div className="h-4 w-24 bg-muted rounded animate-pulse" />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <div className="h-10 flex-1 bg-muted rounded animate-pulse" />
+                    <div className="h-10 flex-1 bg-muted rounded animate-pulse" />
+                  </div>
+                </Card>
+              ))}
+            </div>
+          ) : children.length === 0 ? (
             <Card className="p-12 text-center min-h-[220px]">
               <p className="text-muted-foreground mb-4">
                 You haven't added any children yet.

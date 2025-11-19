@@ -20,42 +20,8 @@ export const useAudioNotifications = (options: UseAudioNotificationsOptions = {}
   const isPlayingRef = useRef<{ [key in SoundType]?: boolean }>({});
   const resumeListenersRef = useRef<Array<{ event: string; handler: () => void }>>([]);
 
-  // Initialize audio context
+  // Cleanup on unmount - only clean up if audio was actually used
   useEffect(() => {
-    if (!enabled) return;
-
-    // Create a single AudioContext that we'll reuse
-    try {
-      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-      audioContextRef.current = new AudioContextClass();
-      safeLog.log("🔊 [AUDIO] AudioContext created, state:", audioContextRef.current.state);
-    } catch (error) {
-      safeLog.error("❌ [AUDIO] Failed to create AudioContext:", error);
-    }
-
-    // Resume audio context on user interaction (required by browser autoplay policy)
-    const resumeAudio = async () => {
-      if (audioContextRef.current && audioContextRef.current.state === "suspended") {
-        try {
-          await audioContextRef.current.resume();
-          safeLog.log("🔊 [AUDIO] AudioContext resumed via user interaction");
-        } catch (error) {
-          safeLog.error("❌ [AUDIO] Failed to resume AudioContext:", error);
-        }
-      }
-    };
-
-    // Try to resume on any user interaction (listen to all interactions, not just once)
-    const events = ["click", "touchstart", "keydown", "mousedown"];
-    events.forEach((event) => {
-      document.addEventListener(event, resumeAudio, { passive: true });
-      resumeListenersRef.current.push({ event, handler: resumeAudio });
-    });
-
-    // Also try to resume immediately if possible (some browsers allow this)
-    resumeAudio();
-
-    // Cleanup on unmount
     return () => {
       if (isPlayingRef.current.ringtone) {
         isPlayingRef.current.ringtone = false;
@@ -64,16 +30,19 @@ export const useAudioNotifications = (options: UseAudioNotificationsOptions = {}
         clearInterval(ringtoneIntervalRef.current);
         ringtoneIntervalRef.current = null;
       }
+      // Only try to stop vibration if it was actually started
+      const hadVibration = vibrationIntervalRef.current !== null;
       if (vibrationIntervalRef.current) {
         clearInterval(vibrationIntervalRef.current);
         vibrationIntervalRef.current = null;
       }
-      // Stop vibration if supported (may fail if no user interaction yet)
-      if ("vibrate" in navigator) {
+      // Stop vibration only if it was actually running (avoids browser warnings)
+      if (hadVibration && "vibrate" in navigator) {
         try {
           navigator.vibrate(0); // Stop any ongoing vibration
         } catch (error) {
           // Vibration requires user interaction - silently ignore in cleanup
+          // This is expected during HMR or if user hasn't interacted yet
         }
       }
       // Remove event listeners
@@ -86,15 +55,38 @@ export const useAudioNotifications = (options: UseAudioNotificationsOptions = {}
         audioContextRef.current = null;
       }
     };
-  }, [enabled]);
+  }, []);
 
   // Ensure audio context is resumed before playing
+  // AudioContext is created lazily only when audio needs to play (when a call starts)
   const ensureAudioContextReady = useCallback(async (): Promise<AudioContext | null> => {
+    if (!enabled) return null;
+
+    // Create AudioContext lazily only when needed (when a call starts)
     if (!audioContextRef.current) {
       try {
         const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
         audioContextRef.current = new AudioContextClass();
-        safeLog.log("🔊 [AUDIO] AudioContext created, initial state:", audioContextRef.current.state);
+        safeLog.log("🔊 [AUDIO] AudioContext created (lazy init), initial state:", audioContextRef.current.state);
+
+        // Set up resume listeners when AudioContext is first created
+        const resumeAudio = async () => {
+          if (audioContextRef.current && audioContextRef.current.state === "suspended") {
+            try {
+              await audioContextRef.current.resume();
+              safeLog.log("🔊 [AUDIO] AudioContext resumed via user interaction");
+            } catch (error) {
+              safeLog.error("❌ [AUDIO] Failed to resume AudioContext:", error);
+            }
+          }
+        };
+
+        // Listen for user interactions to resume AudioContext (required by browser autoplay policy)
+        const events = ["click", "touchstart", "keydown", "mousedown"];
+        events.forEach((event) => {
+          document.addEventListener(event, resumeAudio, { passive: true });
+          resumeListenersRef.current.push({ event, handler: resumeAudio });
+        });
       } catch (error) {
         safeLog.error("❌ [AUDIO] Failed to create AudioContext:", error);
         return null;
@@ -112,7 +104,7 @@ export const useAudioNotifications = (options: UseAudioNotificationsOptions = {}
         // Try one more time after a short delay
         try {
           await new Promise(resolve => setTimeout(resolve, 100));
-          if (audioContextRef.current.state === "suspended") {
+          if (audioContextRef.current && audioContextRef.current.state === "suspended") {
             await audioContextRef.current.resume();
             safeLog.log("🔊 [AUDIO] AudioContext resumed on retry, state:", audioContextRef.current.state);
           }
@@ -127,7 +119,7 @@ export const useAudioNotifications = (options: UseAudioNotificationsOptions = {}
     }
 
     return audioContextRef.current;
-  }, []);
+  }, [enabled]);
 
   // Start vibration pattern (for mobile devices)
   const startVibration = useCallback(() => {

@@ -1,4 +1,116 @@
-# Device Management & Toast Notification Improvements
+# KidsCallHome - Changes Summary
+
+## Latest Changes (2025-02-03)
+
+### 1. Security Enhancements - Audit Logging System
+- **New Feature**: Comprehensive audit logging system for security events
+- **Implementation**: 
+  - Created `audit_logs` table with RLS policies (service role only for reads)
+  - Added `log_audit_event()` RPC function for client-side logging
+  - Added `get_audit_logs()` and `cleanup_old_audit_logs()` admin functions
+  - Client-side audit logging utility with server sync (`src/utils/auditLog.ts`)
+- **Features**:
+  - Tracks login attempts, failures, lockouts, suspicious activity
+  - Stores IP, user agent, email, metadata with severity levels
+  - Automatic server sync via Supabase RPC (graceful fallback if function missing)
+  - Local storage backup (last 100 entries)
+  - Suspicious activity detection
+- **Files**: 
+  - `supabase/migrations/20250203000002_create_audit_log_system.sql`
+  - `src/utils/auditLog.ts` (enhanced)
+
+### 2. Security Enhancements - Account Lockout & Breach Checking
+- **Account Lockout Hook**: New `useAccountLockout` hook for managing lockout status and CAPTCHA display
+- **Email Breach Checking**: 
+  - New `useEmailBreachCheck` hook for real-time email breach detection
+  - Checks against HaveIBeenPwned API (non-blocking, fails open)
+  - Shows breach details and security tips
+- **Password Breach Checking**: 
+  - Enhanced `usePasswordBreachCheck` hook
+  - Expanded weak password list from 55 to 250+ passwords
+  - Real-time HaveIBeenPwned API checking (600+ million passwords)
+- **New Components**:
+  - `EmailInputWithBreachCheck.tsx` - Email input with breach checking
+  - `PasswordInputWithBreachCheck.tsx` - Password input with breach checking
+  - `LockoutWarning.tsx` - Visual lockout warnings
+- **Files**:
+  - `src/hooks/useAccountLockout.ts` (new)
+  - `src/hooks/useEmailBreachCheck.ts` (new)
+  - `src/hooks/usePasswordBreachCheck.ts` (enhanced)
+  - `src/components/auth/EmailInputWithBreachCheck.tsx` (new)
+  - `src/components/auth/PasswordInputWithBreachCheck.tsx` (new)
+  - `src/components/auth/LockoutWarning.tsx` (new)
+  - `src/utils/passwordBreachCheck.ts` (enhanced)
+  - `src/utils/security.ts` (enhanced)
+
+### 3. Component Refactoring - Large File Split
+- **Issue**: Large page components (600-900 lines) were difficult to maintain
+- **Solution**: Split large pages into smaller, focused components
+- **Refactored Pages**:
+  - **ChildLogin.tsx**: Split into 4 components
+    - `ColorAnimalSelector.tsx` - Color/animal selection screen
+    - `FamilyCodeKeypad.tsx` - Family code entry keypad
+    - `NumberEntryScreen.tsx` - Number entry interface
+    - `SuccessScreen.tsx` - Success confirmation screen
+  - **DeviceManagement.tsx**: Split into 5 components
+    - `DeviceCard.tsx` - Individual device card display
+    - `DeviceFilters.tsx` - Filter controls
+    - `DeviceHistoryPagination.tsx` - History pagination
+    - `DeviceRemovalDialog.tsx` - Device removal confirmation
+    - `DeviceRenameDialog.tsx` - Device renaming dialog
+  - **Info.tsx**: Split into 9 components
+    - `AppDescription.tsx` - App description section
+    - `CancellationSection.tsx` - Cancellation policy
+    - `ContactSection.tsx` - Contact information
+    - `DataRemovalSection.tsx` - Data removal instructions
+    - `DemoSection.tsx` - Demo information
+    - `InfoNavigation.tsx` - Navigation component
+    - `PricingSection.tsx` - Pricing information
+    - `PrivacySection.tsx` - Privacy policy
+    - `SecuritySection.tsx` - Security information
+    - `TermsSection.tsx` - Terms of service
+  - **ParentAuth.tsx**: Refactored to use new auth components
+- **Data Layer**: Created `src/data/` directory for constants
+  - `childLoginConstants.ts` - Child login constants
+  - `infoSections.ts` - Info page section definitions
+- **Impact**: 
+  - Reduced code by ~1,900 lines (net reduction)
+  - Improved maintainability and testability
+  - Better code organization and reusability
+- **Files**: All new component directories under `src/components/`
+
+### 4. Database Migrations - Subscription Fixes
+- **Cancelled Subscription Access Fix**:
+  - **Issue**: Cancelled subscriptions were treated as expired immediately
+  - **Fix**: Updated `can_add_child()` function to allow cancelled subscriptions until expiration date
+  - **Files**: 
+    - `supabase/migrations/20250203000000_fix_cancelled_subscription_access.sql`
+    - `FIX_CANCELLED_SUBSCRIPTION.sql` (standalone fix script)
+- **Verification Migration**: Added verification query for subscription fix
+  - `supabase/migrations/20250203000001_verify_can_add_child_fix.sql`
+
+### 5. RLS Optimization Analysis
+- **New Documentation**: Comprehensive analysis of RLS policy performance
+- **Identified Issues**:
+  - Redundant EXISTS checks in parent call policies
+  - Duplicate logic in UPDATE policies
+  - Optimization opportunities for child message policies
+- **File**: `docs/RLS_OPTIMIZATION_ANALYSIS.md`
+
+### 6. Utility Enhancements
+- **Audit Logging**: Enhanced `src/utils/auditLog.ts` with server sync
+- **Device Tracking**: Enhanced `src/utils/deviceTrackingLog.ts` with better error handling
+- **IP Geolocation**: Enhanced `src/utils/ipGeolocation.ts` with improved error handling
+- **Security Utils**: Enhanced `src/utils/security.ts` with sanitization helpers
+- **Cookies**: New `src/utils/cookies.ts` utility for cookie management
+- **Supabase Client**: Enhanced with better error handling
+
+### 7. Configuration Updates
+- **Vite Config**: Updated `vite.config.ts` with additional optimizations
+- **Main Entry**: Enhanced `src/main.tsx` with improved initialization
+- **Audio Notifications**: Enhanced `src/features/calls/hooks/useAudioNotifications.ts`
+
+## Previous Changes (2025-01-22)
 
 ## Summary of Changes
 
@@ -82,3 +194,30 @@
    - Verify devices are tracked correctly on child login
    - Check console for any errors
    - Verify country code is captured (if IP geolocation works)
+
+---
+
+## Overall Impact Summary
+
+### Code Quality Improvements
+- **Net Code Reduction**: ~1,900 lines removed through refactoring
+- **Component Organization**: Large pages split into 18+ focused, reusable components
+- **Maintainability**: Improved code organization with dedicated component directories
+- **Testability**: Smaller components are easier to unit test
+
+### Security Enhancements
+- **Audit Logging**: Comprehensive security event tracking system
+- **Breach Protection**: Email and password breach checking via HaveIBeenPwned API
+- **Account Security**: Enhanced lockout mechanisms with visual warnings
+- **Data Protection**: Improved sanitization and security utilities
+
+### Database & Backend
+- **Subscription Fixes**: Cancelled subscriptions now work until expiration
+- **RLS Analysis**: Comprehensive performance analysis documentation
+- **Audit System**: Full audit logging infrastructure with RPC functions
+
+### Developer Experience
+- **Better Organization**: Clear separation of concerns with component directories
+- **Reusable Components**: Auth, child login, device, and info components
+- **Data Layer**: Centralized constants and configuration
+- **Enhanced Utilities**: Improved error handling and logging throughout

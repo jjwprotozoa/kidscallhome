@@ -1,76 +1,25 @@
 // src/pages/DeviceManagement.tsx
 // Purpose: Device management page for parents to view and manage authorized devices
 
+import { DeviceCard, type Device } from "@/components/devices/DeviceCard";
+import { DeviceFilters } from "@/components/devices/DeviceFilters";
+import { DeviceHistoryPagination } from "@/components/devices/DeviceHistoryPagination";
+import { DeviceRemovalDialog } from "@/components/devices/DeviceRemovalDialog";
+import { DeviceRenameDialog } from "@/components/devices/DeviceRenameDialog";
 import Navigation from "@/components/Navigation";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { HelpBubble } from "@/features/onboarding/HelpBubble";
 import { OnboardingTour } from "@/features/onboarding/OnboardingTour";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { countryCodeToFlag } from "@/utils/ipGeolocation";
 import { safeLog, sanitizeError, sanitizeObject } from "@/utils/security";
-import { parseDeviceInfo } from "@/utils/userAgentParser";
 import type { RealtimeChannel } from "@supabase/supabase-js";
-import { formatDistanceToNow } from "date-fns";
-import {
-  AlertTriangle,
-  ArrowUp,
-  Edit2,
-  Filter,
-  History,
-  Monitor,
-  RefreshCw,
-  Shield,
-  Smartphone,
-  Tablet,
-  Trash2,
-} from "lucide-react";
+import { ArrowUp, History, RefreshCw, Shield, Smartphone } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-interface Device {
-  id: string;
-  device_name: string;
-  device_type: "mobile" | "tablet" | "desktop" | "other";
-  last_used_child_id: string | null;
-  last_login_at: string;
-  last_ip_address: string | null;
-  last_location: string | null;
-  mac_address: string | null;
-  user_agent: string | null;
-  country_code?: string | null;
-  is_active: boolean;
-  created_at: string;
-  updated_at?: string;
-  child_name?: string; // Joined from children table
-  children?: { name: string } | null; // Supabase relation
-}
+// Device type is exported from DeviceCard component
 
 const DeviceManagement = () => {
   const [devices, setDevices] = useState<Device[]>([]);
@@ -626,25 +575,6 @@ const DeviceManagement = () => {
     }
   };
 
-  const getDeviceIcon = (type: string) => {
-    switch (type) {
-      case "mobile":
-        return <Smartphone className="h-5 w-5" />;
-      case "tablet":
-        return <Tablet className="h-5 w-5" />;
-      case "desktop":
-        return <Monitor className="h-5 w-5" />;
-      default:
-        return <Smartphone className="h-5 w-5" />;
-    }
-  };
-
-  const isDeviceStale = (lastLogin: string) => {
-    const daysSinceLogin =
-      (Date.now() - new Date(lastLogin).getTime()) / (1000 * 60 * 60 * 24);
-    return daysSinceLogin > 30; // Consider stale if not used in 30 days
-  };
-
   return (
     <div className="min-h-[100dvh] bg-background w-full overflow-x-hidden">
       <Navigation />
@@ -711,41 +641,13 @@ const DeviceManagement = () => {
                 </Button>
 
                 {/* Filters */}
-                <div className="flex flex-1 gap-2">
-                  <Select
-                    value={activeChildFilter}
-                    onValueChange={setActiveChildFilter}
-                  >
-                    <SelectTrigger className="w-full sm:w-[180px]">
-                      <Filter className="h-4 w-4 mr-2" />
-                      <SelectValue placeholder="Filter by child" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Children</SelectItem>
-                      {allChildren.map((child) => (
-                        <SelectItem key={child.id} value={child.id}>
-                          {child.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-
-                  <Select
-                    value={activeDeviceTypeFilter}
-                    onValueChange={setActiveDeviceTypeFilter}
-                  >
-                    <SelectTrigger className="w-full sm:w-[180px]">
-                      <SelectValue placeholder="Filter by device type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Types</SelectItem>
-                      <SelectItem value="mobile">Mobile</SelectItem>
-                      <SelectItem value="tablet">Tablet</SelectItem>
-                      <SelectItem value="desktop">Desktop</SelectItem>
-                      <SelectItem value="other">Other</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                <DeviceFilters
+                  childFilter={activeChildFilter}
+                  deviceTypeFilter={activeDeviceTypeFilter}
+                  onChildFilterChange={setActiveChildFilter}
+                  onDeviceTypeFilterChange={setActiveDeviceTypeFilter}
+                  allChildren={allChildren}
+                />
               </div>
 
               {/* Filter Info */}
@@ -782,160 +684,18 @@ const DeviceManagement = () => {
                   </Card>
                 ) : (
                   <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-                    {filteredActiveDevices.map((device) => {
-                      const stale = isDeviceStale(device.last_login_at);
-                      return (
-                        <Card
-                          key={device.id}
-                          className={`p-4 space-y-3 ${
-                            !device.is_active ? "opacity-60" : ""
-                          } ${
-                            stale
-                              ? "border-yellow-200 dark:border-yellow-800"
-                              : ""
-                          }`}
-                        >
-                          <div className="flex items-start justify-between">
-                            <div className="flex items-start gap-3 flex-1 min-w-0">
-                              <div className="mt-1">
-                                {getDeviceIcon(device.device_type)}
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <h3 className="font-semibold truncate">
-                                  {device.device_name}
-                                </h3>
-                                <p className="text-sm text-muted-foreground capitalize">
-                                  {device.device_type}
-                                </p>
-                              </div>
-                            </div>
-                            {!device.is_active && (
-                              <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded">
-                                Revoked
-                              </span>
-                            )}
-                          </div>
-
-                          {stale && (
-                            <div className="flex items-center gap-2 text-yellow-700 dark:text-yellow-300 text-sm">
-                              <AlertTriangle className="h-4 w-4" />
-                              <span>Not used recently</span>
-                            </div>
-                          )}
-
-                          <div className="space-y-1 text-sm">
-                            {device.child_name && (
-                              <p className="text-muted-foreground">
-                                Last used by:{" "}
-                                <span className="font-medium">
-                                  {device.child_name}
-                                </span>
-                              </p>
-                            )}
-                            <p className="text-muted-foreground">
-                              Last login:{" "}
-                              <span className="font-medium">
-                                {formatDistanceToNow(
-                                  new Date(device.last_login_at),
-                                  {
-                                    addSuffix: true,
-                                  }
-                                )}
-                              </span>
-                            </p>
-                            {device.country_code && (
-                              <p className="text-muted-foreground">
-                                Country:{" "}
-                                <span className="font-medium text-base">
-                                  {countryCodeToFlag(device.country_code) || ""}{" "}
-                                  {device.country_code}
-                                </span>
-                              </p>
-                            )}
-                            {device.user_agent &&
-                              (() => {
-                                const deviceInfo = parseDeviceInfo(
-                                  device.user_agent
-                                );
-                                return (
-                                  <>
-                                    <p className="text-muted-foreground">
-                                      Browser:{" "}
-                                      <span className="font-medium">
-                                        {deviceInfo.browser.fullName}
-                                      </span>
-                                    </p>
-                                    <p className="text-muted-foreground">
-                                      OS:{" "}
-                                      <span className="font-medium">
-                                        {deviceInfo.os.fullName}
-                                      </span>
-                                    </p>
-                                    {deviceInfo.deviceModel && (
-                                      <p className="text-muted-foreground">
-                                        Model:{" "}
-                                        <span className="font-medium">
-                                          {deviceInfo.deviceModel}
-                                        </span>
-                                      </p>
-                                    )}
-                                  </>
-                                );
-                              })()}
-                            {device.mac_address && (
-                              <p className="text-muted-foreground">
-                                MAC:{" "}
-                                <span className="font-mono text-xs">
-                                  {device.mac_address}
-                                </span>
-                              </p>
-                            )}
-                            {device.last_ip_address && (
-                              <p className="text-muted-foreground">
-                                IP:{" "}
-                                <span className="font-mono text-xs">
-                                  {device.last_ip_address}
-                                </span>
-                              </p>
-                            )}
-                            {device.last_location && (
-                              <p className="text-muted-foreground">
-                                Location Details:{" "}
-                                <span className="font-medium">
-                                  {device.last_location}
-                                </span>
-                              </p>
-                            )}
-                          </div>
-
-                          {device.is_active && (
-                            <div className="flex gap-2 pt-2 border-t">
-                              <Button
-                                onClick={() => {
-                                  setDeviceToRename(device);
-                                  setNewDeviceName(device.device_name);
-                                }}
-                                variant="outline"
-                                size="sm"
-                                className="flex-1"
-                              >
-                                <Edit2 className="h-4 w-4 mr-2" />
-                                Rename
-                              </Button>
-                              <Button
-                                onClick={() => setDeviceToRemove(device)}
-                                variant="destructive"
-                                size="sm"
-                                className="flex-1"
-                              >
-                                <Trash2 className="h-4 w-4 mr-2" />
-                                Remove
-                              </Button>
-                            </div>
-                          )}
-                        </Card>
-                      );
-                    })}
+                    {filteredActiveDevices.map((device) => (
+                      <DeviceCard
+                        key={device.id}
+                        device={device}
+                        showActions={true}
+                        onRename={(device) => {
+                          setDeviceToRename(device);
+                          setNewDeviceName(device.device_name);
+                        }}
+                        onRemove={(device) => setDeviceToRemove(device)}
+                      />
+                    ))}
                   </div>
                 )}
               </div>
@@ -960,41 +720,13 @@ const DeviceManagement = () => {
                 </Button>
 
                 {/* Filters */}
-                <div className="flex flex-1 gap-2">
-                  <Select
-                    value={historyChildFilter}
-                    onValueChange={setHistoryChildFilter}
-                  >
-                    <SelectTrigger className="w-full sm:w-[180px]">
-                      <Filter className="h-4 w-4 mr-2" />
-                      <SelectValue placeholder="Filter by child" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Children</SelectItem>
-                      {allChildren.map((child) => (
-                        <SelectItem key={child.id} value={child.id}>
-                          {child.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-
-                  <Select
-                    value={historyDeviceTypeFilter}
-                    onValueChange={setHistoryDeviceTypeFilter}
-                  >
-                    <SelectTrigger className="w-full sm:w-[180px]">
-                      <SelectValue placeholder="Filter by device type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Types</SelectItem>
-                      <SelectItem value="mobile">Mobile</SelectItem>
-                      <SelectItem value="tablet">Tablet</SelectItem>
-                      <SelectItem value="desktop">Desktop</SelectItem>
-                      <SelectItem value="other">Other</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                <DeviceFilters
+                  childFilter={historyChildFilter}
+                  deviceTypeFilter={historyDeviceTypeFilter}
+                  onChildFilterChange={setHistoryChildFilter}
+                  onDeviceTypeFilterChange={setHistoryDeviceTypeFilter}
+                  allChildren={allChildren}
+                />
               </div>
 
               {/* History Info */}
@@ -1049,188 +781,23 @@ const DeviceManagement = () => {
                 ) : (
                   <>
                     <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-                      {paginatedHistory.map((device) => {
-                        const stale = isDeviceStale(device.last_login_at);
-                        const isInactive = !device.is_active;
-                        return (
-                          <Card
-                            key={device.id}
-                            className={`p-4 space-y-3 ${
-                              isInactive
-                                ? "opacity-75 border-destructive/20 bg-muted/30"
-                                : ""
-                            } ${
-                              stale
-                                ? "border-yellow-200 dark:border-yellow-800"
-                                : ""
-                            }`}
-                          >
-                            <div className="flex items-start justify-between">
-                              <div className="flex items-start gap-3 flex-1 min-w-0">
-                                <div className="mt-1">
-                                  {getDeviceIcon(device.device_type)}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <h3 className="font-semibold truncate">
-                                    {device.device_name}
-                                  </h3>
-                                  <p className="text-sm text-muted-foreground capitalize">
-                                    {device.device_type}
-                                  </p>
-                                </div>
-                              </div>
-                              {isInactive ? (
-                                <span className="text-xs text-destructive bg-destructive/10 px-2 py-1 rounded">
-                                  Removed
-                                </span>
-                              ) : (
-                                <span className="text-xs text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950 px-2 py-1 rounded">
-                                  Active
-                                </span>
-                              )}
-                            </div>
-
-                            {stale && (
-                              <div className="flex items-center gap-2 text-yellow-700 dark:text-yellow-300 text-sm">
-                                <AlertTriangle className="h-4 w-4" />
-                                <span>Not used recently</span>
-                              </div>
-                            )}
-
-                            <div className="space-y-1 text-sm">
-                              <p className="text-muted-foreground">
-                                Created:{" "}
-                                <span className="font-medium">
-                                  {formatDistanceToNow(
-                                    new Date(device.created_at),
-                                    {
-                                      addSuffix: true,
-                                    }
-                                  )}
-                                </span>
-                              </p>
-                              {device.child_name && (
-                                <p className="text-muted-foreground">
-                                  Last used by:{" "}
-                                  <span className="font-medium">
-                                    {device.child_name}
-                                  </span>
-                                </p>
-                              )}
-                              <p className="text-muted-foreground">
-                                Last login:{" "}
-                                <span className="font-medium">
-                                  {formatDistanceToNow(
-                                    new Date(device.last_login_at),
-                                    {
-                                      addSuffix: true,
-                                    }
-                                  )}
-                                </span>
-                              </p>
-                              {isInactive && (
-                                <p className="text-muted-foreground">
-                                  Removed:{" "}
-                                  <span className="font-medium">
-                                    {formatDistanceToNow(
-                                      new Date(device.updated_at),
-                                      {
-                                        addSuffix: true,
-                                      }
-                                    )}
-                                  </span>
-                                </p>
-                              )}
-                              {device.country_code && (
-                                <p className="text-muted-foreground">
-                                  Country:{" "}
-                                  <span className="font-medium text-base">
-                                    {countryCodeToFlag(device.country_code) ||
-                                      ""}{" "}
-                                    {device.country_code}
-                                  </span>
-                                </p>
-                              )}
-                              {device.user_agent &&
-                                (() => {
-                                  const deviceInfo = parseDeviceInfo(
-                                    device.user_agent
-                                  );
-                                  return (
-                                    <>
-                                      <p className="text-muted-foreground">
-                                        Browser:{" "}
-                                        <span className="font-medium">
-                                          {deviceInfo.browser.fullName}
-                                        </span>
-                                      </p>
-                                      <p className="text-muted-foreground">
-                                        OS:{" "}
-                                        <span className="font-medium">
-                                          {deviceInfo.os.fullName}
-                                        </span>
-                                      </p>
-                                      {deviceInfo.deviceModel && (
-                                        <p className="text-muted-foreground">
-                                          Model:{" "}
-                                          <span className="font-medium">
-                                            {deviceInfo.deviceModel}
-                                          </span>
-                                        </p>
-                                      )}
-                                    </>
-                                  );
-                                })()}
-                              {device.mac_address && (
-                                <p className="text-muted-foreground">
-                                  MAC:{" "}
-                                  <span className="font-mono text-xs">
-                                    {device.mac_address}
-                                  </span>
-                                </p>
-                              )}
-                              {device.last_ip_address && (
-                                <p className="text-muted-foreground">
-                                  IP:{" "}
-                                  <span className="font-mono text-xs">
-                                    {device.last_ip_address}
-                                  </span>
-                                </p>
-                              )}
-                            </div>
-                          </Card>
-                        );
-                      })}
+                      {paginatedHistory.map((device) => (
+                        <DeviceCard
+                          key={device.id}
+                          device={device}
+                          showActions={false}
+                          showCreatedDate={true}
+                          showRemovedDate={true}
+                        />
+                      ))}
                     </div>
 
                     {/* Pagination */}
-                    {totalPages > 1 && (
-                      <div className="flex items-center justify-center gap-2 pt-4">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() =>
-                            setHistoryPage((p) => Math.max(1, p - 1))
-                          }
-                          disabled={historyPage === 1}
-                        >
-                          Previous
-                        </Button>
-                        <span className="text-sm text-muted-foreground px-4">
-                          Page {historyPage} of {totalPages}
-                        </span>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() =>
-                            setHistoryPage((p) => Math.min(totalPages, p + 1))
-                          }
-                          disabled={historyPage === totalPages}
-                        >
-                          Next
-                        </Button>
-                      </div>
-                    )}
+                    <DeviceHistoryPagination
+                      currentPage={historyPage}
+                      totalPages={totalPages}
+                      onPageChange={setHistoryPage}
+                    />
                   </>
                 )}
               </div>
@@ -1253,8 +820,11 @@ const DeviceManagement = () => {
       </div>
 
       {/* Remove Device Dialog */}
-      <AlertDialog
-        open={!!deviceToRemove}
+      <DeviceRemovalDialog
+        device={deviceToRemove}
+        requireAuth={requireAuth}
+        authPassword={authPassword}
+        onAuthPasswordChange={setAuthPassword}
         onOpenChange={(open) => {
           if (!open) {
             setDeviceToRemove(null);
@@ -1262,104 +832,17 @@ const DeviceManagement = () => {
             setAuthPassword("");
           }
         }}
-      >
-        <AlertDialogContent key={requireAuth ? "password" : "confirm"}>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {requireAuth ? "Confirm Password" : "Remove Device?"}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {requireAuth ? (
-                <>
-                  For security, please enter your password to remove{" "}
-                  <strong>{deviceToRemove?.device_name}</strong>. This device
-                  will need to be re-authorized on next login.
-                </>
-              ) : (
-                <>
-                  Removing <strong>{deviceToRemove?.device_name}</strong> will
-                  revoke its access. You'll need to re-authorize this device the
-                  next time someone tries to log in from it. This action
-                  requires password confirmation.
-                </>
-              )}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          {requireAuth && (
-            <div className="space-y-2">
-              <Input
-                type="password"
-                placeholder="Enter your password"
-                value={authPassword}
-                onChange={(e) => setAuthPassword(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    handleRemoveDevice();
-                  }
-                }}
-                autoFocus
-              />
-            </div>
-          )}
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={async (e) => {
-                // If we're not requiring auth yet, trigger handleRemoveDevice which will show warning toast
-                if (!requireAuth) {
-                  e.preventDefault();
-                  handleRemoveDevice();
-                  return;
-                }
-                // Otherwise, proceed with device removal
-                await handleRemoveDevice();
-              }}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {requireAuth ? "Remove Device" : "Continue"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        onRemove={handleRemoveDevice}
+      />
 
       {/* Rename Device Dialog */}
-      <Dialog
-        open={!!deviceToRename}
+      <DeviceRenameDialog
+        device={deviceToRename}
+        newDeviceName={newDeviceName}
+        onDeviceNameChange={setNewDeviceName}
         onOpenChange={(open) => !open && setDeviceToRename(null)}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Rename Device</DialogTitle>
-            <DialogDescription>
-              Give this device a friendly name to easily identify it.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <Input
-              placeholder="Device name"
-              value={newDeviceName}
-              onChange={(e) => setNewDeviceName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && newDeviceName.trim()) {
-                  handleRenameDevice();
-                }
-              }}
-              autoFocus
-            />
-            <div className="flex gap-2 justify-end">
-              <Button variant="outline" onClick={() => setDeviceToRename(null)}>
-                Cancel
-              </Button>
-              <Button
-                onClick={handleRenameDevice}
-                disabled={!newDeviceName.trim()}
-              >
-                Save
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+        onRename={handleRenameDevice}
+      />
     </div>
   );
 };

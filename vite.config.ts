@@ -84,6 +84,13 @@ export default defineConfig(({ mode }) => {
         include: [/node_modules/],
         transformMixedEsModules: true,
       },
+      // Remove console statements in production builds
+      minify: 'esbuild',
+      terserOptions: undefined, // Use esbuild minification
+      // Configure esbuild to drop console statements in production
+      esbuild: {
+        drop: mode === 'production' ? ['console', 'debugger'] : [],
+      },
     },
   };
 });

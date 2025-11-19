@@ -9,6 +9,20 @@ export interface IPGeolocationResult {
   region: string | null;
 }
 
+// Cache for IP geolocation results (key: IP address, value: result + timestamp)
+const geolocationCache = new Map<
+  string,
+  { result: IPGeolocationResult; timestamp: number }
+>();
+
+// Cache duration: 24 hours (IP addresses don't change location frequently)
+const CACHE_DURATION_MS = 24 * 60 * 60 * 1000;
+
+// Flag to disable IP geolocation (for testing or when rate limited)
+const DISABLE_IP_GEOLOCATION =
+  import.meta.env.VITE_DISABLE_IP_GEOLOCATION === "true" ||
+  localStorage.getItem("kch_disable_ip_geolocation") === "true";
+
 /**
  * Convert ISO country code to flag emoji
  * Uses Unicode Regional Indicator Symbols
@@ -32,6 +46,7 @@ export function countryCodeToFlag(countryCode: string | null): string | null {
  * Get geolocation information from IP address
  * Uses ip-api.com (free tier: 45 requests/minute)
  * Falls back to ipapi.co if needed
+ * Results are cached for 24 hours to reduce API calls
  */
 export async function getIPGeolocation(ipAddress: string | null): Promise<IPGeolocationResult> {
   if (!ipAddress) {
@@ -42,6 +57,29 @@ export async function getIPGeolocation(ipAddress: string | null): Promise<IPGeol
       city: null,
       region: null,
     };
+  }
+
+  // Check if IP geolocation is disabled
+  if (DISABLE_IP_GEOLOCATION) {
+    return {
+      country: null,
+      countryCode: null,
+      countryFlag: null,
+      city: null,
+      region: null,
+    };
+  }
+
+  // Check cache first
+  const cached = geolocationCache.get(ipAddress);
+  if (cached) {
+    const age = Date.now() - cached.timestamp;
+    if (age < CACHE_DURATION_MS) {
+      // Return cached result
+      return cached.result;
+    }
+    // Cache expired, remove it
+    geolocationCache.delete(ipAddress);
   }
 
   try {
@@ -78,6 +116,13 @@ export async function getIPGeolocation(ipAddress: string | null): Promise<IPGeol
 
       // Handle 403/429 responses silently - these are rate limits, not errors
       if (response.status === 403 || response.status === 429) {
+        // Rate limited - disable IP geolocation for this session to avoid repeated calls
+        if (import.meta.env.DEV) {
+          console.warn(
+            '[IP Geolocation] Rate limited by ip-api.com. Disabling for this session. Set VITE_DISABLE_IP_GEOLOCATION=true to disable permanently.'
+          );
+        }
+        localStorage.setItem('kch_disable_ip_geolocation', 'true');
         // Silently fall through to fallback - don't throw, don't log
         throw new Error('Rate limited');
       }
@@ -87,13 +132,21 @@ export async function getIPGeolocation(ipAddress: string | null): Promise<IPGeol
         
         if (data.status === 'success') {
           const countryCode = data.countryCode || null;
-          return {
+          const result: IPGeolocationResult = {
             country: data.country || null,
             countryCode,
             countryFlag: countryCodeToFlag(countryCode),
             city: data.city || null,
             region: data.regionName || null,
           };
+          
+          // Cache the result
+          geolocationCache.set(ipAddress, {
+            result,
+            timestamp: Date.now(),
+          });
+          
+          return result;
         }
       }
       // For other non-ok responses, fall through to fallback
@@ -135,13 +188,21 @@ export async function getIPGeolocation(ipAddress: string | null): Promise<IPGeol
         
         if (data.country_code && !data.error) {
           const countryCode = data.country_code || null;
-          return {
+          const result: IPGeolocationResult = {
             country: data.country_name || null,
             countryCode,
             countryFlag: countryCodeToFlag(countryCode),
             city: data.city || null,
             region: data.region || null,
           };
+          
+          // Cache the result
+          geolocationCache.set(ipAddress, {
+            result,
+            timestamp: Date.now(),
+          });
+          
+          return result;
         }
       }
     } catch (fetchError) {
@@ -156,13 +217,21 @@ export async function getIPGeolocation(ipAddress: string | null): Promise<IPGeol
   }
 
   // Return empty result if all services fail
-  return {
+  const emptyResult: IPGeolocationResult = {
     country: null,
     countryCode: null,
     countryFlag: null,
     city: null,
     region: null,
   };
+  
+  // Cache empty result for a shorter duration (5 minutes) to avoid repeated failed calls
+  geolocationCache.set(ipAddress, {
+    result: emptyResult,
+    timestamp: Date.now() - (CACHE_DURATION_MS - 5 * 60 * 1000), // Cache for 5 min
+  });
+  
+  return emptyResult;
 }
 
 /**

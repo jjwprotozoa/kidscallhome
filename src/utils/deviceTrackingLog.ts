@@ -66,9 +66,18 @@ export async function logDeviceTracking(
 
     // Try to send via Supabase RPC function (if it exists)
     // Fallback: Store in localStorage for later sync (if RPC doesn't exist)
+    // NOTE: The RPC function may not exist yet - 404 errors are expected and handled gracefully
     try {
       const { error } = await supabase.rpc('log_device_tracking', {
         p_log_entry: logEntry,
+      }).catch((rpcError) => {
+        // Catch network errors and 404s before Supabase logs them
+        // Return a structured error that we can check
+        const errorObj = rpcError as any;
+        if (errorObj?.status === 404 || errorObj?.code === 'PGRST301') {
+          return { error: { code: 'PGRST301', message: 'Function not found', status: 404 } };
+        }
+        throw rpcError;
       });
 
       // If RPC call succeeded, we're done
@@ -88,6 +97,7 @@ export async function logDeviceTracking(
         error.message?.includes('Not Found');
 
       // If function doesn't exist, store locally (expected behavior)
+      // This is normal - the RPC function is optional and may not be deployed yet
       if (isFunctionNotFound) {
         // Silently fall back to localStorage - this is expected if RPC doesn't exist yet
         try {
@@ -115,6 +125,34 @@ export async function logDeviceTracking(
       }
     } catch (rpcError) {
       // Network error or other exception - store locally
+      // Check if it's a 404 (function not found) - this is expected
+      const errorObj = rpcError as any;
+      const is404 = errorObj?.status === 404 || 
+                   errorObj?.code === 'PGRST301' ||
+                   errorObj?.message?.includes('404') ||
+                   errorObj?.message?.includes('Not Found');
+      
+      if (is404) {
+        // Function doesn't exist - store locally (expected)
+        try {
+          const logs = getStoredDeviceLogs();
+          logs.push({
+            ...logEntry,
+            timestamp: Date.now(),
+          });
+          
+          if (logs.length > 100) {
+            logs.shift();
+          }
+          
+          localStorage.setItem('kch_device_tracking_logs', JSON.stringify(logs));
+        } catch {
+          // Silently fail
+        }
+        return;
+      }
+      
+      // For other network errors, also store locally
       try {
         const logs = getStoredDeviceLogs();
         logs.push({
@@ -122,7 +160,6 @@ export async function logDeviceTracking(
           timestamp: Date.now(),
         });
         
-        // Keep only last 100 entries
         if (logs.length > 100) {
           logs.shift();
         }
