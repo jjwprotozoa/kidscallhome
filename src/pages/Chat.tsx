@@ -406,10 +406,38 @@ const Chat = () => {
 
       let data, error;
       
-      // If sending as child, use secure RPC function with token validation
-      if (isChild && childData?.token) {
+      // If sending as child, always use secure RPC function with token validation
+      if (isChild) {
+        // Prefer in-memory token, but fall back to localStorage in case of older sessions
+        let sessionToken = childData?.token;
+        
+        if (!sessionToken) {
+          try {
+            const stored = localStorage.getItem("childSession");
+            const parsed: ChildSession | null = stored ? JSON.parse(stored) : null;
+            if (parsed && parsed.id === targetChildId && parsed.token) {
+              sessionToken = parsed.token;
+            }
+          } catch (parseError) {
+            console.error("❌ [MESSAGE INSERT] Failed to parse childSession from localStorage", parseError);
+          }
+        }
+
+        if (!sessionToken) {
+          console.error("❌ [MESSAGE INSERT] Missing child session token", {
+            isChild,
+            targetChildId,
+          });
+          toast({
+            title: "Session expired",
+            description: "Please log out and log in again to send messages.",
+            variant: "destructive",
+          });
+          return;
+        }
+
         const result = await supabase.rpc("send_child_message", {
-          p_token: childData.token,
+          p_token: sessionToken,
           p_child_id: targetChildId,
           p_content: newMessage.trim(),
         });
