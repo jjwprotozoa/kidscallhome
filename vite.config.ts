@@ -106,6 +106,11 @@ export default defineConfig(({ mode }) => {
               if (id.includes('react') || 
                   id.includes('react-dom') ||
                   id.includes('react-router') ||
+                  id.includes('react-hook-form') ||
+                  id.includes('react-day-picker') ||
+                  id.includes('react-resizable-panels') ||
+                  id.includes('embla-carousel-react') ||
+                  id.includes('input-otp') ||
                   id.includes('@tanstack/react-query') ||
                   id.includes('@radix-ui') ||
                   id.includes('next-themes') ||
@@ -115,8 +120,16 @@ export default defineConfig(({ mode }) => {
                   id.includes('cmdk') ||
                   id.includes('class-variance-authority') ||
                   id.includes('clsx') ||
-                  id.includes('tailwind-merge')) {
+                  id.includes('tailwind-merge') ||
+                  id.includes('lucide-react') ||
+                  id.includes('date-fns') ||
+                  id.includes('zod')) {
                 // Keep in main entry chunk for proper loading order
+                return undefined;
+              }
+              
+              // Keep Supabase in main - it's used everywhere and might have initialization issues
+              if (id.includes('@supabase')) {
                 return undefined;
               }
               
@@ -126,19 +139,13 @@ export default defineConfig(({ mode }) => {
                 return 'vendor-recharts';
               }
               
-              // Supabase client - large SDK, but used everywhere
-              // Keep in main for now to avoid issues
-              // if (id.includes('@supabase')) {
-              //   return 'vendor-supabase';
-              // }
-              
               // Capacitor plugins - native features (only needed on mobile)
               if (id.includes('@capacitor')) {
                 return 'vendor-capacitor';
               }
               
               // All other node_modules go to vendor-other
-              // This is now much smaller since we kept most things in main
+              // This should now be very small (mostly build tools and dev dependencies)
               return 'vendor-other';
             }
           },
