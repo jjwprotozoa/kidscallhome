@@ -362,7 +362,8 @@ export async function getCountryFromIP(ipAddress: string | null): Promise<string
     const result = await getCountry(ipAddress);
     return result.countryCode || null;
   } catch (error) {
-    console.warn('Failed to get country from IP:', error);
+    // Silently fail - IP geolocation is non-critical
+    // Errors are already handled in ipGeolocation.ts
     return null;
   }
 }

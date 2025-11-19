@@ -280,9 +280,33 @@ export const GlobalMessageNotifications = () => {
           )
           .subscribe((status, err) => {
             if (err) {
-              console.error("❌ [GLOBAL MESSAGE] Child subscription error:", err);
-            } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-              console.error("❌ [GLOBAL MESSAGE] Child subscription failed:", status);
+              // Check if it's the "mismatch" error - this is often transient and can be ignored
+              const errorMessage = err instanceof Error ? err.message : String(err);
+              if (errorMessage.includes("mismatch between server and client bindings")) {
+                // This is a known Supabase Realtime issue - often resolves on retry
+                if (import.meta.env.DEV) {
+                  console.warn("⚠️ [GLOBAL MESSAGE] Child subscription binding mismatch (will retry):", errorMessage);
+                }
+              } else {
+                console.error("❌ [GLOBAL MESSAGE] Child subscription error:", err);
+              }
+            } else if (status === "TIMED_OUT") {
+              // TIMED_OUT is often transient - don't log as error
+              if (import.meta.env.DEV) {
+                console.debug("⏱️ [GLOBAL MESSAGE] Child subscription timed out (will retry)");
+              }
+            } else if (status === "CHANNEL_ERROR") {
+              // CHANNEL_ERROR is often transient - check if it's a binding mismatch
+              const errorMessage = err instanceof Error ? err.message : String(err || "");
+              if (errorMessage.includes("mismatch between server and client bindings")) {
+                // This is a known Supabase Realtime issue - often resolves on retry
+                if (import.meta.env.DEV) {
+                  console.warn("⚠️ [GLOBAL MESSAGE] Child subscription binding mismatch (will retry):", errorMessage);
+                }
+              } else {
+                // Only log non-binding-mismatch CHANNEL_ERRORs
+                console.error("❌ [GLOBAL MESSAGE] Child subscription failed:", status);
+              }
             }
             // CLOSED is normal cleanup, don't log as error
           });
@@ -334,9 +358,33 @@ export const GlobalMessageNotifications = () => {
           )
           .subscribe((status, err) => {
             if (err) {
-              console.error("❌ [GLOBAL MESSAGE] Parent subscription error:", err);
-            } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-              console.error("❌ [GLOBAL MESSAGE] Parent subscription failed:", status);
+              // Check if it's the "mismatch" error - this is often transient and can be ignored
+              const errorMessage = err instanceof Error ? err.message : String(err);
+              if (errorMessage.includes("mismatch between server and client bindings")) {
+                // This is a known Supabase Realtime issue - often resolves on retry
+                if (import.meta.env.DEV) {
+                  console.warn("⚠️ [GLOBAL MESSAGE] Parent subscription binding mismatch (will retry):", errorMessage);
+                }
+              } else {
+                console.error("❌ [GLOBAL MESSAGE] Parent subscription error:", err);
+              }
+            } else if (status === "TIMED_OUT") {
+              // TIMED_OUT is often transient - don't log as error
+              if (import.meta.env.DEV) {
+                console.debug("⏱️ [GLOBAL MESSAGE] Parent subscription timed out (will retry)");
+              }
+            } else if (status === "CHANNEL_ERROR") {
+              // CHANNEL_ERROR is often transient - check if it's a binding mismatch
+              const errorMessage = err instanceof Error ? err.message : String(err || "");
+              if (errorMessage.includes("mismatch between server and client bindings")) {
+                // This is a known Supabase Realtime issue - often resolves on retry
+                if (import.meta.env.DEV) {
+                  console.warn("⚠️ [GLOBAL MESSAGE] Parent subscription binding mismatch (will retry):", errorMessage);
+                }
+              } else {
+                // Only log non-binding-mismatch CHANNEL_ERRORs
+                console.error("❌ [GLOBAL MESSAGE] Parent subscription failed:", status);
+              }
             }
             // CLOSED is normal cleanup, don't log as error
           });

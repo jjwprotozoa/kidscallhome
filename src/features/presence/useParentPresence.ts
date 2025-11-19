@@ -44,7 +44,10 @@ export function useParentPresence({
   }, [onStatusChange]);
 
   useEffect(() => {
-    if (!enabled || !parentId) return;
+    // Skip if disabled or parentId is empty/invalid
+    if (!enabled || !parentId || parentId.trim() === "") {
+      return;
+    }
 
     const channelName = `presence:parent:${parentId}`;
 
@@ -54,6 +57,12 @@ export function useParentPresence({
         parentId,
         channelName,
       });
+    }
+
+    // Clean up existing channel first to prevent duplicates
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current);
+      channelRef.current = null;
     }
 
     // Create channel for subscribing to presence
@@ -68,6 +77,15 @@ export function useParentPresence({
     channel
       .on("presence", { event: "sync" }, () => {
         const state = channel.presenceState<PresenceMetadata>();
+
+        // Log sync event in dev mode for debugging
+        if (import.meta.env.DEV) {
+          safeLog.debug("🔄 [PARENT PRESENCE] Presence sync event", {
+            parentId,
+            stateKeys: Object.keys(state),
+            hasParent: parentId in state,
+          });
+        }
 
         // Check if parent is present
         const isOnline =
@@ -110,12 +128,8 @@ export function useParentPresence({
             lastSeen: newLastSeen || prevLastSeen,
           };
 
-          // Notify if status changed
-          if (
-            wasOnline !== isOnline &&
-            onStatusChangeRef.current &&
-            prev.lastSeen !== null
-          ) {
+          // Notify if status changed (remove the prev.lastSeen check to allow initial online detection)
+          if (wasOnline !== isOnline && onStatusChangeRef.current) {
             onStatusChangeRef.current(isOnline);
           }
 
@@ -188,6 +202,20 @@ export function useParentPresence({
         });
       })
       .subscribe((status, err) => {
+        // Only log non-transient statuses in dev mode for debugging
+        // Skip logging TIMED_OUT and CHANNEL_ERROR here - they're handled below
+        if (
+          import.meta.env.DEV &&
+          status !== "TIMED_OUT" &&
+          status !== "CHANNEL_ERROR"
+        ) {
+          safeLog.debug(`[PARENT PRESENCE] Subscription status: ${status}`, {
+            parentId,
+            channelName,
+            error: err,
+          });
+        }
+
         if (status === "SUBSCRIBED") {
           // Log in development
           if (import.meta.env.DEV) {
@@ -201,6 +229,7 @@ export function useParentPresence({
           }
 
           // Check initial presence state after subscription
+          // Use longer delay to ensure presence state is fully synced
           setTimeout(() => {
             const state = channel.presenceState<PresenceMetadata>();
             const isOnline =
@@ -248,14 +277,74 @@ export function useParentPresence({
                 });
               }
             }
-          }, 500); // Small delay to ensure presence state is synced
-        } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-          safeLog.error("❌ [PARENT PRESENCE] Subscription error", {
-            parentId,
-            status,
-            error: err,
-          });
+          }, 1000); // Increased delay to ensure presence state is synced
+        } else if (status === "TIMED_OUT") {
+          // TIMED_OUT is often transient - don't treat as fatal error
+          // The subscription will retry automatically on next effect run
+          // Check if error contains "mismatch" message - this is a known Supabase issue
+          const errorMessage =
+            err instanceof Error ? err.message : String(err || "");
+          if (
+            errorMessage.includes("mismatch between server and client bindings")
+          ) {
+            // This is a known Supabase Realtime issue - often resolves on retry
+            if (import.meta.env.DEV) {
+              safeLog.debug(
+                "⏱️ [PARENT PRESENCE] Subscription timed out with binding mismatch (will retry)",
+                {
+                  parentId,
+                  channelName,
+                }
+              );
+            }
+          } else {
+            if (import.meta.env.DEV) {
+              safeLog.debug(
+                "⏱️ [PARENT PRESENCE] Subscription timed out (will retry)",
+                {
+                  parentId,
+                  channelName,
+                }
+              );
+            }
+          }
+
+          // Don't reset presence state on timeout - keep last known state
+          // This prevents flickering between online/offline during transient network issues
+        } else if (status === "CHANNEL_ERROR") {
+          // Check if it's the "mismatch" error - this is often transient
+          const errorMessage =
+            err instanceof Error ? err.message : String(err || "");
+          if (
+            errorMessage.includes("mismatch between server and client bindings")
+          ) {
+            // This is a known Supabase Realtime issue - often resolves on retry
+            if (import.meta.env.DEV) {
+              safeLog.debug(
+                "⚠️ [PARENT PRESENCE] Subscription binding mismatch (will retry)",
+                {
+                  parentId,
+                  channelName,
+                }
+              );
+            }
+            // Don't reset state on binding mismatch - it's often transient
+          } else {
+            safeLog.error("❌ [PARENT PRESENCE] Subscription error", {
+              parentId,
+              status,
+              error: err,
+              channelName,
+            });
+
+            // Reset presence state on actual error (not timeout or binding mismatch)
+            setPresence({
+              isOnline: false,
+              lastSeen: null,
+            });
+          }
         }
+        // Other statuses (SUBSCRIBING, CLOSED, etc.) are logged above
       });
 
     channelRef.current = channel;

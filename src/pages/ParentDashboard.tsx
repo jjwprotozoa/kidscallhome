@@ -56,8 +56,8 @@ const ParentDashboard = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { stopIncomingCall } = useIncomingCallNotifications({
-    enabled: true,
-    volume: 0.7,
+      enabled: true,
+      volume: 0.7,
   });
 
   // Use parent data hook
@@ -144,8 +144,8 @@ const ParentDashboard = () => {
   }, []);
 
   const handleCallCleared = useCallback(() => {
-    setIncomingCall(null);
-    incomingCallRef.current = null;
+                setIncomingCall(null);
+                incomingCallRef.current = null;
   }, []);
 
   // Use incoming call subscription hook
@@ -531,7 +531,6 @@ const ParentDashboard = () => {
               onClick={() => setShowAddChild(true)}
               className="flex-1"
               size="lg"
-              disabled={!canAddMoreChildren}
             >
               <Plus className="mr-2 h-5 w-5" />
               Add Child
@@ -566,15 +565,15 @@ const ParentDashboard = () => {
                   key={child.id}
                   child={child}
                   index={index}
-                  isOnline={isChildOnline(child.id)}
+                        isOnline={isChildOnline(child.id)}
                   fullLoginCode={getFullLoginCode(child)}
                   onEditCode={() => setChildToEditCode(child)}
                   onCopyCode={() => handleCopyCode(getFullLoginCode(child))}
                   onCopyMagicLink={() => handleCopyMagicLink(child)}
                   onPrintCode={() => handlePrintCode(child)}
                   onViewQR={() => setShowCodeDialog({ child })}
-                  onCall={() => handleCall(child.id)}
-                  onChat={() => handleChat(child.id)}
+                      onCall={() => handleCall(child.id)}
+                      onChat={() => handleChat(child.id)}
                   onDelete={() => setChildToDelete(child)}
                 />
               ))}

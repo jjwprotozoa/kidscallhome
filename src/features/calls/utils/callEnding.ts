@@ -135,7 +135,11 @@ export async function endCall({
     let ensureError: { message?: string } | null = null;
     try {
       // RPC function may not exist in type definitions yet - using type assertion
-      const { error: rpcError } = await (supabase.rpc as unknown as (name: string) => Promise<{ error: { message?: string } | null }>)("ensure_call_ending_columns");
+      const { error: rpcError } = await (
+        supabase.rpc as unknown as (
+          name: string
+        ) => Promise<{ error: { message?: string } | null }>
+      )("ensure_call_ending_columns");
       ensureError = rpcError;
     } catch (rpcErr) {
       // RPC might not exist yet - that's OK, we'll fall back
@@ -243,7 +247,12 @@ export async function endCall({
   if (!error && data) {
     try {
       // RPC function may not exist in type definitions yet - using type assertion
-      await (supabase.rpc as unknown as (name: string, args?: Record<string, unknown>) => Promise<unknown>)("increment_call_version", {
+      await (
+        supabase.rpc as unknown as (
+          name: string,
+          args?: Record<string, unknown>
+        ) => Promise<unknown>
+      )("increment_call_version", {
         call_id: callId,
       });
     } catch (rpcErr) {
@@ -268,7 +277,11 @@ export async function endCall({
         .select("id, status, ended_at")
         .eq("id", callId)
         .maybeSingle();
-      return existingCall as { id: string; status: string; ended_at: string | null } | null;
+      return existingCall as {
+        id: string;
+        status: string;
+        ended_at: string | null;
+      } | null;
     }
 
     // For 406 errors or other issues, try one more time with just status update

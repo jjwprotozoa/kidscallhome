@@ -106,11 +106,14 @@ export function usePresence({
           
         } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
           isConnectedRef.current = false;
-          console.error("❌ [PRESENCE] Presence channel error", {
-            status,
-            channelName,
-            userId,
-          });
+          // Only log errors in development, and only if it's not a common timeout
+          if (import.meta.env.DEV && status !== "TIMED_OUT") {
+            console.error("❌ [PRESENCE] Presence channel error", {
+              status,
+              channelName,
+              userId,
+            });
+          }
         } else if (status === "CLOSED") {
           isConnectedRef.current = false;
           // Silent close - normal cleanup

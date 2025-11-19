@@ -64,268 +64,236 @@ export function useChildrenPresence({
   useEffect(() => {
     if (!enabled || childIds.length === 0) return;
 
+    // Capture ref at start of effect for cleanup
+    const currentChannelRef = channelRefsRef.current;
+
     // Clean up existing channels first to prevent duplicates
-    const existingChannels = channelRefsRef.current;
-    if (existingChannels.size > 0) {
-      existingChannels.forEach((channel) => {
+    if (currentChannelRef.size > 0) {
+      currentChannelRef.forEach((channel) => {
         supabase.removeChannel(channel);
       });
-      existingChannels.clear();
+      currentChannelRef.clear();
     }
 
-    const channels = new Map<string, RealtimeChannel>();
+    // Track channels created in this effect for cleanup
+    const channelsInThisEffect = new Map<string, RealtimeChannel>();
 
     // Subscribe to each child's presence channel
-    childIds.forEach((childId) => {
-      const channelName = `presence:child:${childId}`;
+    // Use setTimeout to yield to event loop and prevent blocking message handlers
+    childIds.forEach((childId, index) => {
+      // Stagger subscriptions slightly to prevent blocking (yield to event loop)
+      setTimeout(() => {
+        // Skip if channel already exists (prevent duplicate subscriptions)
+        if (currentChannelRef.has(childId)) {
+          return;
+        }
 
-      // Log in development
-      if (import.meta.env.DEV) {
-        safeLog.debug("👀 [CHILDREN PRESENCE] Subscribing to child presence", {
-          childId,
-          channelName,
-        });
-      }
+        const channelName = `presence:child:${childId}`;
 
-      // Create channel for subscribing to presence
-      // Note: Subscribers need to enable presence config to receive presence events
-      const channel = supabase.channel(channelName, {
-        config: {
-          presence: {
-            key: childId, // Use childId as key for presence state lookup
+        // Only log subscription start for small numbers of children (reduced verbosity)
+        if (import.meta.env.DEV && childIds.length <= 3) {
+          safeLog.debug("👀 [CHILDREN PRESENCE] Subscribing", { childId });
+        }
+
+        // Create channel for subscribing to presence
+        // Note: Subscribers need to enable presence config to receive presence events
+        const channel = supabase.channel(channelName, {
+          config: {
+            presence: {
+              key: childId, // Use childId as key for presence state lookup
+            },
           },
-        },
-      });
+        });
 
-      channel
-        .on("presence", { event: "sync" }, () => {
-          const state = channel.presenceState<PresenceMetadata>();
-          const isOnline =
-            childId in state &&
-            Array.isArray(state[childId]) &&
-            state[childId].length > 0;
+        channel
+          .on("presence", { event: "sync" }, () => {
+            const state = channel.presenceState<PresenceMetadata>();
+            const isOnline =
+              childId in state &&
+              Array.isArray(state[childId]) &&
+              state[childId].length > 0;
 
-          // Get the most recent presence metadata
-          const childPresences = state[childId] as
-            | PresenceMetadata[]
-            | undefined;
-          const latestPresence =
-            childPresences && childPresences.length > 0
-              ? childPresences[0]
-              : undefined;
-          const newLastSeen = isOnline
-            ? latestPresence?.lastSeen || new Date().toISOString()
-            : null;
+            // Get the most recent presence metadata
+            const childPresences = state[childId] as
+              | PresenceMetadata[]
+              | undefined;
+            const latestPresence =
+              childPresences && childPresences.length > 0
+                ? childPresences[0]
+                : undefined;
+            const newLastSeen = isOnline
+              ? latestPresence?.lastSeen || new Date().toISOString()
+              : null;
 
-          setPresence((prev) => {
-            const wasOnline = prev[childId]?.isOnline || false;
-            const prevLastSeen = prev[childId]?.lastSeen || null;
+            setPresence((prev) => {
+              const wasOnline = prev[childId]?.isOnline || false;
+              const prevLastSeen = prev[childId]?.lastSeen || null;
 
-            // Only update state if something actually changed
-            // This prevents unnecessary re-renders and reduces message spam
-            if (wasOnline === isOnline && prevLastSeen === newLastSeen) {
-              return prev; // No change, return previous state
-            }
+              // Only update state if something actually changed
+              // This prevents unnecessary re-renders and reduces message spam
+              if (wasOnline === isOnline && prevLastSeen === newLastSeen) {
+                return prev; // No change, return previous state
+              }
 
-            // Log in development only when status changes
-            if (import.meta.env.DEV && wasOnline !== isOnline) {
-              safeLog.debug("🔄 [CHILDREN PRESENCE] Status changed", {
-                childId,
-                isOnline,
-                wasOnline,
-              });
-            }
-
-            const newState = {
-              ...prev,
-              [childId]: {
-                isOnline,
-                lastSeen: newLastSeen || prevLastSeen,
-              },
-            };
-
-            // Notify callback only on actual status change
-            if (
-              wasOnline !== isOnline &&
-              onStatusChangeRef.current &&
-              prev[childId] !== undefined
-            ) {
-              onStatusChangeRef.current(childId, isOnline);
-            }
-
-            return newState;
-          });
-        })
-        .on("presence", { event: "join" }, ({ key, newPresences }) => {
-          // Log in development
-          if (import.meta.env.DEV) {
-            safeLog.debug("👋 [CHILDREN PRESENCE] Child joined presence", {
-              childId,
-              key,
-              matches: key === childId,
-              newPresences,
-            });
-          }
-
-          // Only update if this is the child we're tracking
-          if (key !== childId) {
-            if (import.meta.env.DEV) {
-              safeLog.debug(
-                "⏭️ [CHILDREN PRESENCE] Skipping join - different child",
-                {
-                  expected: childId,
-                  received: key,
-                }
-              );
-            }
-            return;
-          }
-
-          const metadata = newPresences[0] as unknown as
-            | PresenceMetadata
-            | undefined;
-          setPresence((prev) => {
-            const wasOnline = prev[childId]?.isOnline || false;
-            const newState = {
-              ...prev,
-              [childId]: {
-                isOnline: true,
-                lastSeen: metadata?.lastSeen || new Date().toISOString(),
-              },
-            };
-
-            if (!wasOnline && onStatusChangeRef.current) {
-              onStatusChangeRef.current(childId, true);
-            }
-
-            // Log in development
-            if (import.meta.env.DEV) {
-              safeLog.debug(
-                "🟢 [CHILDREN PRESENCE] Child marked as online via join",
-                {
+              // Log in development only when status changes
+              if (import.meta.env.DEV && wasOnline !== isOnline) {
+                safeLog.debug("🔄 [CHILDREN PRESENCE] Status changed", {
                   childId,
-                  wasOnline,
-                  lastSeen: metadata?.lastSeen,
-                }
-              );
-            }
-
-            return newState;
-          });
-        })
-        .on("presence", { event: "leave" }, ({ key, leftPresences }) => {
-          // Only update if this is the child we're tracking
-          if (key !== childId) {
-            return;
-          }
-
-          // Silent leave - status change logging happens in sync handler
-
-          setPresence((prev) => {
-            const wasOnline = prev[childId]?.isOnline || false;
-            const newState = {
-              ...prev,
-              [childId]: {
-                isOnline: false,
-                lastSeen: prev[childId]?.lastSeen || new Date().toISOString(),
-              },
-            };
-
-            if (wasOnline && onStatusChangeRef.current) {
-              onStatusChangeRef.current(childId, false);
-            }
-
-            return newState;
-          });
-        })
-        .subscribe((status, err) => {
-          if (status === "SUBSCRIBED") {
-            // Log in development
-            if (import.meta.env.DEV) {
-              safeLog.debug(
-                "✅ [CHILDREN PRESENCE] Subscribed to child presence",
-                {
-                  childId,
-                  channelName,
-                }
-              );
-            }
-
-            // Check initial presence state after subscription
-            // This handles the case where child was already online before parent subscribed
-            setTimeout(() => {
-              const state = channel.presenceState<PresenceMetadata>();
-              const isOnline =
-                childId in state &&
-                Array.isArray(state[childId]) &&
-                state[childId].length > 0;
-
-              // Log in development
-              if (import.meta.env.DEV) {
-                safeLog.debug("🔍 [CHILDREN PRESENCE] Initial presence check", {
-                  childId,
-                  channelName,
-                  state,
-                  stateKeys: Object.keys(state),
                   isOnline,
+                  wasOnline,
                 });
               }
 
-              if (isOnline) {
-                const childPresences = state[childId] as
-                  | PresenceMetadata[]
-                  | undefined;
-                const latestPresence =
-                  childPresences && childPresences.length > 0
-                    ? childPresences[0]
-                    : undefined;
+              const newState = {
+                ...prev,
+                [childId]: {
+                  isOnline,
+                  lastSeen: newLastSeen || prevLastSeen,
+                },
+              };
 
-                setPresence((prev) => ({
-                  ...prev,
-                  [childId]: {
-                    isOnline: true,
-                    lastSeen:
-                      latestPresence?.lastSeen || new Date().toISOString(),
-                  },
-                }));
-
-                // Log in development
-                if (import.meta.env.DEV) {
-                  safeLog.debug("🟢 [CHILDREN PRESENCE] Child is online", {
-                    childId,
-                    lastSeen: latestPresence?.lastSeen,
-                  });
-                }
-              } else {
-                // Log in development
-                if (import.meta.env.DEV) {
-                  safeLog.debug("⚪ [CHILDREN PRESENCE] Child is offline", {
-                    childId,
-                  });
-                }
+              // Notify callback only on actual status change
+              if (
+                wasOnline !== isOnline &&
+                onStatusChangeRef.current &&
+                prev[childId] !== undefined
+              ) {
+                onStatusChangeRef.current(childId, isOnline);
               }
-            }, 500); // Small delay to ensure presence state is synced
-          } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-            safeLog.error("❌ [CHILDREN PRESENCE] Subscription error", {
-              childId,
-              status,
-              error: err,
-            });
-          }
-        });
 
-      channels.set(childId, channel);
+              return newState;
+            });
+          })
+          .on("presence", { event: "join" }, ({ key, newPresences }) => {
+            // Only update if this is the child we're tracking
+            if (key !== childId) {
+              return;
+            }
+
+            const metadata = newPresences[0] as unknown as
+              | PresenceMetadata
+              | undefined;
+            setPresence((prev) => {
+              const wasOnline = prev[childId]?.isOnline || false;
+              const newState = {
+                ...prev,
+                [childId]: {
+                  isOnline: true,
+                  lastSeen: metadata?.lastSeen || new Date().toISOString(),
+                },
+              };
+
+              if (!wasOnline && onStatusChangeRef.current) {
+                onStatusChangeRef.current(childId, true);
+              }
+
+              // Log in development
+              if (import.meta.env.DEV) {
+                safeLog.debug(
+                  "🟢 [CHILDREN PRESENCE] Child marked as online via join",
+                  {
+                    childId,
+                    wasOnline,
+                    lastSeen: metadata?.lastSeen,
+                  }
+                );
+              }
+
+              return newState;
+            });
+          })
+          .on("presence", { event: "leave" }, ({ key, leftPresences }) => {
+            // Only update if this is the child we're tracking
+            if (key !== childId) {
+              return;
+            }
+
+            // Silent leave - status change logging happens in sync handler
+
+            setPresence((prev) => {
+              const wasOnline = prev[childId]?.isOnline || false;
+              const newState = {
+                ...prev,
+                [childId]: {
+                  isOnline: false,
+                  lastSeen: prev[childId]?.lastSeen || new Date().toISOString(),
+                },
+              };
+
+              if (wasOnline && onStatusChangeRef.current) {
+                onStatusChangeRef.current(childId, false);
+              }
+
+              return newState;
+            });
+          })
+          .subscribe((status, err) => {
+            if (status === "SUBSCRIBED") {
+              // Reduced logging: Only log subscription success for small numbers of children
+              if (import.meta.env.DEV && childIds.length <= 3) {
+                safeLog.debug("✅ [CHILDREN PRESENCE] Subscribed", { childId });
+              }
+
+              // Check initial presence state after subscription
+              // This handles the case where child was already online before parent subscribed
+              // Stagger checks to prevent blocking (500ms + index * 50ms)
+              setTimeout(() => {
+                const state = channel.presenceState<PresenceMetadata>();
+                const isOnline =
+                  childId in state &&
+                  Array.isArray(state[childId]) &&
+                  state[childId].length > 0;
+
+                if (isOnline) {
+                  const childPresences = state[childId] as
+                    | PresenceMetadata[]
+                    | undefined;
+                  const latestPresence =
+                    childPresences && childPresences.length > 0
+                      ? childPresences[0]
+                      : undefined;
+
+                  setPresence((prev) => ({
+                    ...prev,
+                    [childId]: {
+                      isOnline: true,
+                      lastSeen:
+                        latestPresence?.lastSeen || new Date().toISOString(),
+                    },
+                  }));
+
+                  // Only log when child is actually online (more interesting than offline)
+                  if (import.meta.env.DEV && childIds.length <= 3) {
+                    safeLog.debug("🟢 [CHILDREN PRESENCE] Online", {
+                      childId,
+                    });
+                  }
+                }
+                // Removed offline logging - too verbose, not actionable
+              }, 500 + index * 50); // Stagger checks: 500ms, 550ms, 600ms, etc.
+            } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+              safeLog.error("❌ [CHILDREN PRESENCE] Subscription error", {
+                childId,
+                status,
+                error: err,
+              });
+            }
+          });
+
+        // Track channel in both ref and local map for cleanup
+        currentChannelRef.set(childId, channel);
+        channelsInThisEffect.set(childId, channel);
+      }, index * 10); // Stagger subscriptions: 0ms, 10ms, 20ms, etc. to yield to event loop
     });
 
-    channelRefsRef.current = channels;
-
     return () => {
-      // Silent cleanup
-      channels.forEach((channel) => {
+      // Silent cleanup - remove channels created in this effect
+      channelsInThisEffect.forEach((channel, childId) => {
         supabase.removeChannel(channel);
+        // Also remove from ref (using captured ref from effect start)
+        currentChannelRef.delete(childId);
       });
-      channels.clear();
-      channelRefsRef.current.clear();
+      channelsInThisEffect.clear();
     };
   }, [childIdsKey, enabled, childIds]);
 

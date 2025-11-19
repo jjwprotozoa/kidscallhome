@@ -18,7 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Check, Crown, Loader2, Sparkles } from "lucide-react";
+import { Check, Crown, Loader2, Sparkles, ExternalLink } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { isPWA } from "@/utils/platformDetection";
@@ -99,6 +99,7 @@ const Upgrade = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [showSuccessDialog, setShowSuccessDialog] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
+  const [isManagingSubscription, setIsManagingSubscription] = useState(false);
 
   useEffect(() => {
     checkAuth();
@@ -397,6 +398,40 @@ const Upgrade = () => {
     await processUpgrade();
   };
 
+  const handleManageSubscription = async () => {
+    setIsManagingSubscription(true);
+    try {
+      const { data, error } = await supabase.functions.invoke(
+        "create-customer-portal-session",
+        {
+          body: {
+            returnUrl: `${window.location.origin}/parent/upgrade`,
+          },
+        }
+      );
+
+      if (error) {
+        throw error;
+      }
+
+      if (data?.success && data?.url) {
+        // Redirect to Stripe Customer Portal
+        window.location.href = data.url;
+      } else {
+        throw new Error(data?.error || "Failed to create portal session");
+      }
+    } catch (error: any) {
+      console.error("Error opening subscription management:", error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to open subscription management. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsManagingSubscription(false);
+    }
+  };
+
   // Hide upgrade page for native apps (they use in-app purchases)
   if (!isPWA()) {
     return (
@@ -461,14 +496,34 @@ const Upgrade = () => {
                     {subscriptionType === "annual-family-plan" && " - Unlimited children"}
                   </p>
                 </div>
-                <div className="text-right">
-                  <p className="text-sm font-semibold text-primary">
-                    Active Subscription
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {currentChildrenCount} /{" "}
-                    {allowedChildren === 999 ? "∞" : allowedChildren} children
-                  </p>
+                <div className="flex items-center gap-4">
+                  <div className="text-right">
+                    <p className="text-sm font-semibold text-primary">
+                      Active Subscription
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {currentChildrenCount} /{" "}
+                      {allowedChildren === 999 ? "∞" : allowedChildren} children
+                    </p>
+                  </div>
+                  <Button
+                    variant="default"
+                    onClick={handleManageSubscription}
+                    disabled={isManagingSubscription}
+                    size="sm"
+                  >
+                    {isManagingSubscription ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Opening...
+                      </>
+                    ) : (
+                      <>
+                        <ExternalLink className="mr-2 h-4 w-4" />
+                        Manage
+                      </>
+                    )}
+                  </Button>
                 </div>
               </div>
             </Card>

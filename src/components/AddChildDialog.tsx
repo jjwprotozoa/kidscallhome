@@ -308,12 +308,46 @@ const AddChildDialog = ({ open, onOpenChange, onChildAdded }: AddChildDialogProp
         safeLog.error("Error checking subscription limit:", sanitizeError(canAddError));
         // Continue anyway - don't block if check fails
       } else if (canAdd === false) {
+        // Get subscription details for better error message
+        const { data: parentData } = await supabase
+          .from("parents")
+          .select("allowed_children, subscription_status, subscription_expires_at")
+          .eq("id", user.id)
+          .single();
+        
+        const { count: currentCount } = await supabase
+          .from("children")
+          .select("*", { count: "exact", head: true })
+          .eq("parent_id", user.id);
+
+        const allowed = parentData?.allowed_children || 1;
+        const status = parentData?.subscription_status || "unknown";
+        const expiresAt = parentData?.subscription_expires_at;
+        const isExpired = expiresAt ? new Date(expiresAt) <= new Date() : false;
+
+        let errorMessage = "You've reached your subscription limit. ";
+        
+        if (status !== "active" || isExpired) {
+          errorMessage += `Your subscription status is "${status}"${isExpired ? " and has expired" : ""}. `;
+        }
+        
+        errorMessage += `You have ${currentCount || 0} / ${allowed === 999 ? "unlimited" : allowed} children. `;
+        errorMessage += "Please upgrade your plan or manage your subscription to add more children.";
+
+        console.error("Subscription limit check failed:", {
+          canAdd,
+          currentCount,
+          allowed,
+          status,
+          expiresAt,
+          isExpired,
+        });
+
         toast({
           title: "Subscription Limit Reached",
-          description:
-            "You've reached your subscription limit. Please upgrade your plan to add more children.",
+          description: errorMessage,
           variant: "destructive",
-          duration: 8000,
+          duration: 10000,
         });
         setLoading(false);
         return;

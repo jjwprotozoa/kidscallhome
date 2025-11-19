@@ -47,65 +47,112 @@ export async function getIPGeolocation(ipAddress: string | null): Promise<IPGeol
   try {
     // Try ip-api.com first (free, no API key needed, 45 req/min)
     // Format: https://ip-api.com/json/{ip}?fields=status,message,country,countryCode,city,regionName
-    const response = await fetch(
-      `https://ip-api.com/json/${ipAddress}?fields=status,message,country,countryCode,city,regionName`,
-      {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-        },
-      }
-    );
-
-    if (response.ok) {
-      const data = await response.json();
+    // Add timeout to prevent hanging requests (5 seconds)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    
+    try {
+      const response = await fetch(
+        `https://ip-api.com/json/${ipAddress}?fields=status,message,country,countryCode,city,regionName`,
+        {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+          },
+          signal: controller.signal,
+        }
+      ).catch((fetchError) => {
+        // Catch network errors (CORS, network failures, etc.)
+        clearTimeout(timeoutId);
+        // Silently handle - will fall through to fallback
+        return null;
+      });
       
-      if (data.status === 'success') {
-        const countryCode = data.countryCode || null;
-        return {
-          country: data.country || null,
-          countryCode,
-          countryFlag: countryCodeToFlag(countryCode),
-          city: data.city || null,
-          region: data.regionName || null,
-        };
+      clearTimeout(timeoutId);
+
+      // If fetch failed (network error), response will be null
+      if (!response) {
+        // Silently fall through to fallback
+        throw new Error('Network error');
       }
+
+      // Handle 403/429 responses silently - these are rate limits, not errors
+      if (response.status === 403 || response.status === 429) {
+        // Silently fall through to fallback - don't throw, don't log
+        throw new Error('Rate limited');
+      }
+
+      if (response.ok) {
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+          const countryCode = data.countryCode || null;
+          return {
+            country: data.country || null,
+            countryCode,
+            countryFlag: countryCodeToFlag(countryCode),
+            city: data.city || null,
+            region: data.regionName || null,
+          };
+        }
+      }
+      // For other non-ok responses, fall through to fallback
+      throw new Error('Response not ok');
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+      // Silently handle all errors - rate limits, timeouts, network errors
+      // All will fall through to fallback without logging
+      if (fetchError instanceof TypeError && fetchError.message.includes('aborted')) {
+        // Timeout - silently fall through to fallback
+      }
+      // Don't rethrow - let it fall through to fallback
     }
-    // 403/429 responses are handled silently - fall through to fallback
-    // Don't log as error since rate limiting is expected behavior
   } catch (error) {
-    // Silently handle network errors and rate limits - fall through to fallback
-    // Only log unexpected errors that aren't network-related
-    if (error instanceof TypeError && !error.message.includes('Failed to fetch')) {
-      console.warn('ip-api.com geolocation failed, trying fallback:', error);
-    }
+    // Silently handle all errors from ip-api.com - rate limits, timeouts, network errors
+    // All errors are expected and will fall through to fallback
+    // No logging needed - this is normal behavior when rate limited
   }
 
   // Fallback to ipapi.co (free tier: 1000 requests/day)
   try {
-    const response = await fetch(`https://ipapi.co/${ipAddress}/json/`, {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-      },
-    });
-
-    if (response.ok) {
-      const data = await response.json();
+    // Add timeout to prevent hanging requests (5 seconds)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    
+    try {
+      const response = await fetch(`https://ipapi.co/${ipAddress}/json/`, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+        },
+        signal: controller.signal,
+      });
       
-      if (data.country_code && !data.error) {
-        const countryCode = data.country_code || null;
-        return {
-          country: data.country_name || null,
-          countryCode,
-          countryFlag: countryCodeToFlag(countryCode),
-          city: data.city || null,
-          region: data.region || null,
-        };
+      clearTimeout(timeoutId);
+
+      if (response.ok) {
+        const data = await response.json();
+        
+        if (data.country_code && !data.error) {
+          const countryCode = data.country_code || null;
+          return {
+            country: data.country_name || null,
+            countryCode,
+            countryFlag: countryCodeToFlag(countryCode),
+            city: data.city || null,
+            region: data.region || null,
+          };
+        }
       }
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+      throw fetchError;
     }
   } catch (error) {
-    console.warn('ipapi.co geolocation failed:', error);
+    // Silently handle errors - only log in dev mode for unexpected errors
+    if (import.meta.env.DEV && error instanceof TypeError && !error.message.includes('aborted')) {
+      console.warn('ipapi.co geolocation failed:', error);
+    }
   }
 
   // Return empty result if all services fail

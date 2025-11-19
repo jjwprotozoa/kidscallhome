@@ -40,69 +40,117 @@ const Chat = () => {
   useEffect(() => {
     const initializeChat = async () => {
       let targetChildId: string | null = null;
+      let isChildUser = false; // Local variable to track user type
       
-      // CRITICAL: Check auth session FIRST - parents have auth session, children don't
-      // This prevents parents from being misidentified as children due to stale childSession
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        
-        if (session?.user) {
-          // Has auth session = parent (even if childSession exists)
-          setIsChild(false);
-          
-          // Parent accessing chat via /chat/:childId route
-          if (childId) {
-            targetChildId = childId;
-            fetchMessages(childId);
-            fetchChildData(childId);
-          } else {
-            navigate("/parent/children");
-            return;
+      // CRITICAL: Check childSession FIRST if childId param matches childSession
+      // This ensures children are correctly identified even if there's a stale parent session
+      const childSession = localStorage.getItem("childSession");
+      let childSessionData: ChildSession | null = null;
+      
+      if (childSession) {
+        try {
+          childSessionData = JSON.parse(childSession);
+          // If childId param matches childSession ID, this is definitely a child
+          if (childId && childId === childSessionData.id) {
+            isChildUser = true;
+            setIsChild(true);
+            setChildData(childSessionData);
+            targetChildId = childSessionData.id;
+            fetchMessages(childSessionData.id);
+            
+            // Fetch parent data for child users
+            supabase
+              .from("children")
+              .select("parent_id")
+              .eq("id", childSessionData.id)
+              .single()
+              .then(({ data: childRecord, error: childError }) => {
+                if (childError || !childRecord) {
+                  safeLog.error("Error fetching child record:", sanitizeError(childError));
+                  return;
+                }
+                return supabase
+                  .from("parents")
+                  .select("id, name")
+                  .eq("id", childRecord.parent_id)
+                  .maybeSingle();
+              })
+              .then((result) => {
+                if (result?.data) {
+                  setParentName(result.data.name);
+                  setParentData({ name: result.data.name, id: result.data.id });
+                } else if (result?.error) {
+                  safeLog.error("Error fetching parent data:", sanitizeError(result.error));
+                }
+              })
+              .catch((error) => {
+                safeLog.error("Error fetching parent data:", sanitizeError(error));
+              });
+            
+            // Set up realtime subscription (will be done below)
+            // Continue to subscription setup
           }
-        } else {
-          // No auth session - check if we have childSession
-          const childSession = localStorage.getItem("childSession");
-          if (childSession) {
-            try {
-              const data = JSON.parse(childSession);
-              setIsChild(true);
-              setChildData(data);
-              targetChildId = data.id;
-              fetchMessages(data.id);
-              // Fetch parent data for child users - get parent_id from database
-              supabase
-                .from("children")
-                .select("parent_id")
-                .eq("id", data.id)
-                .single()
-                .then(({ data: childRecord, error: childError }) => {
-                  if (childError || !childRecord) {
-                    safeLog.error("Error fetching child record:", sanitizeError(childError));
-                    return;
-                  }
-                  // Now fetch parent data
-                  return supabase
-                    .from("parents")
-                    .select("id, name")
-                    .eq("id", childRecord.parent_id)
-                    .maybeSingle();
-                })
-                .then((result) => {
-                  if (result?.data) {
-                    setParentName(result.data.name);
-                    setParentData({ name: result.data.name, id: result.data.id });
-                  } else if (result?.error) {
-                    safeLog.error("Error fetching parent data:", sanitizeError(result.error));
-                  }
-                })
-                .catch((error) => {
-                  safeLog.error("Error fetching parent data:", sanitizeError(error));
-                });
-            } catch (error) {
-              safeLog.error("Error parsing childSession:", sanitizeError(error));
-              navigate("/");
+        } catch (error) {
+          safeLog.error("Error parsing childSession:", sanitizeError(error));
+        }
+      }
+      
+      // If we didn't identify as child above, check auth session
+      if (!isChildUser) {
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          
+          if (session?.user) {
+            // Has auth session = parent
+            isChildUser = false;
+            setIsChild(false);
+            
+            // Parent accessing chat via /chat/:childId route
+            if (childId) {
+              targetChildId = childId;
+              fetchMessages(childId);
+              fetchChildData(childId);
+            } else {
+              navigate("/parent/children");
               return;
             }
+          } else if (childSessionData) {
+            // No auth session but have childSession - child accessing their own chat
+            isChildUser = true;
+            setIsChild(true);
+            setChildData(childSessionData);
+            targetChildId = childSessionData.id;
+            fetchMessages(childSessionData.id);
+            
+            // Fetch parent data for child users - get parent_id from database
+            supabase
+              .from("children")
+              .select("parent_id")
+              .eq("id", childSessionData.id)
+              .single()
+              .then(({ data: childRecord, error: childError }) => {
+                if (childError || !childRecord) {
+                  safeLog.error("Error fetching child record:", sanitizeError(childError));
+                  return;
+                }
+                // Now fetch parent data
+                return supabase
+                  .from("parents")
+                  .select("id, name")
+                  .eq("id", childRecord.parent_id)
+                  .maybeSingle();
+              })
+              .then((result) => {
+                if (result?.data) {
+                  setParentName(result.data.name);
+                  setParentData({ name: result.data.name, id: result.data.id });
+                } else if (result?.error) {
+                  safeLog.error("Error fetching parent data:", sanitizeError(result.error));
+                }
+              })
+              .catch((error) => {
+                safeLog.error("Error fetching parent data:", sanitizeError(error));
+              });
           } else if (childId) {
             // No childSession but has childId param - this shouldn't happen for children
             // But could be a parent accessing without auth? Redirect to home
@@ -112,18 +160,19 @@ const Chat = () => {
             navigate("/");
             return;
           }
+        } catch (error) {
+          safeLog.error("Error checking auth session:", sanitizeError(error));
+          navigate("/");
+          return;
         }
-      } catch (error) {
-        safeLog.error("Error checking auth session:", sanitizeError(error));
-        navigate("/");
-        return;
       }
 
       // Set up realtime subscription
       if (targetChildId) {
+        // Use local isChildUser variable instead of state to avoid stale closure
         safeLog.log("📡 [CHAT] Setting up realtime subscription for messages", {
           childId: targetChildId,
-          isChild,
+          isChild: isChildUser,
           timestamp: new Date().toISOString(),
         });
 
@@ -132,7 +181,7 @@ const Chat = () => {
           channelName,
           targetChildId,
           filter: `child_id=eq.${targetChildId}`,
-          isChild,
+          isChild: isChildUser,
         });
 
         channelRef.current = supabase
@@ -180,7 +229,7 @@ const Chat = () => {
               status,
               channel: channelName,
               childId: targetChildId,
-              isChild,
+              isChild: isChildUser, // Use local variable instead of state
               error: err ? sanitizeError(err) : undefined,
               timestamp: new Date().toISOString(),
             });
@@ -223,13 +272,14 @@ const Chat = () => {
 
   // Mark messages as read when chat is viewed
   useEffect(() => {
-    if (!childData) return;
+    // Wait for initialization - need either childData (for child) or childId (for parent)
+    if (isChild && !childData) return;
+    if (!isChild && !childId) return;
 
     const markMessagesAsRead = async () => {
       try {
-        const childSession = localStorage.getItem("childSession");
-        const isChild = !!childSession;
-        const targetChildId = isChild ? childData.id : childId;
+        // Use state value instead of re-checking localStorage
+        const targetChildId = isChild ? childData?.id : childId;
 
         if (!targetChildId) {
           safeLog.log("⚠️ [CHAT READ] No targetChildId, skipping mark as read");
@@ -317,7 +367,7 @@ const Chat = () => {
 
     // Mark messages as read immediately when chat page loads
     markMessagesAsRead();
-  }, [childData, childId]); // Run when childData or childId changes (page loads)
+  }, [childData, childId, isChild]); // Run when childData, childId, or isChild changes (page loads)
 
   // Cleanup: Ensure badge is cleared when navigating away from chat
   useEffect(() => {
@@ -434,12 +484,24 @@ const Chat = () => {
       }
 
       // Build payload matching RLS requirements
+      // CRITICAL: For children, sender_id MUST equal child_id for RLS policy to pass
       const payload = {
         child_id: targetChildId,
         sender_id: senderId,
         sender_type: isChild ? "child" : "parent",
         content: newMessage.trim(),
       };
+
+      // Validate payload matches RLS policy requirements
+      if (isChild) {
+        // RLS policy requires: sender_type = 'child' AND sender_id = child_id
+        if (payload.sender_type !== "child") {
+          throw new Error("Invalid sender_type for child message");
+        }
+        if (payload.sender_id !== payload.child_id) {
+          throw new Error(`RLS policy violation: sender_id (${payload.sender_id}) must equal child_id (${payload.child_id})`);
+        }
+      }
 
       // DEBUG: Log payload to console (sanitized)
       // SECURITY: Never log message content - only metadata
@@ -451,6 +513,7 @@ const Chat = () => {
         isChild,
         auth_uid: authUid,
         sender_id_matches_auth_uid: isChild ? "N/A (anon)" : (senderId === authUid),
+        sender_id_equals_child_id: isChild ? (payload.sender_id === payload.child_id) : "N/A",
       });
 
       const { data, error } = await supabase.from("messages").insert(payload).select().single();
@@ -465,10 +528,18 @@ const Chat = () => {
           // Never log full payload - only metadata
           payload_metadata: {
             child_id: payload.child_id,
+            sender_id: payload.sender_id,
             sender_type: payload.sender_type,
             content_length: payload.content.length,
+            sender_id_equals_child_id: isChild ? (payload.sender_id === payload.child_id) : "N/A",
           },
         });
+        
+        // Provide user-friendly error message for RLS violations
+        if (error.code === "42501" || error.message.includes("row-level security")) {
+          throw new Error("Unable to send message. Please check database RLS policies are correctly configured.");
+        }
+        
         throw error;
       }
 

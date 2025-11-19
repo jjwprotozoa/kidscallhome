@@ -66,11 +66,55 @@ export async function logDeviceTracking(
 
     // Try to send via Supabase RPC function (if it exists)
     // Fallback: Store in localStorage for later sync (if RPC doesn't exist)
-    const { error } = await supabase.rpc('log_device_tracking', {
-      p_log_entry: logEntry,
-    }).catch(async () => {
-      // If RPC doesn't exist, store locally for later sync
-      // This prevents breaking the app if the backend isn't ready
+    try {
+      const { error } = await supabase.rpc('log_device_tracking', {
+        p_log_entry: logEntry,
+      });
+
+      // If RPC call succeeded, we're done
+      if (!error) {
+        return;
+      }
+
+      // Check if error is because RPC function doesn't exist (code 42883, P0001, 404, or message contains "does not exist")
+      const isFunctionNotFound = 
+        error.code === '42883' || 
+        error.code === 'P0001' ||
+        error.code === 'PGRST301' || // PostgREST function not found
+        (error as any).status === 404 ||
+        error.message?.includes('does not exist') ||
+        error.message?.includes('function') && error.message?.includes('not found') ||
+        error.message?.includes('404') ||
+        error.message?.includes('Not Found');
+
+      // If function doesn't exist, store locally (expected behavior)
+      if (isFunctionNotFound) {
+        // Silently fall back to localStorage - this is expected if RPC doesn't exist yet
+        try {
+          const logs = getStoredDeviceLogs();
+          logs.push({
+            ...logEntry,
+            timestamp: Date.now(),
+          });
+          
+          // Keep only last 100 entries
+          if (logs.length > 100) {
+            logs.shift();
+          }
+          
+          localStorage.setItem('kch_device_tracking_logs', JSON.stringify(logs));
+        } catch {
+          // Silently fail - logging shouldn't break the app
+        }
+        return;
+      }
+
+      // For other errors, log in dev mode only
+      if (import.meta.env.DEV) {
+        console.warn('[DEVICE TRACKING] RPC error (non-critical):', error.message);
+      }
+    } catch (rpcError) {
+      // Network error or other exception - store locally
       try {
         const logs = getStoredDeviceLogs();
         logs.push({
@@ -87,8 +131,7 @@ export async function logDeviceTracking(
       } catch {
         // Silently fail - logging shouldn't break the app
       }
-      return { error: null };
-    });
+    }
 
     // In development, also log to console for debugging (sanitized)
     if (import.meta.env.DEV) {

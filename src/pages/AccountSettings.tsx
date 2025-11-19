@@ -18,9 +18,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { ArrowRight, Crown, Loader2, Settings, Sparkles, X } from "lucide-react";
+import { ArrowRight, Crown, Loader2, Settings, Sparkles, X, ExternalLink } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { isPWA } from "@/utils/platformDetection";
 
 const AccountSettings = () => {
   const navigate = useNavigate();
@@ -36,6 +37,7 @@ const AccountSettings = () => {
   const [currentChildrenCount, setCurrentChildrenCount] = useState(0);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
+  const [isManagingSubscription, setIsManagingSubscription] = useState(false);
 
   useEffect(() => {
     checkAuth();
@@ -122,6 +124,49 @@ const AccountSettings = () => {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleManageSubscription = async () => {
+    if (!isPWA()) {
+      toast({
+        title: "Not Available",
+        description: "Subscription management is only available in the web app.",
+        variant: "default",
+      });
+      return;
+    }
+
+    setIsManagingSubscription(true);
+    try {
+      const { data, error } = await supabase.functions.invoke(
+        "create-customer-portal-session",
+        {
+          body: {
+            returnUrl: `${window.location.origin}/parent/settings`,
+          },
+        }
+      );
+
+      if (error) {
+        throw error;
+      }
+
+      if (data?.success && data?.url) {
+        // Redirect to Stripe Customer Portal
+        window.location.href = data.url;
+      } else {
+        throw new Error(data?.error || "Failed to create portal session");
+      }
+    } catch (error: any) {
+      console.error("Error opening subscription management:", error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to open subscription management. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsManagingSubscription(false);
     }
   };
 
@@ -271,7 +316,27 @@ const AccountSettings = () => {
                 </p>
               </div>
               {subscriptionType !== "free" && subscriptionStatus === "active" && (
-                <div className="pt-2 border-t">
+                <div className="pt-2 border-t space-y-2">
+                  {isPWA() && (
+                    <Button
+                      variant="default"
+                      onClick={handleManageSubscription}
+                      disabled={isManagingSubscription}
+                      className="w-full"
+                    >
+                      {isManagingSubscription ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Opening...
+                        </>
+                      ) : (
+                        <>
+                          <ExternalLink className="mr-2 h-4 w-4" />
+                          Manage Subscription
+                        </>
+                      )}
+                    </Button>
+                  )}
                   <Button
                     variant="outline"
                     onClick={() => setShowCancelDialog(true)}

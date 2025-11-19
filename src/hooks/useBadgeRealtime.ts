@@ -93,10 +93,33 @@ export function useBadgeRealtime() {
       .subscribe((status, err) => {
         // Only log errors, not normal status changes
         if (err) {
-          console.error("❌ [BADGE REALTIME] Messages subscription error:", err);
-        } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-          // Log errors even if err is undefined but status indicates failure
-          console.error("❌ [BADGE REALTIME] Messages subscription failed:", status);
+          // Check if it's the "mismatch" error - this is often transient and can be ignored
+          const errorMessage = err instanceof Error ? err.message : String(err);
+          if (errorMessage.includes("mismatch between server and client bindings")) {
+            // This is a known Supabase Realtime issue - often resolves on retry
+            if (import.meta.env.DEV) {
+              console.warn("⚠️ [BADGE REALTIME] Messages subscription binding mismatch (will retry):", errorMessage);
+            }
+          } else {
+            console.error("❌ [BADGE REALTIME] Messages subscription error:", err);
+          }
+        } else if (status === "TIMED_OUT") {
+          // TIMED_OUT is often transient - don't log as error
+          if (import.meta.env.DEV) {
+            console.debug("⏱️ [BADGE REALTIME] Messages subscription timed out (will retry)");
+          }
+        } else if (status === "CHANNEL_ERROR") {
+          // CHANNEL_ERROR is often transient - check if it's a binding mismatch
+          const errorMessage = err instanceof Error ? err.message : String(err || "");
+          if (errorMessage.includes("mismatch between server and client bindings")) {
+            // This is a known Supabase Realtime issue - often resolves on retry
+            if (import.meta.env.DEV) {
+              console.warn("⚠️ [BADGE REALTIME] Messages subscription binding mismatch (will retry):", errorMessage);
+            }
+          } else {
+            // Only log non-binding-mismatch CHANNEL_ERRORs
+            console.error("❌ [BADGE REALTIME] Messages subscription failed:", status);
+          }
         }
         // CLOSED is normal cleanup, don't log as error
       });
@@ -226,10 +249,33 @@ export function useBadgeRealtime() {
       .subscribe((status, err) => {
         // Only log errors, not normal status changes
         if (err) {
-          console.error("❌ [BADGE REALTIME] Calls subscription error:", err);
-        } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-          // Log errors even if err is undefined but status indicates failure
-          console.error("❌ [BADGE REALTIME] Calls subscription failed:", status);
+          // Check if it's the "mismatch" error - this is often transient and can be ignored
+          const errorMessage = err instanceof Error ? err.message : String(err);
+          if (errorMessage.includes("mismatch between server and client bindings")) {
+            // This is a known Supabase Realtime issue - often resolves on retry
+            if (import.meta.env.DEV) {
+              console.warn("⚠️ [BADGE REALTIME] Calls subscription binding mismatch (will retry):", errorMessage);
+            }
+          } else {
+            console.error("❌ [BADGE REALTIME] Calls subscription error:", err);
+          }
+        } else if (status === "TIMED_OUT") {
+          // TIMED_OUT is often transient - don't log as error
+          if (import.meta.env.DEV) {
+            console.debug("⏱️ [BADGE REALTIME] Calls subscription timed out (will retry)");
+          }
+        } else if (status === "CHANNEL_ERROR") {
+          // CHANNEL_ERROR is often transient - check if it's a binding mismatch
+          const errorMessage = err instanceof Error ? err.message : String(err || "");
+          if (errorMessage.includes("mismatch between server and client bindings")) {
+            // This is a known Supabase Realtime issue - often resolves on retry
+            if (import.meta.env.DEV) {
+              console.warn("⚠️ [BADGE REALTIME] Calls subscription binding mismatch (will retry):", errorMessage);
+            }
+          } else {
+            // Only log non-binding-mismatch CHANNEL_ERRORs
+            console.error("❌ [BADGE REALTIME] Calls subscription failed:", status);
+          }
         }
         // CLOSED is normal cleanup, don't log as error
       });
