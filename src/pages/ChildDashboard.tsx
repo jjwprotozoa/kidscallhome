@@ -172,16 +172,27 @@ const ChildDashboard = () => {
       // Check calls created in the last 2 minutes to catch calls that might have been created
       // while the dashboard was loading or subscription was setting up
       const checkExistingCalls = async () => {
+        if (!childData.token) return;
+        
         const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
-        const { data: existingCalls } = await supabase
-          .from("calls")
-          .select("*")
-          .eq("child_id", childData.id)
-          .eq("caller_type", "parent")
-          .eq("status", "ringing")
-          .gte("created_at", twoMinutesAgo)
-          .order("created_at", { ascending: false })
-          .limit(1);
+        
+        // Use secure RPC function with token validation
+        const { data: allCalls, error } = await supabase.rpc("get_child_calls", {
+          p_token: childData.token,
+          p_child_id: childData.id,
+        });
+        
+        if (error) {
+          console.error("Error fetching calls:", error);
+          return;
+        }
+        
+        // Filter for recent parent-initiated ringing calls
+        const existingCalls = allCalls?.filter(call => 
+          call.caller_type === "parent" &&
+          call.status === "ringing" &&
+          new Date(call.created_at) >= new Date(twoMinutesAgo)
+        ).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 1);
 
         if (existingCalls && existingCalls.length > 0) {
           const call = existingCalls[0];
@@ -199,16 +210,27 @@ const ChildDashboard = () => {
       // IMPORTANT: Only check for parent-initiated calls, not child-initiated ones
       // Use a 1-minute window since we poll every 10 seconds
       const pollForCalls = async () => {
+        if (!childData.token) return;
+        
         const oneMinuteAgo = new Date(Date.now() - 60 * 1000).toISOString();
-        const { data: newCalls } = await supabase
-          .from("calls")
-          .select("*")
-          .eq("child_id", childData.id)
-          .eq("caller_type", "parent") // Only parent-initiated calls
-          .eq("status", "ringing")
-          .gte("created_at", oneMinuteAgo)
-          .order("created_at", { ascending: false })
-          .limit(1);
+        
+        // Use secure RPC function with token validation
+        const { data: allCalls, error } = await supabase.rpc("get_child_calls", {
+          p_token: childData.token,
+          p_child_id: childData.id,
+        });
+        
+        if (error) {
+          console.error("Error polling calls:", error);
+          return;
+        }
+        
+        // Filter for recent parent-initiated ringing calls
+        const newCalls = allCalls?.filter(call =>
+          call.caller_type === "parent" &&
+          call.status === "ringing" &&
+          new Date(call.created_at) >= new Date(oneMinuteAgo)
+        ).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 1);
 
         if (newCalls && newCalls.length > 0) {
           const call = newCalls[0];
