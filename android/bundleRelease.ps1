@@ -34,3 +34,5 @@ if (Test-Path $problemsReportFile) {
 Write-Host "Starting bundleRelease build..." -ForegroundColor Green
 & .\gradlew.bat bundleRelease --no-daemon
 
+
+

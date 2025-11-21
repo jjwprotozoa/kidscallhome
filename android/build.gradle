@@ -2,7 +2,7 @@
 // AGP 8.11.2 requires Java 11+ - fail early with clear error message
 def javaVersion = JavaVersion.current()
 if (javaVersion < JavaVersion.VERSION_11) {
-    throw new GradleException(
+    throw new RuntimeException(
         "Java ${javaVersion} is not supported. " +
         "Android Gradle Plugin 8.11.2 requires Java 11 or higher. " +
         "Please set JAVA_HOME to a Java 11+ installation. " +

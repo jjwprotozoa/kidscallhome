@@ -30,7 +30,9 @@ USING (
 ```
 
 **Issues:**
+
 1. **Redundant check**: If `calls.parent_id = auth.uid()`, the EXISTS check is redundant because:
+
    - The `calls` table has a foreign key relationship
    - If `parent_id` matches, the child must belong to that parent (enforced by FK)
    - The EXISTS subquery adds unnecessary overhead
@@ -38,6 +40,7 @@ USING (
 2. **Duplicate logic in UPDATE policy**: The UPDATE policy repeats the same EXISTS check in both USING and WITH CHECK clauses (lines 131-147)
 
 **Optimization:**
+
 ```sql
 -- Optimized: Since calls.parent_id has no FK constraint, we need EXISTS
 -- But we can simplify by checking parent_id directly first (indexed)
@@ -70,7 +73,8 @@ USING (
 WITH CHECK (calls.parent_id = auth.uid());  -- Simplified: just verify parent_id unchanged
 ```
 
-**Performance Impact:** 
+**Performance Impact:**
+
 - Removes duplicate EXISTS check in WITH CHECK clause
 - Parent_id check happens first (can use index)
 - Reduces policy evaluation overhead for UPDATE operations
@@ -98,7 +102,9 @@ USING (
 ```
 
 **Issues:**
+
 1. **Redundant verification**: The EXISTS check only verifies the child exists, but:
+
    - The `calls.child_id` is a foreign key to `children.id`
    - If the call exists, the child must exist (FK constraint)
    - This check adds overhead without security benefit
@@ -106,6 +112,7 @@ USING (
 2. **UPDATE policy duplication**: Lines 72-85 repeat the same EXISTS check in both USING and WITH CHECK
 
 **Optimization:**
+
 ```sql
 -- Optimized: Remove EXISTS check (FK constraint ensures child exists)
 CREATE POLICY "Children can view their own calls"
@@ -147,6 +154,7 @@ WITH CHECK (
 ```
 
 **Issues:**
+
 1. **Function call overhead**: Calls a SECURITY DEFINER function for every insert
 2. **Redundant check**: The function verifies `child_id = sender_id`, but this is already checked in the policy
 3. **Function implementation** (lines 9-27) does:
@@ -161,6 +169,7 @@ WITH CHECK (
    - This can be simplified
 
 **Optimization:**
+
 ```sql
 -- Option 1: Direct EXISTS (no function call) - CURRENT RECOMMENDATION
 -- Use this if you need to verify child exists for anonymous users
@@ -192,6 +201,7 @@ WITH CHECK (
 ```
 
 **Performance Impact:**
+
 - Eliminates function call overhead
 - Reduces policy evaluation time
 - Simpler to maintain
@@ -221,10 +231,12 @@ WITH CHECK (
 ```
 
 **Issues:**
+
 1. **Redundant check**: If we verify `children.parent_id = auth.uid()`, we don't need to also check `sender_id = auth.uid()` separately (they should match)
 2. **Can be simplified** if FK constraints ensure data integrity
 
 **Optimization:**
+
 ```sql
 -- Optimized: Single EXISTS check
 CREATE POLICY "Parents can send messages"
@@ -260,18 +272,20 @@ TO anon
 WITH CHECK (
   caller_type = 'child'::text AND
   calls.child_id IN (
-    SELECT id 
-    FROM public.children 
+    SELECT id
+    FROM public.children
     WHERE parent_id = calls.parent_id
   )
 );
 ```
 
 **Issues:**
+
 1. **IN subquery**: Less efficient than EXISTS for large datasets
 2. **Redundant verification**: If `parent_id` is set correctly, the IN check verifies child belongs to parent, but this could be simplified
 
 **Optimization:**
+
 ```sql
 -- Option 1: Use EXISTS (more efficient)
 CREATE POLICY "Children can insert calls they initiate"
@@ -301,6 +315,7 @@ WITH CHECK (
 ```
 
 **Performance Impact:**
+
 - EXISTS is typically faster than IN for subqueries
 - Reduces query planning overhead
 
@@ -311,11 +326,13 @@ WITH CHECK (
 ### High-Impact Optimizations
 
 1. **Remove redundant EXISTS checks in parent call policies**
+
    - **Impact:** High - affects all parent call operations
    - **Risk:** Low - FK constraints ensure data integrity
    - **Files:** `20250120000001_fix_call_rls_both_directions.sql`
 
 2. **Simplify child message INSERT policy**
+
    - **Impact:** Medium - affects all child message inserts
    - **Risk:** Low - can test thoroughly
    - **Files:** `20250202000000_fix_child_message_insert_rls_both_roles.sql`
@@ -328,6 +345,7 @@ WITH CHECK (
 ### Medium-Impact Optimizations
 
 4. **Remove duplicate WITH CHECK in UPDATE policies**
+
    - **Impact:** Medium - reduces policy evaluation overhead
    - **Risk:** Low - WITH CHECK only needed if columns change
    - **Files:** Multiple call policy files
@@ -340,11 +358,13 @@ WITH CHECK (
 ## Recommended Migration Strategy
 
 1. **Phase 1: Low-Risk Optimizations**
+
    - Remove duplicate WITH CHECK clauses in UPDATE policies
    - Replace IN with EXISTS in subqueries
    - Test thoroughly in development
 
 2. **Phase 2: Medium-Risk Optimizations**
+
    - Simplify child message INSERT policy (remove function call)
    - Remove redundant EXISTS checks where FK constraints exist
    - Monitor performance in staging
@@ -377,11 +397,13 @@ Before applying optimizations:
 ## FK Constraint Analysis
 
 **Verified Constraints:**
+
 - ✅ `messages.child_id` → `children.id` (ON DELETE CASCADE)
 - ✅ `calls.child_id` → `children.id` (ON DELETE CASCADE)
 - ❌ `calls.parent_id` → `parents.id` (NO FK CONSTRAINT EXISTS)
 
 **Impact on Optimizations:**
+
 - **Messages**: Can safely remove EXISTS check for child existence (FK ensures it)
 - **Calls**: Must keep EXISTS check for parent-child relationship verification (no FK on parent_id)
 - **Calls.parent_id**: No FK means we cannot rely on database constraints alone
@@ -389,6 +411,7 @@ Before applying optimizations:
 ## Notes
 
 - **FK Constraints**: Verify constraints with:
+
   ```sql
   SELECT conname, conrelid::regclass, confrelid::regclass
   FROM pg_constraint
@@ -401,4 +424,3 @@ Before applying optimizations:
 - **Testing**: Always test RLS policy changes in a development environment first
 
 - **Recommendation**: Consider adding FK constraint `calls.parent_id → parents.id` to enable further optimizations
-
