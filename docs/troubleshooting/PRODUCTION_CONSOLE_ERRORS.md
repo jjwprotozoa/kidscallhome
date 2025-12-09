@@ -57,17 +57,34 @@ These warnings are expected when Cloudflare is protecting your site:
 - These warnings don't affect functionality
 - The CSP headers allow `challenges.cloudflare.com` for legitimate challenges
 
-### 4. 403 Forbidden Error
+### 4. 403 Forbidden Error & Cloudflare Verification Stuck
 
 **Error:**
 ```
 GET https://www.kidscallhome.com/ 403 (Forbidden)
+Site stuck on Cloudflare verification
 ```
 
 **Solution:** ✅ Fixed in `vercel.json`
-- Removed `Cross-Origin-Resource-Policy: same-origin` header that was blocking the main page
-- This header was too restrictive and prevented the page from loading
-- Security is still maintained through CSP and other headers
+- **CSP Updates**: Added `https://*.cloudflare.com` to all relevant CSP directives to allow Cloudflare challenge scripts and resources
+- **X-Frame-Options**: Changed from `DENY` to `SAMEORIGIN` to allow Cloudflare challenge iframes
+- **Frame-ancestors**: Changed from `'none'` to `'self'` to allow Cloudflare challenge frames
+- **Form-action**: Added `https://*.cloudflare.com` to allow Cloudflare challenge form submissions
+
+**Additional Steps (if still stuck):**
+1. **Check Cloudflare Security Settings**:
+   - Go to Cloudflare Dashboard → Security → WAF
+   - Check if "Security Level" is set too high (should be "Medium" or "Low" for production)
+   - Review any custom firewall rules that might be blocking legitimate traffic
+
+2. **Check Cloudflare Challenge Settings**:
+   - Go to Security → Bots
+   - Ensure "Bot Fight Mode" or "Super Bot Fight Mode" isn't blocking legitimate users
+   - Consider adding your domain to "Allowlist" if needed
+
+3. **Check Rate Limiting**:
+   - Go to Security → Rate Limiting
+   - Ensure rate limits aren't too aggressive for normal traffic
 
 ### 5. Performance Warning
 
@@ -93,8 +110,11 @@ These indicate handlers taking longer than expected:
 
 **Security Headers:**
 - `Content-Security-Policy`: Restricts resource loading to trusted sources (applies to all requests)
+  - Allows Cloudflare domains (`https://*.cloudflare.com`) for challenge scripts
+  - Allows Cloudflare challenge frames and form submissions
+- `X-Frame-Options: SAMEORIGIN`: Allows same-origin frames (needed for Cloudflare challenges)
 - `Cross-Origin-Embedder-Policy: unsafe-none`: Allows necessary cross-origin resources
-- Additional security headers (X-Content-Type-Options, X-Frame-Options, etc.)
+- Additional security headers (X-Content-Type-Options, X-XSS-Protection, etc.)
 
 **Vercel Live Blocking:**
 - Rewrite rule: `/_next-live/*` → `/404`
