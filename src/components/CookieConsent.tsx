@@ -67,6 +67,27 @@ export const CookieConsent = () => {
               setIsChecking(false);
               return;
             } else {
+              // Database doesn't have consent yet - check localStorage as fallback
+              // This handles the case where user accepted before sign-in (sync may be in progress)
+              const consentDataStr = localStorage.getItem(CONSENT_STORAGE_KEY);
+              if (consentDataStr) {
+                try {
+                  const consentData = JSON.parse(consentDataStr);
+                  // If user already accepted in localStorage, don't show banner
+                  // (it will sync to database on login, or already syncing)
+                  if (
+                    consentData.accepted === true &&
+                    consentData.version === CONSENT_VERSION
+                  ) {
+                    setShowBanner(false);
+                    setIsChecking(false);
+                    return;
+                  }
+                } catch (error) {
+                  // Invalid localStorage data, continue to show banner
+                }
+              }
+
               // User hasn't accepted privacy/cookie consent, show banner
               // Pre-populate email opt-in checkbox if they already opted in
               const emailOptIn = parentData.email_updates_opt_in === true;
@@ -138,6 +159,24 @@ export const CookieConsent = () => {
     };
 
     checkConsent();
+
+    // Listen for auth state changes (e.g., user signs in)
+    // This ensures consent is re-checked when authentication state changes
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      // Re-check consent when user signs in or session changes
+      // Add small delay to allow localStorage sync to complete in ParentAuth
+      if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
+        setTimeout(() => {
+          checkConsent();
+        }, 500); // 500ms delay to allow sync to complete
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   const handleAccept = async () => {

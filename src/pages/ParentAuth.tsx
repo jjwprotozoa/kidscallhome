@@ -357,12 +357,40 @@ const ParentAuth = () => {
           // User is a parent - continue with parent flow
           const { data: parentData } = await supabase
             .from("parents")
-            .select("name")
+            .select("name, privacy_cookie_accepted, email_updates_opt_in")
             .eq("id", user.id)
             .maybeSingle();
 
           if (parentData?.name) {
             setCookie("parentName", parentData.name, 365); // Store for 1 year
+          }
+
+          // Sync localStorage consent to database if user accepted before sign-in
+          // This ensures consent persists across devices and sessions
+          const consentDataStr = localStorage.getItem("kch_cookie_consent");
+          if (consentDataStr) {
+            try {
+              const consentData = JSON.parse(consentDataStr);
+              // Only sync if user accepted (not declined) and database doesn't have it
+              if (
+                consentData.accepted === true &&
+                parentData?.privacy_cookie_accepted !== true
+              ) {
+                await supabase
+                  .from("parents")
+                  .update({
+                    privacy_cookie_accepted: true,
+                    email_updates_opt_in:
+                      consentData.emailOptIn === true ||
+                      parentData?.email_updates_opt_in === true,
+                  })
+                  .eq("id", user.id);
+                console.log("Synced localStorage consent to database");
+              }
+            } catch (error) {
+              // Silently fail - consent sync shouldn't break login
+              console.warn("Failed to sync consent:", error);
+            }
           }
 
           // Track device on login

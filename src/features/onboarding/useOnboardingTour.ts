@@ -70,12 +70,21 @@ export function useOnboardingTour({
 
   // Check if tour should auto-start on mount
   // Only auto-start if:
-  // 1. Tour not completed AND it's a new device (or cache cleared)
-  // 2. Manual trigger via HelpBubble (handled by event listener below)
+  // 1. Tour not completed (primary check - if completed, never show again)
+  // 2. AND it's a new device (or cache cleared) - for first-time experience only
+  // 3. Manual trigger via HelpBubble (handled by event listener below)
   useEffect(() => {
-    const shouldAutoStart = !isTourCompleted(role, pageKey) && isNewDevice(role, pageKey);
+    // Primary check: if tour is completed, NEVER auto-start again
+    if (isTourCompleted(role, pageKey)) {
+      setIsRunning(false);
+      return;
+    }
+    
+    // Only auto-start if tour is not completed AND it's a new device
+    // This ensures it only shows once per device, and never again if completed
+    const shouldAutoStart = isNewDevice(role, pageKey);
     if (shouldAutoStart) {
-      // Auto-start tour on new device or cache clear
+      // Auto-start tour on new device or cache clear (first time only)
       setIsRunning(true);
       setStepIndex(0);
     }

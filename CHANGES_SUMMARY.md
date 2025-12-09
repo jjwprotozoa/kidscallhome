@@ -1,6 +1,40 @@
 # KidsCallHome - Changes Summary
 
-## Latest Changes (2025-12-09)
+## Latest Changes (2025-01-08)
+
+### 1. Privacy Policy Consent Improvements
+
+- **Issue**: Privacy policy consent banner could show repeatedly, and localStorage consent wasn't syncing to database on sign-in
+- **Fixes**:
+  - **Consent Sync on Login**: Added logic to sync localStorage consent to database when user signs in, ensuring consent persists across devices and sessions
+  - **Auth State Change Listener**: Added listener to re-check consent when authentication state changes (sign-in, token refresh) with 500ms delay to allow sync to complete
+  - **localStorage Fallback**: Enhanced logic to check localStorage as fallback for authenticated users, preventing banner from showing if user already accepted (even if database sync is in progress)
+  - **Race Condition Prevention**: Added delay to auth state change check to prevent race conditions between consent sync and banner display
+- **Impact**:
+  - Consent now properly persists across devices and sessions
+  - Banner won't show unnecessarily if user already accepted
+  - Privacy policy link works both before and after sign-in
+  - Better user experience with proper consent tracking
+- **Files**:
+  - `src/components/CookieConsent.tsx` (enhanced with auth state listener and localStorage fallback)
+  - `src/pages/ParentAuth.tsx` (added consent sync on login)
+
+### 2. Onboarding Tour Fix - Prevent Repeated Display
+
+- **Issue**: Onboarding tour could show every time the app loads, even after completion
+- **Fix**: Updated logic to prioritize completion check - if tour is completed, it never auto-starts again, regardless of device fingerprint changes
+  - Primary check: If tour is completed, never auto-start (prevents repeated display)
+  - Device check only applies for first-time experience (if tour not completed)
+  - Completion status stored in localStorage persists across sessions
+- **Impact**:
+  - Tour only shows once per device (first-time experience)
+  - Once completed, tour never shows again (even if device fingerprint changes)
+  - Users can still manually restart tour via HelpBubble button
+  - Better user experience - no interruptions for returning users
+- **Files**:
+  - `src/features/onboarding/useOnboardingTour.ts` (improved completion check logic)
+
+## Previous Changes (2025-12-09)
 
 ### 1. COEP/CORP Error Fix - Change COEP to credentialless
 
