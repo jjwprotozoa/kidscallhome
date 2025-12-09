@@ -6,36 +6,54 @@ This document addresses common console errors seen in production deployments.
 
 ## Errors Fixed
 
-### 1. Vercel Live Feedback Script Error
+### 1. Vercel Live Feedback Script Error & COEP/CORP Error
 
-**Error:**
+**Errors:**
+
 ```
 The FetchEvent for "https://vercel.live/_next-live/feedback/feedback.js" resulted in a network error response: Cross-Origin-Resource-Policy prevented from serving the response to the client.
+ERR_BLOCKED_BY_RESPONSE.NotSameOriginAfterDefaultedToSameOriginByCoep
 ```
 
-**Cause:** Vercel Live is a development/preview feature that shouldn't be enabled in production.
+**Cause:** 
+- Vercel Live is a development/preview feature that shouldn't be enabled in production
+- COEP (Cross-Origin-Embedder-Policy) requires CORP (Cross-Origin-Resource-Policy) headers on cross-origin resources
+- Vercel's toolbar script doesn't include the required CORP header
 
 **Solution:**
-1. **Disable Vercel Live in Vercel Dashboard:**
+
+1. **Disable Vercel Live in Vercel Dashboard (Recommended):**
    - Go to your Vercel project settings
    - Navigate to **Settings** → **General**
    - Find **Vercel Live** or **Preview Comments** section
    - Disable it for production deployments
 
-2. **Configuration Fixes Applied:**
+2. **COEP Configuration Fix:**
+   - Changed `Cross-Origin-Embedder-Policy` from `unsafe-none` to `credentialless`
+   - `credentialless` allows loading resources without explicit CORP headers
+   - This resolves the COEP/CORP conflict with Vercel Live scripts
+
+3. **Additional Blocking (Defense in Depth):**
    - Added rewrite rule to redirect `/_next-live/*` paths to 404
    - Added redirect rule to block `/_next-live/*` requests
    - CSP headers block external scripts from `vercel.live` domain
    - These rules ensure Vercel Live requests are blocked at the edge
 
+**Priority:**
+1. ✅ Fix 403 error first (Cloudflare verification) - **DONE**
+2. ✅ Fix COEP/CORP error - **DONE** (changed to `credentialless`)
+3. Disable Vercel Live in dashboard (manual step)
+
 ### 2. Content Security Policy (CSP) Warnings
 
 **Error:**
+
 ```
 Note that 'script-src' was not explicitly set, so 'default-src' is used as a fallback.
 ```
 
 **Solution:** ✅ Fixed in `vercel.json`
+
 - Added explicit `Content-Security-Policy` header with proper `script-src` directive
 - CSP now applies to all requests (removed HTML-only restriction)
 - Allows necessary scripts while blocking unwanted external scripts
@@ -44,6 +62,7 @@ Note that 'script-src' was not explicitly set, so 'default-src' is used as a fal
 ### 3. Cloudflare Challenge Warnings
 
 **Errors:**
+
 ```
 Request for the Private Access Token challenge.
 The resource https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/cmg/1 was preloaded...
@@ -52,6 +71,7 @@ The resource https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/cm
 **Status:** ✅ **Normal - No action needed**
 
 These warnings are expected when Cloudflare is protecting your site:
+
 - Cloudflare automatically challenges suspicious traffic
 - The Private Access Token is part of Cloudflare's bot protection
 - These warnings don't affect functionality
@@ -60,24 +80,29 @@ These warnings are expected when Cloudflare is protecting your site:
 ### 4. 403 Forbidden Error & Cloudflare Verification Stuck
 
 **Error:**
+
 ```
 GET https://www.kidscallhome.com/ 403 (Forbidden)
 Site stuck on Cloudflare verification
 ```
 
 **Solution:** ✅ Fixed in `vercel.json`
+
 - **CSP Updates**: Added `https://*.cloudflare.com` to all relevant CSP directives to allow Cloudflare challenge scripts and resources
 - **X-Frame-Options**: Changed from `DENY` to `SAMEORIGIN` to allow Cloudflare challenge iframes
 - **Frame-ancestors**: Changed from `'none'` to `'self'` to allow Cloudflare challenge frames
 - **Form-action**: Added `https://*.cloudflare.com` to allow Cloudflare challenge form submissions
 
 **Additional Steps (if still stuck):**
+
 1. **Check Cloudflare Security Settings**:
+
    - Go to Cloudflare Dashboard → Security → WAF
    - Check if "Security Level" is set too high (should be "Medium" or "Low" for production)
    - Review any custom firewall rules that might be blocking legitimate traffic
 
 2. **Check Cloudflare Challenge Settings**:
+
    - Go to Security → Bots
    - Ensure "Bot Fight Mode" or "Super Bot Fight Mode" isn't blocking legitimate users
    - Consider adding your domain to "Allowlist" if needed
@@ -89,6 +114,7 @@ Site stuck on Cloudflare verification
 ### 5. Performance Warning
 
 **Error:**
+
 ```
 [Violation] 'message' handler took 709ms
 [Violation] 'setTimeout' handler took 50ms
@@ -97,6 +123,7 @@ Site stuck on Cloudflare verification
 **Status:** ⚠️ **Monitor - May need optimization**
 
 These indicate handlers taking longer than expected:
+
 - Message handlers (likely in service worker or WebSocket connections)
 - setTimeout handlers (may be from Cloudflare challenge scripts)
 - Monitor these - if they happen frequently, investigate:
@@ -109,14 +136,18 @@ These indicate handlers taking longer than expected:
 ### Updated `vercel.json`
 
 **Security Headers:**
+
 - `Content-Security-Policy`: Restricts resource loading to trusted sources (applies to all requests)
   - Allows Cloudflare domains (`https://*.cloudflare.com`) for challenge scripts
   - Allows Cloudflare challenge frames and form submissions
 - `X-Frame-Options: SAMEORIGIN`: Allows same-origin frames (needed for Cloudflare challenges)
-- `Cross-Origin-Embedder-Policy: unsafe-none`: Allows necessary cross-origin resources
+- `Cross-Origin-Embedder-Policy: credentialless`: Allows loading resources without explicit CORP headers
+  - Resolves COEP/CORP conflict with Vercel Live scripts
+  - More permissive than `require-corp` but still provides security
 - Additional security headers (X-Content-Type-Options, X-XSS-Protection, etc.)
 
 **Vercel Live Blocking:**
+
 - Rewrite rule: `/_next-live/*` → `/404`
 - Redirect rule: `/_next-live/*` → `/404`
 - CSP blocks `vercel.live` domain scripts
@@ -128,11 +159,13 @@ These indicate handlers taking longer than expected:
 After deploying these changes:
 
 1. **Check Console:**
+
    - Vercel Live errors should be gone (or blocked by CSP)
    - CSP warnings should be resolved
    - Cloudflare warnings are normal and can be ignored
 
 2. **Test Functionality:**
+
    - Verify app loads correctly
    - Test video calls (camera/microphone permissions)
    - Test messaging and real-time features
@@ -158,4 +191,3 @@ After deploying these changes:
 - `vercel.json` - Security headers configuration
 - `middleware.ts` - Edge middleware for additional security
 - `public/sw.js` - Service worker (check for slow message handlers)
-

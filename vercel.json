@@ -49,7 +49,7 @@
         },
         {
           "key": "Cross-Origin-Embedder-Policy",
-          "value": "unsafe-none"
+          "value": "credentialless"
         },
         {
           "key": "X-Content-Type-Options",
