@@ -9,7 +9,7 @@ import {
   getChildProfileId,
   getCurrentAdultProfileId,
   getOrCreateConversation,
-} from "@/utils/conversations.js";
+} from "@/utils/conversations";
 import { safeLog, sanitizeError } from "@/utils/security";
 
 interface Message {

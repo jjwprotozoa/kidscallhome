@@ -12,7 +12,7 @@ import { StatusIndicator } from "@/features/presence/StatusIndicator";
 import { useParentPresence } from "@/features/presence/useParentPresence";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { getChildConversations } from "@/utils/conversations.js";
+import { getChildConversations } from "@/utils/conversations";
 import { MessageSquare, Phone } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
