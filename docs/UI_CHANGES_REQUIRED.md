@@ -3,9 +3,11 @@
 ## 🎯 High Priority - User-Facing Changes
 
 ### 1. **Onboarding Flow - Family Setup Selection** ✅ (Created, needs integration)
+
 **Location**: After parent signup, before dashboard access
 
 **Changes**:
+
 - Add `FamilySetupSelection` component to signup flow
 - Show after parent account creation
 - Two options:
@@ -19,9 +21,11 @@
 ### 2. **Parent Dashboard - New Tabs/Sections**
 
 #### A. **Family Setup Tab** (NEW)
+
 **Location**: `src/pages/ParentDashboard.tsx` - Add new tab
 
 **Content**:
+
 - Display current household type (Single/Two Household)
 - Show linked family status (if two-household)
 - "Link Family" button (for two-household, to link with co-parent)
@@ -29,9 +33,11 @@
 - Household type cannot be changed after initial setup (or with warning)
 
 #### B. **Child Connections Tab** (NEW)
+
 **Location**: `src/pages/ParentDashboard.tsx` - Add new tab
 
 **Content**:
+
 - List of pending child-to-child connection requests
 - Show: Child name, other child name, requested by (parent/child), status
 - "Approve" / "Reject" buttons for pending requests
@@ -40,22 +46,22 @@
 - For two-household: Show which parent approved
 
 #### C. **Safety & Reports Tab** (NEW)
+
 **Location**: `src/pages/ParentDashboard.tsx` - Add new tab
 
 **Content**:
+
 - **Blocked Contacts Section**:
   - List of contacts blocked by children
   - Show: Child name, blocked contact name, reason (if provided), date blocked
   - "Unblock" button (with confirmation)
   - "Remove from Family" button (permanently remove family member)
-  
 - **Reports Section**:
   - List of reports from children
   - Show: Child name, reported contact, report type, message, date
   - Status badges: Pending, Reviewed, Resolved, Dismissed
   - "Review" button to mark as reviewed
   - "Resolve" / "Dismiss" buttons
-  
 - **Safety Mode Settings**:
   - Toggle: "Enable Safety Mode"
   - Options (when enabled):
@@ -71,6 +77,7 @@
 **Location**: `src/pages/ChildDashboard.tsx` - On each contact card
 
 **Changes**:
+
 - Add "Block & Report" button to each contact (parent, family member, or other child)
 - Button should be visible but not prominent (maybe in contact card menu)
 - When clicked, opens `BlockAndReportButton` dialog
@@ -78,6 +85,7 @@
 - Disable call/message buttons for blocked contacts
 
 **Visual Indicators**:
+
 - 🚫 Icon on blocked contacts
 - Grayed out contact cards for blocked contacts
 - Tooltip: "This contact is blocked"
@@ -89,6 +97,7 @@
 **Location**: `src/pages/ChildDashboard.tsx` - New section
 
 **Content**:
+
 - Show list of approved child connections (other children they can communicate with)
 - Only show children that both parents approved
 - Show connection status (if pending approval from other parent)
@@ -101,6 +110,7 @@
 **Location**: `src/pages/Chat.tsx` and `src/features/messaging/components/MessageInput.tsx`
 
 **Changes**:
+
 - Check permissions before allowing message send
 - Show error messages:
   - "This contact is blocked"
@@ -113,12 +123,14 @@
 
 ### 6. **Call Screens - Permission Checks** (NEW)
 
-**Location**: 
+**Location**:
+
 - `src/pages/ParentCallScreen.tsx`
 - `src/pages/ChildCallScreen.tsx`
 - `src/features/calls/hooks/useVideoCall.ts`
 
 **Changes**:
+
 - Check permissions before initiating call
 - Show error dialogs:
   - "Cannot call: This contact is blocked"
@@ -134,6 +146,7 @@
 **Location**: `src/features/family/components/FamilyTab.tsx`
 
 **Changes**:
+
 - Add relationship type display (Grandparent, Aunt, Uncle, Cousin, Other)
 - Show if family member is blocked by any child
 - Add "View Reports" link if family member has reports
@@ -146,6 +159,7 @@
 **Location**: `src/components/Navigation.tsx`
 
 **Changes**:
+
 - For Parents: Add "Family Setup" link (if not set up yet)
 - For Parents: Add "Safety & Reports" link
 - For Parents: Add "Child Connections" link
@@ -158,12 +172,14 @@
 
 ### 9. **Contact Lists - Visual Indicators**
 
-**Location**: 
+**Location**:
+
 - `src/pages/ChildDashboard.tsx` (contact cards)
 - `src/pages/ParentDashboard.tsx` (children list)
 - `src/pages/FamilyMemberDashboard.tsx` (children list)
 
 **Changes**:
+
 - Show 🚫 icon on blocked contacts
 - Show ⏳ icon on pending child connections
 - Show ✅ icon on approved child connections
@@ -177,10 +193,11 @@
 **Location**: `src/pages/AccountSettings.tsx` or new `src/pages/FamilySettings.tsx`
 
 **Content**:
+
 - **Household Type**: Display current type (read-only after setup)
 - **Linked Families**: Show linked family info (if two-household)
 - **Safety Mode**: Toggle and settings
-- **Child Communication**: 
+- **Child Communication**:
   - Enable/disable supervised friending (for children 10+)
   - View child connection requests
 
@@ -189,6 +206,7 @@
 ## 🎨 UI Component Changes
 
 ### New Components Needed:
+
 1. ✅ `FamilySetupSelection.tsx` - Created
 2. ✅ `BlockAndReportButton.tsx` - Created
 3. ❌ `ChildConnectionRequest.tsx` - List and manage connection requests
@@ -200,6 +218,7 @@
 9. ❌ `PermissionErrorDialog.tsx` - Show permission errors
 
 ### Components to Update:
+
 1. `ParentDashboard.tsx` - Add new tabs
 2. `ChildDashboard.tsx` - Add block/report buttons, approved peers section
 3. `Chat.tsx` - Add permission checks
@@ -223,6 +242,7 @@
 ## 🔔 Notification Changes
 
 ### New Notifications Needed:
+
 1. **Parent Notification**: "Your child [Name] blocked [Contact Name]"
 2. **Parent Notification**: "Your child [Name] reported [Contact Name]"
 3. **Parent Notification**: "New child connection request from [Child Name]"
@@ -234,6 +254,7 @@
 ## 🚫 Error States & Edge Cases
 
 ### Error Messages to Add:
+
 1. "This contact has been blocked"
 2. "Child-to-child communication requires approval from both parents"
 3. "Adults cannot communicate with other adults in this app"
@@ -241,6 +262,7 @@
 5. "Connection request is pending approval"
 
 ### Loading States:
+
 - "Checking permissions..."
 - "Loading connection requests..."
 - "Loading reports..."
@@ -249,32 +271,35 @@
 
 ## 📊 Summary of Changes by Page
 
-| Page | Changes Required |
-|------|------------------|
-| **ParentAuth/Setup** | Add family setup selection |
-| **ParentDashboard** | 3 new tabs: Family Setup, Child Connections, Safety & Reports |
-| **ChildDashboard** | Block/Report buttons, Approved Peers section, Status indicators |
-| **Chat** | Permission checks, Error messages, Disable blocked contacts |
-| **Call Screens** | Permission checks, Error dialogs, Blocked contact handling |
-| **FamilyTab** | Relationship types, Blocked status, Reports link |
-| **Navigation** | New menu items, Notification badges |
-| **Settings** | Family settings section, Safety mode |
+| Page                 | Changes Required                                                |
+| -------------------- | --------------------------------------------------------------- |
+| **ParentAuth/Setup** | Add family setup selection                                      |
+| **ParentDashboard**  | 3 new tabs: Family Setup, Child Connections, Safety & Reports   |
+| **ChildDashboard**   | Block/Report buttons, Approved Peers section, Status indicators |
+| **Chat**             | Permission checks, Error messages, Disable blocked contacts     |
+| **Call Screens**     | Permission checks, Error dialogs, Blocked contact handling      |
+| **FamilyTab**        | Relationship types, Blocked status, Reports link                |
+| **Navigation**       | New menu items, Notification badges                             |
+| **Settings**         | Family settings section, Safety mode                            |
 
 ---
 
 ## 🎯 Implementation Priority
 
 1. **P0 (Critical)**:
+
    - Permission checks in Chat and Calls
    - Block/Report buttons on Child Dashboard
    - Error messages for blocked contacts
 
 2. **P1 (High)**:
+
    - Family Setup onboarding
    - Parent Dashboard new tabs
    - Child connection management
 
 3. **P2 (Medium)**:
+
    - Safety mode settings
    - Reports review UI
    - Family linking UI
@@ -283,4 +308,3 @@
    - Notification enhancements
    - Advanced safety features
    - Analytics/insights
-

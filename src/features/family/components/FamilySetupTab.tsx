@@ -1,13 +1,14 @@
 // src/features/family/components/FamilySetupTab.tsx
 // Tab component for viewing and managing family setup (household type, linked families)
 
-import { useState, useEffect } from "react";
-import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { supabase } from "@/integrations/supabase/client";
+import { Card } from "@/components/ui/card";
+import { TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { FamilyLinkDialog } from "./FamilyLinkDialog";
+import { supabase } from "@/integrations/supabase/client";
 import type { HouseholdType } from "@/types/family-communication";
+import { useEffect, useState } from "react";
+import { FamilyLinkDialog } from "./FamilyLinkDialog";
 
 interface LinkedFamily {
   id: string;
@@ -27,10 +28,13 @@ export const FamilySetupTab: React.FC = () => {
     const fetchFamilySetup = async () => {
       try {
         setLoading(true);
-        const { data: { user } } = await supabase.auth.getUser();
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
         if (!user) return;
 
-        const { data: adultProfile } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: adultProfile } = await (supabase as any)
           .from("adult_profiles")
           .select("family_id")
           .eq("user_id", user.id)
@@ -42,34 +46,50 @@ export const FamilySetupTab: React.FC = () => {
         const { data: family } = await supabase
           .from("families")
           .select("household_type, linked_family_id, name")
-          .eq("id", adultProfile.family_id)
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          .eq("id", (adultProfile as any).family_id)
           .single();
 
         if (family) {
-          setHouseholdType(family.household_type as HouseholdType);
-          if (family.linked_family_id) {
+          // @ts-expect-error - families table has household_type and linked_family_id but types are out of date
+          const familyData = family as {
+            household_type: HouseholdType | string;
+            linked_family_id: string | null;
+            name: string | null;
+          };
+
+          // Normalize household type (handle both "two_household" and "two-household" if needed)
+          const normalizedType = familyData.household_type?.replace(
+            "-",
+            "_"
+          ) as HouseholdType;
+          const finalType = normalizedType || "single";
+          setHouseholdType(finalType);
+          if (familyData.linked_family_id) {
             setIsLinked(true);
             // Fetch linked family details
             const { data: linkedFamilyData } = await supabase
               .from("families")
               .select("id, name")
-              .eq("id", family.linked_family_id)
+              .eq("id", familyData.linked_family_id)
               .single();
 
             if (linkedFamilyData) {
               // Try to get co-parent name
-              const { data: coParentProfile } = await supabase
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const { data: coParentProfile } = await (supabase as any)
                 .from("adult_profiles")
                 .select("name")
-                .eq("family_id", family.linked_family_id)
+                .eq("family_id", familyData.linked_family_id)
                 .eq("role", "parent")
                 .limit(1)
                 .maybeSingle();
 
               setLinkedFamily({
                 id: linkedFamilyData.id,
-                name: linkedFamilyData.name,
-                coParentName: coParentProfile?.name,
+                name: (linkedFamilyData as { name: string | null }).name,
+                coParentName: (coParentProfile as { name: string } | null)
+                  ?.name,
               });
             }
           }
@@ -86,10 +106,13 @@ export const FamilySetupTab: React.FC = () => {
 
   const handleUnlink = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) return;
 
-      const { data: adultProfile } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: adultProfile } = await (supabase as any)
         .from("adult_profiles")
         .select("family_id")
         .eq("user_id", user.id)
@@ -101,21 +124,28 @@ export const FamilySetupTab: React.FC = () => {
       const { data: family } = await supabase
         .from("families")
         .select("linked_family_id")
-        .eq("id", adultProfile.family_id)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .eq("id", (adultProfile as any).family_id)
         .single();
 
-      if (!family?.linked_family_id) return;
+      const familyData = family as unknown as {
+        linked_family_id: string | null;
+      };
+      if (!familyData?.linked_family_id) return;
 
       // Unlink both families
       await Promise.all([
         supabase
           .from("families")
-          .update({ linked_family_id: null, linked_at: null })
-          .eq("id", adultProfile.family_id),
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          .update({ linked_family_id: null, linked_at: null } as any)
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          .eq("id", (adultProfile as any).family_id),
         supabase
           .from("families")
-          .update({ linked_family_id: null, linked_at: null })
-          .eq("id", family.linked_family_id),
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          .update({ linked_family_id: null, linked_at: null } as any)
+          .eq("id", familyData.linked_family_id),
       ]);
 
       setIsLinked(false);
@@ -133,67 +163,74 @@ export const FamilySetupTab: React.FC = () => {
     }
   };
 
-  if (loading) {
-    return <div className="p-4">Loading family setup...</div>;
-  }
-
   return (
-    <div className="space-y-6">
-      {/* Household Type */}
-      <Card className="p-4">
-        <h3 className="font-semibold mb-2">Household Type</h3>
-        <p className="text-sm text-gray-600 mb-4">
-          {householdType === "single"
-            ? "Single Household (living together)"
-            : "Two Households (separated/divorced)"}
-        </p>
-        <p className="text-xs text-gray-500">
-          This was set during onboarding and cannot be changed.
-        </p>
-      </Card>
+    <TabsContent value="setup" className="space-y-6 mt-6">
+      {loading ? (
+        <div className="p-4">Loading family setup...</div>
+      ) : (
+        <div className="space-y-6">
+          {/* Household Type */}
+          <Card className="p-4">
+            <h3 className="font-semibold mb-2">Household Type</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              {householdType === "single"
+                ? "Single Household (living together)"
+                : "Two Households (separated/divorced)"}
+            </p>
+            <p className="text-xs text-gray-500">
+              This was set during onboarding and cannot be changed.
+            </p>
+          </Card>
 
-      {/* Linked Families (Only for two-household) */}
-      {householdType === "two_household" && (
-        <Card className="p-4">
-          <h3 className="font-semibold mb-2">Linked Families</h3>
-          {isLinked && linkedFamily ? (
-            <div>
-              <p className="text-sm text-gray-600 mb-2">
-                Linked with: {linkedFamily.coParentName || linkedFamily.name || "Co-parent"}
-              </p>
-              <p className="text-xs text-gray-500 mb-4">
-                You can see each other's call logs and approved contacts (metadata only).
-              </p>
-              <Button variant="destructive" onClick={handleUnlink}>
-                Unlink Family
-              </Button>
-            </div>
-          ) : (
-            <div>
-              <p className="text-sm text-gray-600 mb-4">
-                Not currently linked with co-parent. Link to share metadata (call logs, contacts) while maintaining independence.
-              </p>
-              <Button onClick={() => setShowLinkDialog(true)}>
-                Link with Co-Parent
-              </Button>
-            </div>
+          {/* Linked Families (Only for two-household) */}
+          {(householdType === "two_household" ||
+            (householdType as string) === "two-household") && (
+            <Card className="p-4">
+              <h3 className="font-semibold mb-2">Linked Families</h3>
+              {isLinked && linkedFamily ? (
+                <div>
+                  <p className="text-sm text-gray-600 mb-2">
+                    Linked with:{" "}
+                    {linkedFamily.coParentName ||
+                      linkedFamily.name ||
+                      "Co-parent"}
+                  </p>
+                  <p className="text-xs text-gray-500 mb-4">
+                    You can see each other's call logs and approved contacts
+                    (metadata only).
+                  </p>
+                  <Button variant="destructive" onClick={handleUnlink}>
+                    Unlink Family
+                  </Button>
+                </div>
+              ) : (
+                <div>
+                  <p className="text-sm text-gray-600 mb-4">
+                    Not currently linked with co-parent. Link to share metadata
+                    (call logs, contacts) while maintaining independence.
+                  </p>
+                  <Button onClick={() => setShowLinkDialog(true)}>
+                    Link with Co-Parent
+                  </Button>
+                </div>
+              )}
+            </Card>
           )}
-        </Card>
-      )}
 
-      <FamilyLinkDialog
-        open={showLinkDialog}
-        onClose={() => setShowLinkDialog(false)}
-        onLink={async (email: string) => {
-          // TODO: Implement family linking via email
-          toast({
-            title: "Link request sent",
-            description: `A link request has been sent to ${email}`,
-          });
-          setShowLinkDialog(false);
-        }}
-      />
-    </div>
+          <FamilyLinkDialog
+            open={showLinkDialog}
+            onClose={() => setShowLinkDialog(false)}
+            onLink={async (email: string) => {
+              // TODO: Implement family linking via email
+              toast({
+                title: "Link request sent",
+                description: `A link request has been sent to ${email}`,
+              });
+              setShowLinkDialog(false);
+            }}
+          />
+        </div>
+      )}
+    </TabsContent>
   );
 };
-

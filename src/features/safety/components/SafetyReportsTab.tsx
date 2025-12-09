@@ -4,6 +4,7 @@
 import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { TabsContent } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { unblockContact } from "@/utils/family-communication";
@@ -13,7 +14,7 @@ import { SafetyModeSettings } from "./SafetyModeSettings";
 
 export const SafetyReportsTab: React.FC = () => {
   return (
-    <div className="space-y-6">
+    <TabsContent value="safety" className="space-y-6 mt-6">
       {/* Blocked Contacts Section */}
       <section>
         <h2 className="text-xl font-semibold mb-4">Blocked Contacts</h2>
@@ -31,7 +32,7 @@ export const SafetyReportsTab: React.FC = () => {
         <h2 className="text-xl font-semibold mb-4">Safety Mode</h2>
         <SafetyModeSettings />
       </section>
-    </div>
+    </TabsContent>
   );
 };
 

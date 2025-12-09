@@ -4,6 +4,7 @@
 import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { TabsContent } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { approveChildConnection, requestChildConnection } from "@/utils/family-communication";
@@ -144,12 +145,12 @@ export const ChildConnectionsTab: React.FC<ChildConnectionsTabProps> = ({ childr
     }
   };
 
-  if (loading) {
-    return <div className="p-4">Loading connections...</div>;
-  }
-
   return (
-    <div className="space-y-6">
+    <TabsContent value="connections" className="space-y-6 mt-6">
+      {loading ? (
+        <div className="p-4">Loading connections...</div>
+      ) : (
+        <div className="space-y-6">
       {/* Pending Requests */}
       <section>
         <h2 className="text-xl font-semibold mb-4">Pending Connection Requests</h2>
@@ -214,7 +215,9 @@ export const ChildConnectionsTab: React.FC<ChildConnectionsTabProps> = ({ childr
           </div>
         )}
       </section>
-    </div>
+        </div>
+      )}
+    </TabsContent>
   );
 };
 

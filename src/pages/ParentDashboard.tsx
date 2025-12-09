@@ -5,17 +5,17 @@ import { IncomingCallDialog } from "@/components/IncomingCallDialog";
 import Navigation from "@/components/Navigation";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { FamilyCodeCard } from "@/features/family/components/FamilyCodeCard";
-import { ChildrenTab } from "@/features/family/components/ChildrenTab";
-import { FamilyTab } from "@/features/family/components/FamilyTab";
-import { ChildConnectionsTab } from "@/features/family/components/ChildConnectionsTab";
-import { SafetyReportsTab } from "@/features/safety/components/SafetyReportsTab";
-import { FamilySetupTab } from "@/features/family/components/FamilySetupTab";
 import { useIncomingCallNotifications } from "@/features/calls/hooks/useIncomingCallNotifications";
 import { endCall as endCallUtil } from "@/features/calls/utils/callEnding";
+import { ChildConnectionsTab } from "@/features/family/components/ChildConnectionsTab";
+import { ChildrenTab } from "@/features/family/components/ChildrenTab";
+import { FamilyCodeCard } from "@/features/family/components/FamilyCodeCard";
+import { FamilySetupTab } from "@/features/family/components/FamilySetupTab";
+import { FamilyTab } from "@/features/family/components/FamilyTab";
 import { HelpBubble } from "@/features/onboarding/HelpBubble";
 import { OnboardingTour } from "@/features/onboarding/OnboardingTour";
 import { useChildrenPresence } from "@/features/presence/useChildrenPresence";
+import { SafetyReportsTab } from "@/features/safety/components/SafetyReportsTab";
 import { useToast } from "@/hooks/use-toast";
 import { useParentData } from "@/hooks/useParentData";
 import { useParentIncomingCallSubscription } from "@/hooks/useParentIncomingCallSubscription";
@@ -23,9 +23,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useTotalMissedBadge, useTotalUnreadBadge } from "@/stores/badgeStore";
 import { clearAllNotifications } from "@/utils/clearAllNotifications";
 import { isPWA } from "@/utils/platformDetection";
-import { BellOff, Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 interface Child {
   id: string;
@@ -62,7 +61,6 @@ const ParentDashboard = () => {
   const [familyMembersLoading, setFamilyMembersLoading] = useState(false);
   const [showAddChild, setShowAddChild] = useState(false);
   const [showAddFamilyMember, setShowAddFamilyMember] = useState(false);
-  const [activeTab, setActiveTab] = useState("children");
   const [incomingCall, setIncomingCall] = useState<IncomingCall | null>(null);
   const [showCodeDialog, setShowCodeDialog] = useState<{ child: Child } | null>(
     null
@@ -74,7 +72,37 @@ const ParentDashboard = () => {
   const incomingCallRef = useRef<IncomingCall | null>(null); // Ref to track latest incomingCall for subscription callbacks
   const isAnsweringRef = useRef(false); // Track if user is answering to prevent auto-decline
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { toast } = useToast();
+
+  // Initialize activeTab from URL query parameter
+  const validTabs = ["children", "family", "connections", "safety", "setup"] as const;
+  const tabFromUrl = searchParams.get("tab");
+  const [activeTab, setActiveTab] = useState(() => {
+    return tabFromUrl && validTabs.includes(tabFromUrl as typeof validTabs[number]) 
+      ? tabFromUrl 
+      : "children";
+  });
+
+  // Sync activeTab with URL query parameter when it changes externally (e.g., browser back/forward)
+  useEffect(() => {
+    const urlTab = searchParams.get("tab");
+    const validUrlTab = urlTab && validTabs.includes(urlTab as typeof validTabs[number]) 
+      ? urlTab 
+      : "children";
+    // Only update if different to avoid unnecessary re-renders
+    if (validUrlTab !== activeTab) {
+      setActiveTab(validUrlTab);
+    }
+    // Only depend on searchParams to avoid loops - we check activeTab inside the effect
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  // Update URL when tab changes
+  const handleTabChange = useCallback((value: string) => {
+    setActiveTab(value);
+    setSearchParams({ tab: value }, { replace: true });
+  }, [setSearchParams]);
   const { stopIncomingCall } = useIncomingCallNotifications({
     enabled: true,
     volume: 0.7,
@@ -154,9 +182,11 @@ const ParentDashboard = () => {
   const fetchFamilyMembers = useCallback(async () => {
     try {
       setFamilyMembersLoading(true);
-      
+
       // Get current user's family
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) return;
 
       const { data: adultProfile } = await supabase
@@ -183,16 +213,22 @@ const ParentDashboard = () => {
         .eq("family_id", adultProfile.family_id);
 
       if (!childMemberships || childMemberships.length === 0) {
-        setFamilyMembers((familyMembersData || []).map(fm => ({ ...fm, blockedByChildren: [], reportCount: 0 })));
+        setFamilyMembers(
+          (familyMembersData || []).map((fm) => ({
+            ...fm,
+            blockedByChildren: [],
+            reportCount: 0,
+          }))
+        );
         return;
       }
 
-      const childProfileIds = childMemberships.map(cm => cm.child_profile_id);
+      const childProfileIds = childMemberships.map((cm) => cm.child_profile_id);
 
       // Get adult profile IDs for family members (user_id -> adult_profile_id mapping)
       const familyMemberUserIds = (familyMembersData || [])
-        .filter(fm => fm.id)
-        .map(fm => fm.id!);
+        .filter((fm) => fm.id)
+        .map((fm) => fm.id!);
 
       const { data: adultProfiles } = await supabase
         .from("adult_profiles")
@@ -200,7 +236,7 @@ const ParentDashboard = () => {
         .in("user_id", familyMemberUserIds);
 
       const userToAdultProfileMap = new Map(
-        adultProfiles?.map(ap => [ap.user_id, ap.id]) || []
+        adultProfiles?.map((ap) => [ap.user_id, ap.id]) || []
       );
       const adultProfileIds = Array.from(userToAdultProfileMap.values());
 
@@ -214,7 +250,7 @@ const ParentDashboard = () => {
 
       // Fetch child names for blocked contacts
       const blockedChildIds = new Set(
-        blockedContacts?.map(bc => bc.blocker_child_id) || []
+        blockedContacts?.map((bc) => bc.blocker_child_id) || []
       );
       const { data: childProfiles } = await supabase
         .from("child_profiles")
@@ -222,7 +258,7 @@ const ParentDashboard = () => {
         .in("id", Array.from(blockedChildIds));
 
       const childNameMap = new Map(
-        childProfiles?.map(cp => [cp.id, cp.name]) || []
+        childProfiles?.map((cp) => [cp.id, cp.name]) || []
       );
 
       // Fetch reports for these children where reported adult is a family member
@@ -234,25 +270,25 @@ const ParentDashboard = () => {
         .eq("status", "pending");
 
       // Process data to add blockedByChildren and reportCount
-      const enrichedFamilyMembers = (familyMembersData || []).map(fm => {
+      const enrichedFamilyMembers = (familyMembersData || []).map((fm) => {
         const adultProfileId = userToAdultProfileMap.get(fm.id || "");
         if (!adultProfileId) {
           return { ...fm, blockedByChildren: [], reportCount: 0 };
         }
-        
+
         // Find blocked contacts for this family member
         const blockedForThisMember = (blockedContacts || []).filter(
-          bc => bc.blocked_adult_profile_id === adultProfileId
+          (bc) => bc.blocked_adult_profile_id === adultProfileId
         );
-        
+
         // Get child names who blocked this member
         const blockedByChildren = blockedForThisMember
-          .map(bc => childNameMap.get(bc.blocker_child_id))
+          .map((bc) => childNameMap.get(bc.blocker_child_id))
           .filter(Boolean) as string[];
 
         // Count pending reports for this family member
         const reportCount = (reports || []).filter(
-          r => r.reported_adult_profile_id === adultProfileId
+          (r) => r.reported_adult_profile_id === adultProfileId
         ).length;
 
         return {
@@ -339,9 +375,10 @@ const ParentDashboard = () => {
       if (!user) throw new Error("Not authenticated");
 
       // Get current member data - handle both id and email cases
-      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-        familyMemberId
-      );
+      const isUUID =
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+          familyMemberId
+        );
 
       let member;
       let fetchError;
@@ -445,9 +482,10 @@ const ParentDashboard = () => {
   const handleRemoveFamilyMember = async (familyMemberIdOrEmail: string) => {
     try {
       // Check if it's a UUID (id) or email
-      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-        familyMemberIdOrEmail
-      );
+      const isUUID =
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+          familyMemberIdOrEmail
+        );
 
       let error;
       if (isUUID) {
@@ -809,7 +847,7 @@ const ParentDashboard = () => {
 
           <Tabs
             value={activeTab}
-            onValueChange={setActiveTab}
+            onValueChange={handleTabChange}
             className="w-full"
           >
             <TabsList className="grid w-full grid-cols-5">
