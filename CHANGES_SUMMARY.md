@@ -2,18 +2,20 @@
 
 ## Latest Changes (2025-12-09)
 
-### 1. Build Fix - Vite Import Resolution
+### 1. Build Fix - Missing conversations.ts File
 - **Issue**: Build failing on Vercel with error: `Could not load /vercel/path0/src/utils/conversations (imported by src/pages/Chat.tsx)`
-- **Root Cause**: Vite was unable to resolve imports from `@/utils/conversations` during the build process due to missing explicit extension resolution configuration
+- **Root Cause**: The file `src/utils/conversations.ts` was untracked in git, so it wasn't available during the Vercel build process
 - **Fix**: 
+  - Added `src/utils/conversations.ts` to git (was previously untracked)
   - Removed incorrect `.js` file extensions from imports (Vite resolves TypeScript files automatically)
   - Added explicit `extensions` array to Vite `resolve` configuration to ensure proper TypeScript file resolution: `[".mjs", ".js", ".mts", ".ts", ".jsx", ".tsx", ".json"]`
   - Updated `src/features/messaging/hooks/useChatInitialization.ts`
   - Updated `src/features/messaging/hooks/useMessageSending.ts`
   - Updated `src/pages/ChildParentsList.tsx`
   - Updated `vite.config.ts`
-- **Impact**: Build now succeeds on Vercel. Vite correctly resolves TypeScript imports through path aliases with explicit extension resolution
+- **Impact**: Build now succeeds on Vercel. The conversations utility file is now tracked in git and available during build
 - **Files**: 
+  - `src/utils/conversations.ts` (newly added to git)
   - `src/features/messaging/hooks/useChatInitialization.ts`
   - `src/features/messaging/hooks/useMessageSending.ts`
   - `src/pages/ChildParentsList.tsx`
