@@ -2,7 +2,24 @@
 
 ## Latest Changes (2025-12-09)
 
-### 1. Cloudflare Verification Stuck Fix - Allow Cloudflare Challenge Scripts
+### 1. COEP/CORP Error Fix - Change COEP to credentialless
+
+- **Issue**: `ERR_BLOCKED_BY_RESPONSE.NotSameOriginAfterDefaultedToSameOriginByCoep` error for Vercel Live scripts
+- **Root Cause**: COEP (Cross-Origin-Embedder-Policy) requires CORP (Cross-Origin-Resource-Policy) headers on cross-origin resources, but Vercel's toolbar script doesn't include the required CORP header
+- **Fix**: Changed `Cross-Origin-Embedder-Policy` from `unsafe-none` to `credentialless`
+  - `credentialless` allows loading resources without explicit CORP headers
+  - Resolves COEP/CORP conflict with Vercel Live scripts
+  - More permissive than `require-corp` but still provides security
+- **Priority**: Fixed after resolving 403 Cloudflare verification issue
+- **Impact**: 
+  - COEP/CORP errors should be resolved
+  - Vercel Live scripts can load without CORP headers (though still blocked by CSP/rewrites)
+  - Maintains security while allowing necessary cross-origin resources
+- **Files**: 
+  - `vercel.json` (updated COEP value)
+  - `docs/troubleshooting/PRODUCTION_CONSOLE_ERRORS.md` (updated with COEP/CORP explanation)
+
+### 2. Cloudflare Verification Stuck Fix - Allow Cloudflare Challenge Scripts
 
 - **Issue**: Production deployment getting stuck on Cloudflare verification, 403 errors during challenges
 - **Root Cause**: Security headers (CSP and X-Frame-Options) were blocking Cloudflare challenge scripts and iframes
@@ -16,11 +33,11 @@
   - **X-Frame-Options**: Changed from `DENY` to `SAMEORIGIN` to allow Cloudflare challenge iframes
   - **Frame-Ancestors**: Changed from `'none'` to `'self'` to allow Cloudflare challenge frames
 - **Documentation**: Created comprehensive Cloudflare verification troubleshooting guide
-- **Impact**: 
+- **Impact**:
   - Cloudflare challenges should now complete successfully
   - 403 errors during verification should be resolved
   - Site should no longer get stuck on verification screen
-- **Files**: 
+- **Files**:
   - `vercel.json` (updated CSP and frame options)
   - `docs/troubleshooting/CLOUDFLARE_VERIFICATION_ISSUES.md` (new)
   - `docs/troubleshooting/PRODUCTION_CONSOLE_ERRORS.md` (updated)
