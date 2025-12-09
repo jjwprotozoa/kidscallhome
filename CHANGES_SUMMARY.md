@@ -2,7 +2,30 @@
 
 ## Latest Changes (2025-12-09)
 
-### 1. Production Console Errors Fix - Security Headers & Vercel Live (Updated)
+### 1. Cloudflare Verification Stuck Fix - Allow Cloudflare Challenge Scripts
+
+- **Issue**: Production deployment getting stuck on Cloudflare verification, 403 errors during challenges
+- **Root Cause**: Security headers (CSP and X-Frame-Options) were blocking Cloudflare challenge scripts and iframes
+- **Fixes**:
+  - **CSP Updates**: Added `https://*.cloudflare.com` to all relevant CSP directives:
+    - `script-src`: Allows Cloudflare challenge scripts
+    - `style-src`: Allows Cloudflare challenge styles
+    - `connect-src`: Allows Cloudflare challenge connections
+    - `frame-src`: Allows Cloudflare challenge iframes
+    - `form-action`: Allows Cloudflare challenge form submissions
+  - **X-Frame-Options**: Changed from `DENY` to `SAMEORIGIN` to allow Cloudflare challenge iframes
+  - **Frame-Ancestors**: Changed from `'none'` to `'self'` to allow Cloudflare challenge frames
+- **Documentation**: Created comprehensive Cloudflare verification troubleshooting guide
+- **Impact**: 
+  - Cloudflare challenges should now complete successfully
+  - 403 errors during verification should be resolved
+  - Site should no longer get stuck on verification screen
+- **Files**: 
+  - `vercel.json` (updated CSP and frame options)
+  - `docs/troubleshooting/CLOUDFLARE_VERIFICATION_ISSUES.md` (new)
+  - `docs/troubleshooting/PRODUCTION_CONSOLE_ERRORS.md` (updated)
+
+### 2. Production Console Errors Fix - Security Headers & Vercel Live (Updated)
 
 - **Issue**: Multiple production console errors:
   - **403 Forbidden error** on main page (critical)
