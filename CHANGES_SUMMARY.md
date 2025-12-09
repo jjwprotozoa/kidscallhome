@@ -2,7 +2,20 @@
 
 ## Latest Changes (2025-12-09)
 
-### 1. Critical Fix - Symmetric Call Termination
+### 1. Build Fix - Vite Import Resolution
+- **Issue**: Build failing on Vercel with error: `Could not load /vercel/path0/src/utils/conversations (imported by src/pages/Chat.tsx)`
+- **Root Cause**: Vite was unable to resolve imports from `@/utils/conversations` without explicit file extensions during the build process
+- **Fix**: Added `.js` file extensions to all imports from `@/utils/conversations` to ensure proper ES module resolution
+  - Updated `src/features/messaging/hooks/useChatInitialization.ts`
+  - Updated `src/features/messaging/hooks/useMessageSending.ts`
+  - Updated `src/pages/ChildParentsList.tsx`
+- **Impact**: Build now succeeds on Vercel. Vite correctly resolves `.js` imports to their corresponding `.ts` files during the build process
+- **Files**: 
+  - `src/features/messaging/hooks/useChatInitialization.ts`
+  - `src/features/messaging/hooks/useMessageSending.ts`
+  - `src/pages/ChildParentsList.tsx`
+
+### 2. Critical Fix - Symmetric Call Termination
 - **Issue**: Asymmetric call termination where parent ending calls terminated for both parties, but child ending only affected the child
 - **Root Cause**: Termination listener channel was failing with CHANNEL_ERROR due to channel name conflicts and subscription timing issues
 - **Fixes**:
