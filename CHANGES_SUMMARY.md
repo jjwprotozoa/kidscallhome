@@ -1,6 +1,26 @@
 # KidsCallHome - Changes Summary
 
-## Latest Changes (2025-02-03)
+## Latest Changes (2025-12-09)
+
+### 1. Critical Fix - Symmetric Call Termination
+- **Issue**: Asymmetric call termination where parent ending calls terminated for both parties, but child ending only affected the child
+- **Root Cause**: Termination listener channel was failing with CHANNEL_ERROR due to channel name conflicts and subscription timing issues
+- **Fixes**:
+  - **Symmetric Termination**: Removed conditional logic based on `ended_by` field - both parties now always cleanup when call ends, regardless of who initiated termination
+  - **Idempotency Guards**: Added cleanup guards in both `useVideoCall.ts` and `useWebRTC.ts` to prevent double cleanup from multiple listeners
+  - **Channel Name Conflict Fix**: 
+    - Changed termination listener channel name from `call-termination:${callId}` to `call-termination:${callId}:${Date.now()}` for uniqueness
+    - Added cleanup of existing termination channels before creating new ones
+  - **Enhanced Error Handling**: Added detailed error logging for CHANNEL_ERROR with special handling for transient binding mismatch errors
+  - **Connection State Monitoring**: Added `oniceconnectionstatechange` handler to monitor ICE connection failures and auto-end stale connections after 5-second timeout
+  - **ICE Candidate Buffering**: Already implemented in call handlers - candidates are queued when remote description isn't set yet
+- **Impact**: Both parent and child now disconnect immediately when either party ends the call (symmetric termination)
+- **Files**: 
+  - `src/features/calls/hooks/useVideoCall.ts`
+  - `src/features/calls/hooks/useWebRTC.ts`
+  - `src/features/calls/utils/callHandlers.ts`
+
+## Previous Changes (2025-02-03)
 
 ### 1. TypeScript & Lint Error Fixes - Chat Component
 - **Issue**: Multiple TypeScript and ESLint errors in Chat.tsx preventing compilation

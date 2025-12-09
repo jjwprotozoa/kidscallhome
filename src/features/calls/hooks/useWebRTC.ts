@@ -38,11 +38,20 @@ export const useWebRTC = (
   const processedTrackIds = useRef<Set<string>>(new Set());
   const currentCallIdRef = useRef<string | null>(callId);
   
+  // CRITICAL: Idempotency guard for cleanup
+  const cleanupExecutedRef = useRef(false);
+  
+  // NOTE: ICE candidate buffering is already handled in call handlers
+  // via iceCandidatesQueue.current - candidates are queued when remoteDescription
+  // isn't set yet and processed after setRemoteDescription is called
+  
   // Update callId ref when it changes so ICE candidate handler can access it
   useEffect(() => {
     currentCallIdRef.current = callId;
     if (callId) {
       safeLog.log("📞 [CALL ID] CallId updated in useWebRTC:", callId);
+      // CRITICAL: Reset cleanup flag when starting a new call
+      cleanupExecutedRef.current = false;
     }
   }, [callId]);
 
@@ -210,6 +219,7 @@ export const useWebRTC = (
       });
 
       // Monitor connection state changes
+      // DIAGNOSTIC: Enhanced connection state logging
       pc.onconnectionstatechange = () => {
         const state = pc.connectionState;
         const iceState = pc.iceConnectionState;
@@ -219,12 +229,35 @@ export const useWebRTC = (
         const role = isChild ? 'child' : 'parent';
         safeLog.log('[KCH]', role, 'connectionState', state);
         
-        safeLog.log("🔵 [CONNECTION STATE] Peer connection state changed:", {
+        const connectionStateInfo = {
           connectionState: state,
           iceConnectionState: iceState,
           signalingState: signalingState,
+          hasLocalDescription: !!pc.localDescription,
+          hasRemoteDescription: !!pc.remoteDescription,
+          hasRemoteStream: !!remoteStreamRef.current,
+          remoteStreamTracks: remoteStreamRef.current?.getTracks().length || 0,
           timestamp: new Date().toISOString(),
-        });
+        };
+        
+        // eslint-disable-next-line no-console
+        console.log("🔵 [CONNECTION STATE] Peer connection state changed:", connectionStateInfo);
+        safeLog.log("🔵 [CONNECTION STATE] Peer connection state changed:", connectionStateInfo);
+        
+        // DIAGNOSTIC: Log state transitions with context
+        if (state === "connected") {
+          // eslint-disable-next-line no-console
+          console.log("✅ [CONNECTION STATE] CONNECTED - Peer connection established", {
+            ...connectionStateInfo,
+            readyForMedia: iceState === "connected" || iceState === "completed",
+          });
+        } else if (state === "failed" || state === "disconnected" || state === "closed") {
+          // eslint-disable-next-line no-console
+          console.error("❌ [CONNECTION STATE] CONNECTION PROBLEM", connectionStateInfo);
+        } else if (state === "connecting") {
+          // eslint-disable-next-line no-console
+          console.log("⏳ [CONNECTION STATE] CONNECTING - Establishing connection", connectionStateInfo);
+        }
 
         if (state === "connected") {
           safeLog.log("✅ [CONNECTION STATE] Peer connection is now connected!");
@@ -312,6 +345,7 @@ export const useWebRTC = (
       let iceStateStartTime = Date.now();
       const ICE_STUCK_TIMEOUT = 30000; // 30 seconds - if stuck in "new" for this long, something is wrong
       
+      // DIAGNOSTIC: Enhanced ICE state logging
       pc.oniceconnectionstatechange = () => {
         const iceState = pc.iceConnectionState;
         const timeInState = Date.now() - iceStateStartTime;
@@ -320,7 +354,7 @@ export const useWebRTC = (
         const role = isChild ? 'child' : 'parent';
         safeLog.log('[KCH]', role, 'iceConnectionState', iceState);
         
-        safeLog.log("🧊 [ICE STATE] ICE connection state changed:", {
+        const iceStateInfo = {
           iceConnectionState: iceState,
           connectionState: pc.connectionState,
           signalingState: pc.signalingState,
@@ -329,7 +363,36 @@ export const useWebRTC = (
           iceGatheringState: pc.iceGatheringState,
           timeInStateMs: timeInState,
           timestamp: new Date().toISOString(),
-        });
+        };
+        
+        // eslint-disable-next-line no-console
+        console.log("🧊 [ICE STATE] ICE connection state changed:", iceStateInfo);
+        safeLog.log("🧊 [ICE STATE] ICE connection state changed:", iceStateInfo);
+        
+        // DIAGNOSTIC: Log state transitions with context
+        const stateTransition = {
+          newState: iceState,
+          previousState: "unknown", // We don't track previous, but log current
+          connectionState: pc.connectionState,
+          signalingState: pc.signalingState,
+          hasRemoteStream: !!remoteStreamRef.current,
+          remoteStreamTracks: remoteStreamRef.current?.getTracks().length || 0,
+          timestamp: new Date().toISOString(),
+        };
+        
+        if (iceState === "connected" || iceState === "completed") {
+          // eslint-disable-next-line no-console
+          console.log("✅ [ICE STATE] ICE CONNECTED - Media should flow now", stateTransition);
+        } else if (iceState === "failed" || iceState === "disconnected") {
+          // eslint-disable-next-line no-console
+          console.error("❌ [ICE STATE] ICE FAILED/DISCONNECTED", stateTransition);
+        } else if (iceState === "checking") {
+          // eslint-disable-next-line no-console
+          console.log("⏳ [ICE STATE] ICE CHECKING - Waiting for connection", stateTransition);
+        } else if (iceState === "new") {
+          // eslint-disable-next-line no-console
+          console.log("🆕 [ICE STATE] ICE NEW - Connection starting", stateTransition);
+        }
 
         // Reset timer when state changes
         iceStateStartTime = Date.now();
@@ -534,6 +597,55 @@ export const useWebRTC = (
           safeLog.error("Signaling state is closed!");
         }
       };
+      
+      // CRITICAL: Add connection state monitoring for auto-cleanup on failures
+      // Monitor iceConnectionState to detect network failures and auto-cleanup stale connections
+      pc.oniceconnectionstatechange = () => {
+        const iceState = pc.iceConnectionState;
+        const connectionState = pc.connectionState;
+        
+        safeLog.log("🔍 [CONNECTION STATE] ICE connection state changed:", {
+          iceConnectionState: iceState,
+          connectionState: connectionState,
+          timestamp: new Date().toISOString(),
+        });
+        
+        // Auto-end call after timeout if connection fails or disconnects
+        if (iceState === "failed" || iceState === "disconnected") {
+          safeLog.warn("⚠️ [CONNECTION STATE] Connection failure detected, scheduling auto-cleanup", {
+            iceState,
+            connectionState,
+          });
+          
+          // Auto-end call after timeout if connection doesn't recover
+          setTimeout(() => {
+            const currentPC = peerConnectionRef.current;
+            if (
+              currentPC &&
+              currentPC.iceConnectionState !== "connected" &&
+              currentPC.iceConnectionState !== "completed" &&
+              currentPC.signalingState !== "closed"
+            ) {
+              const activeCallId = currentCallIdRef.current;
+              if (activeCallId) {
+                safeLog.error("❌ [CONNECTION STATE] Connection failed to recover, ending call", {
+                  iceState: currentPC.iceConnectionState,
+                  connectionState: currentPC.connectionState,
+                  callId: activeCallId,
+                });
+                
+                // Determine role from isChild prop
+                const isChildUser = isChild;
+                const by = isChildUser ? 'child' : 'parent';
+                
+                endCallUtil({ callId: activeCallId, by, reason: 'disconnected' }).catch(() => {
+                  // Ignore errors - call might already be ended
+                });
+              }
+            }
+          }, 5000); // 5 second timeout before auto-ending
+        }
+      };
 
       peerConnectionRef.current = pc;
 
@@ -547,8 +659,9 @@ export const useWebRTC = (
       });
 
       // Handle remote stream
+      // DIAGNOSTIC: Log when ontrack fires - this is critical for diagnosing media binding issues
       pc.ontrack = (event) => {
-        safeLog.log("📹 [REMOTE TRACK] Received remote track:", {
+        const trackInfo = {
           kind: event.track.kind,
           id: event.track.id,
           enabled: event.track.enabled,
@@ -557,6 +670,26 @@ export const useWebRTC = (
           streams: event.streams.length,
           connectionState: pc.connectionState,
           iceConnectionState: pc.iceConnectionState,
+          signalingState: pc.signalingState,
+          hasLocalDescription: !!pc.localDescription,
+          hasRemoteDescription: !!pc.remoteDescription,
+          timestamp: new Date().toISOString(),
+        };
+        
+        // eslint-disable-next-line no-console
+        console.log("📹 [REMOTE TRACK] ontrack FIRED - Track received from remote peer", trackInfo);
+        safeLog.log("📹 [REMOTE TRACK] Received remote track:", trackInfo);
+        
+        // DIAGNOSTIC: Log track state immediately
+        // eslint-disable-next-line no-console
+        console.log("📊 [REMOTE TRACK] Track state analysis:", {
+          trackKind: event.track.kind,
+          isMuted: event.track.muted,
+          isEnabled: event.track.enabled,
+          readyState: event.track.readyState,
+          iceState: pc.iceConnectionState,
+          connectionState: pc.connectionState,
+          willUnmuteWhen: "ICE connects and media flows",
           timestamp: new Date().toISOString(),
         });
 
@@ -572,13 +705,33 @@ export const useWebRTC = (
         };
 
         event.track.onunmute = () => {
-          safeLog.log("✅ [REMOTE TRACK] Track unmuted - MEDIA IS FLOWING!", {
+          const unmuteInfo = {
             kind: event.track.kind,
             id: event.track.id,
             reason: "Track is receiving data - media should be visible/audible now",
             iceConnectionState: pc.iceConnectionState,
             connectionState: pc.connectionState,
-          });
+            signalingState: pc.signalingState,
+            timestamp: new Date().toISOString(),
+          };
+          
+          // eslint-disable-next-line no-console
+          console.log("✅ [REMOTE TRACK] Track UNMUTED - MEDIA IS FLOWING!", unmuteInfo);
+          safeLog.log("✅ [REMOTE TRACK] Track unmuted - MEDIA IS FLOWING!", unmuteInfo);
+          
+          // DIAGNOSTIC: Verify video element state when track unmutes
+          if (event.track.kind === "video" && remoteVideoRef.current) {
+            const video = remoteVideoRef.current;
+            // eslint-disable-next-line no-console
+            console.log("🎬 [REMOTE TRACK] Video track unmuted - checking video element:", {
+              hasSrcObject: !!video.srcObject,
+              readyState: video.readyState,
+              paused: video.paused,
+              muted: video.muted,
+              shouldPlay: !video.paused && video.srcObject !== null,
+              timestamp: new Date().toISOString(),
+            });
+          }
           
           // CRITICAL: When track unmutes, aggressively ensure video is playing
           // This is especially important for parent-to-child calls
@@ -973,6 +1126,13 @@ export const useWebRTC = (
   }, [callId, localVideoRef, remoteVideoRef, isChild]);
 
   const cleanup = useCallback((force: boolean = false) => {
+    // CRITICAL: Idempotency guard to prevent double cleanup
+    // Allow cleanup if force=true (explicit hangup) even if already executed
+    if (cleanupExecutedRef.current && !force) {
+      safeLog.log("⚠️ [CLEANUP] Cleanup already executed, skipping (use force=true to override)");
+      return;
+    }
+    
     const pc = peerConnectionRef.current;
     const iceState = pc?.iceConnectionState;
     const connectionState = pc?.connectionState;
@@ -985,7 +1145,11 @@ export const useWebRTC = (
       hasLocalStream: !!localStreamRef.current,
       hasRemoteStream: !!remoteStreamRef.current,
       force: force,
+      cleanupExecuted: cleanupExecutedRef.current,
     });
+    
+    // Mark cleanup as executed
+    cleanupExecutedRef.current = true;
 
     // CRITICAL FIX: Don't cleanup if ICE is still in "new" or "checking" state
     // UNLESS force=true (explicit hangup) - then always cleanup

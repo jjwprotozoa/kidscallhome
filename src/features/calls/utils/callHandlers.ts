@@ -6,6 +6,9 @@ import type { Json } from "@/integrations/supabase/types";
 import type { CallRecord } from "../types/call";
 import { isCallTerminal } from "./callEnding";
 
+// Track processed terminations to prevent duplicate logs
+const processedTerminationsRef = new Set<string>();
+
 export const handleParentCall = async (
   pc: RTCPeerConnection,
   childId: string,
@@ -225,7 +228,22 @@ export const handleParentCall = async (
             const oldCall = payload.old as CallRecord;
 
             // Check if call is in terminal state
-            if (isCallTerminal(updatedCall)) {
+            // CRITICAL: Only process if status changed TO terminal (not if it was already ended)
+            const isTerminal = isCallTerminal(updatedCall);
+            const wasTerminal = oldCall ? isCallTerminal(oldCall) : null; // null means unknown, not false
+            const statusChanged = oldCall?.status !== updatedCall.status;
+
+            // Process termination if:
+            // 1. Call is now terminal AND
+            // 2. Status actually changed (to avoid processing same state multiple times) AND
+            // 3. Either oldCall was not terminal OR oldCall is undefined OR oldCall.status was undefined (first update) AND
+            // 4. PC is not already closed
+            if (
+              isTerminal &&
+              statusChanged &&
+              (wasTerminal === false || oldCall === undefined || (oldCall !== undefined && oldCall.status === undefined)) &&
+              pc.signalingState !== "closed"
+            ) {
               const iceState = pc.iceConnectionState;
               console.error(
                 "🛑 [CALL LIFECYCLE] Call ended by remote party (parent handler - existing call)",
@@ -233,22 +251,52 @@ export const handleParentCall = async (
                   callId: updatedCall.id,
                   oldStatus: oldCall?.status,
                   newStatus: updatedCall.status,
-                  reason: "Status changed to 'ended' in database",
+                  ended_at: updatedCall.ended_at,
+                  reason: "Status changed to terminal state in database",
                   timestamp: new Date().toISOString(),
                   connectionState: pc.connectionState,
                   iceConnectionState: iceState,
                   signalingState: pc.signalingState,
                 }
               );
+              // Always close when call is ended - don't wait for ICE state
+              // The call was explicitly ended, so we should close immediately
+              console.log(
+                "🛑 [CALL LIFECYCLE] Call ended - closing peer connection immediately",
+                {
+                  iceState,
+                  reason:
+                    "Call status changed to terminal - closing regardless of ICE state",
+                }
+              );
+
+              // CRITICAL: Stop connecting immediately to stop ringtone when call ends
+              setIsConnecting(false);
+              
               if (pc.signalingState !== "closed") {
                 pc.close();
               }
+              
+              // NOTE: Cleanup and navigation will be handled by useVideoCall's termination listener
+              // which listens to the same database UPDATE event. We just close the PC here.
+              
+              return;
+            }
+
+            // CRITICAL: Don't process answer or ICE candidates if peer connection is closed
+            // This prevents errors when call is terminated but UPDATE events still arrive
+            if (pc.signalingState === "closed" || pc.connectionState === "closed") {
               return;
             }
 
             // Check if child answered the call
             if (updatedCall.answer && pc.remoteDescription === null) {
               try {
+                // Double-check connection is still open before setting remote description
+                if (pc.signalingState === "closed" || pc.connectionState === "closed") {
+                  return;
+                }
+
                 console.log(
                   "✅ [PARENT HANDLER] Parent received answer from child (existing call), setting remote description..."
                 );
@@ -261,12 +309,18 @@ export const handleParentCall = async (
                 // Process queued ICE candidates
                 for (const candidate of iceCandidatesQueue.current) {
                   try {
+                    // Check connection before each candidate
+                    if (pc.signalingState === "closed" || pc.connectionState === "closed") {
+                      break; // Stop processing if connection closed
+                    }
                     await pc.addIceCandidate(new RTCIceCandidate(candidate));
                   } catch (err) {
                     const error = err as Error;
                     if (
                       !error.message?.includes("duplicate") &&
-                      !error.message?.includes("already")
+                      !error.message?.includes("already") &&
+                      !error.message?.includes("closed") &&
+                      !error.message?.includes("signalingState")
                     ) {
                       console.error(
                         "❌ [PARENT HANDLER] Error adding queued ICE candidate:",
@@ -285,6 +339,11 @@ export const handleParentCall = async (
               }
             }
 
+            // CRITICAL: Don't process ICE candidates if peer connection is closed
+            if (pc.signalingState === "closed" || pc.connectionState === "closed") {
+              return;
+            }
+
             // Add ICE candidates from child
             const candidatesToProcess = updatedCall.child_ice_candidates as unknown as
               | RTCIceCandidateInit[]
@@ -293,6 +352,11 @@ export const handleParentCall = async (
             if (candidatesToProcess && Array.isArray(candidatesToProcess)) {
               for (const candidate of candidatesToProcess) {
                 try {
+                  // CRITICAL: Check if connection is closed before processing each candidate
+                  if (pc.signalingState === "closed" || pc.connectionState === "closed") {
+                    return; // Stop processing if connection closed
+                  }
+
                   if (!candidate.candidate) {
                     continue;
                   }
@@ -305,9 +369,12 @@ export const handleParentCall = async (
                   }
                 } catch (err) {
                   const error = err as Error;
+                  // Silently handle duplicate candidates and closed connection errors
                   if (
                     !error.message?.includes("duplicate") &&
-                    !error.message?.includes("already")
+                    !error.message?.includes("already") &&
+                    !error.message?.includes("closed") &&
+                    !error.message?.includes("signalingState")
                   ) {
                     console.error(
                       "❌ [PARENT HANDLER] Error adding ICE candidate:",
@@ -664,17 +731,34 @@ export const handleParentCall = async (
         },
         async (payload) => {
           const updatedCall = payload.new as CallRecord;
+          const oldCall = payload.old as CallRecord | null;
 
-          // Check if call was ended
-          if (updatedCall.status === "ended") {
+          // Check if call is in terminal state
+          // CRITICAL: Only process if status changed TO terminal (not if it was already ended)
+          const isTerminal = isCallTerminal(updatedCall);
+          const wasTerminal = oldCall ? isCallTerminal(oldCall) : null; // null means unknown, not false
+          const statusChanged = oldCall?.status !== updatedCall.status;
+
+          // Process termination if:
+          // 1. Call is now terminal AND
+          // 2. Status actually changed (to avoid processing same state multiple times) AND
+          // 3. Either oldCall was not terminal OR oldCall is undefined OR oldCall.status was undefined (first update) AND
+          // 4. PC is not already closed
+          if (
+            isTerminal &&
+            statusChanged &&
+            (wasTerminal === false || oldCall === undefined || (oldCall !== undefined && oldCall.status === undefined)) &&
+            pc.signalingState !== "closed"
+          ) {
             const iceState = pc.iceConnectionState;
             console.error(
-              "🛑 [CALL LIFECYCLE] Call ended by remote party (parent handler)",
+              "🛑 [CALL LIFECYCLE] Call ended by remote party (parent handler - incoming call)",
               {
                 callId: updatedCall.id,
-                oldStatus: (payload.old as CallRecord)?.status,
+                oldStatus: oldCall?.status,
                 newStatus: updatedCall.status,
-                reason: "Status changed to 'ended' in database",
+                ended_at: updatedCall.ended_at,
+                reason: "Status changed to terminal state in database",
                 timestamp: new Date().toISOString(),
                 connectionState: pc.connectionState,
                 iceConnectionState: iceState,
@@ -688,13 +772,39 @@ export const handleParentCall = async (
               {
                 iceState,
                 reason:
-                  "Call status changed to 'ended' - closing regardless of ICE state",
+                  "Call status changed to terminal - closing regardless of ICE state",
               }
             );
 
+            // CRITICAL: Stop connecting immediately to stop ringtone when call ends
+            setIsConnecting(false);
+            
             if (pc.signalingState !== "closed") {
               pc.close();
             }
+            
+            // CRITICAL: Log that termination was detected so we can verify termination listener also receives it
+            console.log(
+              "🛑 [CALL HANDLER] Termination detected - peer connection closed. " +
+              "Termination listener should also receive this UPDATE event.",
+              {
+                callId: updatedCall.id,
+                status: updatedCall.status,
+                ended_by: updatedCall.ended_by,
+                timestamp: new Date().toISOString(),
+              }
+            );
+            
+            // NOTE: Cleanup and navigation will be handled by useVideoCall's termination listener
+            // which listens to the same database UPDATE event. We just close the PC here.
+            // If termination listener doesn't receive the event, it's a channel subscription issue.
+            
+            return;
+          }
+
+          // CRITICAL: Don't process ICE candidates if peer connection is closed
+          // This prevents errors when call is terminated but UPDATE events still arrive
+          if (pc.signalingState === "closed" || pc.connectionState === "closed") {
             return;
           }
 
@@ -724,6 +834,11 @@ export const handleParentCall = async (
 
             for (const candidate of candidatesToProcess) {
               try {
+                // CRITICAL: Check if connection is closed before processing each candidate
+                if (pc.signalingState === "closed" || pc.connectionState === "closed") {
+                  return; // Stop processing if connection closed
+                }
+
                 // Validate candidate before adding
                 if (!candidate.candidate) {
                   continue; // Skip invalid candidates silently
@@ -750,11 +865,13 @@ export const handleParentCall = async (
                   }
                 }
               } catch (err) {
-                // Silently handle duplicate candidates
+                // Silently handle duplicate candidates and closed connection errors
                 const error = err as Error;
                 if (
                   !error.message?.includes("duplicate") &&
-                  !error.message?.includes("already")
+                  !error.message?.includes("already") &&
+                  !error.message?.includes("closed") &&
+                  !error.message?.includes("signalingState")
                 ) {
                   console.error(
                     "❌ [PARENT HANDLER] Error adding ICE candidate:",
@@ -983,16 +1100,40 @@ export const handleParentCall = async (
             }
 
             // Check if call is in terminal state - only process if status actually changed TO ended
-            // CRITICAL: Only treat as ended if we have a previous state that was NOT terminal
-            // If oldCall is undefined, we can't be sure this is a new termination
+            // CRITICAL: Handle cases where oldCall.status might be undefined
+            // If oldCall is undefined OR oldCall.status is undefined, we still want to process termination
+            // if the new status is terminal (this handles cases where the first update we see is "ended")
             const isTerminal = isCallTerminal(updatedCall);
             const wasTerminal = oldCall ? isCallTerminal(oldCall) : null; // null means unknown, not false
+            // Reuse statusChanged from above (line 962) - no need to redeclare
 
-            // Only process if we have a previous state and it was NOT terminal
-            if (isTerminal && oldCall !== undefined && wasTerminal === false) {
+            // Process termination if:
+            // 1. Call is now terminal AND
+            // 2. Status actually changed (to avoid processing same state multiple times) AND
+            // 3. Either oldCall was not terminal OR oldCall is undefined OR oldCall.status was undefined (first update) AND
+            // 4. PC is not already closed
+            if (
+              isTerminal && 
+              statusChanged &&
+              (wasTerminal === false || oldCall === undefined || (oldCall !== undefined && oldCall.status === undefined)) &&
+              pc.signalingState !== "closed"
+            ) {
+              // Prevent duplicate termination logs
+              if (processedTerminationsRef.has(updatedCall.id)) {
+                return;
+              }
+              processedTerminationsRef.add(updatedCall.id);
+              
+              // Clean up old processed terminations (keep set from growing indefinitely)
+              if (processedTerminationsRef.size > 100) {
+                processedTerminationsRef.clear();
+                processedTerminationsRef.add(updatedCall.id);
+              }
+              
               const iceState = pc.iceConnectionState;
+              // Use console.info instead of console.log to reduce noise
               console.info(
-                "🛑 [CALL LIFECYCLE] Call ended by remote party (parent handler - parent initiated)",
+                "🛑 [CALL LIFECYCLE] Call ended by remote party (parent handler)",
                 {
                   callId: updatedCall.id,
                   oldStatus: oldCall?.status,
@@ -1004,20 +1145,18 @@ export const handleParentCall = async (
                   signalingState: pc.signalingState,
                 }
               );
-              // Always close when call is ended - don't wait for ICE state
-              // The call was explicitly ended, so we should close immediately
-              console.log(
-                "🛑 [CALL LIFECYCLE] Call ended - closing peer connection immediately",
-                {
-                  iceState,
-                  reason:
-                    "Call status changed to 'ended' - closing regardless of ICE state",
-                }
-              );
 
+              // CRITICAL: Stop connecting immediately to stop ringtone when call ends
+              setIsConnecting(false);
+              
+              // Close peer connection immediately
               if (pc.signalingState !== "closed") {
                 pc.close();
               }
+              
+              // NOTE: Cleanup and navigation will be handled by useVideoCall's termination listener
+              // which listens to the same database UPDATE event. We just close the PC here.
+              
               return;
             }
 
@@ -1059,12 +1198,19 @@ export const handleParentCall = async (
                   );
                   for (const candidate of iceCandidatesQueue.current) {
                     try {
+                      // CRITICAL: Check if connection is closed before processing each candidate
+                      if (pc.signalingState === "closed" || pc.connectionState === "closed") {
+                        break; // Stop processing if connection closed
+                      }
                       await pc.addIceCandidate(new RTCIceCandidate(candidate));
                     } catch (err) {
                       const error = err as Error;
+                      // Silently handle duplicate candidates and closed connection errors
                       if (
                         !error.message?.includes("duplicate") &&
-                        !error.message?.includes("already")
+                        !error.message?.includes("already") &&
+                        !error.message?.includes("closed") &&
+                        !error.message?.includes("signalingState")
                       ) {
                         console.error(
                           "❌ [PARENT HANDLER] Error adding queued ICE candidate:",
@@ -1114,6 +1260,11 @@ export const handleParentCall = async (
                   (async () => {
                     for (const candidate of existingCandidates) {
                       try {
+                        // CRITICAL: Check if connection is closed before processing each candidate
+                        if (pc.signalingState === "closed" || pc.connectionState === "closed") {
+                          return; // Stop processing if connection closed
+                        }
+
                         if (!candidate.candidate) continue;
                         if (pc.remoteDescription) {
                           // CRITICAL: Await to ensure candidate is added properly
@@ -1128,9 +1279,12 @@ export const handleParentCall = async (
                         }
                       } catch (err) {
                         const error = err as Error;
+                        // Silently handle duplicate candidates and closed connection errors
                         if (
                           !error.message?.includes("duplicate") &&
-                          !error.message?.includes("already")
+                          !error.message?.includes("already") &&
+                          !error.message?.includes("closed") &&
+                          !error.message?.includes("signalingState")
                         ) {
                           console.error(
                             "❌ [PARENT HANDLER] Error adding existing ICE candidate:",
@@ -1152,6 +1306,12 @@ export const handleParentCall = async (
               console.log(
                 "ℹ️ [PARENT HANDLER] Answer received but remote description already set"
               );
+            }
+
+            // CRITICAL: Don't process ICE candidates if peer connection is closed
+            // This prevents errors when call is terminated but UPDATE events still arrive
+            if (pc.signalingState === "closed" || pc.connectionState === "closed") {
+              return;
             }
 
             // Add ICE candidates - CRITICAL for connection establishment
@@ -1179,6 +1339,11 @@ export const handleParentCall = async (
 
               for (const candidate of candidatesToProcess) {
                 try {
+                  // CRITICAL: Check if connection is closed before processing each candidate
+                  if (pc.signalingState === "closed" || pc.connectionState === "closed") {
+                    return; // Stop processing if connection closed
+                  }
+
                   // Validate candidate before adding
                   if (!candidate.candidate) {
                     continue; // Skip invalid candidates silently
@@ -1205,10 +1370,12 @@ export const handleParentCall = async (
                   }
                 } catch (err) {
                   const error = err as Error;
-                  // Silently handle duplicate candidates
+                  // Silently handle duplicate candidates and closed connection errors
                   if (
                     !error.message?.includes("duplicate") &&
-                    !error.message?.includes("already")
+                    !error.message?.includes("already") &&
+                    !error.message?.includes("closed") &&
+                    !error.message?.includes("signalingState")
                   ) {
                     console.error(
                       "❌ [PARENT HANDLER] Error adding ICE candidate:",
