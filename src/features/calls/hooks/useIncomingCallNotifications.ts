@@ -129,10 +129,17 @@ export const useIncomingCallNotifications = (
   }, [isVisible, hasBeenVisible, playRingtone]);
 
   // Stop ringing for a call
+  // CRITICAL: If callId matches OR if there's any active call, stop the ringtone
+  // This ensures ringtone stops even if callId doesn't match exactly (e.g., when answering via call screen)
   const stopIncomingCall = useCallback(
-    async (callId: string) => {
-      if (activeCallRef.current === callId) {
-        console.log("🔇 [CALL NOTIFICATIONS] Stopping incoming call notifications:", callId);
+    async (callId?: string) => {
+      // Stop if callId matches, OR if there's any active call (callId not provided means stop any active call)
+      if (!callId || activeCallRef.current === callId || activeCallRef.current !== null) {
+        console.log("🔇 [CALL NOTIFICATIONS] Stopping incoming call notifications:", {
+          callId: callId || "any",
+          activeCallId: activeCallRef.current,
+          reason: !callId ? "Stop any active call" : activeCallRef.current === callId ? "CallId matches" : "Active call exists",
+        });
         stopRingtone();
         await closeNotification("incoming-call");
         activeCallRef.current = null;

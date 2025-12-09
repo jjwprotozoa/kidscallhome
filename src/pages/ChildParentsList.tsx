@@ -16,6 +16,7 @@ import { getChildConversations } from "@/utils/conversations";
 import { MessageSquare, Phone } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { BlockAndReportButton } from "@/features/safety/components/BlockAndReportButton";
 
 interface ChildSession {
   id: string;
@@ -46,6 +47,7 @@ const ChildParentsList = () => {
     []
   );
   const [loading, setLoading] = useState(true);
+  const [blockedContactIds, setBlockedContactIds] = useState<string[]>([]);
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -57,6 +59,46 @@ const ChildParentsList = () => {
     parentId: parentConversation?.participant.id || "",
     enabled: !!parentConversation?.participant.id,
   });
+
+  const loadBlockedContacts = async (childId: string) => {
+    try {
+      // Get child profile ID from child_profiles table
+      const { data: childProfile } = await supabase
+        .from("child_profiles")
+        .select("id")
+        .eq("id", childId)
+        .single();
+
+      if (!childProfile) return;
+
+      // Query blocked_contacts where blocker_id equals child profile id and unblocked_at is null
+      const { data: blockedContacts, error } = await supabase
+        .from("blocked_contacts")
+        .select("blocked_adult_profile_id, blocked_child_profile_id")
+        .eq("blocker_child_id", childProfile.id)
+        .is("unblocked_at", null);
+
+      if (error) {
+        console.error("Error loading blocked contacts:", error);
+        return;
+      }
+
+      // Extract blocked IDs (both adult and child profile IDs)
+      const blockedIds: string[] = [];
+      blockedContacts?.forEach((blocked) => {
+        if (blocked.blocked_adult_profile_id) {
+          blockedIds.push(blocked.blocked_adult_profile_id);
+        }
+        if (blocked.blocked_child_profile_id) {
+          blockedIds.push(blocked.blocked_child_profile_id);
+        }
+      });
+
+      setBlockedContactIds(blockedIds);
+    } catch (error) {
+      console.error("Error in loadBlockedContacts:", error);
+    }
+  };
 
   useEffect(() => {
     const loadData = async () => {
@@ -91,6 +133,7 @@ const ChildParentsList = () => {
       // Fetch all conversations (with parent and family members)
       if (childData.id) {
         await fetchConversations(childData.id);
+        await loadBlockedContacts(childData.id);
       } else {
         toast({
           title: "Error",
@@ -103,6 +146,13 @@ const ChildParentsList = () => {
 
     loadData();
   }, [navigate, toast]);
+
+  // Reload blocked contacts when child changes
+  useEffect(() => {
+    if (child?.id) {
+      loadBlockedContacts(child.id);
+    }
+  }, [child?.id]);
 
   const fetchConversations = async (childId: string) => {
     try {
@@ -205,13 +255,19 @@ const ChildParentsList = () => {
               {conversations.map((conv) => {
                 const isParent = conv.participant.type === "parent";
                 const isOnline = isParent ? isParentOnline : false; // For now, only track parent presence
+                // Check if this contact is blocked (using adult_profile_id from conversation)
+                const isBlocked = blockedContactIds.includes(conv.conversation.adult_id);
 
                 return (
                   <Card
                     key={conv.conversation.id}
                     data-tour={isParent ? "child-parents-list-card" : undefined}
-                    className="p-4 sm:p-6 hover:shadow-lg transition-all"
+                    className={`p-4 sm:p-6 hover:shadow-lg transition-all relative ${isBlocked ? "opacity-50" : ""}`}
                   >
+                    {/* Blocked indicator in top right */}
+                    {isBlocked && (
+                      <div className="absolute top-4 right-4 text-2xl">🚫</div>
+                    )}
                     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                       <div className="flex items-center space-x-3 sm:space-x-4 flex-1 min-w-0">
                         <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-primary flex items-center justify-center text-white font-bold text-xl sm:text-2xl flex-shrink-0">
@@ -244,32 +300,50 @@ const ChildParentsList = () => {
                           </p>
                         </div>
                       </div>
-                      <div className="flex gap-2 w-full sm:w-auto">
-                        <Button
-                          onClick={() =>
-                            handleCall(
-                              conv.participant.id,
-                              conv.participant.type
-                            )
-                          }
-                          variant="outline"
-                          className="flex-1 sm:flex-initial"
-                        >
-                          <Phone className="mr-2 h-4 w-4" />
-                          Call
-                        </Button>
-                        <Button
-                          onClick={() =>
-                            handleChat(
-                              conv.conversation.id,
-                              conv.participant.id
-                            )
-                          }
-                          className="flex-1 sm:flex-initial"
-                        >
-                          <MessageSquare className="mr-2 h-4 w-4" />
-                          Message
-                        </Button>
+                      <div className="flex flex-col gap-2 w-full sm:w-auto">
+                        <div className="flex gap-2 w-full sm:w-auto">
+                          <Button
+                            onClick={() =>
+                              handleCall(
+                                conv.participant.id,
+                                conv.participant.type
+                              )
+                            }
+                            variant="outline"
+                            className="flex-1 sm:flex-initial"
+                            disabled={isBlocked}
+                          >
+                            <Phone className="mr-2 h-4 w-4" />
+                            Call
+                          </Button>
+                          <Button
+                            onClick={() =>
+                              handleChat(
+                                conv.conversation.id,
+                                conv.participant.id
+                              )
+                            }
+                            className="flex-1 sm:flex-initial"
+                            disabled={isBlocked}
+                          >
+                            <MessageSquare className="mr-2 h-4 w-4" />
+                            Message
+                          </Button>
+                        </div>
+                        {child && (
+                          <div className="w-full sm:w-auto">
+                            <BlockAndReportButton
+                              childId={child.id}
+                              blockedAdultProfileId={conv.conversation.adult_id}
+                              contactName={conv.participant.name}
+                              onBlocked={() => {
+                                if (child?.id) {
+                                  loadBlockedContacts(child.id);
+                                }
+                              }}
+                            />
+                          </div>
+                        )}
                       </div>
                     </div>
                   </Card>

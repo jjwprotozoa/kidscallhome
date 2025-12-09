@@ -149,6 +149,12 @@ export const GlobalIncomingCall = () => {
 
       // Check for existing ringing calls
       const checkExistingCalls = async () => {
+        // CRITICAL: Don't check for incoming calls if user is already on the call page
+        // This prevents showing incoming call dialog when user is making an outgoing call
+        if (location.pathname.startsWith("/call/")) {
+          return;
+        }
+        
         const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
         
         if (isChild) {
@@ -169,7 +175,7 @@ export const GlobalIncomingCall = () => {
             .from("calls")
             .select("*")
             .eq("child_id", childData.id)
-            .eq("caller_type", "parent")
+            .eq("caller_type", "parent") // CRITICAL: Only show calls from parent (incoming), not child's own outgoing calls
             .eq("status", "ringing")
             .gte("created_at", twoMinutesAgo)
             .order("created_at", { ascending: false })
@@ -193,7 +199,7 @@ export const GlobalIncomingCall = () => {
             .from("calls")
             .select("*")
             .eq("parent_id", cachedUserId)
-            .eq("caller_type", "child")
+            .eq("caller_type", "child") // CRITICAL: Only show calls from child (incoming), not parent's own outgoing calls
             .eq("status", "ringing")
             .gte("created_at", twoMinutesAgo)
             .order("created_at", { ascending: false })
@@ -322,14 +328,21 @@ export const GlobalIncomingCall = () => {
 
               if (call.caller_type === "child") return;
 
-              if (
-                incomingCallRef.current &&
-                incomingCallRef.current.id === call.id
-              ) {
-                if (call.status === "active" || call.status === "ended") {
+              // CRITICAL: Stop incoming call ringtone when call status changes to active/ended
+              // Check both: if this is the tracked incoming call, OR if status changed to active/ended
+              // This ensures ringtone stops even if incomingCallRef doesn't match (e.g., when answering via call screen)
+              if (call.status === "active" || call.status === "ended") {
+                if (
+                  incomingCallRef.current &&
+                  incomingCallRef.current.id === call.id
+                ) {
+                  // This is the tracked incoming call - clear it
                   setIncomingCall(null);
                   incomingCallRef.current = null;
                 }
+                // CRITICAL: Always stop incoming call ringtone when status changes to active/ended
+                // This ensures ringtone stops even if user answered via call screen instead of GlobalIncomingCall dialog
+                stopIncomingCall(call.id);
               }
 
               if (
@@ -386,14 +399,21 @@ export const GlobalIncomingCall = () => {
 
               if (call.caller_type === "parent") return;
 
-              if (
-                incomingCallRef.current &&
-                incomingCallRef.current.id === call.id
-              ) {
-                if (call.status === "active" || call.status === "ended") {
+              // CRITICAL: Stop incoming call ringtone when call status changes to active/ended
+              // Check both: if this is the tracked incoming call, OR if status changed to active/ended
+              // This ensures ringtone stops even if incomingCallRef doesn't match (e.g., when answering via call screen)
+              if (call.status === "active" || call.status === "ended") {
+                if (
+                  incomingCallRef.current &&
+                  incomingCallRef.current.id === call.id
+                ) {
+                  // This is the tracked incoming call - clear it
                   setIncomingCall(null);
                   incomingCallRef.current = null;
                 }
+                // CRITICAL: Always stop incoming call ringtone when status changes to active/ended
+                // This ensures ringtone stops even if user answered via call screen instead of GlobalIncomingCall dialog
+                stopIncomingCall(call.id);
               }
 
               if (
@@ -515,7 +535,7 @@ export const GlobalIncomingCall = () => {
                 backgroundColor: incomingCall.child_avatar_color || "#3B82F6",
               }}
             >
-              {incomingCall.child_name?.[0] || "📞"}
+              {(incomingCall.child_name || incomingCall.parent_name)?.[0] || "📞"}
             </div>
             <div>
               <AlertDialogTitle className="text-xl">Incoming Call</AlertDialogTitle>

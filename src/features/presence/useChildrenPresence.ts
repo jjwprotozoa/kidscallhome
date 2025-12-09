@@ -48,21 +48,26 @@ export function useChildrenPresence({
   const childIdsKey = useMemo(() => [...childIds].sort().join(","), [childIds]);
 
   // Initialize presence state for all children as offline
+  // Use childIdsKey for stable dependency (prevents infinite loops)
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || !childIdsKey) return;
 
     const initialPresence: PresenceState = {};
-    childIds.forEach((childId) => {
+    const ids = childIdsKey.split(",").filter(Boolean);
+    ids.forEach((childId) => {
       initialPresence[childId] = {
         isOnline: false,
         lastSeen: null,
       };
     });
     setPresence(initialPresence);
-  }, [childIds, enabled]);
+  }, [childIdsKey, enabled]);
 
   useEffect(() => {
-    if (!enabled || childIds.length === 0) return;
+    // Parse childIds from stable key
+    const parsedChildIds = childIdsKey ? childIdsKey.split(",").filter(Boolean) : [];
+    
+    if (!enabled || parsedChildIds.length === 0) return;
 
     // Capture ref at start of effect for cleanup
     const currentChannelRef = channelRefsRef.current;
@@ -80,7 +85,7 @@ export function useChildrenPresence({
 
     // Subscribe to each child's presence channel
     // Use setTimeout to yield to event loop and prevent blocking message handlers
-    childIds.forEach((childId, index) => {
+    parsedChildIds.forEach((childId, index) => {
       // Stagger subscriptions slightly to prevent blocking (yield to event loop)
       setTimeout(() => {
         // Skip if channel already exists (prevent duplicate subscriptions)
@@ -91,7 +96,7 @@ export function useChildrenPresence({
         const channelName = `presence:child:${childId}`;
 
         // Only log subscription start for small numbers of children (reduced verbosity)
-        if (import.meta.env.DEV && childIds.length <= 3) {
+        if (import.meta.env.DEV && parsedChildIds.length <= 3) {
           safeLog.debug("👀 [CHILDREN PRESENCE] Subscribing", { childId });
         }
 
@@ -202,7 +207,7 @@ export function useChildrenPresence({
               return newState;
             });
           })
-          .on("presence", { event: "leave" }, ({ key, leftPresences }) => {
+          .on("presence", { event: "leave" }, ({ key }) => {
             // Only update if this is the child we're tracking
             if (key !== childId) {
               return;
@@ -230,7 +235,7 @@ export function useChildrenPresence({
           .subscribe((status, err) => {
             if (status === "SUBSCRIBED") {
               // Reduced logging: Only log subscription success for small numbers of children
-              if (import.meta.env.DEV && childIds.length <= 3) {
+              if (import.meta.env.DEV && parsedChildIds.length <= 3) {
                 safeLog.debug("✅ [CHILDREN PRESENCE] Subscribed", { childId });
               }
 
@@ -263,7 +268,7 @@ export function useChildrenPresence({
                   }));
 
                   // Only log when child is actually online (more interesting than offline)
-                  if (import.meta.env.DEV && childIds.length <= 3) {
+                  if (import.meta.env.DEV && parsedChildIds.length <= 3) {
                     safeLog.debug("🟢 [CHILDREN PRESENCE] Online", {
                       childId,
                     });
@@ -295,7 +300,7 @@ export function useChildrenPresence({
       });
       channelsInThisEffect.clear();
     };
-  }, [childIdsKey, enabled, childIds]);
+  }, [childIdsKey, enabled]);
 
   const getChildStatus = useCallback(
     (childId: string) => {

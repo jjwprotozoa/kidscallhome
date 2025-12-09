@@ -235,10 +235,34 @@ export const GlobalMessageNotifications = () => {
 
             if (!cachedChildIds || cachedChildIds.length === 0) return;
 
+            // Get all conversation_ids for parent's children
+            // Resolve parent's adult_profile_id first
+            const { data: adultProfile } = await supabase
+              .from("adult_profiles")
+              .select("id")
+              .eq("user_id", cachedUserId)
+              .eq("role", "parent")
+              .limit(1);
+            
+            if (!adultProfile || adultProfile.length === 0) return;
+            
+            const adultProfileId = adultProfile[0].id;
+            
+            // Get conversations for this adult
+            const { data: conversations } = await supabase
+              .from("conversations")
+              .select("id")
+              .eq("adult_id", adultProfileId);
+            
+            if (!conversations || conversations.length === 0) return;
+            
+            const conversationIds = conversations.map(c => c.id);
+
+            // Fetch messages by conversation_id only (never by child_id alone)
             const { data: newMessages } = await supabase
               .from("messages")
               .select("*")
-              .in("child_id", cachedChildIds)
+              .in("conversation_id", conversationIds)
               .eq("sender_type", "child")
               .is("read_at", null)
               .gte("created_at", oneMinuteAgo)

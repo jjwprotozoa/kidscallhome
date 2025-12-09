@@ -96,23 +96,34 @@ export const useAudioNotifications = (options: UseAudioNotificationsOptions = {}
     // Resume if suspended - try multiple times if needed
     if (audioContextRef.current.state === "suspended") {
       try {
-        safeLog.log("🔊 [AUDIO] AudioContext is suspended, attempting to resume...");
+        // Only log in dev mode to reduce console noise
+        if (import.meta.env.DEV) {
+          safeLog.log("🔊 [AUDIO] AudioContext is suspended, attempting to resume...");
+        }
         await audioContextRef.current.resume();
-        safeLog.log("🔊 [AUDIO] AudioContext resumed successfully, state:", audioContextRef.current.state);
+        if (import.meta.env.DEV) {
+          safeLog.log("🔊 [AUDIO] AudioContext resumed successfully, state:", audioContextRef.current.state);
+        }
       } catch (error) {
-        safeLog.error("❌ [AUDIO] Failed to resume AudioContext:", error);
+        // AudioContext autoplay restrictions are expected - don't log as error
+        // Browser will show its own warning, we just handle it gracefully
+        if (import.meta.env.DEV) {
+          safeLog.debug("🔊 [AUDIO] AudioContext resume blocked by autoplay policy (expected without user gesture)");
+        }
         // Try one more time after a short delay
         try {
           await new Promise(resolve => setTimeout(resolve, 100));
           if (audioContextRef.current && audioContextRef.current.state === "suspended") {
             await audioContextRef.current.resume();
-            safeLog.log("🔊 [AUDIO] AudioContext resumed on retry, state:", audioContextRef.current.state);
+            if (import.meta.env.DEV) {
+              safeLog.log("🔊 [AUDIO] AudioContext resumed on retry, state:", audioContextRef.current.state);
+            }
           }
         } catch (retryError) {
-          safeLog.error("❌ [AUDIO] Failed to resume AudioContext on retry:", retryError);
-          // If resume fails, the AudioContext might need user interaction
-          // Log a helpful message
-          safeLog.warn("⚠️ [AUDIO] AudioContext requires user interaction. Ringtone may not play until user interacts with page.");
+          // Autoplay restrictions are expected - don't log as error
+          if (import.meta.env.DEV) {
+            safeLog.debug("🔊 [AUDIO] AudioContext requires user interaction (expected browser behavior)");
+          }
           return null;
         }
       }

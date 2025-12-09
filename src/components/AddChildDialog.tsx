@@ -236,16 +236,22 @@ const AddChildDialog = ({ open, onOpenChange, onChildAdded }: AddChildDialogProp
     }
   };
 
-  const checkCodeUnique = async (code: string): Promise<boolean> => {
+  const checkCodeUnique = async (childCode: string): Promise<boolean> => {
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return false;
+
+      // Check if this child code is unique within the family
+      // Since login_code now stores only child-specific part, we check within parent_id
       const { data, error } = await supabase
         .from("children")
         .select("id")
-        .eq("login_code", code)
+        .eq("parent_id", user.id)
+        .eq("login_code", childCode)
         .maybeSingle();
       
       if (error) throw error;
-      return !data; // Code is unique if no data found
+      return !data; // Code is unique if no data found within this family
     } catch {
       return false;
     }
@@ -353,8 +359,12 @@ const AddChildDialog = ({ open, onOpenChange, onChildAdded }: AddChildDialogProp
         return;
       }
 
-      // Check if code is unique
-      const isUnique = await checkCodeUnique(generatedCode);
+      // Store only child-specific part (color/animal-number) in login_code
+      // Family code is already stored in parents.family_code
+      const childCode = `${selectedOption}-${selectedNumber}`;
+      
+      // Check if code is unique within this family
+      const isUnique = await checkCodeUnique(childCode);
       if (!isUnique) {
         toast({
           title: "Code already taken",
@@ -368,7 +378,7 @@ const AddChildDialog = ({ open, onOpenChange, onChildAdded }: AddChildDialogProp
       const { error } = await supabase.from("children").insert({
         parent_id: user.id,
         name: name.trim(),
-        login_code: generatedCode,
+        login_code: childCode, // Store only child-specific part
         avatar_color: selectedColor,
       });
 
@@ -376,7 +386,7 @@ const AddChildDialog = ({ open, onOpenChange, onChildAdded }: AddChildDialogProp
 
       toast({ 
         title: "Child added successfully!",
-        description: `Full login code: ${generatedCode}`,
+        description: `Full login code: ${generatedCode} (${familyCode}-${childCode})`,
       });
       setName("");
       setSelectedColor(avatarColors[0]);

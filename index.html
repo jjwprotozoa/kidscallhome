@@ -246,20 +246,19 @@
   </head>
 
   <body>
-    <div id="root">
-      <!-- Loading indicator - will be replaced by React -->
-      <div style="display: flex; align-items: center; justify-content: center; min-height: 100vh; font-family: system-ui;">
-        <div style="text-align: center;">
-          <div style="width: 48px; height: 48px; border: 4px solid #e5e7eb; border-top-color: #3b82f6; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 1rem;"></div>
-          <p style="color: #6b7280; font-size: 0.875rem;">Loading Kids Call Home...</p>
-        </div>
+    <!-- Loading indicator - shown immediately, hidden by React when ready -->
+    <div id="app-loading" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; background: #ffffff; z-index: 9999; font-family: system-ui;">
+      <div style="text-align: center;">
+        <div style="width: 48px; height: 48px; border: 4px solid #e5e7eb; border-top-color: #3b82f6; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 1rem;"></div>
+        <p style="color: #6b7280; font-size: 0.875rem;">Loading Kids Call Home...</p>
       </div>
-      <style>
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
-      </style>
     </div>
+    <style>
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+    </style>
+    <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
     <noscript>
       <div style="padding: 2rem; font-family: system-ui; max-width: 600px; margin: 2rem auto; text-align: center;">

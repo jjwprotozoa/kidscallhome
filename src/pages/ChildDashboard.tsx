@@ -88,13 +88,17 @@ const ChildDashboard = () => {
     // Fetch parent name
     const fetchParentName = async () => {
       try {
-        // Use selected parent ID if available, otherwise use child's parent_id
-        let parentIdToFetch: string;
+        // PERFORMANCE: Use selected parent ID, child's parent_id from session, or fetch from DB
+        let parentIdToFetch: string | null = null;
         
         if (storedParentId) {
           parentIdToFetch = storedParentId;
+        } else if (childData.parent_id) {
+          // PERFORMANCE: Use parent_id from session if available (avoids extra DB query)
+          parentIdToFetch = childData.parent_id;
+          setSelectedParentId(parentIdToFetch);
         } else {
-          // First get the child's parent_id from the database
+          // Only fetch from DB if parent_id is not in session
           const { data: childRecord, error: childError } = await supabase
             .from("children")
             .select("parent_id")
@@ -109,7 +113,13 @@ const ChildDashboard = () => {
           setSelectedParentId(parentIdToFetch);
         }
 
-        // Then fetch the parent's name
+        if (!parentIdToFetch) {
+          setParentName("Parent");
+          parentNameRef.current = "Parent";
+          return;
+        }
+
+        // Fetch the parent's name
         const { data: parentData, error: parentError } = await supabase
           .from("parents")
           .select("name")

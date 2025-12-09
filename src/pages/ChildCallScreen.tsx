@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { VideoCallUI } from "@/features/calls/components/VideoCallUI";
 import { useCallEngine } from "@/features/calls/hooks/useCallEngine";
+import { useIncomingCallNotifications } from "@/features/calls/hooks/useIncomingCallNotifications";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -45,6 +46,7 @@ const ChildCallScreen = () => {
     initialize();
   }, [parentId, navigate]);
 
+  const { stopIncomingCall } = useIncomingCallNotifications();
   const callEngine = useCallEngine({
     role: "child",
     localProfileId: childId || "",
@@ -104,19 +106,25 @@ const ChildCallScreen = () => {
             <p className="text-muted-foreground">From {parentName}</p>
             <div className="flex gap-4 justify-center">
               <Button
-                onClick={() =>
-                  callEngine.callId &&
-                  callEngine.acceptIncomingCall(callEngine.callId)
-                }
+                onClick={() => {
+                  if (callEngine.callId) {
+                    // CRITICAL: Stop incoming call ringtone immediately when Accept is clicked
+                    stopIncomingCall(callEngine.callId);
+                    callEngine.acceptIncomingCall(callEngine.callId);
+                  }
+                }}
               >
                 Accept
               </Button>
               <Button
                 variant="destructive"
-                onClick={() =>
-                  callEngine.callId &&
-                  callEngine.rejectIncomingCall(callEngine.callId)
-                }
+                onClick={() => {
+                  if (callEngine.callId) {
+                    // CRITICAL: Stop incoming call ringtone immediately when Reject is clicked
+                    stopIncomingCall(callEngine.callId);
+                    callEngine.rejectIncomingCall(callEngine.callId);
+                  }
+                }}
               >
                 Reject
               </Button>

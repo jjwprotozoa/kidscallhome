@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { VideoCallUI } from "@/features/calls/components/VideoCallUI";
 import { useCallEngine } from "@/features/calls/hooks/useCallEngine";
+import { useIncomingCallNotifications } from "@/features/calls/hooks/useIncomingCallNotifications";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -46,6 +47,7 @@ const ParentCallScreen = () => {
     initialize();
   }, [childId, navigate]);
 
+  const { stopIncomingCall } = useIncomingCallNotifications();
   const callEngine = useCallEngine({
     role: "parent",
     localProfileId: parentId || "",
@@ -102,21 +104,28 @@ const ParentCallScreen = () => {
         <Card className="p-8">
           <div className="text-center space-y-4">
             <h2 className="text-2xl font-semibold">Incoming Call</h2>
+            <p className="text-muted-foreground">From {childName}</p>
             <div className="flex gap-4 justify-center">
               <Button
-                onClick={() =>
-                  callEngine.callId &&
-                  callEngine.acceptIncomingCall(callEngine.callId)
-                }
+                onClick={() => {
+                  if (callEngine.callId) {
+                    // CRITICAL: Stop incoming call ringtone immediately when Accept is clicked
+                    stopIncomingCall(callEngine.callId);
+                    callEngine.acceptIncomingCall(callEngine.callId);
+                  }
+                }}
               >
                 Accept
               </Button>
               <Button
                 variant="destructive"
-                onClick={() =>
-                  callEngine.callId &&
-                  callEngine.rejectIncomingCall(callEngine.callId)
-                }
+                onClick={() => {
+                  if (callEngine.callId) {
+                    // CRITICAL: Stop incoming call ringtone immediately when Reject is clicked
+                    stopIncomingCall(callEngine.callId);
+                    callEngine.rejectIncomingCall(callEngine.callId);
+                  }
+                }}
               >
                 Reject
               </Button>

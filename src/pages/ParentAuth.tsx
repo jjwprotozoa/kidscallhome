@@ -34,6 +34,11 @@ import { safeLog, sanitizeError } from "@/utils/security";
 import { LogIn, UserPlus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { FamilySetupSelection } from "@/features/onboarding/components/FamilySetupSelection";
+import {
+  Dialog,
+  DialogContent,
+} from "@/components/ui/dialog";
 
 const ParentAuth = () => {
   const [isLogin, setIsLogin] = useState(true);
@@ -44,6 +49,8 @@ const ParentAuth = () => {
   const [loading, setLoading] = useState(false);
   const [parentName, setParentName] = useState<string | null>(null);
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [needsFamilySetup, setNeedsFamilySetup] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -329,8 +336,25 @@ const ParentAuth = () => {
           severity: "low",
         });
 
-        // Fetch parent name and store in cookie
+        // Check if user is a family member and redirect accordingly
         if (user) {
+          // Check if user is a family member
+          const { data: familyMember } = await supabase
+            .from("family_members")
+            .select("id, name")
+            .eq("id", user.id)
+            .eq("status", "active")
+            .maybeSingle();
+
+          if (familyMember) {
+            // User is a family member - redirect to family member dashboard
+            toast({ title: "Welcome back!" });
+            navigate("/family-member/dashboard");
+            setLoading(false);
+            return;
+          }
+
+          // User is a parent - continue with parent flow
           const { data: parentData } = await supabase
             .from("parents")
             .select("name")
@@ -392,11 +416,11 @@ const ParentAuth = () => {
         });
 
         // SECURITY: Never log passwords - Supabase handles auth securely
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email: sanitizedEmail,
           password: sanitizedPassword,
           options: {
-            data: { name: validation.sanitized.name || name },
+            data: { name: validation.sanitized.name || name, role: "parent" },
             emailRedirectTo: `${window.location.origin}/parent/children`,
           },
         });
@@ -412,13 +436,16 @@ const ParentAuth = () => {
           throw error;
         }
 
+        // If signup successful and user exists, show family setup
+        if (!error && data.user) {
+          setUserId(data.user.id);
+          setNeedsFamilySetup(true);
+        }
+
         // Store name in cookie for new signups
         if (validation.sanitized.name || name) {
           setCookie("parentName", validation.sanitized.name || name, 365);
         }
-
-        toast({ title: "Account created! Welcome!" });
-        navigate("/parent/children");
       }
     } catch (error: unknown) {
       // SECURITY: Sanitize error before logging - never log passwords
@@ -484,6 +511,12 @@ const ParentAuth = () => {
             onChange={setEmail}
             isLogin={isLogin}
           />
+
+          {!isLogin && (
+            <p className="text-xs text-muted-foreground">
+              We use your email to create and secure your parent account and may contact you about important Kids Call Home service updates. You can opt out of non‑essential emails at any time.
+            </p>
+          )}
 
           <PasswordInputWithBreachCheck
             password={password}
@@ -574,6 +607,54 @@ const ParentAuth = () => {
           </button>
         </div>
       </Card>
+
+      {/* Family Setup Modal */}
+      <Dialog open={needsFamilySetup && !!userId} onOpenChange={() => {}}>
+        <DialogContent className="max-w-3xl">
+          <FamilySetupSelection
+            userId={userId!}
+            onComplete={async (householdType) => {
+              // Save household_type to families table
+              try {
+                const { data: { user } } = await supabase.auth.getUser();
+                if (!user) {
+                  throw new Error("User not found");
+                }
+
+                // Get parent profile to find family_id
+                const { data: parentProfile } = await supabase
+                  .from("adult_profiles")
+                  .select("family_id")
+                  .eq("user_id", user.id)
+                  .eq("role", "parent")
+                  .single();
+
+                if (parentProfile?.family_id) {
+                  const { error: updateError } = await supabase
+                    .from("families")
+                    .update({ household_type })
+                    .eq("id", parentProfile.family_id);
+
+                  if (updateError) {
+                    throw updateError;
+                  }
+                }
+
+                setNeedsFamilySetup(false);
+                toast({ title: "Family setup complete! Welcome!" });
+                navigate("/parent");
+              } catch (error) {
+                console.error("Error saving family setup:", error);
+                toast({
+                  title: "Error",
+                  description: "Failed to save family setup. Please try again.",
+                  variant: "destructive",
+                });
+              }
+            }}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

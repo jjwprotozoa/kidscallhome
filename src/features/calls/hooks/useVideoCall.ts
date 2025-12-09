@@ -3,6 +3,7 @@
 
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { canCommunicate } from "@/lib/permissions";
 import { safeLog } from "@/utils/security";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
@@ -612,14 +613,40 @@ export const useVideoCall = () => {
         return null;
       }
 
+      // Check permission before initiating call
+      // Check if we're answering an incoming call (has callId in URL)
+      const urlCallId = searchParams.get("callId");
+      if (!urlCallId) {
+        // Only check permissions for outgoing calls, not incoming
+        const permission = await canCommunicate(
+          user.id,
+          "parent",
+          childId,
+          "child"
+        );
+
+        if (!permission.allowed) {
+          safeLog.warn(
+            "🚫 [PARENT CALL FLOW] Permission denied:",
+            permission.reason
+          );
+          toast({
+            title: "Cannot Make Call",
+            description:
+              permission.reason ||
+              "You don't have permission to call this contact",
+            variant: "destructive",
+          });
+          setIsConnecting(false);
+          return null;
+        }
+      }
+
       safeLog.log("🚀 [PARENT CALL FLOW] Calling handleParentCall...", {
         childId,
         userId: user.id,
         timestamp: new Date().toISOString(),
       });
-
-      // Check if we're answering an incoming call (has callId in URL)
-      const urlCallId = searchParams.get("callId");
 
       const channel = await handleParentCall(
         pc,
@@ -733,6 +760,32 @@ export const useVideoCall = () => {
         .select("parent_id")
         .eq("id", child.id)
         .single();
+
+      // Check permission before initiating call (only for outgoing calls)
+      if (!isAnsweringCall && childData?.parent_id) {
+        const permission = await canCommunicate(
+          child.id,
+          "child",
+          childData.parent_id,
+          "parent"
+        );
+
+        if (!permission.allowed) {
+          safeLog.warn(
+            "🚫 [CHILD CALL FLOW] Permission denied:",
+            permission.reason
+          );
+          toast({
+            title: "Cannot Make Call",
+            description:
+              permission.reason ||
+              "You don't have permission to call this contact",
+            variant: "destructive",
+          });
+          setIsConnecting(false);
+          return null;
+        }
+      }
 
       if (childError || !childData) {
         safeLog.error("Child not found in database:", childError);
@@ -916,8 +969,11 @@ export const useVideoCall = () => {
     // CRITICAL: Check if call is already ended when setting up listener
     // This handles cases where the call ended before the listener was subscribed
     // Do this check asynchronously without blocking listener setup
+    // OPTIMIZATION: This query runs once per call initialization - realtime subscription
+    // will handle most termination events, so this is just for edge cases
     (async () => {
       try {
+        // OPTIMIZATION: Only query essential fields to reduce payload size
         const { data: currentCall } = await supabase
           .from("calls")
           .select("id, status, ended_at, ended_by")

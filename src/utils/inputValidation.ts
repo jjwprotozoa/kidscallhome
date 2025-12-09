@@ -441,18 +441,22 @@ export function validatePassword(password: string): {
 /**
  * Validate child login code format
  * Format: familyCode-color/animal-number (e.g., "ABC123-blue-19" or "123456-cat-7")
+ * Also accepts spaces instead of hyphens (e.g., "ABC123 blue 19")
  */
 export function validateChildLoginCode(code: string): boolean {
   if (!code || typeof code !== "string") {
     return false;
   }
 
+  // Normalize spaces to hyphens for user-friendly input
+  const normalizedCode = code.trim().replace(/\s+/g, "-");
+
   // Format: familyCode-color/animal-number
   // familyCode: 3-6 alphanumeric characters
   // color/animal: lowercase letters
   // number: 1-2 digits (1-99)
   const codeRegex = /^[A-Z0-9]{3,6}-[a-z]+-\d{1,2}$/i;
-  return codeRegex.test(code.trim());
+  return codeRegex.test(normalizedCode);
 }
 
 /**

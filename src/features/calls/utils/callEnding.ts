@@ -4,7 +4,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import { safeLog } from "@/utils/security";
 
-export type EndCallBy = "parent" | "child";
+export type EndCallBy = "parent" | "child" | "family_member";
 export type EndCallReason =
   | "hangup"
   | "disconnected"

@@ -65,7 +65,10 @@ export const usePushNotifications = () => {
   // Request notification permission
   const requestPermission = useCallback(async (): Promise<NotificationPermission> => {
     if (!("Notification" in window)) {
-      console.warn("⚠️ [PUSH] This browser does not support notifications");
+      // Only log once, not repeatedly
+      if (import.meta.env.DEV) {
+        console.debug("⚠️ [PUSH] This browser does not support notifications");
+      }
       return "denied";
     }
 
@@ -74,13 +77,18 @@ export const usePushNotifications = () => {
     }
 
     if (Notification.permission === "denied") {
-      console.warn("⚠️ [PUSH] Notification permission denied");
+      // Only log once in dev mode, not repeatedly - permission denial is expected for some users
+      if (import.meta.env.DEV) {
+        console.debug("⚠️ [PUSH] Notification permission denied (expected if user declined)");
+      }
       return "denied";
     }
 
     // Request permission
     const permission = await Notification.requestPermission();
-    console.log("🔔 [PUSH] Notification permission:", permission);
+    if (import.meta.env.DEV) {
+      console.log("🔔 [PUSH] Notification permission:", permission);
+    }
     return permission;
   }, []);
 
@@ -94,7 +102,11 @@ export const usePushNotifications = () => {
 
       const permission = await requestPermission();
       if (permission !== "granted") {
-        console.warn("⚠️ [PUSH] Notification permission not granted");
+        // Only log in dev mode - permission denial is expected for some users
+        // Don't spam console with warnings
+        if (import.meta.env.DEV) {
+          console.debug("⚠️ [PUSH] Notification permission not granted (expected if user declined)");
+        }
         return;
       }
 

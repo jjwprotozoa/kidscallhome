@@ -1,28 +1,31 @@
-import React, { useEffect, lazy, Suspense } from "react";
-import { Toaster } from "@/components/ui/toaster";
-import { Toaster as Sonner } from "@/components/ui/sonner";
-import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { SafeAreaLayout } from "@/components/layout/SafeAreaLayout";
-import { supabase } from "@/integrations/supabase/client";
+import { CookieConsent } from "@/components/CookieConsent";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { useBadgeInitialization } from "@/hooks/useBadgeInitialization";
-import { useBadgeRealtime } from "@/hooks/useBadgeRealtime";
 import { GlobalIncomingCall } from "@/components/GlobalIncomingCall";
 import { GlobalMessageNotifications } from "@/components/GlobalMessageNotifications";
 import { GlobalPresenceTracker } from "@/components/GlobalPresenceTracker";
-import { CookieConsent } from "@/components/CookieConsent";
+import { SafeAreaLayout } from "@/components/layout/SafeAreaLayout";
 import { PWAInstallPrompt } from "@/components/PWAInstallPrompt";
-import { initializeNativeAndroid, isNativeAndroid } from "@/utils/nativeAndroid";
-import { useNavigate } from "react-router-dom";
+import { Toaster as Sonner } from "@/components/ui/sonner";
+import { Toaster } from "@/components/ui/toaster";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { useBadgeInitialization } from "@/hooks/useBadgeInitialization";
+import { useBadgeRealtime } from "@/hooks/useBadgeRealtime";
 import { useWidgetData } from "@/hooks/useWidgetData";
+import { supabase } from "@/integrations/supabase/client";
+import {
+  initializeNativeAndroid,
+  isNativeAndroid,
+} from "@/utils/nativeAndroid";
+import { loadWidgetData } from "@/utils/widgetData";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { lazy, Suspense, useEffect } from "react";
+import { BrowserRouter, Route, Routes, useNavigate } from "react-router-dom";
 
 // Keep small/essential pages as regular imports (needed immediately)
 import Index from "./pages/Index";
+import NetworkError from "./pages/NetworkError";
 import NotFound from "./pages/NotFound";
 import ServerError from "./pages/ServerError";
-import NetworkError from "./pages/NetworkError";
 
 // Lazy load all other pages for code splitting
 const ParentAuth = lazy(() => import("./pages/ParentAuth"));
@@ -38,6 +41,14 @@ const ChildDashboard = lazy(() => import("./pages/ChildDashboard"));
 const ChildHome = lazy(() => import("./pages/ChildHome"));
 const ChildParentsList = lazy(() => import("./pages/ChildParentsList"));
 const ChildCallScreen = lazy(() => import("./pages/ChildCallScreen"));
+const FamilyMemberAuth = lazy(() => import("./pages/FamilyMemberAuth"));
+const FamilyMemberDashboard = lazy(
+  () => import("./pages/FamilyMemberDashboard")
+);
+const FamilyMemberInvite = lazy(() => import("./pages/FamilyMemberInvite"));
+const FamilyMemberCallScreen = lazy(
+  () => import("./pages/FamilyMemberCallScreen")
+);
 const VideoCall = lazy(() => import("./pages/VideoCall"));
 const Chat = lazy(() => import("./pages/Chat"));
 const Info = lazy(() => import("./pages/Info"));
@@ -80,7 +91,7 @@ const BadgeProvider = () => {
 const NativeAndroidInitializer = () => {
   useEffect(() => {
     initializeNativeAndroid().catch((error) => {
-      console.error('Failed to initialize native Android features:', error);
+      console.error("Failed to initialize native Android features:", error);
     });
   }, []);
   return null;
@@ -96,36 +107,41 @@ const WidgetIntentHandler = () => {
     }
 
     // Listen for widget quick call events
-    const handleWidgetQuickCall = async (event: CustomEvent) => {
-      console.log('📱 Widget quick call received:', event.detail);
-      
+    const handleWidgetQuickCall = (event: CustomEvent) => {
+      console.log("📱 Widget quick call received:", event.detail);
+
       const { childId } = event.detail || {};
-      
+
       // Use childId from event if available (from widget URI)
       if (childId) {
-        console.log('📱 Routing to child from widget:', childId);
+        console.log("📱 Routing to child from widget:", childId);
         navigate(`/parent/call/${childId}`);
         return;
       }
-      
+
       // Fallback: Try to load widget data to get last-called child
-      const { loadWidgetData } = await import('@/utils/widgetData');
       const widgetData = loadWidgetData();
-      
+
       if (widgetData?.childId) {
         // Route directly to last-called child's call screen
-        console.log('📱 Routing to last-called child:', widgetData.childId);
+        console.log("📱 Routing to last-called child:", widgetData.childId);
         navigate(`/parent/call/${widgetData.childId}`);
       } else {
         // Fallback to parent dashboard
-        navigate('/parent/dashboard');
+        navigate("/parent/dashboard");
       }
     };
 
-    window.addEventListener('widgetQuickCall', handleWidgetQuickCall as EventListener);
+    window.addEventListener(
+      "widgetQuickCall",
+      handleWidgetQuickCall as EventListener
+    );
 
     return () => {
-      window.removeEventListener('widgetQuickCall', handleWidgetQuickCall as EventListener);
+      window.removeEventListener(
+        "widgetQuickCall",
+        handleWidgetQuickCall as EventListener
+      );
     };
   }, [navigate]);
 
@@ -142,20 +158,20 @@ const WidgetDataManager = () => {
 const SessionManager = () => {
   useEffect(() => {
     // Check if sessionStorage is available
-    if (typeof window === 'undefined' || !window.sessionStorage) {
+    if (typeof window === "undefined" || !window.sessionStorage) {
       return;
     }
-    
+
     // Check if we should clear session on browser close
     const shouldClearOnClose = sessionStorage.getItem("clearSessionOnClose");
-    
+
     if (shouldClearOnClose === "true") {
       const clearSession = () => {
         // Clear Supabase session from localStorage
-        const supabaseKeys = Object.keys(localStorage).filter(key => 
-          key.startsWith("sb-") || key.includes("supabase")
+        const supabaseKeys = Object.keys(localStorage).filter(
+          (key) => key.startsWith("sb-") || key.includes("supabase")
         );
-        supabaseKeys.forEach(key => localStorage.removeItem(key));
+        supabaseKeys.forEach((key) => localStorage.removeItem(key));
         // Also sign out from Supabase to ensure clean state
         supabase.auth.signOut().catch(() => {
           // Ignore errors during signout
@@ -175,7 +191,7 @@ const SessionManager = () => {
 
       window.addEventListener("pagehide", handlePageHide);
       window.addEventListener("beforeunload", handleBeforeUnload);
-      
+
       return () => {
         window.removeEventListener("pagehide", handlePageHide);
         window.removeEventListener("beforeunload", handleBeforeUnload);
@@ -227,28 +243,62 @@ const App = () => {
               <PWAInstallPrompt />
               <Suspense fallback={<PageLoader />}>
                 <Routes>
-                <Route path="/" element={<Index />} />
-                <Route path="/parent/auth" element={<ParentAuth />} />
-                <Route path="/parent" element={<ParentHome />} />
-                <Route path="/parent/children" element={<ParentChildrenList />} />
-                <Route path="/parent/call/:childId" element={<ParentCallScreen />} />
-                <Route path="/parent/dashboard" element={<ParentDashboard />} />
-                <Route path="/parent/devices" element={<DeviceManagement />} />
-                <Route path="/parent/upgrade" element={<Upgrade />} />
-                <Route path="/parent/settings" element={<AccountSettings />} />
-                <Route path="/child/login" element={<ChildLogin />} />
-                <Route path="/child" element={<ChildHome />} />
-                <Route path="/child/parents" element={<ChildParentsList />} />
-                <Route path="/child/call/:parentId" element={<ChildCallScreen />} />
-                <Route path="/child/dashboard" element={<ChildDashboard />} />
-                <Route path="/call/:childId" element={<VideoCall />} />
-                <Route path="/chat/:childId" element={<Chat />} />
-                <Route path="/info" element={<Info />} />
-                {/* Error pages */}
-                <Route path="/error/server" element={<ServerError />} />
-                <Route path="/error/network" element={<NetworkError />} />
-                {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-                <Route path="*" element={<NotFound />} />
+                  <Route path="/" element={<Index />} />
+                  <Route path="/parent/auth" element={<ParentAuth />} />
+                  <Route path="/parent" element={<ParentHome />} />
+                  <Route
+                    path="/parent/children"
+                    element={<ParentChildrenList />}
+                  />
+                  <Route
+                    path="/parent/call/:childId"
+                    element={<ParentCallScreen />}
+                  />
+                  <Route
+                    path="/parent/dashboard"
+                    element={<ParentDashboard />}
+                  />
+                  <Route
+                    path="/parent/devices"
+                    element={<DeviceManagement />}
+                  />
+                  <Route path="/parent/upgrade" element={<Upgrade />} />
+                  <Route
+                    path="/parent/settings"
+                    element={<AccountSettings />}
+                  />
+                  <Route path="/child/login" element={<ChildLogin />} />
+                  <Route path="/child" element={<ChildHome />} />
+                  <Route path="/child/parents" element={<ChildParentsList />} />
+                  <Route
+                    path="/child/call/:parentId"
+                    element={<ChildCallScreen />}
+                  />
+                  <Route path="/child/dashboard" element={<ChildDashboard />} />
+                  <Route
+                    path="/family-member/auth"
+                    element={<FamilyMemberAuth />}
+                  />
+                  <Route
+                    path="/family-member/dashboard"
+                    element={<FamilyMemberDashboard />}
+                  />
+                  <Route
+                    path="/family-member/invite/:token"
+                    element={<FamilyMemberInvite />}
+                  />
+                  <Route
+                    path="/family-member/call/:childId"
+                    element={<FamilyMemberCallScreen />}
+                  />
+                  <Route path="/call/:childId" element={<VideoCall />} />
+                  <Route path="/chat/:childId" element={<Chat />} />
+                  <Route path="/info" element={<Info />} />
+                  {/* Error pages */}
+                  <Route path="/error/server" element={<ServerError />} />
+                  <Route path="/error/network" element={<NetworkError />} />
+                  {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+                  <Route path="*" element={<NotFound />} />
                 </Routes>
               </Suspense>
             </BrowserRouter>

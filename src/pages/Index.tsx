@@ -35,12 +35,12 @@ const Index = () => {
             onClick={() => navigate("/parent/auth")}
           >
             <Users className="h-16 w-16 text-primary mb-4" />
-            <h2 className="text-3xl font-bold mb-4">Parents</h2>
+            <h2 className="text-3xl font-bold mb-4">Parents & Family</h2>
             <p className="text-muted-foreground mb-6">
-              Create an account and add your children. Manage their access and stay connected.
+              Create an account and add your children. Manage their access and stay connected. Family members invited by parents can sign in here too.
             </p>
             <Button className="w-full" size="lg">
-              Parent Sign In
+              Sign In
             </Button>
           </Card>
 

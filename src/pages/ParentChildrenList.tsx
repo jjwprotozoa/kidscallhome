@@ -144,11 +144,57 @@ const ParentChildrenList = () => {
   };
 
   const handleCall = (childId: string) => {
-    navigate(`/call/${childId}`);
+    navigate(`/parent/call/${childId}`);
   };
 
-  const handleChat = (childId: string) => {
-    navigate(`/chat/${childId}`);
+  const handleChat = async (childId: string) => {
+    try {
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast({
+          title: "Error",
+          description: "Not authenticated. Please log in again.",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      // Resolve profile IDs
+      const { getCurrentAdultProfileId, getChildProfileId } = await import("@/utils/conversations");
+      const childProfileId = await getChildProfileId(childId);
+      const adultProfileId = await getCurrentAdultProfileId(user.id, user.id, "parent");
+      
+      if (!childProfileId || !adultProfileId) {
+        toast({
+          title: "Error",
+          description: "Could not resolve profile IDs.",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      // Get or create conversation
+      const { getOrCreateConversation } = await import("@/utils/conversations");
+      const conversationId = await getOrCreateConversation(adultProfileId, "parent", childProfileId);
+      
+      if (conversationId) {
+        navigate(`/chat/${childId}?conversation=${conversationId}`);
+      } else {
+        toast({
+          title: "Error",
+          description: "Could not create conversation.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Error in handleChat:", error);
+      toast({
+        title: "Error",
+        description: "Failed to open chat.",
+        variant: "destructive",
+      });
+    }
   };
 
   // CLS: Reserve space for loading state to match final layout structure

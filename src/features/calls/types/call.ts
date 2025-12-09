@@ -5,6 +5,7 @@ export interface ChildSession {
   id: string;
   name: string;
   avatar_color: string;
+  parent_id?: string; // Optional for backward compatibility
 }
 
 export interface CallRecord {
@@ -19,4 +20,6 @@ export interface CallRecord {
   child_ice_candidates?: unknown;
   created_at: string;
   ended_at?: string | null;
+  ended_by?: "parent" | "child" | null;
+  end_reason?: string | null;
 }

@@ -2,10 +2,10 @@
 // Child Home / Dashboard page
 
 import Navigation from "@/components/Navigation";
-import { OnboardingTour } from "@/features/onboarding/OnboardingTour";
-import { HelpBubble } from "@/features/onboarding/HelpBubble";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { HelpBubble } from "@/features/onboarding/HelpBubble";
+import { OnboardingTour } from "@/features/onboarding/OnboardingTour";
 import { usePresence } from "@/features/presence/usePresence";
 import { useToast } from "@/hooks/use-toast";
 import { Users } from "lucide-react";
@@ -100,7 +100,7 @@ const ChildHome = () => {
                 data-tour="child-home-parents"
               >
                 <Users className="mr-2 h-5 w-5" />
-                Select Parent
+                Family & Parents
               </Button>
               <Button
                 className="w-full"

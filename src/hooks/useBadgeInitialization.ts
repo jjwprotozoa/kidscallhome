@@ -51,11 +51,25 @@ export function useBadgeInitialization() {
           const lastClearedMessages = getLastClearedTimestamp(childId, "messages");
           const lastClearedCalls = getLastClearedTimestamp(childId, "calls");
 
-          // Fetch unread messages from parent that arrived AFTER last clear
+          // Fetch unread messages - must use conversation_id, not child_id alone
+          // Get all conversation_ids for this child first
+          const { data: conversations, error: convError } = await supabase
+            .from("conversations")
+            .select("id")
+            .eq("child_id", childId);
+          
+          if (convError || !conversations || conversations.length === 0) {
+            // No conversations, no unread messages
+            return;
+          }
+          
+          const conversationIds = conversations.map(c => c.id);
+          
+          // Fetch unread messages from conversations
           let messagesQuery = supabase
             .from("messages")
-            .select("child_id, created_at")
-            .eq("child_id", childId)
+            .select("conversation_id, created_at")
+            .in("conversation_id", conversationIds)
             .eq("sender_type", "parent")
             .is("read_at", null);
 

@@ -53,8 +53,27 @@ try {
   safeLog.log("⚛️ [APP INIT] Rendering App component...");
   root.render(<App />);
   safeLog.log("✅ [APP INIT] App rendered successfully");
+  
+  // Hide loading spinner after React has rendered
+  // Use requestAnimationFrame to ensure DOM is ready
+  requestAnimationFrame(() => {
+    const loadingElement = document.getElementById("app-loading");
+    if (loadingElement) {
+      // Fade out smoothly
+      loadingElement.style.transition = "opacity 0.3s ease-out";
+      loadingElement.style.opacity = "0";
+      setTimeout(() => {
+        loadingElement.remove();
+      }, 300);
+    }
+  });
 } catch (error) {
   safeLog.error("❌ [APP INIT] Failed to render app:", error);
+  // Hide loading spinner on error
+  const loadingElement = document.getElementById("app-loading");
+  if (loadingElement) {
+    loadingElement.remove();
+  }
   // Show error in the DOM if React fails to render
   rootElement.innerHTML = `
     <div style="padding: 2rem; font-family: system-ui; max-width: 600px; margin: 2rem auto;">

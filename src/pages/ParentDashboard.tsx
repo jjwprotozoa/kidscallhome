@@ -1,26 +1,29 @@
 import AddChildDialog from "@/components/AddChildDialog";
-import { ChildCard } from "@/components/ChildCard";
+import AddFamilyMemberDialog from "@/components/AddFamilyMemberDialog";
 import { CodeManagementDialogs } from "@/components/CodeManagementDialogs";
 import { IncomingCallDialog } from "@/components/IncomingCallDialog";
 import Navigation from "@/components/Navigation";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { FamilyCodeCard } from "@/features/family/components/FamilyCodeCard";
+import { ChildrenTab } from "@/features/family/components/ChildrenTab";
+import { FamilyTab } from "@/features/family/components/FamilyTab";
+import { ChildConnectionsTab } from "@/features/family/components/ChildConnectionsTab";
+import { SafetyReportsTab } from "@/features/safety/components/SafetyReportsTab";
+import { FamilySetupTab } from "@/features/family/components/FamilySetupTab";
 import { useIncomingCallNotifications } from "@/features/calls/hooks/useIncomingCallNotifications";
 import { endCall as endCallUtil } from "@/features/calls/utils/callEnding";
 import { HelpBubble } from "@/features/onboarding/HelpBubble";
 import { OnboardingTour } from "@/features/onboarding/OnboardingTour";
 import { useChildrenPresence } from "@/features/presence/useChildrenPresence";
+import { useToast } from "@/hooks/use-toast";
 import { useParentData } from "@/hooks/useParentData";
 import { useParentIncomingCallSubscription } from "@/hooks/useParentIncomingCallSubscription";
-import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import {
-  useTotalMissedBadge,
-  useTotalUnreadBadge,
-} from "@/stores/badgeStore";
+import { useTotalMissedBadge, useTotalUnreadBadge } from "@/stores/badgeStore";
 import { clearAllNotifications } from "@/utils/clearAllNotifications";
 import { isPWA } from "@/utils/platformDetection";
-import { BellOff, Copy, Plus } from "lucide-react";
+import { BellOff, Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -38,11 +41,28 @@ interface IncomingCall {
   child_avatar_color: string;
 }
 
+interface FamilyMember {
+  id: string | null;
+  name: string;
+  email: string;
+  relationship: string;
+  status: "pending" | "active" | "suspended";
+  invitation_token?: string | null;
+  invitation_sent_at: string | null;
+  invitation_accepted_at: string | null;
+  created_at: string;
+  blockedByChildren?: string[];
+  reportCount?: number;
+}
 
 const ParentDashboard = () => {
   const [children, setChildren] = useState<Child[]>([]);
+  const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([]);
   const [loading, setLoading] = useState(true);
+  const [familyMembersLoading, setFamilyMembersLoading] = useState(false);
   const [showAddChild, setShowAddChild] = useState(false);
+  const [showAddFamilyMember, setShowAddFamilyMember] = useState(false);
+  const [activeTab, setActiveTab] = useState("children");
   const [incomingCall, setIncomingCall] = useState<IncomingCall | null>(null);
   const [showCodeDialog, setShowCodeDialog] = useState<{ child: Child } | null>(
     null
@@ -56,8 +76,8 @@ const ParentDashboard = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { stopIncomingCall } = useIncomingCallNotifications({
-      enabled: true,
-      volume: 0.7,
+    enabled: true,
+    volume: 0.7,
   });
 
   // Use parent data hook
@@ -97,14 +117,23 @@ const ParentDashboard = () => {
 
   const fetchChildren = useCallback(async () => {
     try {
+      // Get authenticated user ID to filter children (defense in depth - RLS should also enforce this)
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error("Not authenticated");
+      }
+
       const { data, error } = await supabase
         .from("children")
         .select("*")
+        .eq("parent_id", user.id) // Explicitly filter by parent_id (RLS should also enforce this)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
       setChildren(data || []);
-      
+
       // Refresh subscription check after fetching children (non-blocking)
       refreshCanAddMoreChildren().catch((err) => {
         console.warn("Failed to refresh subscription check:", err);
@@ -122,6 +151,353 @@ const ParentDashboard = () => {
     }
   }, [toast, refreshCanAddMoreChildren]);
 
+  const fetchFamilyMembers = useCallback(async () => {
+    try {
+      setFamilyMembersLoading(true);
+      
+      // Get current user's family
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: adultProfile } = await supabase
+        .from("adult_profiles")
+        .select("family_id")
+        .eq("user_id", user.id)
+        .eq("role", "parent")
+        .single();
+
+      if (!adultProfile) return;
+
+      // Fetch family members
+      const { data: familyMembersData, error } = await supabase
+        .from("family_members")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+
+      // Get children in this family
+      const { data: childMemberships } = await supabase
+        .from("child_family_memberships")
+        .select("child_profile_id")
+        .eq("family_id", adultProfile.family_id);
+
+      if (!childMemberships || childMemberships.length === 0) {
+        setFamilyMembers((familyMembersData || []).map(fm => ({ ...fm, blockedByChildren: [], reportCount: 0 })));
+        return;
+      }
+
+      const childProfileIds = childMemberships.map(cm => cm.child_profile_id);
+
+      // Get adult profile IDs for family members (user_id -> adult_profile_id mapping)
+      const familyMemberUserIds = (familyMembersData || [])
+        .filter(fm => fm.id)
+        .map(fm => fm.id!);
+
+      const { data: adultProfiles } = await supabase
+        .from("adult_profiles")
+        .select("id, user_id")
+        .in("user_id", familyMemberUserIds);
+
+      const userToAdultProfileMap = new Map(
+        adultProfiles?.map(ap => [ap.user_id, ap.id]) || []
+      );
+      const adultProfileIds = Array.from(userToAdultProfileMap.values());
+
+      // Fetch blocked contacts for these children where blocked adult is a family member
+      const { data: blockedContacts } = await supabase
+        .from("blocked_contacts")
+        .select("blocked_adult_profile_id, blocker_child_id")
+        .in("blocker_child_id", childProfileIds)
+        .in("blocked_adult_profile_id", adultProfileIds)
+        .is("unblocked_at", null);
+
+      // Fetch child names for blocked contacts
+      const blockedChildIds = new Set(
+        blockedContacts?.map(bc => bc.blocker_child_id) || []
+      );
+      const { data: childProfiles } = await supabase
+        .from("child_profiles")
+        .select("id, name")
+        .in("id", Array.from(blockedChildIds));
+
+      const childNameMap = new Map(
+        childProfiles?.map(cp => [cp.id, cp.name]) || []
+      );
+
+      // Fetch reports for these children where reported adult is a family member
+      const { data: reports } = await supabase
+        .from("reports")
+        .select("reported_adult_profile_id, status")
+        .in("reporter_child_id", childProfileIds)
+        .in("reported_adult_profile_id", adultProfileIds)
+        .eq("status", "pending");
+
+      // Process data to add blockedByChildren and reportCount
+      const enrichedFamilyMembers = (familyMembersData || []).map(fm => {
+        const adultProfileId = userToAdultProfileMap.get(fm.id || "");
+        if (!adultProfileId) {
+          return { ...fm, blockedByChildren: [], reportCount: 0 };
+        }
+        
+        // Find blocked contacts for this family member
+        const blockedForThisMember = (blockedContacts || []).filter(
+          bc => bc.blocked_adult_profile_id === adultProfileId
+        );
+        
+        // Get child names who blocked this member
+        const blockedByChildren = blockedForThisMember
+          .map(bc => childNameMap.get(bc.blocker_child_id))
+          .filter(Boolean) as string[];
+
+        // Count pending reports for this family member
+        const reportCount = (reports || []).filter(
+          r => r.reported_adult_profile_id === adultProfileId
+        ).length;
+
+        return {
+          ...fm,
+          blockedByChildren,
+          reportCount,
+        };
+      });
+
+      setFamilyMembers(enrichedFamilyMembers);
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error occurred";
+      toast({
+        title: "Error loading family members",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      setFamilyMembersLoading(false);
+    }
+  }, [toast]);
+
+  const handleSuspendFamilyMember = async (familyMemberId: string) => {
+    try {
+      const { error } = await supabase
+        .from("family_members")
+        .update({ status: "suspended" })
+        .eq("id", familyMemberId);
+
+      if (error) throw error;
+      toast({
+        title: "Family member suspended",
+        description:
+          "The family member has been suspended and can no longer access the app.",
+      });
+      fetchFamilyMembers();
+    } catch (error: unknown) {
+      toast({
+        title: "Error",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Failed to suspend family member",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleActivateFamilyMember = async (familyMemberId: string) => {
+    try {
+      const { error } = await supabase
+        .from("family_members")
+        .update({ status: "active" })
+        .eq("id", familyMemberId);
+
+      if (error) throw error;
+      toast({
+        title: "Family member activated",
+        description: "The family member can now access the app.",
+      });
+      fetchFamilyMembers();
+    } catch (error: unknown) {
+      toast({
+        title: "Error",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Failed to activate family member",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleResendInvitation = async (
+    familyMemberId: string,
+    email: string
+  ) => {
+    try {
+      // Get current user for parent_id check
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
+      // Get current member data - handle both id and email cases
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        familyMemberId
+      );
+
+      let member;
+      let fetchError;
+
+      if (isUUID && familyMemberId) {
+        // Registered member - query by id
+        const result = await supabase
+          .from("family_members")
+          .select("invitation_token, name, relationship")
+          .eq("id", familyMemberId)
+          .single();
+        member = result.data;
+        fetchError = result.error;
+      } else {
+        // Pending member - query by email and parent_id
+        const result = await supabase
+          .from("family_members")
+          .select("invitation_token, name, relationship")
+          .eq("email", email.toLowerCase().trim())
+          .eq("parent_id", user.id)
+          .single();
+        member = result.data;
+        fetchError = result.error;
+      }
+
+      if (fetchError || !member)
+        throw fetchError || new Error("Family member not found");
+
+      // Generate a new invitation token for security and to handle expired links
+      const newInvitationToken = crypto.randomUUID();
+
+      // Update invitation with new token and timestamp
+      let updateError;
+      if (isUUID && familyMemberId) {
+        // Update by id
+        const result = await supabase
+          .from("family_members")
+          .update({
+            invitation_token: newInvitationToken,
+            invitation_sent_at: new Date().toISOString(),
+          })
+          .eq("id", familyMemberId);
+        updateError = result.error;
+      } else {
+        // Update by email and parent_id
+        const result = await supabase
+          .from("family_members")
+          .update({
+            invitation_token: newInvitationToken,
+            invitation_sent_at: new Date().toISOString(),
+          })
+          .eq("email", email.toLowerCase().trim())
+          .eq("parent_id", user.id);
+        updateError = result.error;
+      }
+
+      if (updateError) throw updateError;
+
+      // Send email with new token
+      const { error: emailError } = await supabase.functions.invoke(
+        "send-family-member-invitation",
+        {
+          body: {
+            invitationToken: newInvitationToken,
+            email: email,
+            name: member.name,
+            relationship: member.relationship,
+            parentName: user?.user_metadata?.name || "a family member",
+          },
+        }
+      );
+
+      if (emailError) {
+        toast({
+          title: "New invitation generated",
+          description:
+            "A new invitation link has been generated, but email sending failed. You can copy and share the link manually from the card.",
+          variant: "default",
+          duration: 8000,
+        });
+      } else {
+        toast({
+          title: "Invitation resent",
+          description: `A new invitation email with a fresh link has been sent to ${email}.`,
+        });
+      }
+
+      fetchFamilyMembers();
+    } catch (error: unknown) {
+      toast({
+        title: "Error",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Failed to resend invitation",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleRemoveFamilyMember = async (familyMemberIdOrEmail: string) => {
+    try {
+      // Check if it's a UUID (id) or email
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        familyMemberIdOrEmail
+      );
+
+      let error;
+      if (isUUID) {
+        // Delete by id (for registered members)
+        const { error: deleteError } = await supabase
+          .from("family_members")
+          .delete()
+          .eq("id", familyMemberIdOrEmail);
+        error = deleteError;
+      } else {
+        // Delete by email (for pending members who haven't registered yet)
+        // Also need to ensure we're only deleting from current parent's family
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (!user) {
+          throw new Error("Not authenticated");
+        }
+
+        const { error: deleteError } = await supabase
+          .from("family_members")
+          .delete()
+          .eq("email", familyMemberIdOrEmail.toLowerCase().trim())
+          .eq("parent_id", user.id);
+        error = deleteError;
+      }
+
+      if (error) throw error;
+      toast({
+        title: "Family member removed",
+        description: "The family member has been removed from your family.",
+      });
+      fetchFamilyMembers();
+    } catch (error: unknown) {
+      toast({
+        title: "Error",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Failed to remove family member",
+        variant: "destructive",
+      });
+    }
+  };
+
+  useEffect(() => {
+    fetchChildren();
+    fetchFamilyMembers();
+  }, [fetchChildren, fetchFamilyMembers]);
+
   useEffect(() => {
     // Clear childSession if it exists - parents should not have childSession
     // This prevents routing issues where parent might be treated as child
@@ -138,7 +514,7 @@ const ParentDashboard = () => {
     checkAuth().catch((error) => {
       console.error("Error checking auth:", error);
     });
-    
+
     fetchChildren().catch((error) => {
       console.error("Error fetching children:", error);
     });
@@ -151,8 +527,8 @@ const ParentDashboard = () => {
   }, []);
 
   const handleCallCleared = useCallback(() => {
-                setIncomingCall(null);
-                incomingCallRef.current = null;
+    setIncomingCall(null);
+    incomingCallRef.current = null;
   }, []);
 
   // Use incoming call subscription hook
@@ -187,19 +563,15 @@ const ParentDashboard = () => {
     });
   };
 
-  // Helper function to get full login code (prepend family code if missing)
+  // Helper function to get full login code (combine family_code + login_code)
+  // login_code now stores only the child-specific part (e.g., "dog-42")
+  // family_code is stored in parents table (e.g., "EGW6RZ")
   const getFullLoginCode = (child: Child): string => {
-    // Check if login_code already includes family code (has 3 parts: familyCode-color-number)
-    const parts = child.login_code.split("-");
-    if (parts.length === 3 && familyCode) {
-      // Already has family code, return as-is
-      return child.login_code;
-    }
-    // Old format (color-number), prepend family code
-    if (parts.length === 2 && familyCode) {
+    if (familyCode) {
+      // Always prepend family code since login_code is now child-specific only
       return `${familyCode}-${child.login_code}`;
     }
-    // Fallback: return as-is if family code not available
+    // Fallback: return child code only if family code not available
     return child.login_code;
   };
 
@@ -416,9 +788,9 @@ const ParentDashboard = () => {
         <div className="max-w-4xl mx-auto space-y-6">
           <div className="mt-2 flex items-center justify-between flex-wrap gap-4">
             <div>
-              <h1 className="text-3xl font-bold">My Children</h1>
+              <h1 className="text-3xl font-bold">Dashboard</h1>
               <p className="text-muted-foreground mt-2">
-                Manage your children's profiles, login codes, and settings
+                Manage your children and family members
               </p>
             </div>
             {isPWA() && (
@@ -433,145 +805,71 @@ const ParentDashboard = () => {
             )}
           </div>
 
-          {familyCode && (
-            <Card className="bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800 p-4">
-              <div className="flex items-center justify-between gap-4">
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-blue-900 dark:text-blue-100 mb-1">
-                    Your Family Code
-                  </p>
-                  <p className="text-2xl font-mono font-bold text-blue-700 dark:text-blue-300">
-                    {familyCode}
-                  </p>
-                  <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
-                    Share this code with your children for login
-                  </p>
-                </div>
-                <Button
-                  onClick={() => {
-                    navigator.clipboard.writeText(familyCode);
-                    toast({
-                      title: "Copied!",
-                      description: "Family code copied to clipboard",
-                    });
-                  }}
-                  variant="outline"
-                  size="sm"
-                  className="flex-shrink-0"
-                >
-                  <Copy className="h-4 w-4 mr-2" />
-                  Copy
-                </Button>
-              </div>
-            </Card>
-          )}
+          <FamilyCodeCard familyCode={familyCode} />
 
-          {!canAddMoreChildren && (
-            <Card className="p-4 bg-yellow-50 dark:bg-yellow-950 border-yellow-200 dark:border-yellow-800 mb-4">
-              <div className="space-y-3">
-                <p className="text-sm text-yellow-900 dark:text-yellow-100">
-                  <strong>Subscription Limit Reached:</strong> You have{" "}
-                  {children.length} /{" "}
-                  {allowedChildren === 999 ? "∞" : allowedChildren || 1}{" "}
-                  children.
-                </p>
-                {isPWA() ? (
-                  <Button
-                    onClick={() => navigate("/parent/upgrade")}
-                    variant="default"
-                    size="sm"
-                    className="w-full sm:w-auto"
-                    data-tour="parent-upgrade-limit"
-                  >
-                    Upgrade Your Plan
-                  </Button>
-                ) : (
-                  <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                    Please upgrade through your app store to add more children.
-                  </p>
-                )}
-              </div>
-            </Card>
-          )}
-          <div className="flex gap-2">
-            <Button
-              onClick={() => setShowAddChild(true)}
-              className="flex-1"
-              size="lg"
-            >
-              <Plus className="mr-2 h-5 w-5" />
-              Add Child
-            </Button>
-            {hasNotifications && (
-              <Button
-                onClick={handleClearAllNotifications}
-                variant="outline"
-                size="lg"
-                className="flex-shrink-0"
-                title={`Clear all notifications (${totalUnreadMessages} messages, ${totalMissedCalls} missed calls)`}
-              >
-                <BellOff className="mr-2 h-5 w-5" />
-                Clear All
-              </Button>
-            )}
-          </div>
+          <Tabs
+            value={activeTab}
+            onValueChange={setActiveTab}
+            className="w-full"
+          >
+            <TabsList className="grid w-full grid-cols-5">
+              <TabsTrigger value="children">Children</TabsTrigger>
+              <TabsTrigger value="family">Family</TabsTrigger>
+              <TabsTrigger value="connections">Connections</TabsTrigger>
+              <TabsTrigger value="safety">Safety</TabsTrigger>
+              <TabsTrigger value="setup">Setup</TabsTrigger>
+            </TabsList>
 
-          {loading ? (
-            <div className="grid gap-4 md:grid-cols-2">
-              {[1, 2].map((i) => (
-                <Card key={i} className="p-6 space-y-4 min-h-[220px]">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-4">
-                      <div className="w-12 h-12 rounded-full bg-muted animate-pulse" />
-                      <div className="space-y-2">
-                        <div className="h-6 w-32 bg-muted rounded animate-pulse" />
-                        <div className="h-4 w-24 bg-muted rounded animate-pulse" />
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <div className="h-10 flex-1 bg-muted rounded animate-pulse" />
-                    <div className="h-10 flex-1 bg-muted rounded animate-pulse" />
-                  </div>
-                </Card>
-              ))}
-            </div>
-          ) : children.length === 0 ? (
-            <Card className="p-12 text-center min-h-[220px]">
-              <p className="text-muted-foreground mb-4">
-                You haven't added any children yet.
-              </p>
-              <p className="text-sm text-muted-foreground">
-                Click "Add Child" above to create a profile and login code.
-              </p>
-            </Card>
-          ) : (
-            <div className="grid gap-4 md:grid-cols-2">
-              {children.map((child, index) => (
-                <ChildCard
-                  key={child.id}
-                  child={child}
-                  index={index}
-                        isOnline={isChildOnline(child.id)}
-                  fullLoginCode={getFullLoginCode(child)}
-                  onEditCode={() => setChildToEditCode(child)}
-                  onCopyCode={() => handleCopyCode(getFullLoginCode(child))}
-                  onCopyMagicLink={() => handleCopyMagicLink(child)}
-                  onPrintCode={() => handlePrintCode(child)}
-                  onViewQR={() => setShowCodeDialog({ child })}
-                      onCall={() => handleCall(child.id)}
-                      onChat={() => handleChat(child.id)}
-                  onDelete={() => setChildToDelete(child)}
-                />
-              ))}
-            </div>
-          )}
+            <ChildrenTab
+              children={children}
+              loading={loading}
+              canAddMoreChildren={canAddMoreChildren}
+              allowedChildren={allowedChildren}
+              hasNotifications={hasNotifications}
+              totalUnreadMessages={totalUnreadMessages}
+              totalMissedCalls={totalMissedCalls}
+              isChildOnline={isChildOnline}
+              getFullLoginCode={getFullLoginCode}
+              onAddChild={() => setShowAddChild(true)}
+              onClearAllNotifications={handleClearAllNotifications}
+              onEditCode={setChildToEditCode}
+              onCopyCode={handleCopyCode}
+              onCopyMagicLink={handleCopyMagicLink}
+              onPrintCode={handlePrintCode}
+              onViewQR={(child) => setShowCodeDialog({ child })}
+              onCall={handleCall}
+              onChat={handleChat}
+              onDelete={setChildToDelete}
+            />
+
+            <FamilyTab
+              familyMembers={familyMembers}
+              loading={familyMembersLoading}
+              onAddFamilyMember={() => setShowAddFamilyMember(true)}
+              onSuspend={handleSuspendFamilyMember}
+              onActivate={handleActivateFamilyMember}
+              onResendInvitation={handleResendInvitation}
+              onRemove={handleRemoveFamilyMember}
+            />
+
+            <ChildConnectionsTab children={children} />
+
+            <SafetyReportsTab />
+
+            <FamilySetupTab />
+          </Tabs>
         </div>
 
         <AddChildDialog
           open={showAddChild}
           onOpenChange={setShowAddChild}
           onChildAdded={fetchChildren}
+        />
+
+        <AddFamilyMemberDialog
+          open={showAddFamilyMember}
+          onOpenChange={setShowAddFamilyMember}
+          onFamilyMemberAdded={fetchFamilyMembers}
         />
 
         {/* Code Management Dialogs */}

@@ -88,21 +88,36 @@ export const handleChildCall = async (
     }
   }
 
-  // CRITICAL FIX: Check for incoming parent calls FIRST
-  // This ensures child answers parent's call instead of continuing an old child-initiated call
-  // Check if there's an incoming call from parent
-  // IMPORTANT: When child is INITIATING a call (not answering), only check for RINGING calls
-  // We should NOT answer old ended calls when trying to make a new call
-  const { data: incomingCallData, error: incomingCallError } = await supabase
-    .from("calls")
-    .select("*")
-    .eq("child_id", child.id)
-    .eq("caller_type", "parent")
-    .eq("status", "ringing") // CRITICAL: Only answer ringing calls when initiating
-    .not("offer", "is", null) // Must have an offer to answer
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  // CRITICAL FIX: Only check for incoming parent calls if we're NOT making an outgoing call
+  // When child is INITIATING a call (no specificCallId), skip incoming call check
+  // This prevents answering an incoming call when child wants to make an outgoing call
+  // Only check for incoming calls if:
+  // 1. We have a specificCallId (answering a specific call), OR
+  // 2. We're explicitly looking for incoming calls (not making a new call)
+  let incomingCallData = null;
+  let incomingCallError = null;
+  
+  // Only check for incoming calls if we don't have a specific call to handle
+  // If specificCallId is null/undefined, child is making an outgoing call - skip incoming check
+  if (specificCallId === null || specificCallId === undefined) {
+    safeLog.log("📞 [CHILD CALL] Child initiating outgoing call - skipping incoming call check");
+  } else {
+    // We have a specificCallId but it didn't match - might be looking for incoming calls
+    // Still check for incoming calls in this case
+    const result = await supabase
+      .from("calls")
+      .select("*")
+      .eq("child_id", child.id)
+      .eq("caller_type", "parent")
+      .eq("status", "ringing") // CRITICAL: Only answer ringing calls
+      .not("offer", "is", null) // Must have an offer to answer
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    
+    incomingCallData = result.data;
+    incomingCallError = result.error;
+  }
 
   if (incomingCallError) {
     safeLog.error("Error checking for incoming call:", incomingCallError);
@@ -450,12 +465,23 @@ const handleExistingCall = async (
 
           // Check if call is in terminal state - only process if status actually changed TO terminal
           const isTerminal = isCallTerminal(updatedCall);
-          // CRITICAL: Only treat as ended if we have a previous state that was NOT terminal
-          // If oldCall is undefined, we can't be sure this is a new termination
+          // CRITICAL: Handle cases where oldCall.status might be undefined
+          // If oldCall is undefined OR oldCall.status is undefined, we still want to process termination
+          // if the new status is terminal (this handles cases where the first update we see is "ended")
           const wasTerminal = oldCall ? isCallTerminal(oldCall) : null; // null means unknown, not false
+          const statusChanged = oldCall?.status !== updatedCall.status;
 
-          // Only process if we have a previous state and it was NOT terminal
-          if (isTerminal && oldCall !== undefined && wasTerminal === false) {
+          // Process termination if:
+          // 1. Call is now terminal AND
+          // 2. Status actually changed (to avoid processing same state multiple times) AND
+          // 3. Either oldCall was not terminal OR oldCall is undefined OR oldCall.status was undefined (first update) AND
+          // 4. PC is not already closed
+          if (
+            isTerminal &&
+            statusChanged &&
+            (wasTerminal === false || oldCall === undefined || (oldCall !== undefined && oldCall.status === undefined)) &&
+            pc.signalingState !== "closed"
+          ) {
             const iceState = pc.iceConnectionState;
             safeLog.log(
               "🛑 [CALL LIFECYCLE] Call ended by remote party (child handler - existing call)",
@@ -482,9 +508,16 @@ const handleExistingCall = async (
               }
             );
 
+            // CRITICAL: Stop connecting immediately to stop ringtone when call ends
+            setIsConnecting(false);
+            
             if (pc.signalingState !== "closed") {
               pc.close();
             }
+            
+            // NOTE: Cleanup and navigation will be handled by useVideoCall's termination listener
+            // which listens to the same database UPDATE event. We just close the PC here.
+            
             return;
           }
 
@@ -855,12 +888,23 @@ const handleIncomingCallFromParent = async (
         // Check if call was ended - use isCallTerminal to check both status and ended_at
         // Only process if status actually changed TO ended (not if it was already ended)
         const isTerminal = isCallTerminal(updatedCall);
-        // CRITICAL: Only treat as ended if we have a previous state that was NOT terminal
-        // If oldCall is undefined, we can't be sure this is a new termination
+        // CRITICAL: Handle cases where oldCall.status might be undefined
+        // If oldCall is undefined OR oldCall.status is undefined, we still want to process termination
+        // if the new status is terminal (this handles cases where the first update we see is "ended")
         const wasTerminal = oldCall ? isCallTerminal(oldCall) : null; // null means unknown, not false
+        const statusChanged = oldCall?.status !== updatedCall.status;
 
-        // Only process if we have a previous state and it was NOT terminal
-        if (isTerminal && oldCall !== undefined && wasTerminal === false) {
+        // Process termination if:
+        // 1. Call is now terminal AND
+        // 2. Status actually changed (to avoid processing same state multiple times) AND
+        // 3. Either oldCall was not terminal OR oldCall is undefined OR oldCall.status was undefined (first update) AND
+        // 4. PC is not already closed
+        if (
+          isTerminal &&
+          statusChanged &&
+          (wasTerminal === false || oldCall === undefined || (oldCall !== undefined && oldCall.status === undefined)) &&
+          pc.signalingState !== "closed"
+        ) {
           const iceState = pc.iceConnectionState;
           safeLog.log(
             "🛑 [CALL LIFECYCLE] Call ended by remote party (child handler - incoming call)",
@@ -887,9 +931,16 @@ const handleIncomingCallFromParent = async (
             }
           );
 
+          // CRITICAL: Stop connecting immediately to stop ringtone when call ends
+          setIsConnecting(false);
+          
           if (pc.signalingState !== "closed") {
             pc.close();
           }
+          
+          // NOTE: Cleanup and navigation will be handled by useVideoCall's termination listener
+          // which listens to the same database UPDATE event. We just close the PC here.
+          
           return;
         }
 
@@ -1228,12 +1279,23 @@ const handleChildInitiatedCall = async (
         // Check if call was ended - use isCallTerminal to check both status and ended_at
         // Only process if status actually changed TO ended (not if it was already ended)
         const isTerminal = isCallTerminal(updatedCall);
-        // CRITICAL: Only treat as ended if we have a previous state that was NOT terminal
-        // If oldCall is undefined, we can't be sure this is a new termination
+        // CRITICAL: Handle cases where oldCall.status might be undefined
+        // If oldCall is undefined OR oldCall.status is undefined, we still want to process termination
+        // if the new status is terminal (this handles cases where the first update we see is "ended")
         const wasTerminal = oldCall ? isCallTerminal(oldCall) : null; // null means unknown, not false
+        const statusChanged = oldCall?.status !== updatedCall.status;
 
-        // Only process if we have a previous state and it was NOT terminal
-        if (isTerminal && oldCall !== undefined && wasTerminal === false) {
+        // Process termination if:
+        // 1. Call is now terminal AND
+        // 2. Status actually changed (to avoid processing same state multiple times) AND
+        // 3. Either oldCall was not terminal OR oldCall is undefined OR oldCall.status was undefined (first update) AND
+        // 4. PC is not already closed
+        if (
+          isTerminal &&
+          statusChanged &&
+          (wasTerminal === false || oldCall === undefined || (oldCall !== undefined && oldCall.status === undefined)) &&
+          pc.signalingState !== "closed"
+        ) {
           const iceState = pc.iceConnectionState;
           safeLog.log(
             "🛑 [CALL LIFECYCLE] Call ended by remote party (child handler - child initiated)",
@@ -1260,9 +1322,16 @@ const handleChildInitiatedCall = async (
             }
           );
 
+          // CRITICAL: Stop connecting immediately to stop ringtone when call ends
+          setIsConnecting(false);
+          
           if (pc.signalingState !== "closed") {
             pc.close();
           }
+          
+          // NOTE: Cleanup and navigation will be handled by useVideoCall's termination listener
+          // which listens to the same database UPDATE event. We just close the PC here.
+          
           return;
         }
 
