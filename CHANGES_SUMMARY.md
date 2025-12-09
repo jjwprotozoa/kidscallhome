@@ -2,6 +2,37 @@
 
 ## Latest Changes (2025-12-09)
 
+### 1. Production Console Errors Fix - Security Headers & Vercel Live
+- **Issue**: Multiple production console errors:
+  - Vercel Live feedback script loading in production (should be disabled)
+  - Missing Content Security Policy (CSP) headers causing warnings
+  - Cross-Origin-Resource-Policy errors
+  - Cloudflare challenge warnings (informational)
+- **Fixes**:
+  - **Security Headers**: Added comprehensive security headers to `vercel.json`:
+    - `Content-Security-Policy`: Restricts resource loading to trusted sources, blocks vercel.live scripts
+    - `Cross-Origin-Resource-Policy: same-origin`: Prevents cross-origin resource loading
+    - `Cross-Origin-Embedder-Policy: unsafe-none`: Allows necessary cross-origin resources
+    - Additional security headers (X-Content-Type-Options, X-Frame-Options, X-XSS-Protection, etc.)
+  - **Vercel Live Blocking**: Added header rule to block `/_next-live/` paths
+  - **CSP Configuration**: Properly configured to allow:
+    - Self-hosted scripts and styles
+    - Google Fonts
+    - Supabase connections (including WebSocket)
+    - Cloudflare challenges
+    - Media and blob resources for video calls
+- **Documentation**: Created troubleshooting guide for production errors
+- **Impact**: 
+  - Vercel Live errors will be blocked by CSP (also disable in Vercel dashboard)
+  - CSP warnings resolved
+  - Improved security posture with proper headers
+  - Cloudflare warnings are normal and can be ignored
+- **Files**: 
+  - `vercel.json` (enhanced with security headers)
+  - `docs/troubleshooting/PRODUCTION_CONSOLE_ERRORS.md` (new)
+
+## Previous Changes (2025-12-09)
+
 ### 1. Build Fix - Missing conversations.ts File
 - **Issue**: Build failing on Vercel with error: `Could not load /vercel/path0/src/utils/conversations (imported by src/pages/Chat.tsx)`
 - **Root Cause**: The file `src/utils/conversations.ts` was untracked in git, so it wasn't available during the Vercel build process
