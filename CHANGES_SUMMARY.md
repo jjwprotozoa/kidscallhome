@@ -2,35 +2,40 @@
 
 ## Latest Changes (2025-12-09)
 
-### 1. Production Console Errors Fix - Security Headers & Vercel Live
+### 1. Production Console Errors Fix - Security Headers & Vercel Live (Updated)
 
 - **Issue**: Multiple production console errors:
+  - **403 Forbidden error** on main page (critical)
   - Vercel Live feedback script loading in production (should be disabled)
   - Missing Content Security Policy (CSP) headers causing warnings
   - Cross-Origin-Resource-Policy errors
   - Cloudflare challenge warnings (informational)
 - **Fixes**:
+  - **403 Error Fix**: Removed `Cross-Origin-Resource-Policy: same-origin` header that was blocking the main page load
   - **Security Headers**: Added comprehensive security headers to `vercel.json`:
-    - `Content-Security-Policy`: Restricts resource loading to trusted sources, blocks vercel.live scripts
-    - `Cross-Origin-Resource-Policy: same-origin`: Prevents cross-origin resource loading
+    - `Content-Security-Policy`: Restricts resource loading to trusted sources, blocks vercel.live scripts (now applies to all requests, not just HTML)
     - `Cross-Origin-Embedder-Policy: unsafe-none`: Allows necessary cross-origin resources
     - Additional security headers (X-Content-Type-Options, X-Frame-Options, X-XSS-Protection, etc.)
-  - **Vercel Live Blocking**: Added header rule to block `/_next-live/` paths
+  - **Vercel Live Blocking** (multiple layers):
+    - Added rewrite rule: `/_next-live/*` → `/404`
+    - Added redirect rule: `/_next-live/*` → `/404`
+    - CSP blocks `vercel.live` domain scripts
   - **CSP Configuration**: Properly configured to allow:
     - Self-hosted scripts and styles
     - Google Fonts
     - Supabase connections (including WebSocket)
     - Cloudflare challenges
     - Media and blob resources for video calls
-- **Documentation**: Created troubleshooting guide for production errors
+- **Documentation**: Created/updated troubleshooting guide for production errors
 - **Impact**:
-  - Vercel Live errors will be blocked by CSP (also disable in Vercel dashboard)
-  - CSP warnings resolved
+  - **403 error on main page resolved**
+  - Vercel Live errors blocked via rewrites/redirects and CSP
+  - CSP warnings resolved (may still see from Cloudflare challenge scripts - normal)
   - Improved security posture with proper headers
   - Cloudflare warnings are normal and can be ignored
 - **Files**:
-  - `vercel.json` (enhanced with security headers)
-  - `docs/troubleshooting/PRODUCTION_CONSOLE_ERRORS.md` (new)
+  - `vercel.json` (enhanced with security headers, Vercel Live blocking)
+  - `docs/troubleshooting/PRODUCTION_CONSOLE_ERRORS.md` (updated)
 
 ## Previous Changes (2025-12-09)
 
