@@ -31,12 +31,12 @@ const Index = () => {
 
         <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
           <Card
-            className="p-8 cursor-pointer hover:shadow-xl transition-all border-4 border-primary/20 hover:border-primary/40"
+            className="p-8 cursor-pointer hover:shadow-xl transition-all border-4 border-primary/20 hover:border-primary/40 flex flex-col h-full"
             onClick={() => navigate("/parent/auth")}
           >
             <Users className="h-16 w-16 text-primary mb-4" />
             <h2 className="text-3xl font-bold mb-4">Parents & Family</h2>
-            <p className="text-muted-foreground mb-6">
+            <p className="text-muted-foreground mb-6 flex-grow">
               Create an account and add your children. Manage their access and stay connected. Family members invited by parents can sign in here too.
             </p>
             <Button className="w-full" size="lg">
@@ -45,12 +45,12 @@ const Index = () => {
           </Card>
 
           <Card
-            className="p-8 cursor-pointer hover:shadow-xl transition-all border-4 border-secondary/20 hover:border-secondary/40"
+            className="p-8 cursor-pointer hover:shadow-xl transition-all border-4 border-secondary/20 hover:border-secondary/40 flex flex-col h-full"
             onClick={() => navigate("/child/login")}
           >
             <MessageCircle className="h-16 w-16 text-secondary mb-4" />
             <h2 className="text-3xl font-bold mb-4">Kids</h2>
-            <p className="text-muted-foreground mb-6">
+            <p className="text-muted-foreground mb-6 flex-grow">
               Enter your special code to call and message your parents!
             </p>
             <Button className="w-full" size="lg" variant="secondary">
