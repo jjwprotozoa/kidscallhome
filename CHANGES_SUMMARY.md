@@ -1,6 +1,61 @@
 # KidsCallHome - Changes Summary
 
-## Latest Changes (2025-01-08)
+## Latest Changes (2025-12-09)
+
+### 1. Database-Level Permissions Matrix Enforcement
+
+- **Issue**: Permissions matrix rules were only enforced at application level, leaving potential security gaps
+- **Solution**: Added comprehensive database-level enforcement via RLS policies and security functions
+- **Key Features**:
+  - **`can_users_communicate()` Function**: Central permission check function that enforces all communication rules at database level
+    - Prevents adult-to-adult communication (critical rule)
+    - Checks blocking status (with parent exception for safety)
+    - Verifies child-to-child connection approvals
+    - Enforces family boundaries
+  - **Enhanced `is_contact_blocked()` Function**: 
+    - Returns `false` if checking child's own parent (safety feature)
+    - Prevents child from blocking their own parent at database level
+  - **RLS Policy Updates**: All message and call INSERT policies now use `can_users_communicate()` before allowing inserts
+- **Safety Features**:
+  - **Child Cannot Block Own Parent**: Database-level prevention ensures parents maintain oversight access even if child wants privacy
+  - **No Adult-to-Adult Communication**: Database enforces that adults cannot communicate with each other
+  - **Blocking Override**: If either side has blocked the other, no communication allowed (except parent exception)
+- **Impact**:
+  - Security hardened at database level - rules cannot be bypassed by application bugs
+  - Parent oversight maintained even if child attempts to block
+  - Clear separation of concerns: database enforces rules, application provides UX
+- **Files**:
+  - `supabase/migrations/20251209000000_enforce_refined_permissions_matrix.sql` (new)
+  - `src/utils/family-communication.ts` (updated with safety feature comment)
+  - `docs/PERMISSIONS_MATRIX_UPDATE_SUMMARY.md` (new)
+  - `docs/REFINED_PERMISSIONS_MATRIX.md` (new)
+  - `docs/RLS_POLICIES_COMPLETE.md` (new)
+
+### 2. Conversations and Feature Flags for Child-to-Child Support
+
+- **Purpose**: Future-proof schema for child-to-child messaging/calls, gated by feature flags
+- **Implementation**:
+  - **Conversations Table**: Created/updated to support 1:1 and group conversations (future-proof for group chats)
+  - **Conversation Participants Table**: Links users/children to conversations, supports both adults and children
+  - **Feature Flags Table**: Per-family feature flags to enable/disable child-to-child communication
+  - **Helper Functions**: 
+    - `get_or_create_conversation()` - Creates or retrieves conversation between participants
+    - `can_children_communicate()` - Checks if child-to-child communication is allowed (feature flag + approvals)
+    - `get_family_feature_flag()` - Retrieves feature flag value for a family
+- **Features**:
+  - Child-to-child communication can be enabled/disabled per family
+  - Parent approval required for child-to-child connections
+  - Feature flags allow gradual rollout and A/B testing
+  - Schema supports future group chat functionality
+- **Impact**:
+  - Foundation laid for child-to-child messaging/calls
+  - Parents maintain control via feature flags
+  - Flexible architecture for future enhancements
+- **Files**:
+  - `supabase/migrations/20251209000001_add_conversations_and_feature_flags.sql` (new)
+  - `docs/FEATURE_FLAGS_AND_CONVERSATIONS.md` (new)
+
+## Previous Changes (2025-01-08)
 
 ### 1. Privacy Policy Consent Improvements
 

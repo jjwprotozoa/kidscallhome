@@ -143,6 +143,9 @@ export async function checkCommunicationPermission(
   }
 
   // Rule: Check if contact is blocked (for child blocking)
+  // SAFETY FEATURE: Child cannot fully block their own parent
+  // The database function is_contact_blocked() already handles this exception
+  // This allows client-side "mute" while maintaining parent oversight
   if (currentUserRole === 'child') {
     const blocked = await isContactBlocked(
       currentUserId,
