@@ -2,9 +2,236 @@
 
 > **Note**: For detailed technical information, complete file lists, testing recommendations, and implementation specifics, see [CHANGES_DETAILED.md](./CHANGES_DETAILED.md).
 
+## SEO & Marketing Copy Implementation
+
+### Overview
+
+Comprehensive SEO optimization and marketing copy developed for app store listings, website, and search engine discovery. Includes structured data, meta tags, social sharing optimization, and voice assistant compatibility.
+
+### Key Components
+
+#### 1. App Store Listings
+
+- **Apple App Store** (`APP_STORE_LISTING.md`):
+  - App name: "Kids Call Home" (15 chars)
+  - Subtitle: "Safe family calls, no SIM" (28 chars)
+  - Promotional text (169 chars): Highlights safety, no SIM requirement, family-only contacts, tablet compatibility
+  - Full description: 4 sections covering family-only calls, tablet compatibility, co-parenting, and privacy-first design
+  - Keywords (100 chars): Optimized for search discovery
+- **Google Play Store** (`PLAY_STORE_LISTING_DESCRIPTIONS.md`):
+  - Short description (80 chars): "Safe video calling app for kids. Family-only calls, no SIM card or phone needed."
+  - Full description (2,487/4,000 chars): Comprehensive copy with "HOW WE KEEP KIDS SAFE" section addressing parent concerns about Messenger Kids/JusTalk Kids style apps
+  - Explicitly addresses: no strangers, no social feeds, no ads, strong privacy, simple parent controls
+  - Dedicated co-parenting section for shared custody use cases
+  - Strategic competitive positioning without naming competitors directly
+
+#### 2. Website SEO (`index.html`)
+
+- **Meta Tags**:
+  - Title: "Kids Call Home – Safe Video Calls for Kids Without a Phone or SIM Card"
+  - Description: Comprehensive meta description emphasizing safety, family-only contacts, tablet compatibility, and privacy (no ads, no strangers, no data tracking)
+  - Keywords: 10 targeted SEO phrases focused on safe kids calling, family-only communication, and tablet compatibility
+  - Canonical URL: `https://www.kidscallhome.com`
+  - Robots: `index, follow`
+- **Structured Data (JSON-LD)**:
+  - Single consolidated `SoftwareApplication` schema (removed redundant schemas)
+  - App category, features, age range (5-17), pricing, audience type
+  - Feature list emphasizes safety: "Family-only video calls", "Parent-controlled contacts", "No public profiles or stranger contact", "Encrypted communication", "No ads or data tracking"
+  - FAQPage schema: 6 problem-focused FAQs covering tablet calling, safety comparison, privacy protection, co-parenting, device compatibility, and ads/in-app purchases
+- **Social Sharing**:
+  - Open Graph tags: Complete implementation for Facebook/LinkedIn sharing with updated messaging
+  - Twitter Card: `summary_large_image` with @KidsCallHome handle
+  - Image metadata: 1200x630px OG image support
+- **SEO Content**: Semantic HTML content accessible to search engines before React hydration
+  - Hidden div (`#seo-content`) with H1, H2, H3 headings and full benefit sections
+  - Content matches structured data FAQs for consistency
+  - Enhanced `<noscript>` fallback with complete content for non-JS environments
+  - Addresses parent concerns: no strangers, no ads, privacy-first design, co-parenting support
+
+#### 3. Landing Page Content (`src/pages/Index.tsx`)
+
+- Hero messaging: "Stay connected with your family through simple video calls and messaging"
+- Two CTAs: "Parents & Family" and "Kids" login paths
+- Feature highlights: Video Calls, Messaging, Safe & Secure
+
+#### 4. Voice Assistant Optimization (`docs/SEO_VOICE_ASSISTANT_OPTIMIZATION.md`)
+
+- Structured data for AI assistants (ChatGPT, Claude, Google Assistant, Siri)
+- Robots.txt allowances for voice assistant bots
+- PWA manifest enhancements with app shortcuts
+- Problem-solving focused keywords for voice queries
+
+### Key Messaging Themes
+
+- **Safety & Security**: No strangers, parent-approved contacts only, encrypted communication
+- **Technical Differentiation**: Works without SIM card/phone number, tablet/iPad/Kindle Fire compatible
+- **Target Audiences**: Co-parents, long-distance families, tablet-only users
+- **Competitive Positioning**: Implicitly contrasts with apps allowing "friends of friends", emphasizes no social feeds/games
+
+### Files
+
+- `APP_STORE_LISTING.md` - Apple App Store copy and keywords
+- `PLAY_STORE_LISTING_DESCRIPTIONS.md` - Google Play Store copy
+- `index.html` - SEO meta tags, structured data, social sharing
+- `src/pages/Index.tsx` - Landing page content
+- `src/components/info/AppDescription.tsx` - App description component
+- `docs/SEO_VOICE_ASSISTANT_OPTIMIZATION.md` - SEO implementation documentation
+
+### Impact
+
+- **Search Engine Discovery**: Comprehensive structured data and meta tags improve search visibility
+- **App Store Optimization**: Optimized copy for both Apple and Google Play stores
+- **Social Sharing**: Proper Open Graph and Twitter Card implementation for link previews
+- **Voice Assistant Ready**: Structured data enables AI assistants to recommend and describe the app
+- **Consistent Messaging**: Unified value proposition across all platforms and touchpoints
+
 ## Latest Changes (2025-12-16)
 
-### 1. Child Blocking & Navigation Fixes
+### 1. SEO & Marketing Copy Update - Landing Page Optimization for 2025
+
+- **Purpose**: Strengthen SEO for 2025 around safe kids calling, "no phone / no SIM / tablet" use, and co-parenting. Modernize structured data and improve above-the-fold messaging to address parent concerns about safety, privacy, and data tracking.
+- **Changes**:
+  - **Title & Meta Tags** (`index.html`):
+    - Updated `<title>` to: "Kids Call Home – Safe Video Calls for Kids Without a Phone or SIM Card"
+    - Updated meta description to emphasize safety, family-only contacts, tablet compatibility, and privacy (no ads, no strangers, no data tracking)
+    - Updated Open Graph and Twitter Card meta tags to match new messaging
+    - Streamlined keywords meta tag to 10 targeted SEO phrases focused on safe kids calling, family-only communication, and tablet compatibility
+  - **Structured Data (JSON-LD) Cleanup**:
+    - Consolidated to single `SoftwareApplication` schema (removed redundant `WebApplication` schema)
+    - Removed `aggregateRating` (no public ratings available)
+    - Removed non-standard properties (`offersSolutionTo`, `alternateName`, `browserRequirements`, `permissions`)
+    - Added `typicalAgeRange: "5-17"` and `audience` type for families
+    - Updated `operatingSystem` to array format: `["Web", "Android", "iOS"]`
+    - Updated feature list to focus on safety: "Family-only video calls", "Parent-controlled contacts", "No public profiles or stranger contact", "Encrypted communication", "No ads or data tracking"
+  - **FAQPage Schema Update**:
+    - Replaced 8 generic FAQs with 6 problem-focused questions addressing parent concerns:
+      - "How can my child call me from a tablet without a SIM card?"
+      - "Is this app safer than typical kids messaging apps?"
+      - "How does Kids Call Home protect my child's privacy?"
+      - "Can my child use this to call both parents in different homes?"
+      - "Does Kids Call Home work on iPads and tablets?"
+      - "Are there ads or in‑app purchases in Kids Call Home?"
+    - Answers emphasize safety, privacy, no strangers, no ads, and co-parenting use cases
+  - **SEO-Visible Content**:
+    - Added semantic HTML content in hidden div (`#seo-content`) accessible to search engines before React hydration
+    - Includes `<h1>`: "Safe video calls for kids — no phone or SIM required"
+    - Added benefit sections with H2 headings:
+      - "Family-only calls, no strangers"
+      - "Works on tablets, iPads, and Wi‑Fi devices"
+      - "Built for co‑parents and long‑distance family"
+      - "Privacy-first design for kids"
+    - Includes full FAQ content matching structured data
+    - Enhanced `<noscript>` fallback with complete content for non-JS environments
+- **Key Messaging Updates**:
+  - **Safety Focus**: Explicitly addresses "no strangers", "no public profiles", "no random friend requests"
+  - **Privacy Emphasis**: Highlights encrypted communication, minimal data collection, no tracking for ads, no data selling
+  - **Parent Concerns**: Addresses modern parent worries about manipulative design patterns, ads, and data tracking
+  - **Tablet/Device Compatibility**: Emphasizes Wi‑Fi-only devices, tablets, iPads, Kindle Fire, Chromebooks
+  - **Co-Parenting**: Highlights use case for shared custody and long-distance families
+- **Technical Implementation**:
+  - SEO content uses `position: absolute; left: -9999px` to hide visually while remaining accessible to crawlers
+  - Content structure matches FAQPage schema for consistency
+  - All functional JavaScript and PWA manifest remain unchanged
+- **Files Modified**:
+  - `index.html` - Updated title, meta tags, structured data, added SEO-visible content
+- **Impact**:
+  - **Improved SEO**: Better targeting for 2025 search queries around safe kids calling and tablet compatibility
+  - **Parent Reassurance**: Content directly addresses concerns about strangers, ads, and data privacy
+  - **Structured Data Compliance**: Cleaned up to follow current SoftwareApplication/FAQPage schema guidance
+  - **Search Engine Accessibility**: Semantic HTML content available before React hydration for better crawling
+  - **Consistent Messaging**: Landing page content aligns with app store listings and marketing materials
+
+### 2. Play Store Listing Rewrite - Competitive Positioning for 2025
+
+- **Purpose**: Rewrite Google Play Store short and full descriptions with stronger, up-to-date positioning against Messenger Kids and JusTalk Kids. Address current parent concerns about cyberbullying, stranger exposure, addictive design, data collection, and complex setup requirements.
+- **Changes**:
+  - **Short Description** (`PLAY_STORE_LISTING_DESCRIPTIONS.md`):
+    - Updated to: "Safe video calling app for kids. Family-only calls, no SIM card or phone needed." (80 characters)
+    - Leads with "Safe video calling app for kids" (high-intent SEO phrase)
+    - Includes "Family-only calls" (key differentiation)
+    - Emphasizes "no SIM card or phone needed" (core technical benefit)
+  - **Full Description Rewrite** (2,487/4,000 characters):
+    - **Opening Lines**: Laser-focused on safe video calls, no SIM requirement, family-only contacts, and co-parenting use cases
+    - **"HOW WE KEEP KIDS SAFE" Section**: Explicitly addresses parent concerns about Messenger Kids/JusTalk Kids style apps:
+      - No strangers: Kids can only call approved family contacts—no open search, no friend requests, no random messages
+      - No social feeds: No endless scrolling, games, or random content that feeds screen addiction
+      - No ads or tricky purchases: Clean interface with no advertising and no dark-pattern in-app purchases
+      - Strong privacy: End-to-end encryption, minimal data collection, no data selling or sharing with advertisers
+      - Simple parent controls: Easy setup without needing extra monitoring apps
+    - **Co-Parenting Section**: Dedicated mini-section explaining how kids can easily reach both homes safely in shared custody situations
+    - **Privacy Emphasis**: Concrete details about encryption (end-to-end for calls/messages, WebRTC peer-to-peer), minimal data collection, and no data selling
+    - **Device Compatibility**: Highlighted early—works on tablets (iPad, Android, Kindle Fire, Chromebook) and phones with Wi-Fi or data
+    - **Competitive Positioning**: Subtle reference to "A calm, family-only alternative to busy kids messaging and social apps" without naming competitors directly
+- **Key Messaging Themes**:
+  - **Safety First**: Addresses cyberbullying risks, stranger exposure, and addictive design patterns
+  - **Privacy & Data-Minimalism**: Emphasizes minimal data collection, no tracking, no data selling
+  - **No Social Media**: Explicitly contrasts with apps that have feeds, games, and social discovery features
+  - **Co-Parenting Support**: Highlights use case for shared custody and long-distance families
+  - **Technical Differentiation**: "No SIM / no phone plan / works on tablets" prominently featured
+- **Parent Concerns Addressed**:
+  - Cyberbullying and unkind behavior between "approved" contacts
+  - Exposure to strangers via IDs, friend requests, or social-style discovery
+  - Addictive, notification-heavy social apps with games and feeds
+  - Heavy data collection and tracking from big tech platforms
+  - Complex setup requiring ongoing supervision and extra monitoring tools
+  - General online safety: grooming, inappropriate content, privacy, screen-time balance
+- **Files Modified**:
+  - `PLAY_STORE_LISTING_DESCRIPTIONS.md` - Complete rewrite of short and full descriptions
+- **Impact**:
+  - **Improved ASO**: Optimized for 2025 search behavior with high-intent phrases like "safe video calling app for kids"
+  - **Competitive Positioning**: Directly addresses weaknesses in Messenger Kids/JusTalk Kids without naming them
+  - **Parent Reassurance**: Explicitly states how app avoids biggest problems parents see in kids messaging apps
+  - **Clear Differentiation**: Emphasizes "no strangers, no feeds, no ads" positioning
+  - **Co-Parenting Appeal**: Dedicated section addresses shared custody use case
+  - **Privacy Credibility**: Concrete encryption and data protection details build trust
+  - **Ready for Play Console**: Copy ready to paste directly into Google Play Console
+
+### 3. Authentication & Session Management Fixes
+
+- **Purpose**: Fix production issues with logout behavior and session persistence
+- **Issues Fixed**:
+  - **Parent Logout Affecting Child**: When parent logged out, it was logging out the child on the same device/browser
+  - **Back Button Clearing Sessions**: Using browser back button was triggering auth checks that redirected users to login even when still logged in
+  - **Child Logout Friction**: Children had logout option causing unnecessary friction for easy access
+- **Changes**:
+  - **Parent/Family Member Logout** (`src/components/Navigation.tsx`):
+    - Changed `supabase.auth.signOut()` to use `scope: 'local'` instead of global signout
+    - Only clears local Supabase session (keys starting with "sb-"), not child sessions
+    - Child sessions stored separately in localStorage as "childSession" remain untouched
+    - Each user type (parent, family member, child) has isolated session storage
+  - **Back Button Navigation**:
+    - **ChildHome.tsx**: Added `useRef` guard to prevent multiple session checks on navigation
+      - Session check only runs once on component mount, not on every navigation
+      - Prevents redirecting to login when using back button
+    - **ParentHome.tsx**: Added `useRef` guard for auth session checks
+      - Auth check only runs once on mount, preserving login state on back navigation
+    - **ChildDashboard/useDashboardData.ts**: Added session check guard
+      - Prevents unnecessary redirects when navigating back to dashboard
+  - **Child Logout Removal** (`src/components/Navigation.tsx`):
+    - Removed logout button from child navigation bar
+    - Removed logout confirmation dialog for children
+    - Removed child logout logic from `handleLogout` function
+    - Children now stay logged in automatically for easy access
+- **Technical Implementation**:
+  - `scope: 'local'` ensures parent/family member logout only affects their Supabase auth session
+  - Child sessions use separate localStorage key ("childSession") completely isolated from Supabase auth
+  - `useRef` guards prevent `useEffect` hooks from running multiple times on navigation
+  - Session checks only occur once per component mount, not on every route change
+  - `onAuthStateChange` listener only clears Supabase keys, never touches child sessions
+- **Files Modified**:
+  - `src/components/Navigation.tsx` - Updated logout logic, removed child logout UI
+  - `src/pages/ChildHome.tsx` - Added session check guard
+  - `src/pages/ParentHome.tsx` - Added auth check guard
+  - `src/pages/ChildDashboard/useDashboardData.ts` - Added session check guard
+- **Impact**:
+  - **Session Isolation**: Parent/family member logout no longer affects child sessions
+  - **Independent Logout**: Each user type can logout independently without affecting others
+  - **Back Button Support**: Users stay logged in when using browser back button
+  - **Reduced Friction**: Children always available without login barriers
+  - **Better UX**: Sessions persist across navigation, only cleared on explicit logout
+  - **Production Stability**: Eliminates production issues with cross-user logout
+
+### 3. Child Blocking & Navigation Fixes
 
 - **Purpose**: Fix child blocking functionality and improve navigation UX
 - **Issues Fixed**:
@@ -53,7 +280,7 @@
   - **Database Consistency**: Uses existing database functions designed for this use case
   - **Performance**: Proper subscription cleanup prevents memory leaks
 
-### 2. Production Loading Issues Fix - Workbox Precaching & Vercel Routing
+### 4. Production Loading Issues Fix - Workbox Precaching & Vercel Routing
 
 - **Purpose**: Fix production loading errors preventing service worker installation and causing 403 errors on HTML files
 - **Issues Fixed**:
@@ -88,6 +315,46 @@
   - **Cloudflare Compatibility**: Frame policy now consistent with CSP allowing challenge iframes
   - **Production Stability**: Eliminates Workbox precaching errors that were breaking PWA functionality
   - **Performance**: HTML files cached efficiently without blocking service worker installation
+
+### 5. Apple App Store Listing Copy Creation
+
+- **Purpose**: Create App Store-optimized copy for Apple App Store Connect submission, addressing 2025 parent concerns about kids messaging apps and emphasizing safety, privacy, and tablet compatibility
+- **Changes**:
+  - **App Name**: Created 3 variants, selected "Kids Call Home" (15 characters)
+    - Clean brand name with safety message handled in subtitle
+  - **Subtitle**: Created 3 variants, selected "Safe family calls, no SIM" (28 characters)
+    - Combines safety, family-only positioning, and key technical differentiator
+  - **Promotional Text**: Created 169-character promotional text
+    - Emphasizes safety, no phone/SIM requirement, family-only contacts, tablet compatibility
+    - Highlights "no ads, no strangers, no social feeds" positioning
+  - **Full Description**: Created 4-section description (~1,200 characters)
+    - Opening paragraph addressing core benefits and parent concerns
+    - "Family-Only Calls, No Strangers" section: Parent control and safety features
+    - "Perfect for Tablets and Wi‑Fi Devices" section: Device compatibility messaging
+    - "Built for Co‑Parents and Long‑Distance Family" section: Use case emphasis
+    - "Privacy-First, Designed for Kids" section: Privacy, encryption, no ads/tracking
+  - **Keywords Field**: Created 100-character keyword string
+    - Optimized for search discovery: "safe video calls kids", "kids call parents", "kids video calling", "kids tablet calling", "family calling app", "kids no sim calling", "co-parenting app", "tablet calling kids", "iPad video calling", "safe kids messaging"
+- **Key Messaging Themes**:
+  - **Safety & Security**: No strangers, parent-approved contacts only, encrypted communication
+  - **Technical Differentiation**: Works without SIM card/phone number, tablet/iPad/Kindle Fire compatible
+  - **Target Audiences**: Co-parents, long-distance families, tablet-only users
+  - **Competitive Positioning**: Implicitly contrasts with apps allowing "friends of friends", emphasizes no social feeds/games
+  - **Parent Concerns Addressed**: Online grooming, cyberbullying, manipulative design patterns, data tracking, complex setup
+- **Tone & Structure**:
+  - Reassuring, calm, parent-centric tone
+  - Avoids technical jargon; explains privacy/safety in plain language
+  - Clear section headings for scannability
+  - Benefit-driven copy that builds trust
+- **Files Created**:
+  - `APP_STORE_LISTING.md` - Complete Apple App Store copy with variants, recommendations, and final selections
+- **Impact**:
+  - **App Store Ready**: Copy ready to paste directly into App Store Connect
+  - **ASO Optimization**: Optimized for Apple's search algorithm with strategic keyword placement
+  - **Parent Trust**: Addresses 2025 parent concerns about kids messaging apps
+  - **Clear Positioning**: Differentiates from competitors without naming them directly
+  - **Consistent Messaging**: Aligns with Google Play Store listing and website SEO copy
+  - **Search Discovery**: Keyword field optimized for parent search queries
 
 ## Previous Changes (2025-12-16)
 

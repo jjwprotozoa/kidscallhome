@@ -1,7 +1,7 @@
 {
   "name": "Kids Call Home",
   "short_name": "KidsCallHome",
-  "description": "Stay connected with your family through simple video calls and messaging. Parents can create accounts and manage their children's access, while kids can easily call and message their parents using a special code.",
+  "description": "Stay connected with your family through simple video calls and messaging. Parents can create accounts and manage their children's access, while family members can be invited to connect with children. Kids can easily call and message their parents and family members using a special code.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",

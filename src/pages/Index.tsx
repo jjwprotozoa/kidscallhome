@@ -25,7 +25,7 @@ const Index = () => {
             Kids Call Home
           </h1>
           <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-            Stay connected with your family through simple video calls and messaging
+            Stay connected with your family through simple video calls and messaging between parents, family members, and children
           </p>
         </div>
 
@@ -51,7 +51,7 @@ const Index = () => {
             <MessageCircle className="h-16 w-16 text-secondary mb-4" />
             <h2 className="text-3xl font-bold mb-4">Kids</h2>
             <p className="text-muted-foreground mb-6 flex-grow">
-              Enter your special code to call and message your parents!
+              Enter your special code to call and message your parents and family members!
             </p>
             <Button className="w-full" size="lg" variant="secondary">
               Kid Login

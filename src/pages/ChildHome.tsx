@@ -10,7 +10,7 @@ import { usePresence } from "@/features/presence/usePresence";
 import { useToast } from "@/hooks/use-toast";
 import { getChildSessionLegacy } from "@/lib/childSession";
 import { Users } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 interface ChildSession {
@@ -24,13 +24,22 @@ const ChildHome = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [child, setChild] = useState<ChildSession | null>(null);
+  const hasCheckedSession = useRef(false);
 
   useEffect(() => {
+    // Only check session once on mount, not on every navigation/back button
+    // This prevents redirecting to login when using back button
+    if (hasCheckedSession.current) {
+      return;
+    }
+    
     const childData = getChildSessionLegacy();
     if (!childData) {
+      hasCheckedSession.current = true;
       navigate("/child/login");
       return;
     }
+    hasCheckedSession.current = true;
     setChild(childData);
   }, [navigate]);
 

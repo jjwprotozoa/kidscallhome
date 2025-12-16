@@ -10,19 +10,27 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { getUserRole } from "@/utils/userRole";
 import { Users } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 
 const ParentHome = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const hasCheckedAuth = useRef(false);
 
   useEffect(() => {
+    // Only check auth once on mount, not on every navigation/back button
+    // This prevents redirecting to login when using back button
+    if (hasCheckedAuth.current) {
+      return;
+    }
+
     const checkAuth = async () => {
       const {
         data: { session },
       } = await supabase.auth.getSession();
       if (!session) {
+        hasCheckedAuth.current = true;
         navigate("/parent/auth");
         return;
       }
@@ -34,10 +42,12 @@ const ParentHome = () => {
       if (user) {
         const userRole = await getUserRole(user.id);
         if (userRole === "family_member") {
+          hasCheckedAuth.current = true;
           navigate("/family-member", { replace: true });
           return;
         }
       }
+      hasCheckedAuth.current = true;
     };
     checkAuth();
   }, [navigate]);

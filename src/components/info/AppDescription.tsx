@@ -39,7 +39,7 @@ export const AppDescription = () => {
             <h3 className="font-semibold mb-2">Short Description</h3>
             <p className="text-muted-foreground">
               Stay connected with your family through simple video calls and
-              messaging.
+              messaging between parents, family members, and children.
             </p>
           </div>
           <Separator />

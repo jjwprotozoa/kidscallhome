@@ -1,6 +1,6 @@
 # Kids Call Home
 
-A family communication app that helps parents and children stay connected through simple video calls and messaging.
+A family communication app that helps parents, family members, and children stay connected through simple video calls and messaging.
 
 **Domain**: https://www.kidscallhome.com
 
@@ -8,7 +8,7 @@ A family communication app that helps parents and children stay connected throug
 
 ## About
 
-Kids Call Home is a safe and secure platform for family communication. Parents can create accounts, add their children, and manage access. Children can use a special code to easily initiate video calls and send messages to their parents, keeping families connected anytime, anywhere.
+Kids Call Home is a safe and secure platform for family communication. Parents can create accounts, add their children, and manage access. Family members (grandparents, aunts, uncles, and other trusted adults) can be invited to connect with children. Children can use a special code to easily initiate video calls and send messages to their parents and family members, keeping families connected anytime, anywhere.
 
 ## Authentication Flow
 

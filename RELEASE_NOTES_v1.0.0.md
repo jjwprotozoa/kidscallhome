@@ -10,7 +10,7 @@ We're excited to announce the first official release of Kids Call Home - a safe,
 
 ### 🎥 Video Calling
 
-- **Peer-to-peer WebRTC video calls** between parents and children
+- **Peer-to-peer WebRTC video calls** between parents, family members, and children
 - High-quality video and audio with low-bandwidth optimization
 - Works on WiFi-only devices (no SIM card or phone plan required)
 - Supports cellular data connections (LTE, 3G, 4G, 5G)
@@ -19,7 +19,7 @@ We're excited to announce the first official release of Kids Call Home - a safe,
 
 ### 💬 Secure Messaging
 
-- Real-time messaging between parents and children
+- Real-time messaging between parents, family members, and children
 - Message notifications and presence indicators
 - Secure message delivery with end-to-end encryption
 - Message history and conversation threads
@@ -39,6 +39,7 @@ We're excited to announce the first official release of Kids Call Home - a safe,
 - Easy parent sign-up with email and password
 - Automatic Family Code generation upon registration
 - Add and manage multiple children
+- Invite family members (grandparents, aunts, uncles, and other trusted adults)
 - View and manage all authorized devices
 - Device tracking with last login times and IP addresses
 - Secure device removal with password re-authentication
@@ -143,8 +144,9 @@ We're excited to announce the first official release of Kids Call Home - a safe,
 1. **Parents:** Sign up at [www.kidscallhome.com](https://www.kidscallhome.com)
 2. **Get your Family Code** - automatically generated upon registration
 3. **Add your children** to your account
-4. **Share the login code** with your children (Family Code + Color/Animal + Number)
-5. **Start calling!** - Children can now call and message you anytime
+4. **Invite family members** (optional) - grandparents, aunts, uncles, and other trusted adults
+5. **Share the login code** with your children (Family Code + Color/Animal + Number)
+6. **Start calling!** - Children can now call and message parents and family members anytime
 
 ---
 

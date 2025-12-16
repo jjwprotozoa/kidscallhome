@@ -26,15 +26,24 @@ export const useDashboardData = () => {
     }
   );
   const handleIncomingCallRef = useRef(handleIncomingCall);
+  const hasCheckedSession = useRef(false);
 
   useEffect(() => {
+    // Only check session once on mount, not on every render/navigation
+    // This prevents redirecting to login when using back button
+    if (hasCheckedSession.current) {
+      return;
+    }
+
     const loadChildSession = async () => {
       const { getChildSessionLegacy } = await import("@/lib/childSession");
       const childData = getChildSessionLegacy();
       if (!childData) {
+        hasCheckedSession.current = true;
         navigate("/child/login");
         return;
       }
+      hasCheckedSession.current = true;
       setChild(childData);
 
       const storedParentId = localStorage.getItem("selectedParentId");

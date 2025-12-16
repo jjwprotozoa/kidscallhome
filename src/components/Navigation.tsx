@@ -343,30 +343,18 @@ const Navigation = () => {
   }, [userType]);
 
   const handleLogout = async () => {
-    if (userType === "child") {
-      const childSession = localStorage.getItem("childSession");
-      if (childSession) {
-        try {
-          const childData = JSON.parse(childSession);
-          // Write presence status to database on logout (major state change)
-          // Note: This is optional - presence is managed via WebSocket/Realtime
-          // import { writePresenceOnLogout } from "@/features/presence/presenceDb";
-          // await writePresenceOnLogout(childData.id, "child");
-        } catch (error) {
-          // Ignore errors
-        }
-      }
-      localStorage.removeItem("childSession");
-      // Reset badge store on logout
-      useBadgeStore.getState().reset();
-      toast({ title: "Logged out" });
-      navigate("/child/login");
-    } else if (userType === "parent" || userType === "family_member") {
+    // Children don't have logout - they stay logged in for easy access
+    // This removes friction and ensures children are always available
+    if (userType === "parent" || userType === "family_member") {
       // Get user ID before signing out
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      await supabase.auth.signOut();
+      
+      // IMPORTANT: Use scope: 'local' to only clear local session, not global
+      // This prevents affecting child sessions on the same device/browser
+      // Child sessions are stored separately in localStorage as "childSession"
+      await supabase.auth.signOut({ scope: 'local' });
 
       // Write presence status to database on logout (major state change)
       // Note: This is optional - presence is managed via WebSocket/Realtime
@@ -704,39 +692,10 @@ const Navigation = () => {
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowLogoutDialog(true)}
-                className="flex-shrink-0"
-              >
-                <LogOut className="h-4 w-4 md:mr-2" />
-                <span className="hidden md:inline">Logout</span>
-              </Button>
+              {/* Children don't have logout - they stay logged in for easy access */}
             </div>
           </div>
         </nav>
-        {/* Logout Confirmation Dialog */}
-        <AlertDialog open={showLogoutDialog} onOpenChange={setShowLogoutDialog}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Confirm Logout</AlertDialogTitle>
-              <AlertDialogDescription>
-                Are you sure you want to log out? You'll need to sign in again
-                to access your account.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={handleLogout}
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              >
-                Logout
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
       </>
     );
   }
