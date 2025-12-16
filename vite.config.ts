@@ -126,6 +126,7 @@ export default defineConfig(({ mode }) => {
             "**/@vite/**/*",
             "**/@react-refresh/**/*",
             "**/*.map",
+            "**/*.html", // Exclude HTML files from precaching - they're served directly and cached at runtime
           ],
           // Exclude source files and API endpoints from navigation fallback
           navigateFallbackDenylist: [
@@ -216,6 +217,23 @@ export default defineConfig(({ mode }) => {
                   maxEntries: 100,
                   maxAgeSeconds: 30 * 24 * 60 * 60, // 30 days
                 },
+              },
+            },
+            // Cache HTML files at runtime (excluded from precaching to avoid 403 errors)
+            // Use NetworkFirst to ensure fresh content, but cache for offline support
+            {
+              urlPattern: /\/.*\.html$/,
+              handler: "NetworkFirst",
+              options: {
+                cacheName: "html-cache",
+                expiration: {
+                  maxEntries: 20,
+                  maxAgeSeconds: 7 * 24 * 60 * 60, // 7 days
+                },
+                cacheableResponse: {
+                  statuses: [0, 200],
+                },
+                networkTimeoutSeconds: 3, // Fallback to cache after 3s
               },
             },
           ],
