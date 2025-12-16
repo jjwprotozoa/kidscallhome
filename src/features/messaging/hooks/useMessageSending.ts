@@ -9,6 +9,7 @@ import {
   getChildProfileId,
   getCurrentAdultProfileId,
   getOrCreateConversation,
+  getChildConversations,
 } from "@/utils/conversations";
 import { safeLog, sanitizeError } from "@/utils/security";
 
@@ -51,8 +52,26 @@ export const useMessageSending = ({
 
   const sendMessage = async (content: string) => {
     if (!content.trim()) return;
-    if (currentSenderType === "child" && !childData) return;
-    if (currentSenderType !== "child" && !childId) return;
+    
+    // Guard: Ensure currentSenderType is set
+    if (!currentSenderType) {
+      safeLog.error("❌ [MESSAGE SEND] currentSenderType is null");
+      toast({
+        title: "Error",
+        description: "Unable to determine sender type. Please refresh the page.",
+        variant: "destructive",
+      });
+      return false;
+    }
+    
+    if (currentSenderType === "child" && !childData) {
+      safeLog.error("❌ [MESSAGE SEND] Child sender but no childData");
+      return false;
+    }
+    if (currentSenderType !== "child" && !childId) {
+      safeLog.error("❌ [MESSAGE SEND] Non-child sender but no childId");
+      return false;
+    }
 
     setLoading(true);
     try {
@@ -73,16 +92,77 @@ export const useMessageSending = ({
           "selectedConversationId"
         );
 
+        // Priority: URL param > localStorage > prop from state > try to resolve
         if (conversationIdParam) {
           currentConversationId = conversationIdParam;
           setConversationId(conversationIdParam);
         } else if (storedConversationId) {
           currentConversationId = storedConversationId;
           setConversationId(storedConversationId);
+        } else if (currentConversationId) {
+          // Use conversationId from state (set by useChatInitialization)
+          // No need to set it again, it's already in state
         } else {
-          throw new Error(
-            "No conversation selected. Please go back to Family & Parents and click 'Message' on the person you want to chat with."
-          );
+          // Last resort: try to resolve conversation automatically
+          try {
+            safeLog.log("🔄 [MESSAGE SEND] Auto-resolving conversation for child:", {
+              childId: childData!.id,
+            });
+            
+            const childProfileId = await getChildProfileId(childData!.id);
+            safeLog.log("🔄 [MESSAGE SEND] Child profile ID resolved:", {
+              childId: childData!.id,
+              childProfileId,
+            });
+            
+            if (childProfileId) {
+              const conversations = await getChildConversations(childProfileId);
+              safeLog.log("🔄 [MESSAGE SEND] Conversations found:", {
+                count: conversations?.length || 0,
+                conversations: conversations?.map(c => ({
+                  id: c.conversation.id,
+                  participantType: c.participant.type,
+                })),
+              });
+              
+              if (conversations && conversations.length > 0) {
+                // Prefer parent conversation, otherwise use first available
+                const parentConv = conversations.find(
+                  (c) => c.participant.type === "parent"
+                );
+                const selectedConv = parentConv || conversations[0];
+                currentConversationId = selectedConv.conversation.id;
+                setConversationId(currentConversationId);
+                localStorage.setItem("selectedConversationId", currentConversationId);
+                
+                safeLog.log("✅ [MESSAGE SEND] Auto-selected conversation:", {
+                  conversationId: currentConversationId,
+                  participantType: selectedConv.participant.type,
+                });
+              } else {
+                safeLog.error("❌ [MESSAGE SEND] No conversations found for child profile:", {
+                  childProfileId,
+                  childId: childData!.id,
+                });
+                throw new Error(
+                  "No conversation selected. Please go back to Family & Parents and click 'Message' on the person you want to chat with."
+                );
+              }
+            } else {
+              safeLog.error("❌ [MESSAGE SEND] Could not resolve child profile ID:", {
+                childId: childData!.id,
+              });
+              throw new Error(
+                "No conversation selected. Please go back to Family & Parents and click 'Message' on the person you want to chat with."
+              );
+            }
+          } catch (resolveError) {
+            safeLog.error("❌ [MESSAGE SEND] Auto-resolution failed:", sanitizeError(resolveError));
+            // If auto-resolution fails, throw the original error
+            throw new Error(
+              "No conversation selected. Please go back to Family & Parents and click 'Message' on the person you want to chat with."
+            );
+          }
         }
 
         if (!currentConversationId) {
@@ -107,12 +187,31 @@ export const useMessageSending = ({
 
           let familyId: string;
           if (isFamilyMember && familyMemberId) {
+            // Try family_members first
             const { data: fm } = await supabase
               .from("family_members")
               .select("parent_id")
               .eq("id", familyMemberId)
-              .single();
-            familyId = fm?.parent_id || user.id;
+              .maybeSingle();
+            
+            if (fm?.parent_id) {
+              familyId = fm.parent_id;
+            } else {
+              // Fallback: Try adult_profiles
+              const { data: adultProfile } = await supabase
+                .from("adult_profiles" as never)
+                .select("family_id")
+                .eq("user_id", familyMemberId)
+                .eq("role", "family_member")
+                .maybeSingle();
+              
+              if (adultProfile) {
+                const ap = adultProfile as { family_id: string };
+                familyId = ap.family_id;
+              } else {
+                familyId = user.id;
+              }
+            }
           } else {
             familyId = user.id;
           }
@@ -192,6 +291,17 @@ export const useMessageSending = ({
           message: error.message,
           code: error.code,
         });
+
+        // Check for rate limit error (policy will return false if rate limit exceeded)
+        if (
+          error.message?.includes("rate_limit") ||
+          error.message?.includes("rate limit") ||
+          error.code === "42501" && error.message?.includes("check_child_message_rate_limit")
+        ) {
+          throw new Error(
+            "You are sending messages too quickly. Please wait a moment and try again."
+          );
+        }
 
         if (error.code === "42501" || error.message.includes("row-level security")) {
           throw new Error(

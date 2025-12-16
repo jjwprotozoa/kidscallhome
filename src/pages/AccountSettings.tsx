@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { useFamilyMemberRedirect } from "@/hooks/useFamilyMemberRedirect";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,6 +25,8 @@ import { useNavigate } from "react-router-dom";
 import { isPWA } from "@/utils/platformDetection";
 
 const AccountSettings = () => {
+  // Redirect family members away from parent routes
+  useFamilyMemberRedirect();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);

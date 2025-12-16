@@ -15,7 +15,6 @@ export const SafetyModeSettings: React.FC = () => {
   const [enabled, setEnabled] = useState(false);
   const [settings, setSettings] = useState<SafetyModeSettingsType>({
     keyword_alerts: false,
-    ai_content_scanning: false,
     export_conversations: false,
     alert_threshold: "medium",
   });
@@ -127,16 +126,6 @@ export const SafetyModeSettings: React.FC = () => {
                 className="rounded"
               />
               <span>Keyword Alerts</span>
-            </label>
-
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={settings.ai_content_scanning}
-                onChange={(e) => setSettings({...settings, ai_content_scanning: e.target.checked})}
-                className="rounded"
-              />
-              <span>AI Content Scanning</span>
             </label>
 
             <label className="flex items-center gap-2">

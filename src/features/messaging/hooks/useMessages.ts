@@ -1,10 +1,10 @@
 // src/features/messaging/hooks/useMessages.ts
 // Hook for fetching and managing messages
 
-import { useState, useEffect, useCallback } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 import { safeLog, sanitizeError } from "@/utils/security";
+import { useCallback, useEffect, useState } from "react";
 
 interface Message {
   id: string;
@@ -23,6 +23,7 @@ interface UseMessagesProps {
   conversationId: string | null;
   isChild: boolean;
   enabled: boolean;
+  realtimeStatus?: "SUBSCRIBED" | "ERROR" | "TIMED_OUT" | "SUBSCRIBING" | null;
 }
 
 export const useMessages = ({
@@ -30,6 +31,7 @@ export const useMessages = ({
   conversationId,
   isChild,
   enabled,
+  realtimeStatus,
 }: UseMessagesProps) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const { toast } = useToast();
@@ -54,18 +56,41 @@ export const useMessages = ({
         return;
       }
 
+      // CRITICAL: Ensure children use anonymous access (not authenticated)
+      if (isChild) {
+        const { data: authCheck } = await supabase.auth.getSession();
+        if (authCheck?.session) {
+          safeLog.warn(
+            "⚠️ [MESSAGES] Child has auth session, signing out for anonymous access"
+          );
+          await supabase.auth.signOut();
+        }
+      }
+
       try {
+        safeLog.log("📥 [MESSAGES] Fetching messages", {
+          conversationId: convIdToUse,
+          isChild,
+          timestamp: new Date().toISOString(),
+        });
+
         // @ts-expect-error - Supabase type instantiation is excessively deep
-        const queryResult = await supabase
+        const result = await supabase
           .from("messages")
           .select("*")
           .eq("conversation_id", convIdToUse)
           .order("created_at", { ascending: true });
 
-        const data = queryResult.data as Message[] | null;
-        const error = queryResult.error as { message: string } | null;
+        const data = result.data as Message[] | null;
+        const error = result.error as { message: string; code?: string } | null;
 
         if (error) {
+          safeLog.error("❌ [MESSAGES] Error fetching messages:", {
+            error: sanitizeError(error),
+            conversationId: convIdToUse,
+            isChild,
+            code: error.code || "unknown",
+          });
           toast({
             title: "Error loading messages",
             description: error.message,
@@ -74,9 +99,20 @@ export const useMessages = ({
           return;
         }
 
+        safeLog.log("✅ [MESSAGES] Messages fetched successfully", {
+          count: data?.length || 0,
+          conversationId: convIdToUse,
+          isChild,
+          senderTypes: data?.map((m) => m.sender_type) || [],
+        });
+
         setMessages((data as Message[]) || []);
       } catch (error) {
-        safeLog.error("Error fetching messages:", sanitizeError(error));
+        safeLog.error("❌ [MESSAGES] Exception fetching messages:", {
+          error: sanitizeError(error),
+          conversationId: convIdToUse,
+          isChild,
+        });
       }
     },
     [conversationId, isChild, toast]
@@ -86,7 +122,10 @@ export const useMessages = ({
     setMessages((current) => {
       const exists = current.some((m) => m.id === message.id);
       if (exists) {
-        safeLog.warn("⚠️ [CHAT] Duplicate message detected, ignoring:", message.id);
+        safeLog.warn(
+          "⚠️ [CHAT] Duplicate message detected, ignoring:",
+          message.id
+        );
         return current;
       }
       return [...current, message];
@@ -100,14 +139,32 @@ export const useMessages = ({
     }
   }, [enabled, targetChildId, conversationId, fetchMessages]);
 
-  // Polling fallback (every 60 seconds - reduced from 15s to minimize database traffic)
-  // Realtime subscriptions should handle most cases, this is just a safety net
+  // Polling fallback - ONLY when realtime subscription is not working
+  // If realtime is SUBSCRIBED, skip polling entirely to reduce database calls
   useEffect(() => {
     if (!enabled || !targetChildId || !conversationId) return;
 
+    // Don't poll if realtime is successfully subscribed
+    if (realtimeStatus === "SUBSCRIBED") {
+      safeLog.log("✅ [CHAT] Realtime active, skipping polling");
+      return;
+    }
+
+    // Only poll when realtime is not working (ERROR, TIMED_OUT, or null/SUBSCRIBING)
+    // Use longer interval (120s) when polling is needed as fallback
     const pollInterval = setInterval(async () => {
       try {
-        // @ts-expect-error - Supabase type instantiation is excessively deep
+        // CRITICAL: Ensure children use anonymous access (not authenticated)
+        if (isChild) {
+          const { data: authCheck } = await supabase.auth.getSession();
+          if (authCheck?.session) {
+            safeLog.warn(
+              "⚠️ [MESSAGES POLL] Child has auth session, signing out for anonymous access"
+            );
+            await supabase.auth.signOut();
+          }
+        }
+
         const queryResult = await supabase
           .from("messages")
           .select("*")
@@ -134,13 +191,10 @@ export const useMessages = ({
       } catch (error) {
         safeLog.error("❌ [CHAT] Polling error:", sanitizeError(error));
       }
-    }, 60000);
+    }, 120000); // 120 seconds - longer interval when polling is needed
 
     return () => clearInterval(pollInterval);
-  }, [enabled, targetChildId, conversationId]);
+  }, [enabled, targetChildId, conversationId, realtimeStatus, isChild]);
 
   return { messages, fetchMessages, addMessage };
 };
-
-
-

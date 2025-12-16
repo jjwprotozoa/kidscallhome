@@ -1,0 +1,43 @@
+// src/pages/Upgrade/types.ts
+// Purpose: Type definitions for Upgrade page
+
+export interface SubscriptionPlan {
+  id: string;
+  name: string;
+  price: string;
+  priceValue: number;
+  interval: "month" | "year";
+  kidsSupported: number | "unlimited";
+  stripeLink: string;
+  description: string;
+  recommended?: boolean;
+  allowQuantity?: boolean;
+}
+
+export type SubscriptionTier = "free" | "additional-kid-monthly" | "additional-kid-annual" | "family-bundle-monthly" | "annual-family-plan";
+
+export type PaymentState = "idle" | "processing" | "success" | "error";
+
+export interface SubscriptionData {
+  email: string;
+  allowedChildren: number;
+  subscriptionType: SubscriptionTier;
+  subscriptionStatus: string;
+  subscriptionExpiresAt: string | null;
+  currentChildrenCount: number;
+  hasActiveSubscription: boolean;
+}
+
+export interface Feature {
+  name: string;
+  free: boolean | string;
+  basic: boolean | string;
+  premium: boolean | string;
+}
+
+
+
+
+
+
+

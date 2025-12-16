@@ -158,8 +158,9 @@ export default function middleware(request: Request) {
   }
 
   // SECURITY: Validate Origin header for state-changing requests
+  // Use exact match to prevent subdomain attacks (e.g., evil-kidscallhome.com)
   if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(request.method)) {
-    if (origin && !allowedOrigins.some((allowed) => origin.includes(allowed))) {
+    if (origin && !allowedOrigins.includes(origin)) {
       return new Response(
         JSON.stringify({ error: 'Forbidden', message: 'Invalid origin' }),
         { 

@@ -13,6 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { HelpBubble } from "@/features/onboarding/HelpBubble";
 import { OnboardingTour } from "@/features/onboarding/OnboardingTour";
 import { useToast } from "@/hooks/use-toast";
+import { useFamilyMemberRedirect } from "@/hooks/useFamilyMemberRedirect";
 import { supabase } from "@/integrations/supabase/client";
 import { safeLog, sanitizeError, sanitizeObject } from "@/utils/security";
 import type { RealtimeChannel } from "@supabase/supabase-js";
@@ -22,6 +23,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 // Device type is exported from DeviceCard component
 
 const DeviceManagement = () => {
+  // Redirect family members away from parent routes
+  useFamilyMemberRedirect();
   const [devices, setDevices] = useState<Device[]>([]);
   const [deviceHistory, setDeviceHistory] = useState<Device[]>([]);
   const [allChildren, setAllChildren] = useState<

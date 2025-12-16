@@ -37,7 +37,10 @@ export function OnboardingTour({ role, pageKey }: OnboardingTourProps) {
     const element = document.querySelector<HTMLElement>(activeStep.selector);
     if (!element) {
       // Element not found - skip to next step after a short delay
-      console.warn(`Onboarding: Element not found for selector "${activeStep.selector}"`);
+      // Only log in development to reduce console noise
+      if (import.meta.env.DEV) {
+        console.warn(`Onboarding: Element not found for selector "${activeStep.selector}"`);
+      }
       setTimeout(() => {
         next();
       }, 100);

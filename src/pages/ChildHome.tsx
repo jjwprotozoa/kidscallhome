@@ -8,6 +8,7 @@ import { HelpBubble } from "@/features/onboarding/HelpBubble";
 import { OnboardingTour } from "@/features/onboarding/OnboardingTour";
 import { usePresence } from "@/features/presence/usePresence";
 import { useToast } from "@/hooks/use-toast";
+import { getChildSessionLegacy } from "@/lib/childSession";
 import { Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -25,12 +26,11 @@ const ChildHome = () => {
   const [child, setChild] = useState<ChildSession | null>(null);
 
   useEffect(() => {
-    const sessionData = localStorage.getItem("childSession");
-    if (!sessionData) {
+    const childData = getChildSessionLegacy();
+    if (!childData) {
       navigate("/child/login");
       return;
     }
-    const childData = JSON.parse(sessionData);
     setChild(childData);
   }, [navigate]);
 

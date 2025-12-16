@@ -1,0 +1,284 @@
+// src/pages/ChildDashboard/useDashboardData.ts
+// Purpose: Data fetching hook for child dashboard (child session, parent name, subscriptions)
+
+import { useIncomingCallNotifications } from "@/features/calls/hooks/useIncomingCallNotifications";
+import { supabase } from "@/integrations/supabase/client";
+import type { RealtimeChannel } from "@supabase/supabase-js";
+import { useEffect, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { CallRecord, ChildSession, IncomingCall } from "./types";
+
+export const useDashboardData = () => {
+  const [child, setChild] = useState<ChildSession | null>(null);
+  const [incomingCall, setIncomingCall] = useState<IncomingCall | null>(null);
+  const [parentName, setParentName] = useState<string>("Parent");
+  const [selectedParentId, setSelectedParentId] = useState<string | null>(null);
+  const parentNameRef = useRef<string>("Parent");
+  const incomingCallRef = useRef<IncomingCall | null>(null);
+  const channelRef = useRef<RealtimeChannel | null>(null);
+  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { handleIncomingCall, stopIncomingCall } = useIncomingCallNotifications(
+    {
+      enabled: true,
+      volume: 0.7,
+    }
+  );
+  const handleIncomingCallRef = useRef(handleIncomingCall);
+
+  useEffect(() => {
+    const loadChildSession = async () => {
+      const { getChildSessionLegacy } = await import("@/lib/childSession");
+      const childData = getChildSessionLegacy();
+      if (!childData) {
+        navigate("/child/login");
+        return;
+      }
+      setChild(childData);
+
+      const storedParentId = localStorage.getItem("selectedParentId");
+      if (storedParentId) {
+        setSelectedParentId(storedParentId);
+      }
+
+      const fetchParentName = async () => {
+        try {
+          let parentIdToFetch: string | null = null;
+
+          if (storedParentId) {
+            parentIdToFetch = storedParentId;
+          } else if (childData.parent_id) {
+            parentIdToFetch = childData.parent_id;
+            setSelectedParentId(parentIdToFetch);
+          } else {
+            const { data: childRecord, error: childError } = await supabase
+              .from("children")
+              .select("parent_id")
+              .eq("id", childData.id)
+              .single();
+
+            if (childError || !childRecord) {
+              console.error("Error fetching child record:", childError);
+              return;
+            }
+            parentIdToFetch = childRecord.parent_id;
+            setSelectedParentId(parentIdToFetch);
+          }
+
+          if (!parentIdToFetch) {
+            setParentName("Parent");
+            parentNameRef.current = "Parent";
+            return;
+          }
+
+          const { data: parentData, error: parentError } = await supabase
+            .from("parents")
+            .select("name")
+            .eq("id", parentIdToFetch)
+            .maybeSingle();
+
+          if (parentError) {
+            console.error("Error fetching parent name:", parentError);
+            return;
+          }
+
+          if (parentData?.name) {
+            setParentName(parentData.name);
+            parentNameRef.current = parentData.name;
+          } else {
+            if (import.meta.env.DEV) {
+              console.warn(
+                "Parent name not found for parent_id:",
+                parentIdToFetch
+              );
+            }
+            setParentName("Parent");
+            parentNameRef.current = "Parent";
+          }
+        } catch (error) {
+          console.error("Error fetching parent name:", error);
+        }
+      };
+
+      await fetchParentName();
+
+      let lastCheckedCallId: string | null = null;
+
+      const setupSubscription = async () => {
+        const handleIncomingCallNotification = async (call: CallRecord) => {
+          if (call.id === lastCheckedCallId) return;
+          if (location.pathname.startsWith("/call/")) {
+            return;
+          }
+
+          lastCheckedCallId = call.id;
+          setIncomingCall({
+            id: call.id,
+            parent_id: call.parent_id,
+          });
+          handleIncomingCallRef.current({
+            callId: call.id,
+            callerName: parentNameRef.current,
+            callerId: call.parent_id,
+            url: `/call/${childData.id}?callId=${call.id}`,
+          });
+        };
+
+        const checkExistingCalls = async () => {
+          const twoMinutesAgo = new Date(
+            Date.now() - 2 * 60 * 1000
+          ).toISOString();
+          const { data: existingCalls } = await supabase
+            .from("calls")
+            .select("*")
+            .eq("child_id", childData.id)
+            .eq("caller_type", "parent")
+            .eq("status", "ringing")
+            .gte("created_at", twoMinutesAgo)
+            .order("created_at", { ascending: false })
+            .limit(1);
+
+          if (existingCalls && existingCalls.length > 0) {
+            const call = existingCalls[0];
+            if (call.id !== lastCheckedCallId) {
+              await handleIncomingCallNotification(call);
+            }
+          }
+        };
+
+        const pollForCalls = async () => {
+          const oneMinuteAgo = new Date(Date.now() - 60 * 1000).toISOString();
+          const { data: newCalls } = await supabase
+            .from("calls")
+            .select("*")
+            .eq("child_id", childData.id)
+            .eq("caller_type", "parent")
+            .eq("status", "ringing")
+            .gte("created_at", oneMinuteAgo)
+            .order("created_at", { ascending: false })
+            .limit(1);
+
+          if (newCalls && newCalls.length > 0) {
+            const call = newCalls[0];
+            if (call.id !== lastCheckedCallId) {
+              await handleIncomingCallNotification(call);
+            }
+          }
+        };
+
+        await checkExistingCalls();
+        pollIntervalRef.current = setInterval(pollForCalls, 60000);
+
+        channelRef.current = supabase
+          .channel("child-incoming-calls")
+          .on(
+            "postgres_changes",
+            {
+              event: "INSERT",
+              schema: "public",
+              table: "calls",
+              filter: `child_id=eq.${childData.id}`,
+            },
+            async (payload) => {
+              const call = payload.new as CallRecord;
+              if (
+                call.caller_type === "parent" &&
+                call.child_id === childData.id &&
+                call.status === "ringing"
+              ) {
+                await handleIncomingCallNotification(call);
+              }
+            }
+          )
+          .on(
+            "postgres_changes",
+            {
+              event: "UPDATE",
+              schema: "public",
+              table: "calls",
+              filter: `child_id=eq.${childData.id}`,
+            },
+            async (payload) => {
+              const call = payload.new as CallRecord;
+              const oldCall = payload.old as CallRecord;
+
+              if (call.caller_type === "child") {
+                return;
+              }
+
+              if (location.pathname.startsWith("/call/")) {
+                return;
+              }
+
+              if (
+                incomingCallRef.current &&
+                incomingCallRef.current.id === call.id
+              ) {
+                if (call.status === "active" || call.status === "ended") {
+                  setIncomingCall(null);
+                  incomingCallRef.current = null;
+                }
+              }
+
+              if (
+                call.caller_type === "parent" &&
+                call.child_id === childData.id &&
+                call.status === "ringing" &&
+                oldCall.status !== "ringing"
+              ) {
+                await handleIncomingCallNotification(call);
+              }
+            }
+          )
+          .subscribe((status, err) => {
+            if (err) {
+              console.error(
+                "❌ [CHILD DASHBOARD] Realtime subscription error:",
+                err
+              );
+            }
+          });
+      };
+
+      await setupSubscription();
+    };
+
+    loadChildSession();
+
+    // Return cleanup function
+    return () => {
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
+    };
+  }, [navigate, location.pathname]);
+
+  useEffect(() => {
+    incomingCallRef.current = incomingCall;
+  }, [incomingCall]);
+
+  useEffect(() => {
+    handleIncomingCallRef.current = handleIncomingCall;
+  }, [handleIncomingCall]);
+
+  useEffect(() => {
+    if (!incomingCall && incomingCallRef.current) {
+      stopIncomingCall(incomingCallRef.current.id);
+    }
+  }, [incomingCall, stopIncomingCall]);
+
+  return {
+    child,
+    incomingCall,
+    setIncomingCall,
+    parentName,
+    selectedParentId,
+    stopIncomingCall,
+  };
+};

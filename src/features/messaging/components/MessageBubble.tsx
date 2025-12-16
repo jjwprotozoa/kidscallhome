@@ -50,3 +50,9 @@ export const MessageBubble = ({ message, isMine }: MessageBubbleProps) => {
 
 
 
+
+
+
+
+
+

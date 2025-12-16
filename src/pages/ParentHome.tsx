@@ -1,16 +1,17 @@
 // src/pages/ParentHome.tsx
 // Parent Home / Dashboard page
 
-import { useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import Navigation from "@/components/Navigation";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { supabase } from "@/integrations/supabase/client";
-import { Users } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
-import Navigation from "@/components/Navigation";
-import { OnboardingTour } from "@/features/onboarding/OnboardingTour";
 import { HelpBubble } from "@/features/onboarding/HelpBubble";
+import { OnboardingTour } from "@/features/onboarding/OnboardingTour";
+import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
+import { getUserRole } from "@/utils/userRole";
+import { Users } from "lucide-react";
+import { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 
 const ParentHome = () => {
   const navigate = useNavigate();
@@ -23,18 +24,35 @@ const ParentHome = () => {
       } = await supabase.auth.getSession();
       if (!session) {
         navigate("/parent/auth");
+        return;
+      }
+
+      // Check if user is a family member and redirect them
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user) {
+        const userRole = await getUserRole(user.id);
+        if (userRole === "family_member") {
+          navigate("/family-member", { replace: true });
+          return;
+        }
       }
     };
     checkAuth();
   }, [navigate]);
-
 
   return (
     <div className="min-h-[100dvh] bg-background">
       <Navigation />
       <OnboardingTour role="parent" pageKey="parent_home" />
       <HelpBubble role="parent" pageKey="parent_home" />
-      <div className="p-4" style={{ paddingTop: 'calc(1rem + 64px + var(--safe-area-inset-top) * 0.15)' }}>
+      <div
+        className="p-4"
+        style={{
+          paddingTop: "calc(1rem + 64px + var(--safe-area-inset-top) * 0.15)",
+        }}
+      >
         <div className="max-w-4xl mx-auto">
           <div className="mb-8 mt-8">
             <h1 className="text-3xl font-bold">Parent Home</h1>
@@ -73,4 +91,3 @@ const ParentHome = () => {
 };
 
 export default ParentHome;
-

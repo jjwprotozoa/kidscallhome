@@ -27,19 +27,12 @@ export function useBadgeInitialization() {
           return;
         }
         
-        const childSession = localStorage.getItem("childSession");
-        const isChild = !!childSession;
+        const { getChildSessionLegacy } = await import("@/lib/childSession");
+        const childData = getChildSessionLegacy();
+        const isChild = !!childData;
 
         if (isChild) {
           // Child: fetch their own unread messages and missed calls
-          let childData;
-          try {
-            childData = JSON.parse(childSession);
-          } catch (error) {
-            console.error("❌ [BADGE INIT] Invalid child session data:", error);
-            return;
-          }
-          
           if (!childData?.id) {
             console.error("❌ [BADGE INIT] Child session missing id");
             return;

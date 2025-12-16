@@ -42,7 +42,7 @@ export const ChildConnectionsTab: React.FC<ChildConnectionsTabProps> = ({ childr
 
       if (!adultProfile) return;
 
-      // Fetch all connection requests involving children in this family
+      // Fetch connections
       const { data: connections, error } = await supabase
         .from("child_connections")
         .select("*")
@@ -51,13 +51,20 @@ export const ChildConnectionsTab: React.FC<ChildConnectionsTabProps> = ({ childr
 
       if (error) throw error;
 
-      // Fetch child names for display
+      if (!connections || connections.length === 0) {
+        setRequests([]);
+        setApproved([]);
+        return;
+      }
+
+      // Build child ID set
       const childIds = new Set<string>();
-      connections?.forEach(conn => {
+      connections.forEach(conn => {
         childIds.add(conn.requester_child_id);
         childIds.add(conn.target_child_id);
       });
 
+      // Fetch child profiles for all needed children
       const { data: childProfiles } = await supabase
         .from("child_profiles")
         .select("id, name")
@@ -65,7 +72,7 @@ export const ChildConnectionsTab: React.FC<ChildConnectionsTabProps> = ({ childr
 
       const childNameMap = new Map(childProfiles?.map(cp => [cp.id, cp.name]) || []);
 
-      const enrichedConnections: ConnectionRequest[] = (connections || []).map(conn => ({
+      const enrichedConnections: ConnectionRequest[] = connections.map(conn => ({
         ...conn,
         requester_child_name: childNameMap.get(conn.requester_child_id) || "Unknown",
         target_child_name: childNameMap.get(conn.target_child_id) || "Unknown",
@@ -148,7 +155,43 @@ export const ChildConnectionsTab: React.FC<ChildConnectionsTabProps> = ({ childr
   return (
     <TabsContent value="connections" className="space-y-6 mt-6">
       {loading ? (
-        <div className="p-4">Loading connections...</div>
+        <div className="space-y-6">
+          <section>
+            <h2 className="text-xl font-semibold mb-4">Pending Connection Requests</h2>
+            <div className="space-y-2">
+              {[1, 2].map(i => (
+                <Card key={i} className="p-4 animate-pulse">
+                  <div className="flex justify-between items-center">
+                    <div className="flex-1">
+                      <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
+                      <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+                    </div>
+                    <div className="flex gap-2">
+                      <div className="h-9 w-20 bg-gray-200 rounded"></div>
+                      <div className="h-9 w-20 bg-gray-200 rounded"></div>
+                    </div>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          </section>
+          <section>
+            <h2 className="text-xl font-semibold mb-4">Approved Connections</h2>
+            <div className="space-y-2">
+              {[1, 2].map(i => (
+                <Card key={i} className="p-4 animate-pulse">
+                  <div className="flex justify-between items-center">
+                    <div className="flex-1">
+                      <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
+                      <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+                    </div>
+                    <div className="h-9 w-24 bg-gray-200 rounded"></div>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          </section>
+        </div>
       ) : (
         <div className="space-y-6">
       {/* Pending Requests */}

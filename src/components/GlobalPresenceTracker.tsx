@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import { usePresence } from "@/features/presence/usePresence";
 import { supabase } from "@/integrations/supabase/client";
+import { getChildSessionLegacy } from "@/lib/childSession";
 
 interface ChildSession {
   id: string;
@@ -46,19 +47,11 @@ export const GlobalPresenceTracker = () => {
           return;
         }
         
-        const childSession = localStorage.getItem("childSession");
-        if (childSession) {
-          try {
-            const childData = JSON.parse(childSession);
-            setChild(childData);
-            setParentId(null);
-            setParentName(null);
-          } catch (error) {
-            console.error("❌ [GLOBAL PRESENCE] Error parsing child session:", error);
-            setChild(null);
-            setParentId(null);
-            setParentName(null);
-          }
+        const childData = getChildSessionLegacy();
+        if (childData) {
+          setChild(childData);
+          setParentId(null);
+          setParentName(null);
         } else {
           setChild(null);
           setParentId(null);

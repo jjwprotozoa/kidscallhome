@@ -1,0 +1,542 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`inputValidation - Baseline Tests > sanitizeAndValidate > should handle code validation 1`] = `
+{
+  "errors": {
+    "code": [
+      "Invalid login code format",
+    ],
+  },
+  "sanitized": {
+    "code": "invalid-code",
+  },
+  "valid": false,
+}
+`;
+
+exports[`inputValidation - Baseline Tests > sanitizeAndValidate > should handle email validation 1`] = `
+{
+  "errors": {
+    "email": [
+      "Invalid email format",
+    ],
+  },
+  "sanitized": {
+    "email": "invalid-email",
+  },
+  "valid": false,
+}
+`;
+
+exports[`inputValidation - Baseline Tests > sanitizeAndValidate > should handle empty input 1`] = `
+{
+  "errors": {},
+  "sanitized": {},
+  "valid": true,
+}
+`;
+
+exports[`inputValidation - Baseline Tests > sanitizeAndValidate > should handle name validation 1`] = `
+{
+  "errors": {
+    "name": [
+      "Name is required",
+    ],
+  },
+  "sanitized": {
+    "name": "",
+  },
+  "valid": false,
+}
+`;
+
+exports[`inputValidation - Baseline Tests > sanitizeAndValidate > should handle name validation 2`] = `
+{
+  "errors": {
+    "name": [
+      "Name must be less than 100 characters",
+    ],
+  },
+  "sanitized": {
+    "name": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+  },
+  "valid": false,
+}
+`;
+
+exports[`inputValidation - Baseline Tests > sanitizeAndValidate > should handle partial input 1`] = `
+{
+  "errors": {},
+  "sanitized": {
+    "email": "user@example.com",
+  },
+  "valid": true,
+}
+`;
+
+exports[`inputValidation - Baseline Tests > sanitizeAndValidate > should handle partial input 2`] = `
+{
+  "errors": {},
+  "sanitized": {
+    "password": "StrongP@ss123",
+  },
+  "valid": true,
+}
+`;
+
+exports[`inputValidation - Baseline Tests > sanitizeAndValidate > should handle password validation 1`] = `
+{
+  "errors": {
+    "password": [
+      "Password must be at least 8 characters",
+      "Password must contain at least one uppercase letter",
+      "Password must contain at least one digit",
+      "Password must contain at least one symbol (!@#$%^&*()_+-=[]{};':"|<>?,./\`~)",
+    ],
+  },
+  "sanitized": {
+    "password": "weak",
+  },
+  "valid": false,
+}
+`;
+
+exports[`inputValidation - Baseline Tests > sanitizeAndValidate > should sanitize inputs 1`] = `
+{
+  "errors": {},
+  "sanitized": {
+    "email": "user@example.com",
+    "name": "scriptalert("xss")/script",
+  },
+  "valid": true,
+}
+`;
+
+exports[`inputValidation - Baseline Tests > sanitizeAndValidate > should validate all fields correctly 1`] = `
+{
+  "errors": {},
+  "sanitized": {
+    "code": "ABC123-blue-19",
+    "email": "user@example.com",
+    "name": "John Doe",
+    "password": "StrongP@ss123",
+  },
+  "valid": true,
+}
+`;
+
+exports[`inputValidation - Baseline Tests > sanitizeInput > should handle non-string input 1`] = `"123"`;
+
+exports[`inputValidation - Baseline Tests > sanitizeInput > should handle non-string input 2`] = `"null"`;
+
+exports[`inputValidation - Baseline Tests > sanitizeInput > should handle non-string input 3`] = `"undefined"`;
+
+exports[`inputValidation - Baseline Tests > sanitizeInput > should preserve safe text 1`] = `"Hello World"`;
+
+exports[`inputValidation - Baseline Tests > sanitizeInput > should preserve safe text 2`] = `"user@example.com"`;
+
+exports[`inputValidation - Baseline Tests > sanitizeInput > should preserve safe text 3`] = `"ABC123-blue-19"`;
+
+exports[`inputValidation - Baseline Tests > sanitizeInput > should remove HTML tags 1`] = `"scriptalert("xss")/script"`;
+
+exports[`inputValidation - Baseline Tests > sanitizeInput > should remove HTML tags 2`] = `"divHello/div"`;
+
+exports[`inputValidation - Baseline Tests > sanitizeInput > should remove HTML tags 3`] = `"Text with  and  characters"`;
+
+exports[`inputValidation - Baseline Tests > sanitizeInput > should remove event handlers 1`] = `"alert("xss")"`;
+
+exports[`inputValidation - Baseline Tests > sanitizeInput > should remove event handlers 2`] = `"alert("xss")"`;
+
+exports[`inputValidation - Baseline Tests > sanitizeInput > should remove event handlers 3`] = `"alert("xss")"`;
+
+exports[`inputValidation - Baseline Tests > sanitizeInput > should remove javascript: protocol 1`] = `"alert("xss")"`;
+
+exports[`inputValidation - Baseline Tests > sanitizeInput > should remove javascript: protocol 2`] = `"alert("xss")"`;
+
+exports[`inputValidation - Baseline Tests > sanitizeInput > should remove javascript: protocol 3`] = `"text  more text"`;
+
+exports[`inputValidation - Baseline Tests > sanitizeInput > should trim whitespace 1`] = `"hello"`;
+
+exports[`inputValidation - Baseline Tests > sanitizeInput > should trim whitespace 2`] = `"text"`;
+
+exports[`inputValidation - Baseline Tests > validatePassword > should accept passwords with various symbols 1`] = `
+{
+  "errors": [],
+  "valid": true,
+}
+`;
+
+exports[`inputValidation - Baseline Tests > validatePassword > should accept passwords with various symbols 2`] = `
+{
+  "errors": [],
+  "valid": true,
+}
+`;
+
+exports[`inputValidation - Baseline Tests > validatePassword > should accept passwords with various symbols 3`] = `
+{
+  "errors": [],
+  "valid": true,
+}
+`;
+
+exports[`inputValidation - Baseline Tests > validatePassword > should accept passwords with various symbols 4`] = `
+{
+  "errors": [],
+  "valid": true,
+}
+`;
+
+exports[`inputValidation - Baseline Tests > validatePassword > should accept passwords with various symbols 5`] = `
+{
+  "errors": [],
+  "valid": true,
+}
+`;
+
+exports[`inputValidation - Baseline Tests > validatePassword > should accept passwords with various symbols 6`] = `
+{
+  "errors": [],
+  "valid": true,
+}
+`;
+
+exports[`inputValidation - Baseline Tests > validatePassword > should accept passwords with various symbols 7`] = `
+{
+  "errors": [],
+  "valid": true,
+}
+`;
+
+exports[`inputValidation - Baseline Tests > validatePassword > should accept passwords with various symbols 8`] = `
+{
+  "errors": [],
+  "valid": true,
+}
+`;
+
+exports[`inputValidation - Baseline Tests > validatePassword > should accept passwords with various symbols 9`] = `
+{
+  "errors": [],
+  "valid": true,
+}
+`;
+
+exports[`inputValidation - Baseline Tests > validatePassword > should accept passwords with various symbols 10`] = `
+{
+  "errors": [],
+  "valid": true,
+}
+`;
+
+exports[`inputValidation - Baseline Tests > validatePassword > should accept passwords with various symbols 11`] = `
+{
+  "errors": [],
+  "valid": true,
+}
+`;
+
+exports[`inputValidation - Baseline Tests > validatePassword > should accept passwords with various symbols 12`] = `
+{
+  "errors": [],
+  "valid": true,
+}
+`;
+
+exports[`inputValidation - Baseline Tests > validatePassword > should accept passwords with various symbols 13`] = `
+{
+  "errors": [],
+  "valid": true,
+}
+`;
+
+exports[`inputValidation - Baseline Tests > validatePassword > should accept passwords with various symbols 14`] = `
+{
+  "errors": [],
+  "valid": true,
+}
+`;
+
+exports[`inputValidation - Baseline Tests > validatePassword > should accept passwords with various symbols 15`] = `
+{
+  "errors": [],
+  "valid": true,
+}
+`;
+
+exports[`inputValidation - Baseline Tests > validatePassword > should accept passwords with various symbols 16`] = `
+{
+  "errors": [],
+  "valid": true,
+}
+`;
+
+exports[`inputValidation - Baseline Tests > validatePassword > should accept passwords with various symbols 17`] = `
+{
+  "errors": [],
+  "valid": true,
+}
+`;
+
+exports[`inputValidation - Baseline Tests > validatePassword > should accept passwords with various symbols 18`] = `
+{
+  "errors": [],
+  "valid": true,
+}
+`;
+
+exports[`inputValidation - Baseline Tests > validatePassword > should accept passwords with various symbols 19`] = `
+{
+  "errors": [],
+  "valid": true,
+}
+`;
+
+exports[`inputValidation - Baseline Tests > validatePassword > should accept passwords with various symbols 20`] = `
+{
+  "errors": [],
+  "valid": true,
+}
+`;
+
+exports[`inputValidation - Baseline Tests > validatePassword > should accept passwords with various symbols 21`] = `
+{
+  "errors": [],
+  "valid": true,
+}
+`;
+
+exports[`inputValidation - Baseline Tests > validatePassword > should accept passwords with various symbols 22`] = `
+{
+  "errors": [],
+  "valid": true,
+}
+`;
+
+exports[`inputValidation - Baseline Tests > validatePassword > should accept passwords with various symbols 23`] = `
+{
+  "errors": [],
+  "valid": true,
+}
+`;
+
+exports[`inputValidation - Baseline Tests > validatePassword > should accept passwords with various symbols 24`] = `
+{
+  "errors": [],
+  "valid": true,
+}
+`;
+
+exports[`inputValidation - Baseline Tests > validatePassword > should accept passwords with various symbols 25`] = `
+{
+  "errors": [],
+  "valid": true,
+}
+`;
+
+exports[`inputValidation - Baseline Tests > validatePassword > should accept passwords with various symbols 26`] = `
+{
+  "errors": [],
+  "valid": true,
+}
+`;
+
+exports[`inputValidation - Baseline Tests > validatePassword > should accept passwords with various symbols 27`] = `
+{
+  "errors": [],
+  "valid": true,
+}
+`;
+
+exports[`inputValidation - Baseline Tests > validatePassword > should accept passwords with various symbols 28`] = `
+{
+  "errors": [],
+  "valid": true,
+}
+`;
+
+exports[`inputValidation - Baseline Tests > validatePassword > should accept passwords with various symbols 29`] = `
+{
+  "errors": [],
+  "valid": true,
+}
+`;
+
+exports[`inputValidation - Baseline Tests > validatePassword > should accept passwords with various symbols 30`] = `
+{
+  "errors": [],
+  "valid": true,
+}
+`;
+
+exports[`inputValidation - Baseline Tests > validatePassword > should accept strong passwords 1`] = `
+{
+  "errors": [],
+  "valid": true,
+}
+`;
+
+exports[`inputValidation - Baseline Tests > validatePassword > should accept strong passwords 2`] = `
+{
+  "errors": [],
+  "valid": true,
+}
+`;
+
+exports[`inputValidation - Baseline Tests > validatePassword > should accept strong passwords 3`] = `
+{
+  "errors": [],
+  "valid": true,
+}
+`;
+
+exports[`inputValidation - Baseline Tests > validatePassword > should handle empty/null input 1`] = `
+{
+  "errors": [
+    "Password is required",
+  ],
+  "valid": false,
+}
+`;
+
+exports[`inputValidation - Baseline Tests > validatePassword > should handle empty/null input 2`] = `
+{
+  "errors": [
+    "Password is required",
+  ],
+  "valid": false,
+}
+`;
+
+exports[`inputValidation - Baseline Tests > validatePassword > should handle empty/null input 3`] = `
+{
+  "errors": [
+    "Password is required",
+  ],
+  "valid": false,
+}
+`;
+
+exports[`inputValidation - Baseline Tests > validatePassword > should reject passwords longer than 128 characters 1`] = `
+{
+  "errors": [
+    "Password must be less than 128 characters",
+    "Password must contain at least one lowercase letter",
+  ],
+  "valid": false,
+}
+`;
+
+exports[`inputValidation - Baseline Tests > validatePassword > should reject passwords shorter than 8 characters 1`] = `
+{
+  "errors": [
+    "Password must be at least 8 characters",
+  ],
+  "valid": false,
+}
+`;
+
+exports[`inputValidation - Baseline Tests > validatePassword > should reject passwords shorter than 8 characters 2`] = `
+{
+  "errors": [
+    "Password must be at least 8 characters",
+  ],
+  "valid": false,
+}
+`;
+
+exports[`inputValidation - Baseline Tests > validatePassword > should reject weak passwords 1`] = `
+{
+  "errors": [
+    "Password must contain at least one uppercase letter",
+    "Password must contain at least one digit",
+    "Password must contain at least one symbol (!@#$%^&*()_+-=[]{};':"|<>?,./\`~)",
+    "Password is too common. Please choose a more unique password.",
+  ],
+  "valid": false,
+}
+`;
+
+exports[`inputValidation - Baseline Tests > validatePassword > should reject weak passwords 2`] = `
+{
+  "errors": [
+    "Password must contain at least one uppercase letter",
+    "Password must contain at least one lowercase letter",
+    "Password must contain at least one symbol (!@#$%^&*()_+-=[]{};':"|<>?,./\`~)",
+    "Password is too common. Please choose a more unique password.",
+  ],
+  "valid": false,
+}
+`;
+
+exports[`inputValidation - Baseline Tests > validatePassword > should reject weak passwords 3`] = `
+{
+  "errors": [
+    "Password must be at least 8 characters",
+    "Password must contain at least one uppercase letter",
+    "Password must contain at least one digit",
+    "Password must contain at least one symbol (!@#$%^&*()_+-=[]{};':"|<>?,./\`~)",
+    "Password is too common. Please choose a more unique password.",
+  ],
+  "valid": false,
+}
+`;
+
+exports[`inputValidation - Baseline Tests > validatePassword > should reject weak passwords 4`] = `
+{
+  "errors": [
+    "Password must be at least 8 characters",
+    "Password must contain at least one uppercase letter",
+    "Password must contain at least one digit",
+    "Password must contain at least one symbol (!@#$%^&*()_+-=[]{};':"|<>?,./\`~)",
+    "Password is too common. Please choose a more unique password.",
+  ],
+  "valid": false,
+}
+`;
+
+exports[`inputValidation - Baseline Tests > validatePassword > should reject weak passwords 5`] = `
+{
+  "errors": [
+    "Password must contain at least one symbol (!@#$%^&*()_+-=[]{};':"|<>?,./\`~)",
+    "Password is too common. Please choose a more unique password.",
+  ],
+  "valid": false,
+}
+`;
+
+exports[`inputValidation - Baseline Tests > validatePassword > should require digit 1`] = `
+{
+  "errors": [
+    "Password must contain at least one digit",
+  ],
+  "valid": false,
+}
+`;
+
+exports[`inputValidation - Baseline Tests > validatePassword > should require lowercase letter 1`] = `
+{
+  "errors": [
+    "Password must contain at least one lowercase letter",
+  ],
+  "valid": false,
+}
+`;
+
+exports[`inputValidation - Baseline Tests > validatePassword > should require symbol 1`] = `
+{
+  "errors": [
+    "Password must contain at least one symbol (!@#$%^&*()_+-=[]{};':"|<>?,./\`~)",
+  ],
+  "valid": false,
+}
+`;
+
+exports[`inputValidation - Baseline Tests > validatePassword > should require uppercase letter 1`] = `
+{
+  "errors": [
+    "Password must contain at least one uppercase letter",
+  ],
+  "valid": false,
+}
+`;

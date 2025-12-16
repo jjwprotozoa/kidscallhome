@@ -1,19 +1,58 @@
 // supabase/functions/send-family-member-invitation/index.ts
 // Edge function to send family member invitation emails
 
+/// <reference types="../deno.d.ts" />
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
-};
+// Allowed origins for CORS
+const allowedOrigins = [
+  "https://www.kidscallhome.com",
+  "https://kidscallhome.com",
+  "http://localhost:8080", // Development only
+  "http://localhost:5173", // Development only
+];
+
+// Helper function to get CORS headers
+function getCorsHeaders(origin: string | null): Record<string, string> {
+  const headers: Record<string, string> = {
+    "Access-Control-Allow-Headers":
+      "authorization, x-client-info, apikey, content-type",
+    "Content-Type": "application/json",
+  };
+
+  if (origin && allowedOrigins.includes(origin)) {
+    headers["Access-Control-Allow-Origin"] = origin;
+    headers["Access-Control-Allow-Credentials"] = "true";
+  }
+
+  return headers;
+}
+
+// Helper function to validate Content-Type
+function validateContentType(req: Request): boolean {
+  const contentType = req.headers.get("content-type");
+  return contentType?.includes("application/json") || false;
+}
 
 serve(async (req) => {
+  const origin = req.headers.get("origin");
+  const corsHeaders = getCorsHeaders(origin);
+
   // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
+  }
+
+  // SECURITY: Validate Content-Type for POST requests
+  if (req.method === "POST" && !validateContentType(req)) {
+    return new Response(
+      JSON.stringify({
+        error: "Invalid Content-Type. Expected application/json",
+      }),
+      { status: 400, headers: corsHeaders }
+    );
   }
 
   try {
@@ -24,7 +63,7 @@ serve(async (req) => {
         JSON.stringify({ error: "No authorization header" }),
         {
           status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          headers: corsHeaders,
         }
       );
     }
@@ -47,13 +86,10 @@ serve(async (req) => {
     } = await supabaseClient.auth.getUser();
 
     if (userError || !user) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: corsHeaders,
+      });
     }
 
     // Parse request body
@@ -67,7 +103,7 @@ serve(async (req) => {
         }),
         {
           status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          headers: corsHeaders,
         }
       );
     }
@@ -77,7 +113,9 @@ serve(async (req) => {
     const invitationUrl = `${baseUrl}/family-member/invite/${invitationToken}`;
 
     // Email subject
-    const subject = `${parentName || "A family member"} invited you to Kids Call Home`;
+    const subject = `${
+      parentName || "A family member"
+    } invited you to Kids Call Home`;
 
     // Email HTML body
     const htmlBody = `
@@ -99,7 +137,11 @@ serve(async (req) => {
             </p>
             
             <p style="font-size: 16px; margin-bottom: 20px;">
-              ${parentName || "A family member"} has invited you to join Kids Call Home as a ${relationship || "family member"}. 
+              ${
+                parentName || "A family member"
+              } has invited you to join Kids Call Home as a ${
+      relationship || "family member"
+    }. 
               You'll be able to make video calls and send messages with the children in the family.
             </p>
             
@@ -127,7 +169,11 @@ serve(async (req) => {
     const textBody = `
 Hi ${name},
 
-${parentName || "A family member"} has invited you to join Kids Call Home as a ${relationship || "family member"}. 
+${
+  parentName || "A family member"
+} has invited you to join Kids Call Home as a ${
+      relationship || "family member"
+    }. 
 You'll be able to make video calls and send messages with the children in the family.
 
 Accept your invitation by clicking this link:
@@ -139,22 +185,20 @@ This invitation will expire in 7 days. If you didn't expect this invitation, you
     // Send email using Supabase's built-in email service
     // Note: This requires Supabase email to be configured
     // Alternative: Use a service like Resend, SendGrid, or AWS SES
-    const { data: emailData, error: emailError } = await supabaseClient.functions.invoke(
-      "send-email",
-      {
+    const { data: emailData, error: emailError } =
+      await supabaseClient.functions.invoke("send-email", {
         body: {
           to: email,
           subject: subject,
           html: htmlBody,
           text: textBody,
         },
-      }
-    );
+      });
 
     // If built-in email function doesn't exist, try using Resend API directly
     if (emailError || !emailData) {
       const resendApiKey = Deno.env.get("RESEND_API_KEY");
-      
+
       if (resendApiKey) {
         const resendResponse = await fetch("https://api.resend.com/emails", {
           method: "POST",
@@ -186,7 +230,7 @@ This invitation will expire in 7 days. If you didn't expect this invitation, you
           }),
           {
             status: 200,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
+            headers: corsHeaders,
           }
         );
       } else {
@@ -195,11 +239,12 @@ This invitation will expire in 7 days. If you didn't expect this invitation, you
         return new Response(
           JSON.stringify({
             success: false,
-            warning: "Email service not configured. Invitation created but email not sent.",
+            warning:
+              "Email service not configured. Invitation created but email not sent.",
           }),
           {
             status: 200,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
+            headers: corsHeaders,
           }
         );
       }
@@ -213,20 +258,21 @@ This invitation will expire in 7 days. If you didn't expect this invitation, you
       }),
       {
         status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: corsHeaders,
       }
     );
   } catch (error) {
+    // Log detailed error server-side only
     console.error("Error sending invitation email:", error);
+    // Return generic error to prevent information leakage
     return new Response(
       JSON.stringify({
-        error: error.message || "Failed to send invitation email",
+        error: "Failed to send invitation email",
       }),
       {
         status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: corsHeaders,
       }
     );
   }
 });
-

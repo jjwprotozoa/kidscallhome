@@ -41,23 +41,46 @@ const FamilyMemberAuth = () => {
 
       // Try to check if user is a family member (but don't fail if query has issues)
       // This helps provide better error messages, but we'll also check after auth
-      let familyMember: { id: string | null; status: string } | null = null;
+      // Note: Query by email might fail due to RLS, but we'll try again after auth
+      let familyMember: {
+        id: string | null;
+        status: string;
+        email?: string;
+      } | null = null;
       try {
         const { data, error: checkError } = await supabase
           .from("family_members")
-          .select("id, status")
+          .select("id, status, email")
           .eq("email", normalizedEmail)
           .maybeSingle();
 
         // Only throw if it's a real error (not "not found" or format issues)
-        if (checkError && checkError.code !== "PGRST116" && checkError.code !== "406") {
-          safeLog.warn("Error checking family member (non-fatal):", sanitizeError(checkError));
+        if (
+          checkError &&
+          checkError.code !== "PGRST116" &&
+          checkError.code !== "406"
+        ) {
+          safeLog.warn(
+            "Error checking family member (non-fatal):",
+            sanitizeError(checkError)
+          );
         } else if (data) {
           familyMember = data;
+          safeLog.log(
+            "🔍 [FAMILY MEMBER AUTH] Found family member by email before auth",
+            {
+              id: data.id,
+              status: data.status,
+              email: data.email,
+            }
+          );
         }
       } catch (queryError) {
         // If query fails (e.g., 406 error), continue with auth attempt
-        safeLog.debug("Family member query failed, continuing with auth:", sanitizeError(queryError));
+        safeLog.debug(
+          "Family member query failed, continuing with auth:",
+          sanitizeError(queryError)
+        );
       }
 
       // Attempt authentication first - this will tell us if credentials are valid
@@ -78,7 +101,7 @@ const FamilyMemberAuth = () => {
               .select("id, status")
               .eq("email", normalizedEmail)
               .maybeSingle();
-            
+
             if (fmData) {
               familyMember = fmData;
             }
@@ -131,7 +154,8 @@ const FamilyMemberAuth = () => {
           } else {
             toast({
               title: "Invalid credentials",
-              description: "The email or password is incorrect. Please try again.",
+              description:
+                "The email or password is incorrect. Please try again.",
               variant: "destructive",
             });
           }
@@ -150,18 +174,350 @@ const FamilyMemberAuth = () => {
       }
 
       // If we don't have family member data yet, fetch it now (we're authenticated)
+      // IMPORTANT: Query by id (auth.uid()) not email, as RLS policy only allows querying by id
+      // But if we found one by email earlier and it has NULL id, we need to link it
       if (!familyMember) {
+        safeLog.log(
+          "🔍 [FAMILY MEMBER AUTH] Fetching family member by id after authentication",
+          {
+            userId: authData.user.id,
+            email: normalizedEmail,
+          }
+        );
+
         const { data: fmData, error: fmError } = await supabase
           .from("family_members")
-          .select("id, status")
-          .eq("email", normalizedEmail)
+          .select("id, status, email")
+          .eq("id", authData.user.id)
           .maybeSingle();
 
-        if (fmError && fmError.code !== "PGRST116") {
-          safeLog.warn("Error fetching family member after auth:", sanitizeError(fmError));
+        if (fmError) {
+          // Log the error for debugging
+          safeLog.error(
+            "❌ [FAMILY MEMBER AUTH] Error fetching family member after auth:",
+            {
+              error: sanitizeError(fmError),
+              userId: authData.user.id,
+              email: normalizedEmail,
+              errorCode: fmError.code,
+              errorMessage: fmError.message,
+            }
+          );
+
+          // If it's a 406 or RLS error, try using the RPC function to find and link by email
+          if (
+            fmError.code === "PGRST116" ||
+            fmError.message?.includes("406") ||
+            fmError.code === "42501"
+          ) {
+            safeLog.debug(
+              "🔄 [FAMILY MEMBER AUTH] RLS blocked query by id, trying RPC function to find by email"
+            );
+
+            // Use the RPC function to find and link the family member by email
+            const { data: linkResult, error: rpcError } = await (
+              supabase.rpc as unknown as (
+                name: string,
+                args: { p_email: string; p_auth_user_id: string }
+              ) => Promise<{
+                data: {
+                  success: boolean;
+                  message?: string;
+                  error?: string;
+                  status?: string;
+                  family_member_id?: string;
+                } | null;
+                error: { message: string; code?: string } | null;
+              }>
+            )("link_family_member_by_email", {
+              p_email: normalizedEmail,
+              p_auth_user_id: authData.user.id,
+            });
+
+            if (rpcError) {
+              safeLog.error(
+                "❌ [FAMILY MEMBER AUTH] RPC function failed:",
+                sanitizeError(rpcError)
+              );
+            } else if (linkResult) {
+              const result = linkResult as {
+                success: boolean;
+                message?: string;
+                error?: string;
+                status?: string;
+                family_member_id?: string;
+              };
+
+              if (result.success) {
+                safeLog.log(
+                  "✅ [FAMILY MEMBER AUTH] Found and linked family member via RPC",
+                  result
+                );
+                // Create familyMember object from the result
+                familyMember = {
+                  id: authData.user.id,
+                  status: result.status || "active",
+                  email: normalizedEmail,
+                };
+              } else {
+                safeLog.error(
+                  "❌ [FAMILY MEMBER AUTH] RPC function returned error:",
+                  result.error || "Unknown error"
+                );
+              }
+            }
+          }
         } else if (fmData) {
+          safeLog.log(
+            "✅ [FAMILY MEMBER AUTH] Successfully found family member by id",
+            {
+              id: fmData.id,
+              status: fmData.status,
+              email: fmData.email,
+            }
+          );
           familyMember = fmData;
+          // Verify the email matches (security check)
+          if (fmData.email?.toLowerCase() !== normalizedEmail) {
+            safeLog.warn(
+              "⚠️ [FAMILY MEMBER AUTH] Email mismatch between auth and family_members record",
+              {
+                authEmail: normalizedEmail,
+                recordEmail: fmData.email,
+              }
+            );
+          }
+        } else {
+          safeLog.warn(
+            "⚠️ [FAMILY MEMBER AUTH] No family member found by id (no error, but no data)",
+            {
+              userId: authData.user.id,
+              email: normalizedEmail,
+            }
+          );
+
+          // Try using RPC function to find by email as last resort
+          safeLog.debug(
+            "🔄 [FAMILY MEMBER AUTH] Trying RPC function to find by email as last resort"
+          );
+
+          const { data: linkResult, error: rpcError } = await (
+            supabase.rpc as unknown as (
+              name: string,
+              args: { p_email: string; p_auth_user_id: string }
+            ) => Promise<{
+              data: {
+                success: boolean;
+                message?: string;
+                error?: string;
+                status?: string;
+                family_member_id?: string;
+              } | null;
+              error: { message: string; code?: string } | null;
+            }>
+          )("link_family_member_by_email", {
+            p_email: normalizedEmail,
+            p_auth_user_id: authData.user.id,
+          });
+
+          if (!rpcError && linkResult) {
+            const result = linkResult as {
+              success: boolean;
+              message?: string;
+              error?: string;
+              status?: string;
+              family_member_id?: string;
+            };
+
+            if (result.success) {
+              safeLog.log(
+                "✅ [FAMILY MEMBER AUTH] Found and linked family member via RPC (last resort)",
+                result
+              );
+              familyMember = {
+                id: authData.user.id,
+                status: result.status || "active",
+                email: normalizedEmail,
+              };
+            } else {
+              safeLog.warn(
+                "⚠️ [FAMILY MEMBER AUTH] RPC function did not find family member:",
+                result.error || "Unknown error"
+              );
+
+              // Last resort: Check if adult_profiles exists (indicates family member was registered)
+              // This is a fallback if family_members record is missing or unlinked
+              const { data: adultProfile } = await supabase
+                .from("adult_profiles" as never)
+                .select("user_id, email, role, family_id")
+                .eq("user_id", authData.user.id)
+                .eq("role", "family_member")
+                .maybeSingle();
+
+              if (adultProfile) {
+                safeLog.log(
+                  "✅ [FAMILY MEMBER AUTH] Found adult_profiles record, family member exists",
+                  { adultProfile }
+                );
+                // Create a familyMember object from adult_profiles
+                // This allows login to proceed even if family_members.id is not set
+                familyMember = {
+                  id: authData.user.id,
+                  status: "active", // Assume active if adult_profiles exists
+                  email: normalizedEmail,
+                };
+              }
+            }
+          } else if (rpcError) {
+            safeLog.error(
+              "❌ [FAMILY MEMBER AUTH] RPC function error:",
+              sanitizeError(rpcError)
+            );
+
+            // Last resort: Check if adult_profiles exists
+            const { data: adultProfile } = await supabase
+              .from("adult_profiles" as never)
+              .select("user_id, email, role, family_id")
+              .eq("user_id", authData.user.id)
+              .eq("role", "family_member")
+              .maybeSingle();
+
+            if (adultProfile) {
+              safeLog.log(
+                "✅ [FAMILY MEMBER AUTH] Found adult_profiles record (RPC failed but profile exists)",
+                { adultProfile }
+              );
+              familyMember = {
+                id: authData.user.id,
+                status: "active",
+                email: normalizedEmail,
+              };
+            }
+          }
         }
+      } else if (familyMember && !familyMember.id) {
+        // We found a family member by email before auth, but it has NULL id
+        // This means the record exists but isn't linked to the auth user yet
+        // Try to link it now that we're authenticated
+        safeLog.log(
+          "🔗 [FAMILY MEMBER AUTH] Family member found but id is NULL, attempting to link",
+          {
+            email: normalizedEmail,
+            userId: authData.user.id,
+          }
+        );
+
+        // Try direct update first
+        // Try direct update first
+        const { error: linkError } = await supabase
+          .from("family_members")
+          .update({ id: authData.user.id })
+          .eq("email", normalizedEmail)
+          .is("id", null);
+
+        if (linkError) {
+          safeLog.warn(
+            "⚠️ [FAMILY MEMBER AUTH] Direct update failed (likely RLS), trying RPC function:",
+            sanitizeError(linkError)
+          );
+
+          // RLS is blocking the update because id is NULL, so the policy check fails
+          // Use the SECURITY DEFINER function to link the record
+          const { data: linkResult, error: rpcError } = await (
+            supabase.rpc as unknown as (
+              name: string,
+              args: { p_email: string; p_auth_user_id: string }
+            ) => Promise<{
+              data: {
+                success: boolean;
+                message?: string;
+                error?: string;
+                status?: string;
+                family_member_id?: string;
+              } | null;
+              error: { message: string; code?: string } | null;
+            }>
+          )("link_family_member_by_email", {
+            p_email: normalizedEmail,
+            p_auth_user_id: authData.user.id,
+          });
+
+          if (rpcError) {
+            safeLog.error(
+              "❌ [FAMILY MEMBER AUTH] RPC function also failed:",
+              sanitizeError(rpcError)
+            );
+            toast({
+              title: "Account found but needs linking",
+              description:
+                "Your account exists but needs to be linked. Please contact the family parent or support.",
+              variant: "default",
+              duration: 8000,
+            });
+            // Set the id in memory so the login can proceed
+            // Note: This won't persist, but allows the user to log in
+            familyMember.id = authData.user.id;
+          } else if (linkResult) {
+            // Type assertion for the RPC result
+            const result = linkResult as {
+              success: boolean;
+              message?: string;
+              error?: string;
+              status?: string;
+              family_member_id?: string;
+            };
+            if (result.success) {
+              safeLog.log(
+                "✅ [FAMILY MEMBER AUTH] Successfully linked family member id via RPC",
+                result
+              );
+              familyMember.id = authData.user.id;
+              if (result.status) {
+                familyMember.status = result.status;
+              }
+            } else {
+              safeLog.error(
+                "❌ [FAMILY MEMBER AUTH] RPC function returned error:",
+                result.error || "Unknown error"
+              );
+              // Set the id in memory so the login can proceed
+              familyMember.id = authData.user.id;
+            }
+          } else {
+            safeLog.warn(
+              "⚠️ [FAMILY MEMBER AUTH] RPC function returned no result"
+            );
+            // Set the id in memory so the login can proceed
+            familyMember.id = authData.user.id;
+          }
+        } else {
+          safeLog.log(
+            "✅ [FAMILY MEMBER AUTH] Successfully linked family member id"
+          );
+          // Update the familyMember object with the new id
+          familyMember.id = authData.user.id;
+        }
+      } else if (
+        familyMember &&
+        familyMember.id &&
+        familyMember.id !== authData.user.id
+      ) {
+        // Family member record exists but id doesn't match current auth user
+        // This is a data integrity issue - the record is linked to a different user
+        safeLog.error("❌ [FAMILY MEMBER AUTH] Family member id mismatch", {
+          recordId: familyMember.id,
+          authUserId: authData.user.id,
+          email: normalizedEmail,
+        });
+        toast({
+          title: "Account mismatch",
+          description:
+            "This email is linked to a different account. Please contact support.",
+          variant: "destructive",
+        });
+        await supabase.auth.signOut();
+        setLoading(false);
+        return;
       }
 
       // If still no family member record, they might have an auth account but not be registered
@@ -200,7 +556,7 @@ const FamilyMemberAuth = () => {
                 title: "Account activated",
                 description: "Welcome! Redirecting to your dashboard...",
               });
-              navigate("/family-member/dashboard");
+              navigate("/family-member");
               setLoading(false);
               return;
             }

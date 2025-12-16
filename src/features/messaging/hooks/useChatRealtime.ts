@@ -1,7 +1,7 @@
 // src/features/messaging/hooks/useChatRealtime.ts
 // Hook for managing realtime message subscriptions
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { safeLog, sanitizeError } from "@/utils/security";
 
@@ -35,6 +35,9 @@ export const useChatRealtime = ({
   onNewMessage,
 }: UseChatRealtimeProps) => {
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const [subscriptionStatus, setSubscriptionStatus] = useState<
+    "SUBSCRIBED" | "ERROR" | "TIMED_OUT" | "SUBSCRIBING" | null
+  >(null);
 
   useEffect(() => {
     // Only set up subscription if we have a conversationId
@@ -137,13 +140,18 @@ export const useChatRealtime = ({
           timestamp: new Date().toISOString(),
         });
 
+        // Update subscription status for polling logic
         if (status === "SUBSCRIBED") {
+          setSubscriptionStatus("SUBSCRIBED");
           safeLog.log("✅ [CHAT] Successfully subscribed to messages");
-        } else if (status === "CHANNEL_ERROR") {
+        } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+          setSubscriptionStatus(status === "TIMED_OUT" ? "TIMED_OUT" : "ERROR");
           safeLog.error(
             "❌ [CHAT] Realtime subscription error:",
             err ? sanitizeError(err) : "Unknown error"
           );
+        } else if (status === "SUBSCRIBING") {
+          setSubscriptionStatus("SUBSCRIBING");
         }
       });
 
@@ -152,10 +160,15 @@ export const useChatRealtime = ({
         safeLog.log("🧹 [CHAT] Cleaning up realtime subscription");
         supabase.removeChannel(channelRef.current);
         channelRef.current = null;
+        setSubscriptionStatus(null);
       }
     };
   }, [targetChildId, conversationId, isChild, isFamilyMember, familyMemberId, onNewMessage]);
+
+  return { subscriptionStatus };
 };
+
+
 
 
 

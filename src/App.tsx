@@ -19,7 +19,60 @@ import {
 import { loadWidgetData } from "@/utils/widgetData";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { lazy, Suspense, useEffect } from "react";
-import { BrowserRouter, Route, Routes, useNavigate } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useNavigate } from "react-router-dom";
+
+// Import functions for critical routes (used for both lazy loading and prefetching)
+const parentHomeImport = () => import("./pages/ParentHome");
+const childHomeImport = () => import("./pages/ChildHome");
+const parentCallScreenImport = () => import("./pages/ParentCallScreen");
+const childCallScreenImport = () => import("./pages/ChildCallScreen");
+
+// Component to prefetch critical routes on idle for weak network optimization
+// Prefetches home screens and call screens that are likely to be visited
+// This improves Time to Interactive on weak networks (LTE/2G) by loading
+// critical route chunks in the background when the browser is idle
+const RoutePrefetcher = () => {
+  useEffect(() => {
+    // Use requestIdleCallback for non-blocking prefetch on idle
+    // Falls back to setTimeout if not available
+    const schedulePrefetch = (callback: () => void) => {
+      if ("requestIdleCallback" in window) {
+        requestIdleCallback(callback, { timeout: 2000 });
+      } else {
+        setTimeout(callback, 2000);
+      }
+    };
+
+    // Prefetch critical routes by triggering their lazy imports
+    // This causes Vite to prefetch the chunks in the background
+    // Critical routes: home screens and call screens (most frequently accessed)
+    const prefetchCriticalRoutes = () => {
+      // Trigger lazy imports for critical routes to prefetch their chunks
+      // These are the most commonly accessed routes, so prefetching improves
+      // perceived performance on slow networks
+      const criticalRouteImports = [
+        parentHomeImport,      // Parent home screen
+        childHomeImport,       // Child home screen
+        parentCallScreenImport, // Parent call screen
+        childCallScreenImport,  // Child call screen
+      ];
+
+      // Prefetch each critical route's chunk
+      criticalRouteImports.forEach((routeImport) => {
+        // Trigger the lazy import to prefetch the chunk
+        // The import() will resolve but we don't need to use the component
+        routeImport().catch(() => {
+          // Silently fail if prefetch fails - this is non-critical
+        });
+      });
+    };
+
+    // Schedule prefetch after initial load to avoid blocking
+    schedulePrefetch(prefetchCriticalRoutes);
+  }, []);
+
+  return null;
+};
 
 // Keep small/essential pages as regular imports (needed immediately)
 import Index from "./pages/Index";
@@ -30,17 +83,17 @@ import ServerError from "./pages/ServerError";
 // Lazy load all other pages for code splitting
 const ParentAuth = lazy(() => import("./pages/ParentAuth"));
 const ParentDashboard = lazy(() => import("./pages/ParentDashboard"));
-const ParentHome = lazy(() => import("./pages/ParentHome"));
+const ParentHome = lazy(parentHomeImport);
 const ParentChildrenList = lazy(() => import("./pages/ParentChildrenList"));
-const ParentCallScreen = lazy(() => import("./pages/ParentCallScreen"));
+const ParentCallScreen = lazy(parentCallScreenImport);
 const DeviceManagement = lazy(() => import("./pages/DeviceManagement"));
 const Upgrade = lazy(() => import("./pages/Upgrade"));
 const AccountSettings = lazy(() => import("./pages/AccountSettings"));
 const ChildLogin = lazy(() => import("./pages/ChildLogin"));
 const ChildDashboard = lazy(() => import("./pages/ChildDashboard"));
-const ChildHome = lazy(() => import("./pages/ChildHome"));
+const ChildHome = lazy(childHomeImport);
 const ChildParentsList = lazy(() => import("./pages/ChildParentsList"));
-const ChildCallScreen = lazy(() => import("./pages/ChildCallScreen"));
+const ChildCallScreen = lazy(childCallScreenImport);
 const FamilyMemberAuth = lazy(() => import("./pages/FamilyMemberAuth"));
 const FamilyMemberDashboard = lazy(
   () => import("./pages/FamilyMemberDashboard")
@@ -63,12 +116,15 @@ const PageLoader = () => (
   </div>
 );
 
-// Configure QueryClient with error handling
+// Configure QueryClient with error handling and caching
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       retry: 1,
       refetchOnWindowFocus: false,
+      refetchOnReconnect: true,
+      staleTime: 5 * 60 * 1000, // 5 minutes - data is fresh for 5 min by default
+      gcTime: 10 * 60 * 1000, // 10 minutes - keep in cache for 10 min (formerly cacheTime)
       // Prevent queries from throwing errors that break the app
       throwOnError: false,
     },
@@ -218,6 +274,9 @@ const App = () => {
           <ErrorBoundary fallback={null}>
             <WidgetDataManager />
           </ErrorBoundary>
+          <ErrorBoundary fallback={null}>
+            <RoutePrefetcher />
+          </ErrorBoundary>
           <Toaster />
           <Sonner />
           <SafeAreaLayout className="w-full overflow-x-hidden">
@@ -268,7 +327,7 @@ const App = () => {
                     element={<AccountSettings />}
                   />
                   <Route path="/child/login" element={<ChildLogin />} />
-                  <Route path="/child" element={<ChildHome />} />
+                  <Route path="/child" element={<Navigate to="/child/parents" replace />} />
                   <Route path="/child/parents" element={<ChildParentsList />} />
                   <Route
                     path="/child/call/:parentId"
@@ -278,6 +337,10 @@ const App = () => {
                   <Route
                     path="/family-member/auth"
                     element={<FamilyMemberAuth />}
+                  />
+                  <Route
+                    path="/family-member"
+                    element={<FamilyMemberDashboard />}
                   />
                   <Route
                     path="/family-member/dashboard"

@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "lib": ["ES2020", "DOM"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "allowSyntheticDefaultImports": true,
+    "allowArbitraryExtensions": true,
+    "noEmit": true,
+    "strict": false,
+    "skipLibCheck": true,
+    "noResolve": false,
+    "types": []
+  },
+  "include": ["**/*.ts", "deno.d.ts"],
+  "exclude": ["node_modules"]
+}
+

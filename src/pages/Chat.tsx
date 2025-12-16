@@ -12,7 +12,7 @@ import { useMessages } from "@/features/messaging/hooks/useMessages";
 import { useMessageSending } from "@/features/messaging/hooks/useMessageSending";
 import { canCommunicate } from "@/lib/permissions";
 import { useBadgeStore } from "@/stores/badgeStore";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 const Chat = () => {
@@ -46,24 +46,29 @@ const Chat = () => {
     setConversationIdState(conversationId);
   }, [conversationId]);
 
-  // Manage messages
-  const { messages, addMessage } = useMessages({
-    targetChildId,
-    conversationId: conversationIdState,
-    isChild,
-    enabled: initialized && !!targetChildId,
-  });
+  // Use a ref to store the latest addMessage callback
+  type MessageType = {
+    id: string;
+    sender_type: "parent" | "child" | "family_member";
+    sender_id?: string;
+    family_member_id?: string;
+    conversation_id?: string | null;
+    child_id: string;
+    content: string;
+    created_at: string;
+    read_at?: string | null;
+  };
+  const addMessageRef = useRef<((message: MessageType) => void) | null>(null);
 
-  // Handle new messages from realtime
-  const handleNewMessage = useCallback(
-    (message: (typeof messages)[0]) => {
-      addMessage(message);
-    },
-    [addMessage]
-  );
+  // Handle new messages from realtime - use ref to avoid stale closure
+  const handleNewMessage = useCallback((message: MessageType) => {
+    if (addMessageRef.current) {
+      addMessageRef.current(message);
+    }
+  }, []);
 
-  // Set up realtime subscription
-  useChatRealtime({
+  // Set up realtime subscription first (subscriptionStatus will be 'subscribing' initially)
+  const { subscriptionStatus } = useChatRealtime({
     targetChildId,
     conversationId: conversationIdState,
     isChild,
@@ -71,6 +76,20 @@ const Chat = () => {
     familyMemberId,
     onNewMessage: handleNewMessage,
   });
+
+  // Manage messages (after subscriptionStatus is available)
+  const { messages, addMessage } = useMessages({
+    targetChildId,
+    conversationId: conversationIdState,
+    isChild,
+    enabled: initialized && !!targetChildId,
+    realtimeStatus: subscriptionStatus,
+  });
+
+  // Update the ref whenever addMessage changes
+  useEffect(() => {
+    addMessageRef.current = addMessage;
+  }, [addMessage]);
 
   // Mark messages as read
   useMarkMessagesRead({
@@ -181,7 +200,7 @@ const Chat = () => {
     if (isChild) {
       navigate("/child/dashboard");
     } else if (isFamilyMember) {
-      navigate("/family-member/dashboard");
+      navigate("/family-member");
     } else {
       navigate("/parent/children");
     }
@@ -215,6 +234,32 @@ const Chat = () => {
     );
   }
 
+  // Show helpful message if child has no conversation selected
+  if (isChild && !conversationIdState) {
+    return (
+      <div className="min-h-[100dvh] flex flex-col bg-background relative">
+        <Navigation />
+        <ChatHeader
+          recipientName="Select a Contact"
+          recipientAvatar={undefined}
+          onBack={goBack}
+        />
+        <div className="flex flex-col items-center justify-center min-h-[60vh] p-4">
+          <p className="text-lg font-medium mb-2">No conversation selected</p>
+          <p className="text-muted-foreground text-center mb-4">
+            Please go back to Family & Parents and click 'Message' on the person you want to chat with.
+          </p>
+          <button
+            onClick={goBack}
+            className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+          >
+            Go to Family & Parents
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-[100dvh] flex flex-col bg-background relative">
       <Navigation />
@@ -242,9 +287,11 @@ const Chat = () => {
         onChange={setNewMessage}
         onSubmit={handleSendMessage}
         loading={loading}
-        disabled={!hasPermission || isBlocked}
+        disabled={!hasPermission || isBlocked || !conversationIdState}
         placeholder={
-          isBlocked
+          !conversationIdState
+            ? "No conversation selected"
+            : isBlocked
             ? "This contact is blocked"
             : !hasPermission
             ? "You don't have permission to send messages"

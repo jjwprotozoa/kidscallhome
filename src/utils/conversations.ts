@@ -205,7 +205,7 @@ export async function getChildConversations(
 ): Promise<
   Array<{
     conversation: Conversation;
-    participant: { id: string; name: string; type: "parent" | "family_member" };
+    participant: { id: string; name: string; type: "parent" | "family_member"; avatar_color?: string; relationship_type?: string | null };
   }>
 > {
   try {
@@ -234,7 +234,7 @@ export async function getChildConversations(
           // This is expected for anonymous (child) users
           const { data: adultProfile, error: profileError } = await supabase
             .from("adult_profiles")
-            .select("id, name, role, user_id")
+            .select("id, name, role, user_id, avatar_color, relationship_type")
             .eq("id", conv.adult_id)
             .maybeSingle();
 
@@ -257,6 +257,7 @@ export async function getChildConversations(
                 type: (conv.adult_role || "parent") as
                   | "parent"
                   | "family_member",
+                avatar_color: "#3B82F6", // Default color if we can't fetch profile
               },
             };
           }
@@ -269,6 +270,8 @@ export async function getChildConversations(
                 adultProfile.name ||
                 (adultProfile.role === "parent" ? "Parent" : "Family Member"),
               type: adultProfile.role as "parent" | "family_member",
+              avatar_color: adultProfile.avatar_color || "#3B82F6",
+              relationship_type: adultProfile.relationship_type || null,
             },
           };
         } catch (error) {
@@ -280,6 +283,7 @@ export async function getChildConversations(
               id: conv.adult_id, // Use adult_id as fallback
               name: conv.adult_role === "parent" ? "Parent" : "Family Member",
               type: (conv.adult_role || "parent") as "parent" | "family_member",
+              avatar_color: "#3B82F6", // Default color if query fails
             },
           };
         }

@@ -242,7 +242,7 @@ const FamilyMemberInvite = () => {
           description: "Welcome! Redirecting to your dashboard...",
         });
         // Redirect to dashboard
-        navigate("/family-member/dashboard");
+        navigate("/family-member");
       }
     } catch (error: unknown) {
       safeLog.error("Error registering:", sanitizeError(error));

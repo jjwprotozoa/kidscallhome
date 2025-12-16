@@ -1,79 +1,157 @@
 // Supabase Edge Function: Stripe Webhook Handler
 // Purpose: Handle Stripe webhook events for subscription lifecycle
 
+/// <reference types="../deno.d.ts" />
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+// Type definitions for Stripe webhook events
+interface StripeSubscription {
+  id: string;
+  customer: string;
+  status: string;
+  current_period_end: number;
+}
+
+interface StripeInvoice {
+  customer: string;
+  subscription: string | null;
+  period_end: number;
+  payment_intent: string | { client_secret: string | null } | null;
+}
+
+interface StripeCheckoutSession {
+  id: string;
+  subscription: string | null;
+}
+
+interface StripeEvent {
+  type: string;
+  data: {
+    object: StripeSubscription | StripeInvoice | StripeCheckoutSession;
+  };
+}
+
+// Type for Supabase client (simplified for Edge Functions)
+type SupabaseClient = ReturnType<typeof createClient>;
 
 const stripeSecretKey = Deno.env.get("STRIPE_SECRET_KEY");
 const webhookSecret = Deno.env.get("STRIPE_WEBHOOK_SECRET");
 
-// Webhook signature verification using Stripe's method
-function verifyWebhookSignature(
-  payload: string,
-  signature: string,
-  secret: string
-): boolean {
-  try {
-    // Stripe webhook signature format: t=timestamp,v1=signature
-    const elements = signature.split(",");
-    const timestamp = elements.find((e) => e.startsWith("t="))?.split("=")[1];
-    const signatures = elements.filter((e) => e.startsWith("v1="));
+// Allowed origins for CORS (production domains only - webhooks don't need CORS but included for consistency)
+const allowedOrigins = [
+  "https://www.kidscallhome.com",
+  "https://kidscallhome.com",
+];
 
-    if (!timestamp || !signatures.length) {
-      return false;
-    }
+// Rate limiting storage (in-memory - for production, use Redis/Upstash)
+const rateLimitStore = new Map<string, { count: number; resetAt: number }>();
 
-    // Create signed payload
-    const signedPayload = `${timestamp}.${payload}`;
-    
-    // Verify each signature
-    for (const sig of signatures) {
-      const signatureValue = sig.split("=")[1];
-      
-      // Use Web Crypto API to verify HMAC-SHA256
-      const encoder = new TextEncoder();
-      const keyData = encoder.encode(secret);
-      const messageData = encoder.encode(signedPayload);
-      
-      // Import key for HMAC
-      const cryptoKey = crypto.subtle.importKey(
-        "raw",
-        keyData,
-        { name: "HMAC", hash: "SHA-256" },
-        false,
-        ["sign"]
-      );
-      
-      // Sign and compare
-      cryptoKey.then((key) => {
-        return crypto.subtle.sign("HMAC", key, messageData);
-      }).then((signatureBuffer) => {
-        // Convert to hex
-        const signatureArray = Array.from(new Uint8Array(signatureBuffer));
-        const signatureHex = signatureArray
-          .map((b) => b.toString(16).padStart(2, "0"))
-          .join("");
-        
-        // Compare signatures using constant-time comparison
-        return signatureHex === signatureValue;
-      });
-    }
-    
-    // Simplified verification - in production, use Stripe SDK
-    // For Deno Edge Functions, we'll use a simpler approach
-    return true; // Will be properly verified below
-  } catch (error) {
-    console.error("Signature verification error:", error);
-    return false;
+// Rate limit configuration for webhook endpoint
+const WEBHOOK_RATE_LIMIT = {
+  maxAttempts: 100, // Allow up to 100 webhook events per minute
+  windowMs: 60 * 1000, // 1 minute window
+};
+
+// Helper function to get rate limit key (use IP address)
+function getRateLimitKey(req: Request): string {
+  // For webhooks, Stripe sends from their IPs, but we can still rate limit by signature
+  // Use a combination of IP and timestamp bucket
+  const ip =
+    req.headers.get("x-forwarded-for")?.split(",")[0] ||
+    req.headers.get("x-real-ip") ||
+    "unknown";
+  const timestamp = Math.floor(Date.now() / WEBHOOK_RATE_LIMIT.windowMs);
+  return `webhook:${ip}:${timestamp}`;
+}
+
+// Check rate limit
+function checkRateLimit(key: string): { allowed: boolean; resetAt?: number } {
+  const now = Date.now();
+  const entry = rateLimitStore.get(key);
+
+  if (!entry || entry.resetAt < now) {
+    // New window or expired
+    rateLimitStore.set(key, {
+      count: 1,
+      resetAt: now + WEBHOOK_RATE_LIMIT.windowMs,
+    });
+    return { allowed: true };
   }
+
+  if (entry.count >= WEBHOOK_RATE_LIMIT.maxAttempts) {
+    return { allowed: false, resetAt: entry.resetAt };
+  }
+
+  // Increment count
+  entry.count++;
+  rateLimitStore.set(key, entry);
+  return { allowed: true };
+}
+
+// Helper function to validate Content-Type
+function validateContentType(req: Request): boolean {
+  const contentType = req.headers.get("content-type");
+  // Stripe webhooks send as application/json or text/plain
+  return (
+    contentType?.includes("application/json") ||
+    contentType?.includes("text/plain") ||
+    false
+  );
+}
+
+// Helper function to get CORS headers
+function getCorsHeaders(origin: string | null): Record<string, string> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+
+  if (origin && allowedOrigins.includes(origin)) {
+    headers["Access-Control-Allow-Origin"] = origin;
+    headers["Access-Control-Allow-Credentials"] = "true";
+  }
+
+  return headers;
 }
 
 serve(async (req) => {
+  // Validate HTTP method
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), {
       status: 405,
       headers: { "Content-Type": "application/json" },
     });
+  }
+
+  // SECURITY: Validate Content-Type header
+  if (!validateContentType(req)) {
+    return new Response(JSON.stringify({ error: "Invalid Content-Type" }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  // SECURITY: Rate limiting for webhook endpoint
+  const rateLimitKey = getRateLimitKey(req);
+  const rateLimitCheck = checkRateLimit(rateLimitKey);
+
+  if (!rateLimitCheck.allowed) {
+    return new Response(
+      JSON.stringify({
+        error: "Rate limit exceeded",
+        message: "Too many webhook requests. Please try again later.",
+      }),
+      {
+        status: 429,
+        headers: {
+          "Content-Type": "application/json",
+          "Retry-After": rateLimitCheck.resetAt
+            ? Math.ceil((rateLimitCheck.resetAt - Date.now()) / 1000).toString()
+            : "60",
+        },
+      }
+    );
   }
 
   try {
@@ -112,15 +190,18 @@ serve(async (req) => {
         signature,
         webhookSecret
       );
-    } catch (err: any) {
-      console.error("Webhook signature verification failed:", err.message);
+    } catch (err: unknown) {
+      // Log detailed error server-side only
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      console.error("Webhook signature verification failed:", errorMessage);
+      // Return generic error to client to prevent information leakage
       return new Response(
         JSON.stringify({
-          error: `Webhook signature verification failed: ${err.message}`,
+          error: "Webhook signature verification failed",
         }),
         {
           status: 400,
-          headers: { "Content-Type": "application/json" },
+          headers: getCorsHeaders(req.headers.get("origin")),
         }
       );
     }
@@ -134,9 +215,9 @@ serve(async (req) => {
     // Handle different event types
     switch (event.type) {
       case "checkout.session.completed": {
-        const session = event.data.object;
+        const session = event.data.object as StripeCheckoutSession;
         // Handle checkout completion
-        console.log("Checkout session completed:", session.id);
+        console.warn("Checkout session completed:", session.id);
         if (session.subscription) {
           // Fetch subscription and update
           const subscriptionResponse = await fetch(
@@ -157,70 +238,81 @@ serve(async (req) => {
 
       case "customer.subscription.created":
       case "customer.subscription.updated": {
-        const subscription = event.data.object;
+        const subscription = event.data.object as StripeSubscription;
         await handleSubscriptionUpdate(supabaseAdmin, subscription);
         break;
       }
 
       case "customer.subscription.deleted": {
-        const subscription = event.data.object;
+        const subscription = event.data.object as StripeSubscription;
         await handleSubscriptionCancelled(supabaseAdmin, subscription);
         break;
       }
 
       case "invoice.payment_succeeded": {
-        const invoice = event.data.object;
+        const invoice = event.data.object as StripeInvoice;
         await handlePaymentSucceeded(supabaseAdmin, invoice);
         break;
       }
 
       case "invoice.payment_failed": {
-        const invoice = event.data.object;
+        const invoice = event.data.object as StripeInvoice;
         await handlePaymentFailed(supabaseAdmin, invoice);
         break;
       }
 
       case "invoice.payment_action_required": {
-        const invoice = event.data.object;
+        const invoice = event.data.object as StripeInvoice;
         await handlePaymentActionRequired(supabaseAdmin, invoice);
         break;
       }
 
       default:
-        console.log(`Unhandled event type: ${event.type}`);
+        console.warn(`Unhandled event type: ${event.type}`);
     }
 
     return new Response(JSON.stringify({ received: true }), {
       status: 200,
-      headers: { "Content-Type": "application/json" },
+      headers: getCorsHeaders(req.headers.get("origin")),
     });
   } catch (error) {
+    // Log detailed error server-side only
     console.error("Webhook error:", error);
-    return new Response(JSON.stringify({ error: error.message }), {
+    // Return generic error to prevent information leakage
+    return new Response(JSON.stringify({ error: "Internal server error" }), {
       status: 500,
-      headers: { "Content-Type": "application/json" },
+      headers: getCorsHeaders(req.headers.get("origin")),
     });
   }
 });
 
 async function handleSubscriptionUpdate(
-  supabase: any,
-  subscription: any
+  supabase: SupabaseClient,
+  subscription: StripeSubscription
 ) {
   const customerId = subscription.customer;
   const subscriptionId = subscription.id;
   const status = subscription.status;
-  const currentPeriodEnd = new Date(subscription.current_period_end * 1000).toISOString();
+  const currentPeriodEnd = new Date(
+    subscription.current_period_end * 1000
+  ).toISOString();
 
   // Find parent by Stripe customer ID or subscription ID
   const { data: parentData } = await supabase
     .from("parents")
     .select("id")
-    .or(`stripe_customer_id.eq.${customerId},stripe_subscription_id.eq.${subscriptionId}`)
+    .or(
+      `stripe_customer_id.eq.${customerId},stripe_subscription_id.eq.${subscriptionId}`
+    )
     .single();
 
   if (!parentData) {
-    console.error("Parent not found for customer:", customerId, "or subscription:", subscriptionId);
+    console.error(
+      "Parent not found for customer:",
+      customerId,
+      "or subscription:",
+      subscriptionId
+    );
     return;
   }
 
@@ -262,13 +354,13 @@ function mapStripeStatusToDbStatus(stripeStatus: string): string {
     unpaid: "expired", // Payment failed, revoke access
     paused: "active", // Allow access during pause
   };
-  
+
   return statusMap[stripeStatus] || "expired";
 }
 
 async function handleSubscriptionCancelled(
-  supabase: any,
-  subscription: any
+  supabase: SupabaseClient,
+  subscription: StripeSubscription
 ) {
   const customerId = subscription.customer;
   const subscriptionId = subscription.id;
@@ -287,7 +379,10 @@ async function handleSubscriptionCancelled(
   }
 }
 
-async function handlePaymentSucceeded(supabase: any, invoice: any) {
+async function handlePaymentSucceeded(
+  supabase: SupabaseClient,
+  invoice: StripeInvoice
+) {
   const customerId = invoice.customer;
   const subscriptionId = invoice.subscription;
 
@@ -298,7 +393,9 @@ async function handlePaymentSucceeded(supabase: any, invoice: any) {
     .from("parents")
     .update({
       subscription_status: "active",
-      subscription_expires_at: new Date(invoice.period_end * 1000).toISOString(),
+      subscription_expires_at: new Date(
+        invoice.period_end * 1000
+      ).toISOString(),
     })
     .eq("stripe_subscription_id", subscriptionId);
 
@@ -307,7 +404,10 @@ async function handlePaymentSucceeded(supabase: any, invoice: any) {
   }
 }
 
-async function handlePaymentFailed(supabase: any, invoice: any) {
+async function handlePaymentFailed(
+  supabase: SupabaseClient,
+  invoice: StripeInvoice
+) {
   const customerId = invoice.customer;
   const subscriptionId = invoice.subscription;
 
@@ -326,7 +426,10 @@ async function handlePaymentFailed(supabase: any, invoice: any) {
   }
 }
 
-async function handlePaymentActionRequired(supabase: any, invoice: any) {
+async function handlePaymentActionRequired(
+  supabase: SupabaseClient,
+  invoice: StripeInvoice
+) {
   const customerId = invoice.customer;
   const subscriptionId = invoice.subscription;
   const paymentIntent = invoice.payment_intent;
@@ -334,9 +437,8 @@ async function handlePaymentActionRequired(supabase: any, invoice: any) {
   if (!subscriptionId || !paymentIntent) return;
 
   // Get payment intent client secret for frontend
-  const clientSecret = typeof paymentIntent === "string" 
-    ? null 
-    : paymentIntent.client_secret;
+  const clientSecret =
+    typeof paymentIntent === "string" ? null : paymentIntent.client_secret;
 
   // Find parent and notify (you could send a push notification or email here)
   const { data: parentData } = await supabase
@@ -355,10 +457,9 @@ async function handlePaymentActionRequired(supabase: any, invoice: any) {
       })
       .eq("stripe_subscription_id", subscriptionId);
 
-    console.log(
+    console.warn(
       `Payment action required for subscription ${subscriptionId}. Client secret: ${clientSecret}`
     );
     // In production, send notification to user via push/email
   }
 }
-

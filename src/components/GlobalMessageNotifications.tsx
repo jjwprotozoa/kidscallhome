@@ -1,13 +1,15 @@
 // src/components/GlobalMessageNotifications.tsx
 // Global message notification handler - shows toast notifications for new messages on any page
 
-import { useEffect, useRef } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
-import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
-import { MessageCircle } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { useChildren } from "@/hooks/useChildren";
+import { useUserSession } from "@/hooks/useUserSession";
+import { supabase } from "@/integrations/supabase/client";
 import type { RealtimeChannel } from "@supabase/supabase-js";
+import { MessageCircle } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 
 interface Message {
   id: string;
@@ -27,6 +29,14 @@ export const GlobalMessageNotifications = () => {
   const lastMessageIdRef = useRef<string | null>(null);
   // Track the currently active chat childId using a ref that updates immediately
   const activeChatChildIdRef = useRef<string | null>(null);
+  // Track realtime subscription status for smart polling
+  const [realtimeStatus, setRealtimeStatus] = useState<
+    "SUBSCRIBED" | "ERROR" | "TIMED_OUT" | "SUBSCRIBING" | null
+  >(null);
+
+  // Use cached hooks instead of direct queries
+  const { data: children } = useChildren();
+  const { data: session } = useUserSession();
 
   // Update active chat childId whenever location changes
   useEffect(() => {
@@ -37,32 +47,26 @@ export const GlobalMessageNotifications = () => {
   useEffect(() => {
     let pollInterval: NodeJS.Timeout | null = null;
     let lastCheckedMessageId: string | null = null;
-    let cachedUserId: string | null = null; // Cache user ID to avoid repeated getUser() calls
-    let cachedChildIds: string[] | null = null; // Cache child IDs to avoid repeated fetches
-    let childrenCacheTime: number = 0; // Track when children list was last fetched
-    const CHILDREN_CACHE_TTL = 5 * 60 * 1000; // Refresh children list every 5 minutes
 
     const setupSubscription = async () => {
       // Check if localStorage is available
-      if (typeof window === 'undefined' || !window.localStorage) {
+      if (typeof window === "undefined" || !window.localStorage) {
         return;
       }
-      
+
       // Check if user is authenticated (parent) or has child session (child)
-      const { data: { session } } = await supabase.auth.getSession();
-      const childSession = localStorage.getItem("childSession");
-      
+      const { getChildSessionLegacy } = await import("@/lib/childSession");
+      const childSession = getChildSessionLegacy();
+
+      // Use cached session from React Query hook
       if (!session && !childSession) {
         // No session - don't set up subscriptions
         return;
       }
 
       const isChild = !session && !!childSession;
-
-      // Cache user ID once at setup (for parents)
-      if (!isChild && session?.user?.id) {
-        cachedUserId = session.user.id;
-      }
+      const childId = childSession?.id;
+      const userId = session?.user?.id;
 
       const handleNewMessage = async (message: Message) => {
         // Skip if we already showed this message
@@ -71,10 +75,7 @@ export const GlobalMessageNotifications = () => {
         // IMPORTANT: Don't show notification if user is currently chatting with this child
         // Use ref to get the current active chat (updates immediately when location changes)
         if (activeChatChildIdRef.current === message.child_id) {
-          console.log(
-            "📨 [GLOBAL MESSAGE] User is actively chatting with this child, not showing notification",
-            { childId: message.child_id, activeChat: activeChatChildIdRef.current }
-          );
+          // User is actively chatting with this child, not showing notification
           return;
         }
 
@@ -94,22 +95,34 @@ export const GlobalMessageNotifications = () => {
         let parentColor: string | null = null;
         try {
           if (message.sender_type === "parent") {
-            const { data: parentData } = await supabase
-              .from("parents")
-              .select("name")
-              .eq("id", message.sender_id)
+            // Try to fetch from adult_profiles (new schema)
+            // sender_id is the user_id (auth.uid())
+            const { data: adultProfile } = await supabase
+              .from("adult_profiles" as never)
+              .select("name, avatar_color")
+              .eq("user_id", message.sender_id)
               .maybeSingle();
-            
-            if (parentData?.name) {
-              senderName = parentData.name;
+
+            if (adultProfile?.name) {
+              senderName = adultProfile.name;
             } else {
-              senderName = "Parent";
+              // Fallback to old parents table if adult_profiles doesn't have the data
+              const { data: parentData } = await supabase
+                .from("parents")
+                .select("name")
+                .eq("id", message.sender_id)
+                .maybeSingle();
+
+              if (parentData?.name) {
+                senderName = parentData.name;
+              } else {
+                senderName = "Parent";
+              }
             }
-            
-            // For child users, use primary blue color for parent messages
-            // Parents don't have individual avatar colors, so we use a consistent color
+
+            // For child users, use the parent's avatar color if available
             if (isChild) {
-              parentColor = "hsl(213, 94%, 68%)"; // Primary blue color
+              parentColor = adultProfile?.avatar_color || "hsl(213, 94%, 68%)"; // Use avatar color or fallback to primary blue
             }
           } else {
             // Child sender - fetch child name and color
@@ -118,13 +131,13 @@ export const GlobalMessageNotifications = () => {
               .select("name, avatar_color")
               .eq("id", message.sender_id)
               .maybeSingle();
-            
+
             if (childData?.name) {
               senderName = childData.name;
             } else {
               senderName = "Child";
             }
-            
+
             // For parent users, use the child's avatar color (sender is the child)
             if (!isChild && childData?.avatar_color) {
               childColor = childData.avatar_color;
@@ -135,9 +148,10 @@ export const GlobalMessageNotifications = () => {
         }
 
         // Truncate message content for preview
-        const messagePreview = message.content.length > 50
-          ? `${message.content.substring(0, 50)}...`
-          : message.content;
+        const messagePreview =
+          message.content.length > 50
+            ? `${message.content.substring(0, 50)}...`
+            : message.content;
 
         // Determine toast styling based on user type
         const toastStyle = isChild
@@ -148,7 +162,8 @@ export const GlobalMessageNotifications = () => {
                   borderColor: parentColor,
                   color: "#ffffff", // White text for contrast
                 } as React.CSSProperties,
-                className: "border-2 shadow-lg ring-2 ring-opacity-30 custom-parent-color",
+                className:
+                  "border-2 shadow-lg ring-2 ring-opacity-30 custom-parent-color",
               }
             : undefined // Fallback to default if no color
           : childColor
@@ -158,7 +173,8 @@ export const GlobalMessageNotifications = () => {
                 borderColor: childColor,
                 color: "#ffffff", // White text for contrast
               } as React.CSSProperties,
-              className: "border-2 shadow-lg ring-2 ring-opacity-30 custom-child-color",
+              className:
+                "border-2 shadow-lg ring-2 ring-opacity-30 custom-child-color",
             }
           : undefined; // Fallback to default if no color
 
@@ -175,8 +191,16 @@ export const GlobalMessageNotifications = () => {
               onClick={() => {
                 navigate(`/chat/${message.child_id}`);
               }}
-              className={isChild ? "ml-2 bg-primary hover:bg-primary/90" : "ml-2 bg-white/20 hover:bg-white/30 text-white border-white/30"}
-              style={!isChild && childColor ? { borderColor: "rgba(255,255,255,0.3)" } : undefined}
+              className={
+                isChild
+                  ? "ml-2 bg-primary hover:bg-primary/90"
+                  : "ml-2 bg-white/20 hover:bg-white/30 text-white border-white/30"
+              }
+              style={
+                !isChild && childColor
+                  ? { borderColor: "rgba(255,255,255,0.3)" }
+                  : undefined
+              }
             >
               <MessageCircle className="h-4 w-4 mr-1" />
               Open
@@ -189,9 +213,12 @@ export const GlobalMessageNotifications = () => {
       const pollForNewMessages = async () => {
         try {
           const oneMinuteAgo = new Date(Date.now() - 60 * 1000).toISOString();
-          
+
           if (isChild) {
-            const childData = JSON.parse(childSession!);
+            const childData = childSession;
+            if (!childData?.id) {
+              return; // Invalid session
+            }
             const { data: newMessages } = await supabase
               .from("messages")
               .select("*")
@@ -205,7 +232,10 @@ export const GlobalMessageNotifications = () => {
             if (newMessages && newMessages.length > 0) {
               // Process messages in reverse order (oldest first) to avoid duplicates
               for (const message of newMessages.reverse()) {
-                if (message.id !== lastCheckedMessageId && message.id !== lastMessageIdRef.current) {
+                if (
+                  message.id !== lastCheckedMessageId &&
+                  message.id !== lastMessageIdRef.current
+                ) {
                   await handleNewMessage(message as Message);
                   lastCheckedMessageId = message.id;
                   break; // Only process the oldest new message
@@ -213,53 +243,49 @@ export const GlobalMessageNotifications = () => {
               }
             }
           } else {
-            // Use cached user ID instead of calling getUser() every poll
-            if (!cachedUserId) {
-              const { data: { session } } = await supabase.auth.getSession();
-              if (!session?.user?.id) return;
-              cachedUserId = session.user.id;
-            }
+            // Use cached user ID from React Query hook
+            if (!userId) return;
 
-            // Refresh children list only if cache is stale (every 5 minutes)
-            const now = Date.now();
-            if (!cachedChildIds || (now - childrenCacheTime) > CHILDREN_CACHE_TTL) {
-              const { data: children } = await supabase
-                .from("children")
-                .select("id")
-                .eq("parent_id", cachedUserId);
+            // Use cached children list from React Query hook
+            if (!children || children.length === 0) return;
 
-              if (!children || children.length === 0) return;
-              cachedChildIds = children.map((c) => c.id);
-              childrenCacheTime = now;
-            }
-
-            if (!cachedChildIds || cachedChildIds.length === 0) return;
+            const childIds = children.map((c) => c.id);
 
             // Get all conversation_ids for parent's children
             // Resolve parent's adult_profile_id first
+            // @ts-expect-error - adult_profiles table exists but not in types, type instantiation is deep
             const { data: adultProfile } = await supabase
+              // @ts-expect-error - adult_profiles table exists but not in types
               .from("adult_profiles")
               .select("id")
-              .eq("user_id", cachedUserId)
+              .eq("user_id", userId)
               .eq("role", "parent")
               .limit(1);
-            
-            if (!adultProfile || adultProfile.length === 0) return;
-            
-            const adultProfileId = adultProfile[0].id;
-            
+
+            if (
+              !adultProfile ||
+              (adultProfile as Array<{ id: string }>).length === 0
+            )
+              return;
+
+            const adultProfileId = (adultProfile as Array<{ id: string }>)[0]
+              .id;
+
             // Get conversations for this adult
+            // @ts-expect-error - conversations table exists but not in types, type instantiation is deep
             const { data: conversations } = await supabase
+              // @ts-expect-error - conversations table exists but not in types
               .from("conversations")
               .select("id")
               .eq("adult_id", adultProfileId);
-            
+
             if (!conversations || conversations.length === 0) return;
-            
-            const conversationIds = conversations.map(c => c.id);
+
+            const conversationIds = conversations.map((c) => c.id);
 
             // Fetch messages by conversation_id only (never by child_id alone)
-            const { data: newMessages } = await supabase
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const result = await (supabase as any)
               .from("messages")
               .select("*")
               .in("conversation_id", conversationIds)
@@ -269,10 +295,15 @@ export const GlobalMessageNotifications = () => {
               .order("created_at", { ascending: false })
               .limit(5);
 
+            const newMessages = result.data as Message[] | null;
+
             if (newMessages && newMessages.length > 0) {
               // Process messages in reverse order (oldest first) to avoid duplicates
               for (const message of newMessages.reverse()) {
-                if (message.id !== lastCheckedMessageId && message.id !== lastMessageIdRef.current) {
+                if (
+                  message.id !== lastCheckedMessageId &&
+                  message.id !== lastMessageIdRef.current
+                ) {
                   await handleNewMessage(message as Message);
                   lastCheckedMessageId = message.id;
                   break; // Only process the oldest new message
@@ -286,9 +317,9 @@ export const GlobalMessageNotifications = () => {
       };
 
       // Set up realtime subscription
-      if (isChild) {
-        const childData = JSON.parse(childSession!);
-        
+      if (isChild && childSession) {
+        const childData = childSession;
+
         channelRef.current = supabase
           .channel("global-child-messages")
           .on(
@@ -308,59 +339,62 @@ export const GlobalMessageNotifications = () => {
             }
           )
           .subscribe((status, err) => {
+            // Update subscription status for smart polling
+            if (status === "SUBSCRIBED") {
+              setRealtimeStatus("SUBSCRIBED");
+            } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+              setRealtimeStatus(status === "TIMED_OUT" ? "TIMED_OUT" : "ERROR");
+            }
+
             if (err) {
               // Check if it's the "mismatch" error - this is often transient and can be ignored
-              const errorMessage = err instanceof Error ? err.message : String(err);
-              if (errorMessage.includes("mismatch between server and client bindings")) {
+              const errorMessage =
+                err instanceof Error ? err.message : String(err);
+              if (
+                errorMessage.includes(
+                  "mismatch between server and client bindings"
+                )
+              ) {
                 // This is a known Supabase Realtime issue - often resolves on retry
-                if (import.meta.env.DEV) {
-                  console.warn("⚠️ [GLOBAL MESSAGE] Child subscription binding mismatch (will retry):", errorMessage);
-                }
+                // Silent in production, only warn in dev
               } else {
-                console.error("❌ [GLOBAL MESSAGE] Child subscription error:", err);
+                console.error(
+                  "❌ [GLOBAL MESSAGE] Child subscription error:",
+                  err
+                );
               }
             } else if (status === "TIMED_OUT") {
               // TIMED_OUT is often transient - don't log as error
-              if (import.meta.env.DEV) {
-                console.debug("⏱️ [GLOBAL MESSAGE] Child subscription timed out (will retry)");
-              }
             } else if (status === "CHANNEL_ERROR") {
               // CHANNEL_ERROR is often transient - check if it's a binding mismatch
-              const errorMessage = err instanceof Error ? err.message : String(err || "");
-              if (errorMessage.includes("mismatch between server and client bindings")) {
-                // This is a known Supabase Realtime issue - often resolves on retry
-                if (import.meta.env.DEV) {
-                  console.warn("⚠️ [GLOBAL MESSAGE] Child subscription binding mismatch (will retry):", errorMessage);
-                }
-              } else {
+              const errorMessage =
+                err instanceof Error ? err.message : String(err || "");
+              if (
+                !errorMessage.includes(
+                  "mismatch between server and client bindings"
+                )
+              ) {
                 // Only log non-binding-mismatch CHANNEL_ERRORs
-                console.error("❌ [GLOBAL MESSAGE] Child subscription failed:", status);
+                console.error(
+                  "❌ [GLOBAL MESSAGE] Child subscription failed:",
+                  status
+                );
               }
             }
             // CLOSED is normal cleanup, don't log as error
           });
       } else {
-        // Use cached user ID instead of calling getUser()
-        if (!cachedUserId) {
-          const { data: { session } } = await supabase.auth.getSession();
-          if (!session?.user?.id) return;
-          cachedUserId = session.user.id;
+        // Use cached user ID from React Query hook
+        if (!userId) {
+          return; // No user ID, can't subscribe
         }
 
-        // Parent: First get all their children, then listen for messages from those children
-        const { data: children } = await supabase
-          .from("children")
-          .select("id")
-          .eq("parent_id", cachedUserId);
-
+        // Parent: Use cached children list from React Query hook
         if (!children || children.length === 0) {
           return; // No children, no need to subscribe
         }
 
         const childIds = children.map((c) => c.id);
-        // Cache child IDs for polling
-        cachedChildIds = childIds;
-        childrenCacheTime = Date.now();
 
         // Parent: listen for messages from all their children
         // We can't filter by multiple child_ids in one subscription, so we'll check in the handler
@@ -386,45 +420,80 @@ export const GlobalMessageNotifications = () => {
             }
           )
           .subscribe((status, err) => {
+            // Update subscription status for smart polling
+            if (status === "SUBSCRIBED") {
+              setRealtimeStatus("SUBSCRIBED");
+            } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+              setRealtimeStatus(status === "TIMED_OUT" ? "TIMED_OUT" : "ERROR");
+            }
+
             if (err) {
               // Check if it's the "mismatch" error - this is often transient and can be ignored
-              const errorMessage = err instanceof Error ? err.message : String(err);
-              if (errorMessage.includes("mismatch between server and client bindings")) {
+              const errorMessage =
+                err instanceof Error ? err.message : String(err);
+              if (
+                errorMessage.includes(
+                  "mismatch between server and client bindings"
+                )
+              ) {
                 // This is a known Supabase Realtime issue - often resolves on retry
-                if (import.meta.env.DEV) {
-                  console.warn("⚠️ [GLOBAL MESSAGE] Parent subscription binding mismatch (will retry):", errorMessage);
-                }
+                // Silent in production, only warn in dev
               } else {
-                console.error("❌ [GLOBAL MESSAGE] Parent subscription error:", err);
+                console.error(
+                  "❌ [GLOBAL MESSAGE] Parent subscription error:",
+                  err
+                );
               }
             } else if (status === "TIMED_OUT") {
               // TIMED_OUT is often transient - don't log as error
-              if (import.meta.env.DEV) {
-                console.debug("⏱️ [GLOBAL MESSAGE] Parent subscription timed out (will retry)");
-              }
             } else if (status === "CHANNEL_ERROR") {
               // CHANNEL_ERROR is often transient - check if it's a binding mismatch
-              const errorMessage = err instanceof Error ? err.message : String(err || "");
-              if (errorMessage.includes("mismatch between server and client bindings")) {
-                // This is a known Supabase Realtime issue - often resolves on retry
-                if (import.meta.env.DEV) {
-                  console.warn("⚠️ [GLOBAL MESSAGE] Parent subscription binding mismatch (will retry):", errorMessage);
-                }
-              } else {
+              const errorMessage =
+                err instanceof Error ? err.message : String(err || "");
+              if (
+                !errorMessage.includes(
+                  "mismatch between server and client bindings"
+                )
+              ) {
                 // Only log non-binding-mismatch CHANNEL_ERRORs
-                console.error("❌ [GLOBAL MESSAGE] Parent subscription failed:", status);
+                console.error(
+                  "❌ [GLOBAL MESSAGE] Parent subscription failed:",
+                  status
+                );
               }
             }
             // CLOSED is normal cleanup, don't log as error
           });
       }
 
-      // Start polling as fallback (every 60 seconds - reduced frequency to minimize console noise)
-      // Realtime subscriptions handle most cases, polling is just a safety net
-      pollInterval = setInterval(pollForNewMessages, 60000);
-      
-      // Initial poll to catch any missed messages (after a short delay)
-      setTimeout(pollForNewMessages, 2000);
+      // Start polling as fallback - ONLY when realtime subscription is not working
+      // If realtime is SUBSCRIBED, skip polling entirely to reduce database calls
+      // Use longer interval (120s) when polling is needed as fallback
+      const startPollingIfNeeded = () => {
+        // Don't poll if realtime is successfully subscribed
+        if (realtimeStatus === "SUBSCRIBED") {
+          if (pollInterval) {
+            clearInterval(pollInterval);
+            pollInterval = null;
+          }
+          return;
+        }
+
+        // Only poll when realtime is not working (ERROR, TIMED_OUT, or null/SUBSCRIBING)
+        if (!pollInterval) {
+          pollInterval = setInterval(pollForNewMessages, 120000); // 120 seconds
+          // Initial poll to catch any missed messages (after a short delay)
+          setTimeout(pollForNewMessages, 2000);
+        }
+      };
+
+      // Start polling check
+      startPollingIfNeeded();
+
+      // Re-check polling when realtime status changes
+      const statusCheckInterval = setInterval(() => {
+        startPollingIfNeeded();
+      }, 5000); // Check every 5 seconds
 
       return () => {
         if (channelRef.current) {
@@ -433,12 +502,15 @@ export const GlobalMessageNotifications = () => {
         if (pollInterval) {
           clearInterval(pollInterval);
         }
+        if (statusCheckInterval) {
+          clearInterval(statusCheckInterval);
+        }
+        setRealtimeStatus(null);
       };
     };
 
     setupSubscription();
-  }, [navigate, toast]); // Note: location.pathname removed - we use activeChatChildIdRef instead
+  }, [navigate, toast, session, children, realtimeStatus]); // Include session, children, and realtimeStatus in dependencies
 
   return null; // This component doesn't render anything
 };
-

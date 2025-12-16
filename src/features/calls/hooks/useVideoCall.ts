@@ -425,12 +425,13 @@ export const useVideoCall = () => {
       const {
         data: { session },
       } = await supabase.auth.getSession();
-      const childSession = localStorage.getItem("childSession");
+      const { getChildSessionLegacy } = await import("@/lib/childSession");
+      const childSession = getChildSessionLegacy();
 
       // CRITICAL: If we have childSession and we're on a call page, prioritize childSession
       // This handles the case where child answers a call - auth session might be stale
       const callPageMatch = window.location.pathname.match(/^\/call\/([^/?]+)/);
-      if (childSession && callPageMatch) {
+      if (childSession !== null && callPageMatch) {
         // We're on a call page with childSession - definitely a child
         const isChildUser = true;
         if (isChildUser !== isChild) {

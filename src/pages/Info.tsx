@@ -24,7 +24,9 @@ const Info = () => {
   const navigate = useNavigate();
   const [showFloatingNav, setShowFloatingNav] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [userType, setUserType] = useState<"parent" | "child" | null>(null);
+  const [userType, setUserType] = useState<
+    "parent" | "child" | "family_member" | null
+  >(null);
   const [loading, setLoading] = useState(true);
 
   // Determine user type and home route
@@ -37,7 +39,41 @@ const Info = () => {
         const childSession = localStorage.getItem("childSession");
 
         if (session) {
-          setUserType("parent");
+          // Has auth session - check if parent or family member
+          const {
+            data: { user },
+          } = await supabase.auth.getUser();
+
+          if (user) {
+            // Check if user is a family member first
+            const { data: familyMember } = await supabase
+              .from("family_members")
+              .select("id")
+              .eq("id", user.id)
+              .eq("status", "active")
+              .maybeSingle();
+
+            if (familyMember) {
+              setUserType("family_member");
+            } else {
+              // Fallback: Check adult_profiles
+              const { data: adultProfile } = await supabase
+                .from("adult_profiles" as never)
+                .select("role")
+                .eq("user_id", user.id)
+                .eq("role", "family_member")
+                .maybeSingle();
+
+              if (adultProfile) {
+                setUserType("family_member");
+              } else {
+                // Not a family member, must be a parent
+                setUserType("parent");
+              }
+            }
+          } else {
+            setUserType("parent"); // Default to parent if session exists but no user
+          }
         } else if (childSession) {
           try {
             JSON.parse(childSession);
@@ -62,6 +98,7 @@ const Info = () => {
   // Get home route based on user type
   const getHomeRoute = () => {
     if (userType === "parent") return "/parent";
+    if (userType === "family_member") return "/family-member/dashboard";
     if (userType === "child") return "/child";
     return "/"; // Landing page if not logged in
   };
@@ -140,6 +177,8 @@ const Info = () => {
                   <span className="hidden sm:inline">
                     {userType === "parent"
                       ? "Back to Parent Home"
+                      : userType === "family_member"
+                      ? "Back to Family Member Home"
                       : userType === "child"
                       ? "Back to Kid Home"
                       : "Back to App"}
@@ -162,6 +201,8 @@ const Info = () => {
             backButtonTitle={
               userType === "parent"
                 ? "Back to Parent Home"
+                : userType === "family_member"
+                ? "Back to Family Member Home"
                 : userType === "child"
                 ? "Back to Kid Home"
                 : "Back to App"

@@ -22,7 +22,7 @@ export const BlockedContactsList: React.FC = () => {
   const fetchBlockedContacts = async () => {
     try {
       setLoading(true);
-      // Get current user's family
+      // Get current user and family in parallel
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
@@ -35,17 +35,25 @@ export const BlockedContactsList: React.FC = () => {
 
       if (!adultProfile) return;
 
-      // Get children in this family
-      const { data: childMemberships } = await supabase
-        .from("child_family_memberships")
-        .select("child_profile_id")
-        .eq("family_id", adultProfile.family_id);
+      // Fetch child memberships and blocked contacts in parallel
+      const [childMembershipsResponse, blockedResponse] = await Promise.all([
+        supabase
+          .from("child_family_memberships")
+          .select("child_profile_id")
+          .eq("family_id", adultProfile.family_id),
+        // Pre-fetch blocked contacts (will filter by childIds after)
+        Promise.resolve(null),
+      ]);
 
-      if (!childMemberships) return;
+      const childMemberships = childMembershipsResponse.data;
+      if (!childMemberships || childMemberships.length === 0) {
+        setBlockedContacts([]);
+        return;
+      }
 
       const childIds = childMemberships.map(cm => cm.child_profile_id);
 
-      // Fetch blocked contacts for these children
+      // Fetch blocked contacts
       const { data: blocked, error } = await supabase
         .from("blocked_contacts")
         .select("*")
@@ -55,22 +63,33 @@ export const BlockedContactsList: React.FC = () => {
 
       if (error) throw error;
 
-      // Fetch names
-      const childProfileIds = new Set(blocked?.map(b => b.blocker_child_id) || []);
-      const adultProfileIds = blocked?.filter(b => b.blocked_adult_profile_id).map(b => b.blocked_adult_profile_id!) || [];
-      const blockedChildIds = blocked?.filter(b => b.blocked_child_profile_id).map(b => b.blocked_child_profile_id!) || [];
+      if (!blocked || blocked.length === 0) {
+        setBlockedContacts([]);
+        return;
+      }
+
+      // Fetch all names in parallel
+      const childProfileIds = new Set(blocked.map(b => b.blocker_child_id));
+      const adultProfileIds = blocked.filter(b => b.blocked_adult_profile_id).map(b => b.blocked_adult_profile_id!);
+      const blockedChildIds = blocked.filter(b => b.blocked_child_profile_id).map(b => b.blocked_child_profile_id!);
 
       const [childProfiles, adultProfiles, blockedChildProfiles] = await Promise.all([
-        supabase.from("child_profiles").select("id, name").in("id", Array.from(childProfileIds)),
-        adultProfileIds.length > 0 ? supabase.from("adult_profiles").select("id, name").in("id", adultProfileIds) : { data: [] },
-        blockedChildIds.length > 0 ? supabase.from("child_profiles").select("id, name").in("id", blockedChildIds) : { data: [] },
+        childProfileIds.size > 0
+          ? supabase.from("child_profiles").select("id, name").in("id", Array.from(childProfileIds))
+          : Promise.resolve({ data: [] }),
+        adultProfileIds.length > 0
+          ? supabase.from("adult_profiles").select("id, name").in("id", adultProfileIds)
+          : Promise.resolve({ data: [] }),
+        blockedChildIds.length > 0
+          ? supabase.from("child_profiles").select("id, name").in("id", blockedChildIds)
+          : Promise.resolve({ data: [] }),
       ]);
 
       const childNameMap = new Map(childProfiles.data?.map(cp => [cp.id, cp.name]) || []);
       const adultNameMap = new Map(adultProfiles.data?.map(ap => [ap.id, ap.name]) || []);
       const blockedChildNameMap = new Map(blockedChildProfiles.data?.map(cp => [cp.id, cp.name]) || []);
 
-      const enriched: BlockedContactWithNames[] = (blocked || []).map(b => ({
+      const enriched: BlockedContactWithNames[] = blocked.map(b => ({
         ...b,
         child_name: childNameMap.get(b.blocker_child_id) || "Unknown",
         contact_name: b.blocked_adult_profile_id
@@ -129,7 +148,21 @@ export const BlockedContactsList: React.FC = () => {
   };
 
   if (loading) {
-    return <div className="p-4">Loading blocked contacts...</div>;
+    return (
+      <div className="space-y-2">
+        {[1, 2, 3].map(i => (
+          <Card key={i} className="p-4 animate-pulse">
+            <div className="flex justify-between items-start">
+              <div className="flex-1">
+                <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
+                <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+              </div>
+              <div className="h-9 w-20 bg-gray-200 rounded"></div>
+            </div>
+          </Card>
+        ))}
+      </div>
+    );
   }
 
   if (blockedContacts.length === 0) {

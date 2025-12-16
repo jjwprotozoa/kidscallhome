@@ -53,7 +53,6 @@ export interface Family {
  */
 export interface SafetyModeSettings {
   keyword_alerts: boolean;
-  ai_content_scanning: boolean;
   export_conversations: boolean;
   alert_threshold: 'low' | 'medium' | 'high';
 }

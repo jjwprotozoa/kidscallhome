@@ -8,10 +8,13 @@ import { useCallEngine } from "@/features/calls/hooks/useCallEngine";
 import { useIncomingCallNotifications } from "@/features/calls/hooks/useIncomingCallNotifications";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useFamilyMemberRedirect } from "@/hooks/useFamilyMemberRedirect";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 
 const ParentCallScreen = () => {
+  // Redirect family members away from parent routes
+  useFamilyMemberRedirect();
   const { childId } = useParams<{ childId: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
