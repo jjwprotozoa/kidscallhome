@@ -326,28 +326,42 @@ export async function approveChildConnection(
 
 /**
  * Block a contact (child blocking adult or another child)
+ * Uses RPC function block_contact_for_child which bypasses RLS for children
  */
 export async function blockContact(input: BlockContactInput): Promise<BlockedContact | null> {
   try {
-    const { data, error } = await supabase
-      .from('blocked_contacts')
-      .insert({
-        blocker_child_id: input.blocker_child_id,
-        blocked_adult_profile_id: input.blocked_adult_profile_id || null,
-        blocked_child_profile_id: input.blocked_child_profile_id || null,
-      })
-      .select()
-      .single();
+    // Use RPC function that bypasses RLS (SECURITY DEFINER)
+    // This allows children to block contacts even with anonymous auth
+    const { data: blockId, error: rpcError } = await supabase.rpc('block_contact_for_child', {
+      p_blocker_child_id: input.blocker_child_id,
+      p_blocked_adult_profile_id: input.blocked_adult_profile_id || null,
+      p_blocked_child_profile_id: input.blocked_child_profile_id || null,
+    });
 
-    if (error) {
-      console.error('Error blocking contact:', error);
+    if (rpcError) {
+      console.error('Error blocking contact:', rpcError);
       return null;
     }
 
-    // Notify parent (async, don't wait)
-    notifyParentOfBlock(input.blocker_child_id, data.id).catch((err) =>
-      console.error('Error notifying parent:', err)
-    );
+    if (!blockId) {
+      console.error('No block ID returned from RPC function');
+      return null;
+    }
+
+    // Fetch the full blocked contact record
+    const { data, error: fetchError } = await supabase
+      .from('blocked_contacts')
+      .select('*')
+      .eq('id', blockId)
+      .single();
+
+    if (fetchError) {
+      console.error('Error fetching blocked contact:', fetchError);
+      return null;
+    }
+
+    // Parent notification is handled automatically by the database trigger
+    // notify_parents_on_block() runs after INSERT
 
     return data;
   } catch (error) {
@@ -413,24 +427,6 @@ export async function createReport(input: ReportInput): Promise<Report | null> {
   } catch (error) {
     console.error('Error in createReport:', error);
     return null;
-  }
-}
-
-/**
- * Notify parent when child blocks someone
- */
-async function notifyParentOfBlock(childId: string, blockedContactId: string): Promise<void> {
-  // This would typically send a notification
-  // For now, we'll update the parent_notified_at timestamp
-  const { error } = await supabase
-    .from('blocked_contacts')
-    .update({
-      parent_notified_at: new Date().toISOString(),
-    })
-    .eq('id', blockedContactId);
-
-  if (error) {
-    console.error('Error updating parent notification:', error);
   }
 }
 

@@ -15,9 +15,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { getChildSessionLegacy } from "@/lib/childSession";
 import { getChildConversations } from "@/utils/conversations";
 import { MessageSquare, Phone } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { BlockAndReportButton } from "@/features/safety/components/BlockAndReportButton";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 
 interface ChildSession {
   id: string;
@@ -162,6 +163,7 @@ const ChildParentsList = () => {
   const [blockedContactIds, setBlockedContactIds] = useState<string[]>([]);
   const navigate = useNavigate();
   const { toast } = useToast();
+  const channelRef = useRef<RealtimeChannel | null>(null);
 
   // Separate parents and family members
   const parents = useMemo(
@@ -260,6 +262,57 @@ const ChildParentsList = () => {
     if (child?.id) {
       loadBlockedContacts(child.id);
     }
+  }, [child?.id]);
+
+  // Set up real-time subscription for blocked_contacts updates
+  useEffect(() => {
+    if (!child?.id) return;
+
+    const currentChildId = child.id;
+
+    // Clean up existing channel
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current);
+    }
+
+    // Subscribe to updates for this child's blocked contacts
+    channelRef.current = supabase
+      .channel(`blocked-contacts-child-${currentChildId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "blocked_contacts",
+          filter: `blocker_child_id=eq.${currentChildId}`,
+        },
+        (payload) => {
+          // When a contact is unblocked (unblocked_at is set), refresh the blocked list
+          if (payload.new.unblocked_at && !payload.old.unblocked_at) {
+            loadBlockedContacts(currentChildId);
+          }
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "blocked_contacts",
+          filter: `blocker_child_id=eq.${currentChildId}`,
+        },
+        () => {
+          // When a new contact is blocked, refresh the blocked list
+          loadBlockedContacts(currentChildId);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+      }
+    };
   }, [child?.id]);
 
   const fetchConversations = async (childId: string) => {
@@ -441,20 +494,8 @@ const ChildParentsList = () => {
                                   Message
                                 </Button>
                               </div>
-                              {child && (
-                                <div className="w-full sm:w-auto">
-                                  <BlockAndReportButton
-                                    childId={child.id}
-                                    blockedAdultProfileId={conv.conversation.adult_id}
-                                    contactName={conv.participant.name}
-                                    onBlocked={() => {
-                                      if (child?.id) {
-                                        loadBlockedContacts(child.id);
-                                      }
-                                    }}
-                                  />
-                                </div>
-                              )}
+                              {/* Hide block button for parents - child cannot block their own parent (safety feature) */}
+                              {/* Block button is only shown for family members in the Family Members section below */}
                             </div>
                           </div>
                         </Card>

@@ -397,8 +397,13 @@ const Navigation = () => {
   }
 
   const getNavLinkClassName = (path: string) => {
+    // For exact matches (like "/parent" or "/child"), only match exactly or with trailing slash
+    // For deeper paths (like "/parent/dashboard"), match the path and its sub-paths
     const isActive =
-      location.pathname === path || location.pathname.startsWith(path + "/");
+      location.pathname === path ||
+      location.pathname === path + "/" ||
+      (path !== "/parent" && path !== "/child" && path !== "/family-member" &&
+       location.pathname.startsWith(path + "/"));
     return cn(
       "flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors relative",
       isActive

@@ -1,13 +1,14 @@
 // src/features/safety/components/BlockedContactsList.tsx
 // Component for displaying and managing blocked contacts
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { unblockContact } from "@/utils/family-communication";
 import type { BlockedContact } from "@/types/family-communication";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 
 interface BlockedContactWithNames extends BlockedContact {
   child_name?: string;
@@ -18,6 +19,7 @@ export const BlockedContactsList: React.FC = () => {
   const [blockedContacts, setBlockedContacts] = useState<BlockedContactWithNames[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
+  const channelRef = useRef<RealtimeChannel | null>(null);
 
   const fetchBlockedContacts = async () => {
     try {
@@ -112,6 +114,43 @@ export const BlockedContactsList: React.FC = () => {
 
   useEffect(() => {
     fetchBlockedContacts();
+
+    // Set up real-time subscription for blocked_contacts updates
+    channelRef.current = supabase
+      .channel("blocked-contacts-updates")
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "blocked_contacts",
+        },
+        (payload) => {
+          // When a contact is unblocked (unblocked_at is set), refresh the list
+          if (payload.new.unblocked_at && !payload.old.unblocked_at) {
+            fetchBlockedContacts();
+          }
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "blocked_contacts",
+        },
+        () => {
+          // When a new contact is blocked, refresh the list
+          fetchBlockedContacts();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+      }
+    };
   }, []);
 
   const handleUnblock = async (blockedContactId: string) => {

@@ -4,7 +4,56 @@
 
 ## Latest Changes (2025-12-16)
 
-### 1. Production Loading Issues Fix - Workbox Precaching & Vercel Routing
+### 1. Child Blocking & Navigation Fixes
+
+- **Purpose**: Fix child blocking functionality and improve navigation UX
+- **Issues Fixed**:
+  - **Child Blocking Error**: Children unable to block contacts due to RLS policy violation (401 Unauthorized)
+  - **Real-Time Updates**: Blocked contact status not updating immediately when parent unblocks
+  - **Navigation Highlighting**: Home and Dashboard buttons always highlighted instead of only when selected
+  - **Block Button Visibility**: Block button shown for parents (children cannot block their own parent)
+- **Changes**:
+  - **Block Contact Function** (`src/utils/family-communication.ts`):
+    - Changed from direct INSERT to using `block_contact_for_child` RPC function
+    - RPC function uses `SECURITY DEFINER` to bypass RLS for children (anonymous auth)
+    - Removed manual parent notification call (handled by database trigger)
+    - Removed unused `notifyParentOfBlock` function
+  - **Real-Time Subscriptions**:
+    - **BlockedContactsList.tsx**: Added Supabase real-time subscription for `blocked_contacts` table
+      - Listens for UPDATE events (when `unblocked_at` is set) and INSERT events
+      - Automatically refreshes list when changes occur
+    - **ChildParentsList.tsx**: Added filtered real-time subscription for child's blocked contacts
+      - Subscribes to updates filtered by `blocker_child_id`
+      - Refreshes blocked contacts list when parent unblocks someone
+      - Properly cleans up subscriptions on unmount or child ID change
+  - **Navigation Active State** (`src/components/Navigation.tsx`):
+    - Fixed `getNavLinkClassName` function to prevent root paths from matching sub-paths
+    - Root paths (`/parent`, `/child`, `/family-member`) only match exactly or with trailing slash
+    - Deeper paths (e.g., `/parent/dashboard`) match path and sub-paths correctly
+    - Prevents Home button from being highlighted when on Dashboard or other sub-pages
+  - **Block Button Visibility** (`src/pages/ChildParentsList.tsx`):
+    - Removed `BlockAndReportButton` from parents section
+    - Block button only shown for family members (children can block family members, not parents)
+    - Added comment explaining safety feature: child cannot block their own parent
+- **Technical Implementation**:
+  - Uses existing `block_contact_for_child` database function (SECURITY DEFINER)
+  - Real-time subscriptions use Supabase `postgres_changes` event listeners
+  - Navigation uses precise path matching instead of `startsWith` for root paths
+  - Proper cleanup of real-time channels to prevent memory leaks
+- **Files Modified**:
+  - `src/utils/family-communication.ts` - Updated `blockContact` to use RPC function
+  - `src/features/safety/components/BlockedContactsList.tsx` - Added real-time subscription
+  - `src/pages/ChildParentsList.tsx` - Added real-time subscription, removed block button for parents
+  - `src/components/Navigation.tsx` - Fixed active state logic
+- **Impact**:
+  - **Child Blocking**: Children can now successfully block contacts without RLS errors
+  - **Real-Time Updates**: UI updates immediately when parent unblocks a contact (no manual refresh needed)
+  - **Navigation UX**: Only active page/tab is highlighted, improving visual clarity
+  - **Safety Feature**: Block button hidden for parents, enforcing safety rule at UI level
+  - **Database Consistency**: Uses existing database functions designed for this use case
+  - **Performance**: Proper subscription cleanup prevents memory leaks
+
+### 2. Production Loading Issues Fix - Workbox Precaching & Vercel Routing
 
 - **Purpose**: Fix production loading errors preventing service worker installation and causing 403 errors on HTML files
 - **Issues Fixed**:
