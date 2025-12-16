@@ -8,6 +8,7 @@ export interface Section {
 
 export const infoSections: Section[] = [
   { id: "description", label: "App Description" },
+  { id: "beta-testing", label: "Beta Testing" },
   { id: "pricing", label: "Pricing & Subscription" },
   { id: "terms", label: "Terms & Conditions" },
   { id: "privacy", label: "Privacy Policy" },
@@ -17,4 +18,3 @@ export const infoSections: Section[] = [
   { id: "contact", label: "Contact & Support" },
   { id: "demo", label: "Demo / Test Account" },
 ];
-

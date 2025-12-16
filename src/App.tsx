@@ -105,6 +105,7 @@ const FamilyMemberCallScreen = lazy(
 const VideoCall = lazy(() => import("./pages/VideoCall"));
 const Chat = lazy(() => import("./pages/Chat"));
 const Info = lazy(() => import("./pages/Info"));
+const Beta = lazy(() => import("./pages/Beta"));
 
 // Loading fallback component
 const PageLoader = () => (
@@ -357,6 +358,7 @@ const App = () => {
                   <Route path="/call/:childId" element={<VideoCall />} />
                   <Route path="/chat/:childId" element={<Chat />} />
                   <Route path="/info" element={<Info />} />
+                  <Route path="/beta" element={<Beta />} />
                   {/* Error pages */}
                   <Route path="/error/server" element={<ServerError />} />
                   <Route path="/error/network" element={<NetworkError />} />

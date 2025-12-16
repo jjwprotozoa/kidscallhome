@@ -2,13 +2,6 @@
 // Account settings page with upgrade link
 
 import Navigation from "@/components/Navigation";
-import { OnboardingTour } from "@/features/onboarding/OnboardingTour";
-import { HelpBubble } from "@/features/onboarding/HelpBubble";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
-import { useFamilyMemberRedirect } from "@/hooks/useFamilyMemberRedirect";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -19,10 +12,26 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { ArrowRight, Crown, Loader2, Settings, Sparkles, X, ExternalLink } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { HelpBubble } from "@/features/onboarding/HelpBubble";
+import { OnboardingTour } from "@/features/onboarding/OnboardingTour";
+import { useToast } from "@/hooks/use-toast";
+import { useFamilyMemberRedirect } from "@/hooks/useFamilyMemberRedirect";
+import { supabase } from "@/integrations/supabase/client";
+import { isPWA } from "@/utils/platformDetection";
+import {
+  ArrowRight,
+  Crown,
+  ExternalLink,
+  Loader2,
+  Settings,
+  Sparkles,
+  Star,
+  X,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { isPWA } from "@/utils/platformDetection";
 
 const AccountSettings = () => {
   // Redirect family members away from parent routes
@@ -34,8 +43,11 @@ const AccountSettings = () => {
   const [email, setEmail] = useState<string | null>(null);
   const [familyCode, setFamilyCode] = useState<string | null>(null);
   const [subscriptionType, setSubscriptionType] = useState<string>("free");
-  const [subscriptionStatus, setSubscriptionStatus] = useState<string>("active");
-  const [subscriptionExpiresAt, setSubscriptionExpiresAt] = useState<string | null>(null);
+  const [subscriptionStatus, setSubscriptionStatus] =
+    useState<string>("active");
+  const [subscriptionExpiresAt, setSubscriptionExpiresAt] = useState<
+    string | null
+  >(null);
   const [allowedChildren, setAllowedChildren] = useState(1);
   const [currentChildrenCount, setCurrentChildrenCount] = useState(0);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
@@ -66,7 +78,9 @@ const AccountSettings = () => {
 
       const { data: parentData, error: parentError } = await supabase
         .from("parents")
-        .select("name, email, family_code, subscription_type, subscription_status, subscription_expires_at, allowed_children")
+        .select(
+          "name, email, family_code, subscription_type, subscription_status, subscription_expires_at, allowed_children"
+        )
         .eq("id", user.id)
         .single();
 
@@ -105,8 +119,12 @@ const AccountSettings = () => {
       setEmail((parentData as any)?.email || null);
       setFamilyCode((parentData as any)?.family_code || null);
       setSubscriptionType((parentData as any)?.subscription_type || "free");
-      setSubscriptionStatus((parentData as any)?.subscription_status || "active");
-      setSubscriptionExpiresAt((parentData as any)?.subscription_expires_at || null);
+      setSubscriptionStatus(
+        (parentData as any)?.subscription_status || "active"
+      );
+      setSubscriptionExpiresAt(
+        (parentData as any)?.subscription_expires_at || null
+      );
       setAllowedChildren((parentData as any)?.allowed_children || 1);
 
       // Get current children count
@@ -134,7 +152,8 @@ const AccountSettings = () => {
     if (!isPWA()) {
       toast({
         title: "Not Available",
-        description: "Subscription management is only available in the web app.",
+        description:
+          "Subscription management is only available in the web app.",
         variant: "default",
       });
       return;
@@ -165,7 +184,9 @@ const AccountSettings = () => {
       console.error("Error opening subscription management:", error);
       toast({
         title: "Error",
-        description: error.message || "Failed to open subscription management. Please try again.",
+        description:
+          error.message ||
+          "Failed to open subscription management. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -188,10 +209,13 @@ const AccountSettings = () => {
         return;
       }
 
-      const { data, error } = await (supabase.rpc as any)("cancel_subscription", {
-        p_parent_id: user.id,
-        p_cancel_reason: "User requested cancellation",
-      });
+      const { data, error } = await (supabase.rpc as any)(
+        "cancel_subscription",
+        {
+          p_parent_id: user.id,
+          p_cancel_reason: "User requested cancellation",
+        }
+      );
 
       if (error) {
         throw error;
@@ -200,7 +224,9 @@ const AccountSettings = () => {
       if (data?.success) {
         toast({
           title: "Subscription Cancelled",
-          description: data.message || "Your subscription has been cancelled. Access will continue until expiration.",
+          description:
+            data.message ||
+            "Your subscription has been cancelled. Access will continue until expiration.",
         });
         setShowCancelDialog(false);
         await loadAccountInfo(); // Refresh subscription info
@@ -211,7 +237,9 @@ const AccountSettings = () => {
       console.error("Error cancelling subscription:", error);
       toast({
         title: "Cancellation Failed",
-        description: error.message || "Failed to cancel subscription. Please contact support.",
+        description:
+          error.message ||
+          "Failed to cancel subscription. Please contact support.",
         variant: "destructive",
       });
     } finally {
@@ -289,9 +317,10 @@ const AccountSettings = () => {
                   <p className="text-base font-medium capitalize">
                     {subscriptionType === "free" ? "Free" : subscriptionType}
                   </p>
-                  {subscriptionType !== "free" && subscriptionStatus === "active" && (
-                    <Crown className="h-4 w-4 text-primary" />
-                  )}
+                  {subscriptionType !== "free" &&
+                    subscriptionStatus === "active" && (
+                      <Crown className="h-4 w-4 text-primary" />
+                    )}
                   {subscriptionStatus === "cancelled" && (
                     <span className="text-xs bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 px-2 py-1 rounded">
                       Cancelled
@@ -303,11 +332,13 @@ const AccountSettings = () => {
                     </span>
                   )}
                 </div>
-                {subscriptionStatus === "cancelled" && subscriptionExpiresAt && (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Access until: {new Date(subscriptionExpiresAt).toLocaleDateString()}
-                  </p>
-                )}
+                {subscriptionStatus === "cancelled" &&
+                  subscriptionExpiresAt && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Access until:{" "}
+                      {new Date(subscriptionExpiresAt).toLocaleDateString()}
+                    </p>
+                  )}
               </div>
               <div>
                 <p className="text-sm text-muted-foreground mb-1">
@@ -318,50 +349,55 @@ const AccountSettings = () => {
                   {allowedChildren === 999 ? "∞ Unlimited" : allowedChildren}
                 </p>
               </div>
-              {subscriptionType !== "free" && subscriptionStatus === "active" && (
-                <div className="pt-2 border-t space-y-2">
-                  {isPWA() && (
+              {subscriptionType !== "free" &&
+                subscriptionStatus === "active" && (
+                  <div className="pt-2 border-t space-y-2">
+                    {isPWA() && (
+                      <Button
+                        variant="default"
+                        onClick={handleManageSubscription}
+                        disabled={isManagingSubscription}
+                        className="w-full"
+                      >
+                        {isManagingSubscription ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Opening...
+                          </>
+                        ) : (
+                          <>
+                            <ExternalLink className="mr-2 h-4 w-4" />
+                            Manage Subscription
+                          </>
+                        )}
+                      </Button>
+                    )}
                     <Button
-                      variant="default"
-                      onClick={handleManageSubscription}
-                      disabled={isManagingSubscription}
+                      variant="outline"
+                      onClick={() => setShowCancelDialog(true)}
                       className="w-full"
                     >
-                      {isManagingSubscription ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Opening...
-                        </>
-                      ) : (
-                        <>
-                          <ExternalLink className="mr-2 h-4 w-4" />
-                          Manage Subscription
-                        </>
-                      )}
+                      <X className="mr-2 h-4 w-4" />
+                      Cancel Subscription
                     </Button>
-                  )}
-                  <Button
-                    variant="outline"
-                    onClick={() => setShowCancelDialog(true)}
-                    className="w-full"
-                  >
-                    <X className="mr-2 h-4 w-4" />
-                    Cancel Subscription
-                  </Button>
-                </div>
-              )}
+                  </div>
+                )}
             </div>
           </Card>
 
           {/* Upgrade Section */}
-          {(subscriptionType === "free" || subscriptionStatus === "expired" || subscriptionStatus === "cancelled") && (
+          {(subscriptionType === "free" ||
+            subscriptionStatus === "expired" ||
+            subscriptionStatus === "cancelled") && (
             <Card className="p-6 bg-gradient-to-br from-primary/10 to-primary/5 border-primary/20">
               <div className="flex items-start gap-4">
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-2">
                     <Sparkles className="h-5 w-5 text-primary" />
                     <h2 className="text-xl font-semibold">
-                      {subscriptionStatus === "cancelled" ? "Resubscribe" : "Upgrade Your Plan"}
+                      {subscriptionStatus === "cancelled"
+                        ? "Resubscribe"
+                        : "Upgrade Your Plan"}
                     </h2>
                   </div>
                   <p className="text-muted-foreground mb-4">
@@ -374,13 +410,39 @@ const AccountSettings = () => {
                     className="w-full sm:w-auto"
                     data-tour="parent-settings-upgrade"
                   >
-                    {subscriptionStatus === "cancelled" ? "Resubscribe" : "View Plans"}
+                    {subscriptionStatus === "cancelled"
+                      ? "Resubscribe"
+                      : "View Plans"}
                     <ArrowRight className="ml-2 h-4 w-4" />
                   </Button>
                 </div>
               </div>
             </Card>
           )}
+
+          {/* Beta Testing Section */}
+          <Card className="p-6">
+            <div className="flex items-start gap-4">
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-2">
+                  <Star className="h-5 w-5 text-primary" />
+                  <h2 className="text-xl font-semibold">Beta Testing</h2>
+                </div>
+                <p className="text-muted-foreground mb-4">
+                  Help us improve KidsCallHome by joining our beta program. Get
+                  early access to new features and share your feedback.
+                </p>
+                <Button
+                  onClick={() => navigate("/beta")}
+                  variant="outline"
+                  className="w-full sm:w-auto"
+                >
+                  Join Beta Program
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          </Card>
         </div>
       </div>
 
@@ -390,20 +452,26 @@ const AccountSettings = () => {
           <AlertDialogHeader>
             <AlertDialogTitle>Cancel Subscription</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to cancel your subscription? You'll continue to have access until{" "}
-              {subscriptionExpiresAt 
+              Are you sure you want to cancel your subscription? You'll continue
+              to have access until{" "}
+              {subscriptionExpiresAt
                 ? new Date(subscriptionExpiresAt).toLocaleDateString()
-                : "the end of your billing period"}.
-              After that, your account will revert to the free tier (1 child limit).
+                : "the end of your billing period"}
+              . After that, your account will revert to the free tier (1 child
+              limit).
               {currentChildrenCount > 1 && (
                 <span className="block mt-2 font-semibold text-yellow-600 dark:text-yellow-400">
-                  Note: You currently have {currentChildrenCount} children. After expiration, you won't be able to add more children, but existing children can still use the app.
+                  Note: You currently have {currentChildrenCount} children.
+                  After expiration, you won't be able to add more children, but
+                  existing children can still use the app.
                 </span>
               )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isCancelling}>Keep Subscription</AlertDialogCancel>
+            <AlertDialogCancel disabled={isCancelling}>
+              Keep Subscription
+            </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleCancelSubscription}
               disabled={isCancelling}
@@ -426,4 +494,3 @@ const AccountSettings = () => {
 };
 
 export default AccountSettings;
-

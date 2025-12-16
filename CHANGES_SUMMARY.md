@@ -4,7 +4,89 @@
 
 ## Latest Changes (2025-12-16)
 
-### 1. Avatar Colors for Parents and Family Members
+### 1. Beta Testing Program - Signup and Feedback System
+
+- **Purpose**: Enable users to join beta testing program and submit feedback to help improve the app
+- **Changes**:
+  - **Database Schema**: Created `beta_signups` and `beta_feedback` tables with comprehensive RLS policies
+    - `beta_signups` table tracks user participation with platform, device info, timezone, use case, and consent
+    - `beta_feedback` table stores user feedback with category (bug/ux/feature/other), rating (1-5), message, and metadata
+    - Status tracking: `invited`, `active`, `paused`, `exited` for beta signups
+    - RLS policies ensure users can only INSERT/SELECT their own records
+    - Users can UPDATE their own signup status (for exiting beta)
+    - No DELETE policies - data retention for analytics
+  - **Beta Page**: Created `/beta` route with two main sections
+    - **Join Beta Form**: Platform selection, app version, device model, timezone, use case, consent checkbox
+    - **Feedback Form**: Category selection, optional rating (1-5), message textarea
+    - Auto-detects platform (iOS/Android/Web), device model, timezone, and app version
+    - Shows success state after joining with feedback form revealed
+    - Mobile-responsive card layout matching app design
+    - Back button for navigation
+  - **Service Layer**: Created `src/services/betaService.ts` with typed functions
+    - `getBetaSignup()` - Get user's beta signup record
+    - `isBetaUser()` - Check if user is in beta (computed check, safer than modifying profiles)
+    - `joinBeta(payload)` - Join beta program with validation
+    - `submitFeedback(payload)` - Submit feedback with metadata collection
+  - **Email Confirmation**: Automatic confirmation email sent on signup
+    - Created `send-beta-signup-confirmation` Supabase Edge Function
+    - Beautiful HTML email template matching app theme (primary blue #3B82F6)
+    - Includes welcome message, "What's Next?" section, feedback link, beta details
+    - Supports Supabase SMTP and Resend API (fallback)
+    - Non-blocking: signup succeeds even if email fails
+  - **Navigation Integration**: Added beta access from multiple locations
+    - Navigation menu: "More" → "Beta Testing"
+    - Account Settings page: Beta Testing card section
+    - Info page: Beta Testing section in navigation
+  - **App Version Display**: Added version information to Info page
+    - Created `src/utils/appVersion.ts` utility
+    - Auto-detects version from Capacitor App plugin (native apps) or package.json (web)
+    - Displays version in App Description section
+    - Auto-fills version in beta signup form
+  - **Version Automation**: Created version sync script
+    - `scripts/sync-version.js` - Syncs version from package.json to Android build.gradle
+    - Automatically increments versionCode for Play Store
+    - Vite automatically injects version from package.json at build time
+    - `npm run version 1.0.2` - Update version everywhere
+  - **App Description Update**: Updated to include family members
+    - Full description now mentions "parents, family members, and children"
+    - Explains family member invitations and access
+    - Key features updated to include family member support
+- **Technical Implementation**:
+  - **Migration**: Created `20251216112138_create_beta_feedback_tables.sql`
+    - Creates both tables with proper indexes for performance
+    - Comprehensive RLS policies for security
+    - Trigger for `updated_at` timestamp on beta_signups
+  - **Edge Function**: `supabase/functions/send-beta-signup-confirmation/index.ts`
+    - Responsive HTML email with app theme colors
+    - Plain text fallback for email clients
+    - Error handling with graceful fallbacks
+  - **Deep Link Support**: Captures referrer in feedback metadata for marketing email tracking
+- **Files Modified**: 
+  - `supabase/migrations/20251216112138_create_beta_feedback_tables.sql` (new)
+  - `src/services/betaService.ts` (new)
+  - `src/pages/Beta.tsx` (new)
+  - `src/components/info/BetaTestingSection.tsx` (new)
+  - `src/components/info/AppDescription.tsx` (updated)
+  - `src/components/Navigation.tsx` (updated)
+  - `src/pages/AccountSettings.tsx` (updated)
+  - `src/pages/Info.tsx` (updated)
+  - `src/data/infoSections.ts` (updated)
+  - `src/utils/appVersion.ts` (new)
+  - `src/App.tsx` (updated - added route)
+  - `supabase/functions/send-beta-signup-confirmation/index.ts` (new)
+  - `scripts/sync-version.js` (new)
+  - `vite.config.ts` (updated - version injection)
+  - `package.json` (updated - version scripts)
+- **Impact**:
+  - **User Engagement**: Users can easily join beta and provide feedback
+  - **Product Improvement**: Structured feedback collection with metadata for analysis
+  - **Professional Communication**: Automated welcome emails improve user experience
+  - **Version Tracking**: App version visible to users and auto-collected in feedback
+  - **Marketing Ready**: Deep link support for email campaigns (`/beta?ref=email`)
+  - **Security**: RLS ensures users can only access their own data
+  - **Non-Breaking**: Isolated feature, no changes to existing functionality
+
+### 2. Avatar Colors for Parents and Family Members
 
 - **Purpose**: Make parents and family members visually distinct with different avatar colors, matching the color system used for children
 - **Changes**:

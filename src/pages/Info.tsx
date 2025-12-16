@@ -2,6 +2,7 @@
 // App Store / Play Store compliance information page
 
 import { AppDescription } from "@/components/info/AppDescription";
+import { BetaTestingSection } from "@/components/info/BetaTestingSection";
 import { CancellationSection } from "@/components/info/CancellationSection";
 import { ContactSection } from "@/components/info/ContactSection";
 import { DataRemovalSection } from "@/components/info/DataRemovalSection";
@@ -212,6 +213,7 @@ const Info = () => {
 
           {/* Sections */}
           <AppDescription />
+          <BetaTestingSection />
           <PricingSection isParent={isParent} />
           <TermsSection />
           <PrivacySection />

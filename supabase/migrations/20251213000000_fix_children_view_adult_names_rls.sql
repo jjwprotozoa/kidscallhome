@@ -63,3 +63,4 @@ COMMENT ON FUNCTION public.adult_has_conversation(UUID) IS
 -- 3. ✅ Policy still secure - only allows viewing names when conversation exists
 
 
+

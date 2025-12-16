@@ -21,13 +21,13 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { getUserRole } from "@/utils/userRole";
 import { cn } from "@/lib/utils";
 import {
   useBadgeStore,
   useTotalMissedBadge,
   useTotalUnreadBadge,
 } from "@/stores/badgeStore";
+import { getUserRole } from "@/utils/userRole";
 import {
   Home,
   Info,
@@ -37,6 +37,7 @@ import {
   Settings,
   Shield,
   Smartphone,
+  Star,
   UserCheck,
   Users,
 } from "lucide-react";
@@ -59,7 +60,10 @@ const Navigation = () => {
     if (pathname.includes("/child/")) return "child";
     // If on family-member route, set as family_member initially
     // The useEffect will verify this, but this prevents showing parent nav initially
-    if (pathname.includes("/family-member") || pathname.startsWith("/family-member")) {
+    if (
+      pathname.includes("/family-member") ||
+      pathname.startsWith("/family-member")
+    ) {
       console.warn("🔍 [NAVIGATION] Initial state: family_member (from route)");
       return "family_member";
     }
@@ -149,7 +153,10 @@ const Navigation = () => {
         }
       }
 
-      if (pathname.includes("/family-member") || pathname.startsWith("/family-member")) {
+      if (
+        pathname.includes("/family-member") ||
+        pathname.startsWith("/family-member")
+      ) {
         // On family member route - verify it's a family member
         try {
           const {
@@ -209,7 +216,10 @@ const Navigation = () => {
               setUserType("parent");
             } else {
               // Role not determined - default based on route or parent
-              if (pathname.includes("/family-member") || pathname.startsWith("/family-member")) {
+              if (
+                pathname.includes("/family-member") ||
+                pathname.startsWith("/family-member")
+              ) {
                 setUserType("family_member");
               } else {
                 setUserType("parent");
@@ -588,6 +598,10 @@ const Navigation = () => {
                     <DropdownMenuItem onClick={() => navigate("/info")}>
                       <Info className="mr-2 h-4 w-4" />
                       <span>App Information</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => navigate("/beta")}>
+                      <Star className="mr-2 h-4 w-4" />
+                      <span>Beta Testing</span>
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>

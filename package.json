@@ -15,6 +15,8 @@
     "tunnel:ngrok": "ngrok start dev-server --config ngrok.yml",
     "tunnel:cloudflare": "cloudflared tunnel --url http://localhost:8080",
     "generate-icons": "node scripts/generate-icons.js",
+    "version:sync": "node scripts/sync-version.js",
+    "version": "node scripts/sync-version.js",
     "cap:sync": "npx cap sync",
     "cap:android": "npx cap open android",
     "cap:ios": "npx cap open ios",
