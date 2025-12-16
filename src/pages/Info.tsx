@@ -109,6 +109,14 @@ const Info = () => {
     return userType === "parent";
   }, [userType]);
 
+  // Filter sections based on user type - hide privacy policy for kids
+  const filteredSections = useMemo(() => {
+    if (userType === "child") {
+      return infoSections.filter((section) => section.id !== "privacy");
+    }
+    return infoSections;
+  }, [userType]);
+
   // Show floating nav when scrolled down
   useEffect(() => {
     const handleScroll = () => {
@@ -192,7 +200,7 @@ const Info = () => {
 
           {/* Navigation */}
           <InfoNavigation
-            sections={infoSections}
+            sections={filteredSections}
             scrollToSection={scrollToSection}
             scrollToTop={scrollToTop}
             sheetOpen={sheetOpen}
@@ -216,7 +224,7 @@ const Info = () => {
           <BetaTestingSection />
           <PricingSection isParent={isParent} />
           <TermsSection />
-          <PrivacySection />
+          {userType !== "child" && <PrivacySection />}
           <SecuritySection />
           <CancellationSection isParent={isParent} />
           <DataRemovalSection />
