@@ -4,7 +4,45 @@
 
 ## Latest Changes (2025-12-16)
 
-### 1. Beta Testing Program - Signup and Feedback System
+### 1. Production Loading Issues Fix - Workbox Precaching & Vercel Routing
+
+- **Purpose**: Fix production loading errors preventing service worker installation and causing 403 errors on HTML files
+- **Issues Fixed**:
+  - **Workbox Precaching 403 Error**: Service worker failing to install due to 403 errors when precaching HTML files
+  - **Vercel Routing Conflict**: HTML files being caught by rewrite rule and redirected to `/index.html` instead of being served directly
+  - **X-Frame-Options Header Conflict**: `DENY` setting conflicting with CSP allowing Cloudflare challenge frames
+- **Changes**:
+  - **Workbox Configuration** (`vite.config.ts`):
+    - Excluded HTML files from precaching by adding `**/*.html` to `globIgnores` array
+    - Added runtime caching strategy for HTML files using NetworkFirst handler
+      - 7-day cache expiration with 3-second network timeout
+      - Falls back to cache on slow networks for offline support
+      - Handles 403 errors gracefully without breaking service worker installation
+  - **Vercel Routing** (`vercel.json`):
+    - Updated rewrite rule to exclude HTML files: added `|.*\\.html` to negative lookahead pattern
+    - HTML files now served directly from `/public` folder instead of being rewritten to `/index.html`
+  - **Security Headers** (`vercel.json`):
+    - Changed `X-Frame-Options` from `DENY` to `SAMEORIGIN` to align with CSP policy
+    - Allows Cloudflare challenge iframes while maintaining security
+- **Technical Implementation**:
+  - HTML files excluded from precaching manifest to prevent 403 errors during service worker installation
+  - Runtime caching ensures HTML files are still cached for offline support
+  - Vercel rewrite pattern updated: `/((?!manifest\\.json|sw\\.js|icon-.*\\.png|og-image\\.png|robots\\.txt|favicon\\.ico|assets/|_next-live/|.*\\.html).*)`
+  - NetworkFirst strategy with timeout ensures fresh content while providing offline fallback
+- **Files Modified**:
+  - `vite.config.ts` - Added HTML exclusion to `globIgnores`, added HTML runtime caching strategy
+  - `vercel.json` - Updated rewrite rule to exclude HTML files, changed X-Frame-Options header
+- **Impact**:
+  - **Service Worker Installation**: No longer fails due to 403 errors on HTML files
+  - **HTML File Access**: Static HTML files (e.g., `/low-data-family-calls.html`) now load correctly
+  - **Offline Support**: HTML files still cached at runtime for offline access
+  - **Cloudflare Compatibility**: Frame policy now consistent with CSP allowing challenge iframes
+  - **Production Stability**: Eliminates Workbox precaching errors that were breaking PWA functionality
+  - **Performance**: HTML files cached efficiently without blocking service worker installation
+
+## Previous Changes (2025-12-16)
+
+### 2. Beta Testing Program - Signup and Feedback System
 
 - **Purpose**: Enable users to join beta testing program and submit feedback to help improve the app
 - **Changes**:
@@ -61,7 +99,7 @@
     - Plain text fallback for email clients
     - Error handling with graceful fallbacks
   - **Deep Link Support**: Captures referrer in feedback metadata for marketing email tracking
-- **Files Modified**: 
+- **Files Modified**:
   - `supabase/migrations/20251216112138_create_beta_feedback_tables.sql` (new)
   - `src/services/betaService.ts` (new)
   - `src/pages/Beta.tsx` (new)
@@ -86,7 +124,7 @@
   - **Security**: RLS ensures users can only access their own data
   - **Non-Breaking**: Isolated feature, no changes to existing functionality
 
-### 2. Avatar Colors for Parents and Family Members
+### 3. Avatar Colors for Parents and Family Members
 
 - **Purpose**: Make parents and family members visually distinct with different avatar colors, matching the color system used for children
 - **Changes**:
@@ -132,7 +170,7 @@
   - **Scalability**: Auto-assignment trigger ensures new adult profiles get colors automatically
   - **Backward Compatible**: Existing records populated, new records auto-assigned, fallbacks ensure no breaking changes
 
-### 2. Child Interface Improvements - Parents List Enhancement
+### 4. Child Interface Improvements - Parents List Enhancement
 
 - **Purpose**: Improve child user experience by making it easier to identify and contact parents vs family members
 - **Changes**:
@@ -165,7 +203,7 @@
   - Faster access to contacts - no intermediate home page step
   - Better performance with memoized filtering of conversations
 
-### 3. Family Member Dashboard UI Consistency - Child Badge and Avatar Styling
+### 5. Family Member Dashboard UI Consistency - Child Badge and Avatar Styling
 
 - **Purpose**: Ensure family member dashboard matches parent's children list UI for consistent user experience across roles
 - **Changes**:
