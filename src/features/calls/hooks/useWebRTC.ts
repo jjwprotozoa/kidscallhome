@@ -195,14 +195,38 @@ export const useWebRTC = (
 
       // Create peer connection with STUN and TURN servers
       // TURN servers are required when both peers are behind symmetric NATs (common on mobile networks)
-      const pc = new RTCPeerConnection({
-        iceServers: [
-          // STUN servers for NAT discovery
-          { urls: "stun:stun.l.google.com:19302" },
-          { urls: "stun:stun1.l.google.com:19302" },
-          { urls: "stun:stun2.l.google.com:19302" },
-          // TURN servers for NAT traversal (free public TURN server for testing)
-          // For production, use a paid TURN service like Twilio or Metered TURN
+      
+      // Build ICE servers configuration
+      // Priority: Environment variables > Default fallback servers
+      const iceServers: RTCIceServer[] = [
+        // STUN servers for NAT discovery (always include)
+        { urls: "stun:stun.l.google.com:19302" },
+        { urls: "stun:stun1.l.google.com:19302" },
+        { urls: "stun:stun2.l.google.com:19302" },
+      ];
+
+      // Add TURN servers from environment variables if available (production)
+      const turnUrls = import.meta.env.VITE_TURN_SERVERS;
+      const turnUsername = import.meta.env.VITE_TURN_USERNAME;
+      const turnCredential = import.meta.env.VITE_TURN_CREDENTIAL;
+
+      if (turnUrls && turnUsername && turnCredential) {
+        // Parse comma-separated TURN URLs from environment
+        const turnUrlList = turnUrls.split(',').map(url => url.trim()).filter(Boolean);
+        turnUrlList.forEach(url => {
+          iceServers.push({
+            urls: url,
+            username: turnUsername,
+            credential: turnCredential,
+          });
+        });
+        safeLog.log("🌐 [WEBRTC] Using production TURN servers from environment variables", {
+          serverCount: turnUrlList.length,
+        });
+      } else {
+        // Fallback to free public TURN servers (development/testing only)
+        // WARNING: These are not reliable for production use
+        iceServers.push(
           {
             urls: "turn:openrelay.metered.ca:80",
             username: "openrelayproject",
@@ -212,8 +236,21 @@ export const useWebRTC = (
             urls: "turn:openrelay.metered.ca:443",
             username: "openrelayproject",
             credential: "openrelayproject",
-          },
-        ],
+          }
+        );
+        
+        // Log warning in production mode
+        if (import.meta.env.PROD) {
+          safeLog.error("⚠️ [WEBRTC] WARNING: Using free public TURN servers in production! " +
+            "Set VITE_TURN_SERVERS, VITE_TURN_USERNAME, and VITE_TURN_CREDENTIAL environment variables " +
+            "for reliable production calls.");
+        } else {
+          safeLog.log("🌐 [WEBRTC] Using free public TURN servers (development mode)");
+        }
+      }
+
+      const pc = new RTCPeerConnection({
+        iceServers,
         // Enable ICE candidate trickling for faster connection
         iceCandidatePoolSize: 10,
       });
@@ -345,6 +382,9 @@ export const useWebRTC = (
       let iceStateStartTime = Date.now();
       const ICE_STUCK_TIMEOUT = 30000; // 30 seconds - if stuck in "new" for this long, something is wrong
       
+      // Store ICE server count for diagnostics
+      const turnServerCount = iceServers.filter(s => s.urls?.includes('turn:')).length;
+      
       // DIAGNOSTIC: Enhanced ICE state logging
       pc.oniceconnectionstatechange = () => {
         const iceState = pc.iceConnectionState;
@@ -386,6 +426,29 @@ export const useWebRTC = (
         } else if (iceState === "failed" || iceState === "disconnected") {
           // eslint-disable-next-line no-console
           console.error("❌ [ICE STATE] ICE FAILED/DISCONNECTED", stateTransition);
+          
+          // Enhanced diagnostics for connection failures
+          safeLog.error("❌ [ICE STATE] Connection failure detected - diagnostics:", {
+            iceState,
+            connectionState: pc.connectionState,
+            signalingState: pc.signalingState,
+            hasLocalDescription: !!pc.localDescription,
+            hasRemoteDescription: !!pc.remoteDescription,
+            localDescriptionType: pc.localDescription?.type,
+            remoteDescriptionType: pc.remoteDescription?.type,
+            iceGatheringState: pc.iceGatheringState,
+            localCandidates: pc.localDescription?.sdp?.split('a=candidate:').length || 0,
+            remoteCandidates: pc.remoteDescription?.sdp?.split('a=candidate:').length || 0,
+            turnServersConfigured: turnServerCount,
+            timestamp: new Date().toISOString(),
+          });
+          
+          // Check if TURN servers are properly configured
+          if (turnServerCount === 0 || (import.meta.env.PROD && !turnUrls)) {
+            safeLog.error("⚠️ [ICE STATE] TURN servers may not be properly configured! " +
+              "Connection failures are common without reliable TURN servers, especially on mobile networks. " +
+              "Set VITE_TURN_SERVERS, VITE_TURN_USERNAME, and VITE_TURN_CREDENTIAL environment variables.");
+          }
         } else if (iceState === "checking") {
           // eslint-disable-next-line no-console
           console.log("⏳ [ICE STATE] ICE CHECKING - Waiting for connection", stateTransition);
@@ -994,6 +1057,30 @@ export const useWebRTC = (
             }, 100);
           } else {
             safeLog.warn("⚠️ [REMOTE STREAM] remoteVideoRef.current is null - video element not ready");
+          }
+        }
+      };
+
+      // Handle ICE candidate errors (helps diagnose TURN server issues)
+      pc.onicecandidateerror = (event) => {
+        // Log ICE candidate errors for diagnostics
+        // These often indicate TURN server connectivity issues
+        const errorInfo = {
+          errorCode: event.errorCode,
+          errorText: event.errorText,
+          hostCandidate: event.hostCandidate,
+          url: event.url,
+          timestamp: new Date().toISOString(),
+        };
+        
+        // Only log errors that aren't expected (like TURN server authentication failures)
+        if (event.errorCode && event.errorCode !== 701) { // 701 is "TURN server returned error"
+          safeLog.warn("⚠️ [ICE CANDIDATE ERROR] ICE candidate gathering error:", errorInfo);
+          
+          // If TURN server error and we're in production without env vars, warn
+          if (event.url?.includes('turn:') && import.meta.env.PROD && !turnUrls) {
+            safeLog.error("❌ [ICE CANDIDATE ERROR] TURN server error detected in production! " +
+              "Set VITE_TURN_SERVERS, VITE_TURN_USERNAME, and VITE_TURN_CREDENTIAL environment variables.");
           }
         }
       };
