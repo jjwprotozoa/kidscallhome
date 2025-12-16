@@ -85,9 +85,78 @@ Comprehensive SEO optimization and marketing copy developed for app store listin
 - **Voice Assistant Ready**: Structured data enables AI assistants to recommend and describe the app
 - **Consistent Messaging**: Unified value proposition across all platforms and touchpoints
 
-## Latest Changes (2025-12-16)
+## Latest Changes (2025-01-XX)
 
-### 1. SEO & Marketing Copy Update - Landing Page Optimization for 2025
+### 1. Call Connection Fixes - Production TURN Server Configuration & Cloudflare Integration
+
+- **Purpose**: Fix production call connection issues caused by unreliable free public TURN servers. Add support for production-grade TURN servers including Cloudflare TURN with dynamic credential generation.
+- **Issues Fixed**:
+  - **Unreliable TURN Servers**: Free public TURN servers (`openrelay.metered.ca`) not reliable for production, especially on mobile networks
+  - **No Production Configuration**: No way to configure production-grade TURN servers via environment variables
+  - **Limited Error Diagnostics**: Insufficient logging to diagnose connection failures
+  - **Static Credentials**: No support for dynamic credential generation (required for Cloudflare TURN)
+- **Changes**:
+  - **Environment Variable Support for Static TURN Servers**:
+    - Added support for `VITE_TURN_SERVERS`, `VITE_TURN_USERNAME`, and `VITE_TURN_CREDENTIAL` environment variables
+    - Supports multiple TURN servers (comma-separated URLs)
+    - Falls back to free public servers in development with warnings
+  - **Cloudflare TURN Integration** (Recommended):
+    - Created API endpoint (`/api/turn-credentials`) for server-side credential generation
+    - Uses Cloudflare RTC API to generate temporary credentials (24-hour TTL)
+    - Server-side secrets (`TURN_KEY_ID`, `TURN_KEY_API_TOKEN`) never exposed to client
+    - Automatic credential rotation - credentials generated per request
+    - Enabled via `VITE_USE_CLOUDFLARE_TURN=true` environment variable
+  - **Enhanced Error Diagnostics**:
+    - Added `onicecandidateerror` handler for TURN server diagnostics
+    - Enhanced connection failure logging with detailed diagnostics
+    - Added production warnings when TURN servers aren't configured
+    - Improved ICE connection state monitoring
+  - **Fallback Chain**:
+    - Priority 1: Cloudflare TURN (if `VITE_USE_CLOUDFLARE_TURN=true`)
+    - Priority 2: Static environment variables (if `VITE_TURN_SERVERS` set)
+    - Priority 3: Free public TURN servers (development only, with warnings)
+- **Technical Implementation**:
+  - **API Endpoint**: `api/turn-credentials.ts` - Vercel serverless function
+    - Calls Cloudflare API: `/v1/turn/keys/{KEY_ID}/credentials/generate-ice-servers`
+    - Returns WebRTC-compatible `iceServers` configuration
+    - Handles errors gracefully with fallback messaging
+  - **WebRTC Hook**: Updated `src/features/calls/hooks/useWebRTC.ts`
+    - Fetches Cloudflare credentials dynamically when enabled
+    - Parses Cloudflare response format: `{ iceServers: [{ urls, username, credential }] }`
+    - Enhanced ICE candidate error handling
+    - Improved connection state diagnostics
+  - **Documentation**: Created comprehensive guides
+    - `docs/CALL_CONNECTION_FIXES.md` - TURN server configuration guide
+    - `docs/CLOUDFLARE_TURN_SETUP.md` - Cloudflare TURN setup instructions
+- **Files Modified**:
+  - `api/turn-credentials.ts` (new) - Cloudflare TURN credential generation endpoint
+  - `src/features/calls/hooks/useWebRTC.ts` - TURN server configuration and Cloudflare support
+  - `docs/CALL_CONNECTION_FIXES.md` (new) - TURN server configuration documentation
+  - `docs/CLOUDFLARE_TURN_SETUP.md` (new) - Cloudflare TURN setup guide
+  - `package.json` - Added `@vercel/node` dev dependency for API endpoint types
+- **Environment Variables Required**:
+  - **For Cloudflare TURN**:
+    ```env
+    TURN_KEY_ID=your_cloudflare_turn_key_id
+    TURN_KEY_API_TOKEN=your_cloudflare_turn_api_token
+    VITE_USE_CLOUDFLARE_TURN=true
+    ```
+  - **For Static TURN Servers**:
+    ```env
+    VITE_TURN_SERVERS=turn:server1.com:3478,turn:server2.com:3478
+    VITE_TURN_USERNAME=your_username
+    VITE_TURN_CREDENTIAL=your_credential
+    ```
+- **Impact**:
+  - **Production Reliability**: Production-grade TURN servers ensure reliable call connections
+  - **Security**: Cloudflare credentials generated server-side, never exposed to client
+  - **Automatic Rotation**: Cloudflare credentials rotate automatically (24-hour TTL)
+  - **Better Diagnostics**: Enhanced logging helps identify connection issues quickly
+  - **Flexible Configuration**: Support for multiple TURN server providers
+  - **Mobile Network Support**: Reliable connections on mobile networks with symmetric NATs
+  - **Cost Efficiency**: Cloudflare TURN pay-per-use pricing vs static server costs
+
+### 2. SEO & Marketing Copy Update - Landing Page Optimization for 2025
 
 - **Purpose**: Strengthen SEO for 2025 around safe kids calling, "no phone / no SIM / tablet" use, and co-parenting. Modernize structured data and improve above-the-fold messaging to address parent concerns about safety, privacy, and data tracking.
 - **Changes**:
@@ -186,7 +255,7 @@ Comprehensive SEO optimization and marketing copy developed for app store listin
   - **Privacy Credibility**: Concrete encryption and data protection details build trust
   - **Ready for Play Console**: Copy ready to paste directly into Google Play Console
 
-### 3. Authentication & Session Management Fixes
+### 4. Authentication & Session Management Fixes
 
 - **Purpose**: Fix production issues with logout behavior and session persistence
 - **Issues Fixed**:
@@ -231,7 +300,7 @@ Comprehensive SEO optimization and marketing copy developed for app store listin
   - **Better UX**: Sessions persist across navigation, only cleared on explicit logout
   - **Production Stability**: Eliminates production issues with cross-user logout
 
-### 3. Child Blocking & Navigation Fixes
+### 5. Child Blocking & Navigation Fixes
 
 - **Purpose**: Fix child blocking functionality and improve navigation UX
 - **Issues Fixed**:
@@ -280,7 +349,7 @@ Comprehensive SEO optimization and marketing copy developed for app store listin
   - **Database Consistency**: Uses existing database functions designed for this use case
   - **Performance**: Proper subscription cleanup prevents memory leaks
 
-### 4. Production Loading Issues Fix - Workbox Precaching & Vercel Routing
+### 6. Production Loading Issues Fix - Workbox Precaching & Vercel Routing
 
 - **Purpose**: Fix production loading errors preventing service worker installation and causing 403 errors on HTML files
 - **Issues Fixed**:
@@ -316,7 +385,7 @@ Comprehensive SEO optimization and marketing copy developed for app store listin
   - **Production Stability**: Eliminates Workbox precaching errors that were breaking PWA functionality
   - **Performance**: HTML files cached efficiently without blocking service worker installation
 
-### 5. Apple App Store Listing Copy Creation
+### 7. Apple App Store Listing Copy Creation
 
 - **Purpose**: Create App Store-optimized copy for Apple App Store Connect submission, addressing 2025 parent concerns about kids messaging apps and emphasizing safety, privacy, and tablet compatibility
 - **Changes**:
