@@ -2,6 +2,42 @@
 
 ## Latest Changes (2025-12-09)
 
+### 1. Conversations and Feature Flags Infrastructure
+
+- **Purpose**: Future-proof schema for child-to-child messaging/calls, gated by feature flags
+- **Implementation**:
+  - **Conversations Table**: Created to support 1:1 and group conversations (future-proof for group chats)
+  - **Conversation Participants Table**: Links users/children to conversations, supports both adults (auth.users.id) and children (child_profiles.id)
+  - **Family Feature Flags Table**: Per-family feature flags to enable/disable child-to-child communication without migrations
+  - **Schema Updates**: 
+    - Added `conversation_id` and `receiver_type` to `messages` table (nullable for backward compatibility)
+    - Added `conversation_id` and `callee_id` to `calls` table (nullable for backward compatibility)
+  - **Helper Functions**: 
+    - `is_feature_enabled_for_children()` - Checks if feature is enabled for either child's family
+    - Updated `can_users_communicate()` - Now checks `'child_to_child_messaging'` feature flag
+    - New `can_users_call()` - Same logic but checks `'child_to_child_calls'` feature flag
+- **RLS Policy Updates**:
+  - Updated child message INSERT policy to use conversation context when available, falls back to parent (legacy)
+  - Updated child call INSERT policy to support conversation_id, callee_id, or legacy parent_id
+  - New RLS policies for conversations, participants, and feature flags tables
+- **Features**:
+  - Child-to-child communication can be enabled/disabled per family via feature flags
+  - Parent approval still required for child-to-child connections (via `child_connections` table)
+  - Feature flags allow gradual rollout and A/B testing without migrations
+  - Schema supports future group chat functionality
+  - Backward compatible - existing messages/calls work unchanged
+- **Impact**:
+  - Foundation laid for child-to-child messaging/calls
+  - Parents maintain control via feature flags (can toggle on/off per family)
+  - Flexible architecture for future enhancements
+  - Database-level enforcement of all rules (even with feature flags enabled)
+- **Files**:
+  - `supabase/migrations/20251209000001_add_conversations_and_feature_flags.sql` (new)
+  - `supabase/migrations/20251209000000_enforce_refined_permissions_matrix.sql` (updated with conversation support)
+  - `docs/FEATURE_FLAGS_AND_CONVERSATIONS.md` (new)
+
+### 2. Database-Level Permissions Matrix Enforcement
+
 ### 1. Database-Level Permissions Matrix Enforcement
 
 - **Issue**: Permissions matrix rules were only enforced at application level, leaving potential security gaps

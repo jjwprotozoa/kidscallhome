@@ -10,6 +10,7 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+dev-dist
 *.local
 
 # Editor directories and files
@@ -31,6 +32,13 @@ ngrok.yml
 .env.local
 .env.*.local
 
+# Android build outputs and caches
+android/build/
+android/app/build/
+android/.gradle/
+android/.cxx/
+android/app/.cxx/
+
 # Android local properties (machine-specific SDK paths)
 android/local.properties
 
@@ -40,3 +48,8 @@ android/app/*.jks
 android/app/*.keystore
 android/**/*.jks
 android/**/*.keystore
+
+# Package manager lockfiles (using npm, ignore others)
+bun.lockb
+yarn.lock
+pnpm-lock.yaml
