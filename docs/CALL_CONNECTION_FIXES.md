@@ -28,6 +28,7 @@ VITE_TURN_CREDENTIAL=your_credential
 ### 2. Enhanced Error Diagnostics
 
 Added comprehensive logging for:
+
 - ICE connection state changes
 - ICE candidate errors (TURN server failures)
 - Connection failure diagnostics
@@ -63,6 +64,7 @@ Cloudflare TURN provides temporary credentials that are generated server-side an
 **See:** [`docs/CLOUDFLARE_TURN_SETUP.md`](./CLOUDFLARE_TURN_SETUP.md) for complete setup instructions.
 
 **Quick Setup:**
+
 1. Get Cloudflare TURN Key ID and API Token from Cloudflare dashboard
 2. Set environment variables:
    ```env
@@ -73,6 +75,7 @@ Cloudflare TURN provides temporary credentials that are generated server-side an
 3. Deploy - the API endpoint (`/api/turn-credentials`) will automatically generate credentials
 
 **Benefits:**
+
 - ✅ Automatic credential rotation (24-hour TTL)
 - ✅ Server-side credential generation (more secure)
 - ✅ No need to manage static credentials
@@ -81,6 +84,7 @@ Cloudflare TURN provides temporary credentials that are generated server-side an
 ### Option 2: Static TURN Servers (Environment Variables)
 
 1. **Get TURN Server Credentials**
+
    - Recommended: [Metered TURN](https://www.metered.ca/tools/openrelay/) (paid, reliable)
    - Alternative: [Twilio STUN/TURN](https://www.twilio.com/stun-turn) (paid)
    - Alternative: Self-hosted [coturn](https://github.com/coturn/coturn) server
@@ -100,6 +104,7 @@ Cloudflare TURN provides temporary credentials that are generated server-side an
 3. **Verify Configuration**
 
    Check browser console logs:
+
    - Should see: `🌐 [WEBRTC] Using production TURN servers from environment variables`
    - Should NOT see: `⚠️ [WEBRTC] WARNING: Using free public TURN servers in production!`
 
@@ -121,10 +126,12 @@ No changes needed - free public TURN servers are used automatically with a devel
 If calls fail to connect:
 
 1. **Check TURN Server Configuration**
+
    - Look for: `⚠️ [WEBRTC] WARNING: Using free public TURN servers in production!`
    - If present, set environment variables
 
 2. **Check ICE Candidate Errors**
+
    - Look for: `⚠️ [ICE CANDIDATE ERROR] ICE candidate gathering error`
    - Check `errorCode` and `url` fields
    - TURN server errors (errorCode 701) indicate TURN server issues
@@ -139,16 +146,19 @@ If calls fail to connect:
 ### Calls Still Not Connecting
 
 1. **Verify Environment Variables**
+
    - Check deployment platform environment variables
    - Ensure variables start with `VITE_` prefix
    - Rebuild/redeploy after setting variables
 
 2. **Check TURN Server Status**
+
    - Test TURN server connectivity
    - Verify credentials are correct
    - Check TURN server logs for errors
 
 3. **Network Issues**
+
    - Both peers behind restrictive NATs may need TURN servers
    - Mobile networks often require TURN servers
    - Corporate networks may block STUN/TURN traffic
@@ -187,4 +197,3 @@ If calls fail to connect:
 - [Metered TURN](https://www.metered.ca/tools/openrelay/)
 - [Twilio STUN/TURN](https://www.twilio.com/stun-turn)
 - [coturn Server](https://github.com/coturn/coturn)
-

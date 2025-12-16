@@ -27,8 +27,9 @@ export default async function handler(
 
   try {
     // Generate temporary TURN credentials from Cloudflare API
+    // Correct endpoint: /credentials/generate-ice-servers
     const response = await fetch(
-      `https://rtc.live.cloudflare.com/v1/turn/keys/${TURN_KEY_ID}/credentials/generate`,
+      `https://rtc.live.cloudflare.com/v1/turn/keys/${TURN_KEY_ID}/credentials/generate-ice-servers`,
       {
         method: 'POST',
         headers: {
@@ -49,20 +50,9 @@ export default async function handler(
 
     const data = await response.json();
     
-    // Return in format compatible with WebRTC
-    // Cloudflare returns: { iceServers: { urls: [...], username: "...", credential: "..." } }
-    return res.status(200).json({
-      iceServers: {
-        urls: [
-          'stun:stun.cloudflare.com:3478',
-          'turn:turn.cloudflare.com:3478?transport=udp',
-          'turn:turn.cloudflare.com:3478?transport=tcp',
-          'turns:turn.cloudflare.com:5349?transport=tcp'
-        ],
-        username: data.iceServers.username,
-        credential: data.iceServers.credential
-      }
-    });
+    // Cloudflare returns: { iceServers: [{ urls: [...], username: "...", credential: "..." }] }
+    // Return directly - the response format is already WebRTC-compatible
+    return res.status(200).json(data);
   } catch (error) {
     console.error('Failed to generate TURN credentials:', error);
     return res.status(500).json({ 

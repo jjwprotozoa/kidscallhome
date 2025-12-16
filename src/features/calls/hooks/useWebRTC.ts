@@ -226,26 +226,30 @@ export const useWebRTC = (
           
           const credentials = await response.json();
           
-          if (credentials.iceServers && credentials.iceServers.urls && credentials.iceServers.username && credentials.iceServers.credential) {
-            // Use Cloudflare STUN server (first URL)
-            iceServers = [
-              { urls: credentials.iceServers.urls[0] }, // STUN
-            ];
+          // Cloudflare returns: { iceServers: [{ urls: [...], username: "...", credential: "..." }] }
+          if (credentials.iceServers && Array.isArray(credentials.iceServers) && credentials.iceServers.length > 0) {
+            const cloudflareConfig = credentials.iceServers[0];
             
-            // Add Cloudflare TURN servers (remaining URLs) with credentials
-            const turnUrls = credentials.iceServers.urls.slice(1);
-            iceServers.push({
-              urls: turnUrls,
-              username: credentials.iceServers.username,
-              credential: credentials.iceServers.credential,
-            });
-            
-            safeLog.log("✅ [WEBRTC] Using Cloudflare TURN servers", {
-              serverCount: turnUrls.length,
-              hasCredentials: true,
-            });
+            if (cloudflareConfig.urls && cloudflareConfig.username && cloudflareConfig.credential) {
+              // Use Cloudflare configuration directly - it's already in the correct format
+              iceServers = [
+                {
+                  urls: cloudflareConfig.urls,
+                  username: cloudflareConfig.username,
+                  credential: cloudflareConfig.credential,
+                }
+              ];
+              
+              safeLog.log("✅ [WEBRTC] Using Cloudflare TURN servers", {
+                serverCount: cloudflareConfig.urls.length,
+                hasCredentials: true,
+                urls: cloudflareConfig.urls,
+              });
+            } else {
+              throw new Error('Invalid credentials format from Cloudflare API - missing urls, username, or credential');
+            }
           } else {
-            throw new Error('Invalid credentials format from Cloudflare API');
+            throw new Error('Invalid credentials format from Cloudflare API - iceServers array not found');
           }
         } catch (error) {
           safeLog.error("❌ [WEBRTC] Failed to get Cloudflare TURN credentials:", error);
