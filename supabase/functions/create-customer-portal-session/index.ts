@@ -1,5 +1,6 @@
 // Supabase Edge Function: Create Stripe Customer Portal Session
 // Purpose: Generate a Stripe Customer Portal session for subscription management
+// Path: supabase/functions/create-customer-portal-session/index.ts
 
 /// <reference types="../deno.d.ts" />
 
