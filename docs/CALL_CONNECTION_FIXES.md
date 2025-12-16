@@ -56,7 +56,29 @@ Added comprehensive logging for:
 
 ## Setup Instructions
 
-### For Production Deployment
+### Option 1: Cloudflare TURN (Recommended)
+
+Cloudflare TURN provides temporary credentials that are generated server-side and rotated automatically.
+
+**See:** [`docs/CLOUDFLARE_TURN_SETUP.md`](./CLOUDFLARE_TURN_SETUP.md) for complete setup instructions.
+
+**Quick Setup:**
+1. Get Cloudflare TURN Key ID and API Token from Cloudflare dashboard
+2. Set environment variables:
+   ```env
+   TURN_KEY_ID=your_turn_key_id
+   TURN_KEY_API_TOKEN=your_turn_key_api_token
+   VITE_USE_CLOUDFLARE_TURN=true
+   ```
+3. Deploy - the API endpoint (`/api/turn-credentials`) will automatically generate credentials
+
+**Benefits:**
+- ✅ Automatic credential rotation (24-hour TTL)
+- ✅ Server-side credential generation (more secure)
+- ✅ No need to manage static credentials
+- ✅ Built-in Cloudflare infrastructure
+
+### Option 2: Static TURN Servers (Environment Variables)
 
 1. **Get TURN Server Credentials**
    - Recommended: [Metered TURN](https://www.metered.ca/tools/openrelay/) (paid, reliable)

@@ -197,55 +197,106 @@ export const useWebRTC = (
       // TURN servers are required when both peers are behind symmetric NATs (common on mobile networks)
       
       // Build ICE servers configuration
-      // Priority: Environment variables > Default fallback servers
-      const iceServers: RTCIceServer[] = [
+      // Priority: Cloudflare TURN (dynamic) > Environment variables > Default fallback servers
+      let iceServers: RTCIceServer[] = [
         // STUN servers for NAT discovery (always include)
         { urls: "stun:stun.l.google.com:19302" },
         { urls: "stun:stun1.l.google.com:19302" },
         { urls: "stun:stun2.l.google.com:19302" },
       ];
 
-      // Add TURN servers from environment variables if available (production)
-      const turnUrls = import.meta.env.VITE_TURN_SERVERS;
-      const turnUsername = import.meta.env.VITE_TURN_USERNAME;
-      const turnCredential = import.meta.env.VITE_TURN_CREDENTIAL;
-
-      if (turnUrls && turnUsername && turnCredential) {
-        // Parse comma-separated TURN URLs from environment
-        const turnUrlList = turnUrls.split(',').map(url => url.trim()).filter(Boolean);
-        turnUrlList.forEach(url => {
-          iceServers.push({
-            urls: url,
-            username: turnUsername,
-            credential: turnCredential,
+      // Check if Cloudflare TURN is enabled
+      const useCloudflareTurn = import.meta.env.VITE_USE_CLOUDFLARE_TURN === 'true';
+      
+      if (useCloudflareTurn) {
+        try {
+          safeLog.log("🌐 [WEBRTC] Fetching Cloudflare TURN credentials...");
+          
+          const response = await fetch('/api/turn-credentials', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
           });
-        });
-        safeLog.log("🌐 [WEBRTC] Using production TURN servers from environment variables", {
-          serverCount: turnUrlList.length,
-        });
-      } else {
-        // Fallback to free public TURN servers (development/testing only)
-        // WARNING: These are not reliable for production use
-        iceServers.push(
-          {
-            urls: "turn:openrelay.metered.ca:80",
-            username: "openrelayproject",
-            credential: "openrelayproject",
-          },
-          {
-            urls: "turn:openrelay.metered.ca:443",
-            username: "openrelayproject",
-            credential: "openrelayproject",
+          
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(`Failed to fetch TURN credentials: ${response.status} - ${errorData.message || 'Unknown error'}`);
           }
-        );
-        
-        // Log warning in production mode
-        if (import.meta.env.PROD) {
-          safeLog.error("⚠️ [WEBRTC] WARNING: Using free public TURN servers in production! " +
-            "Set VITE_TURN_SERVERS, VITE_TURN_USERNAME, and VITE_TURN_CREDENTIAL environment variables " +
-            "for reliable production calls.");
-        } else {
-          safeLog.log("🌐 [WEBRTC] Using free public TURN servers (development mode)");
+          
+          const credentials = await response.json();
+          
+          if (credentials.iceServers && credentials.iceServers.urls && credentials.iceServers.username && credentials.iceServers.credential) {
+            // Use Cloudflare STUN server (first URL)
+            iceServers = [
+              { urls: credentials.iceServers.urls[0] }, // STUN
+            ];
+            
+            // Add Cloudflare TURN servers (remaining URLs) with credentials
+            const turnUrls = credentials.iceServers.urls.slice(1);
+            iceServers.push({
+              urls: turnUrls,
+              username: credentials.iceServers.username,
+              credential: credentials.iceServers.credential,
+            });
+            
+            safeLog.log("✅ [WEBRTC] Using Cloudflare TURN servers", {
+              serverCount: turnUrls.length,
+              hasCredentials: true,
+            });
+          } else {
+            throw new Error('Invalid credentials format from Cloudflare API');
+          }
+        } catch (error) {
+          safeLog.error("❌ [WEBRTC] Failed to get Cloudflare TURN credentials:", error);
+          safeLog.log("⚠️ [WEBRTC] Falling back to default TURN configuration");
+          // Continue to fallback logic below
+        }
+      }
+
+      // Fallback: Add TURN servers from environment variables if available (and Cloudflare not used)
+      if (!useCloudflareTurn || iceServers.length <= 3) {
+        const turnUrls = import.meta.env.VITE_TURN_SERVERS;
+        const turnUsername = import.meta.env.VITE_TURN_USERNAME;
+        const turnCredential = import.meta.env.VITE_TURN_CREDENTIAL;
+
+        if (turnUrls && turnUsername && turnCredential) {
+          // Parse comma-separated TURN URLs from environment
+          const turnUrlList = turnUrls.split(',').map(url => url.trim()).filter(Boolean);
+          turnUrlList.forEach(url => {
+            iceServers.push({
+              urls: url,
+              username: turnUsername,
+              credential: turnCredential,
+            });
+          });
+          safeLog.log("🌐 [WEBRTC] Using production TURN servers from environment variables", {
+            serverCount: turnUrlList.length,
+          });
+        } else if (!useCloudflareTurn) {
+          // Fallback to free public TURN servers (development/testing only)
+          // WARNING: These are not reliable for production use
+          iceServers.push(
+            {
+              urls: "turn:openrelay.metered.ca:80",
+              username: "openrelayproject",
+              credential: "openrelayproject",
+            },
+            {
+              urls: "turn:openrelay.metered.ca:443",
+              username: "openrelayproject",
+              credential: "openrelayproject",
+            }
+          );
+          
+          // Log warning in production mode
+          if (import.meta.env.PROD) {
+            safeLog.error("⚠️ [WEBRTC] WARNING: Using free public TURN servers in production! " +
+              "Set VITE_USE_CLOUDFLARE_TURN=true or configure VITE_TURN_SERVERS environment variables " +
+              "for reliable production calls.");
+          } else {
+            safeLog.log("🌐 [WEBRTC] Using free public TURN servers (development mode)");
+          }
         }
       }
 
