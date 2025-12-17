@@ -11,42 +11,70 @@ import { isNativeAndroid } from "@/utils/nativeAndroid";
 import { useIncomingCallState } from "./useIncomingCallState";
 import { IncomingCallUI } from "./IncomingCallUI";
 import { IncomingCall } from "./types";
+import { setUserStartedCall } from "@/utils/userInteraction";
 
 export const GlobalIncomingCall = () => {
   const { incomingCall, setIncomingCall, stopIncomingCall } = useIncomingCallState();
   const isAnsweringRef = useRef(false);
   const navigate = useNavigate();
 
-  const handleAnswerCall = () => {
-    if (incomingCall) {
-      stopIncomingCall(incomingCall.id);
+  const handleAnswerCall = async () => {
+    if (incomingCall && !isAnsweringRef.current) {
+      // CRITICAL: User clicked Accept - enable audio for the call
+      setUserStartedCall();
+      
+      // Prevent double-clicks
       isAnsweringRef.current = true;
+      stopIncomingCall(incomingCall.id);
       const callId = incomingCall.id;
       
+      // Determine user role to route correctly
+      const { data: { session } } = await supabase.auth.getSession();
+      const childSession = localStorage.getItem("childSession");
+      const isChild = !session && !!childSession;
+      
+      let isFamilyMember = false;
+      if (session?.user?.id) {
+        const { getUserRole } = await import("@/utils/userRole");
+        const userRole = await getUserRole(session.user.id);
+        isFamilyMember = userRole === "family_member";
+        console.log("🔍 [GLOBAL INCOMING CALL] User role detection:", {
+          userId: session.user.id,
+          userRole,
+          isFamilyMember,
+        });
+      }
+      
+      console.log("🔍 [GLOBAL INCOMING CALL] Routing decision:", {
+        isChild,
+        isFamilyMember,
+        hasChildId: !!incomingCall.child_id,
+        hasParentId: !!incomingCall.parent_id,
+        callId,
+      });
+      
       if (incomingCall.child_id) {
-        // Parent answering child's call
-        navigate(`/call/${incomingCall.child_id}?callId=${callId}`);
-      } else if (incomingCall.parent_id) {
-        // Child answering parent's call - need child ID from session
-        if (typeof window !== 'undefined' && window.localStorage) {
-          const childSession = localStorage.getItem("childSession");
-          if (childSession) {
-            try {
-              const childData = JSON.parse(childSession);
-              if (childData?.id) {
-                navigate(`/call/${childData.id}?callId=${callId}`);
-              }
-            } catch (error) {
-              console.error("❌ [GLOBAL INCOMING CALL] Invalid child session data in handleAnswerCall:", error);
-            }
-          }
+        // Adult (parent or family member) answering child's call
+        if (isFamilyMember) {
+          console.log("✅ [GLOBAL INCOMING CALL] Routing family member to:", `/family-member/call/${incomingCall.child_id}?callId=${callId}`);
+          navigate(`/family-member/call/${incomingCall.child_id}?callId=${callId}`);
+        } else {
+          // Parent answering child's call
+          console.log("✅ [GLOBAL INCOMING CALL] Routing parent to:", `/call/${incomingCall.child_id}?callId=${callId}`);
+          navigate(`/call/${incomingCall.child_id}?callId=${callId}`);
         }
+      } else if (incomingCall.parent_id) {
+        // Child answering parent's or family member's call - navigate to child call route
+        console.log("✅ [GLOBAL INCOMING CALL] Routing child to:", `/child/call/${incomingCall.parent_id}?callId=${callId}`);
+        navigate(`/child/call/${incomingCall.parent_id}?callId=${callId}`);
+      } else {
+        console.error("❌ [GLOBAL INCOMING CALL] No child_id or parent_id in incoming call:", incomingCall);
       }
       
       setIncomingCall(null);
       setTimeout(() => {
         isAnsweringRef.current = false;
-      }, 2000);
+      }, 5000); // Increased timeout to prevent race conditions
     }
   };
 
@@ -55,7 +83,18 @@ export const GlobalIncomingCall = () => {
       const { data: { session } } = await supabase.auth.getSession();
       const childSession = localStorage.getItem("childSession");
       const isChild = !session && !!childSession;
-      const by = isChild ? 'child' : 'parent';
+      
+      // Determine who is declining
+      let by: "child" | "parent" | "family_member" = "parent";
+      if (isChild) {
+        by = "child";
+      } else if (session?.user?.id) {
+        const { getUserRole } = await import("@/utils/userRole");
+        const userRole = await getUserRole(session.user.id);
+        if (userRole === "family_member") {
+          by = "family_member";
+        }
+      }
 
       try {
         await endCallUtil({ callId: incomingCall.id, by, reason: 'declined' });

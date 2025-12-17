@@ -6,6 +6,7 @@ import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { endCall as endCallUtil } from "@/features/calls/utils/callEnding";
 import { useIncomingCallNotifications } from "@/features/calls/hooks/useIncomingCallNotifications";
+import { setUserStartedCall } from "@/utils/userInteraction";
 import { IncomingCall } from "./types";
 
 export const useIncomingCallHandlers = () => {
@@ -18,6 +19,9 @@ export const useIncomingCallHandlers = () => {
   });
 
   const handleAnswer = useCallback((incomingCall: IncomingCall, setIncomingCall: (call: IncomingCall | null) => void) => {
+    // CRITICAL: User clicked Accept - enable audio for the call
+    setUserStartedCall();
+    
     stopIncomingCall(incomingCall.id);
     isAnsweringRef.current = true;
     const childId = incomingCall.child_id;
@@ -59,6 +63,7 @@ export const useIncomingCallHandlers = () => {
     handleDecline,
   };
 };
+
 
 
 

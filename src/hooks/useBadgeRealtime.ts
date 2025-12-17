@@ -123,7 +123,15 @@ export function useBadgeRealtime() {
             }
           } else {
             // Only log non-binding-mismatch CHANNEL_ERRORs
-            console.error("❌ [BADGE REALTIME] Messages subscription failed:", status);
+            // CHANNEL_ERROR often happens when connection closes - Supabase will auto-retry
+            if (import.meta.env.DEV) {
+              console.debug("⚠️ [BADGE REALTIME] Messages subscription channel error (will auto-retry):", status);
+            }
+          }
+        } else if (status === "SUBSCRIBED") {
+          // Successfully subscribed - clear any previous errors
+          if (import.meta.env.DEV) {
+            console.debug("✅ [BADGE REALTIME] Messages subscription active");
           }
         }
         // CLOSED is normal cleanup, don't log as error
@@ -279,7 +287,15 @@ export function useBadgeRealtime() {
             }
           } else {
             // Only log non-binding-mismatch CHANNEL_ERRORs
-            console.error("❌ [BADGE REALTIME] Calls subscription failed:", status);
+            // CHANNEL_ERROR often happens when connection closes - Supabase will auto-retry
+            if (import.meta.env.DEV) {
+              console.debug("⚠️ [BADGE REALTIME] Calls subscription channel error (will auto-retry):", status);
+            }
+          }
+        } else if (status === "SUBSCRIBED") {
+          // Successfully subscribed - clear any previous errors
+          if (import.meta.env.DEV) {
+            console.debug("✅ [BADGE REALTIME] Calls subscription active");
           }
         }
         // CLOSED is normal cleanup, don't log as error

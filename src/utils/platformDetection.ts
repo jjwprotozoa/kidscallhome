@@ -36,3 +36,25 @@ export function isPWA(): boolean {
   return !isNativeApp();
 }
 
+/**
+ * Get the current platform (android, ios, or web)
+ */
+export function getPlatform(): "android" | "ios" | "web" {
+  if (typeof window === "undefined") return "web";
+  
+  // Check for Capacitor
+  const windowWithCapacitor = window as any;
+  if (windowWithCapacitor.Capacitor) {
+    const platform = windowWithCapacitor.Capacitor.getPlatform();
+    if (platform === "android") return "android";
+    if (platform === "ios") return "ios";
+  }
+  
+  // Check user agent
+  const ua = navigator.userAgent.toLowerCase();
+  if (ua.includes("android")) return "android";
+  if (ua.includes("iphone") || ua.includes("ipad") || ua.includes("ipod")) return "ios";
+  
+  return "web";
+}
+

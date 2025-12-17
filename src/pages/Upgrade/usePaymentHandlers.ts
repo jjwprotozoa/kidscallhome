@@ -7,6 +7,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { SubscriptionPlan } from "./types";
 import { UNLIMITED_CHILDREN } from "./constants";
+import { purchaseNativeSubscription } from "@/utils/nativePurchases";
+import { isPWA } from "@/utils/platformDetection";
 
 export const usePaymentHandlers = (
   currentAllowedChildren: number,
@@ -30,6 +32,25 @@ export const usePaymentHandlers = (
     setIsProcessing(true);
 
     try {
+      // Check if running on native app (use native purchases) or PWA (use Stripe)
+      if (!isPWA()) {
+        // Native app: Use app store purchases
+        const result = await purchaseNativeSubscription(selectedPlan);
+        
+        if (result.success) {
+          toast({
+            title: "Purchase Successful!",
+            description: result.message || "Your subscription has been activated.",
+            variant: "default",
+          });
+          await refreshSubscriptionInfo();
+          return { success: true, message: result.message };
+        } else {
+          throw new Error(result.message || "Native purchase failed");
+        }
+      }
+
+      // PWA: Use Stripe Checkout
       // Step 1: Create Stripe Checkout Session via Edge Function
       const { data: checkoutData, error: checkoutError } = await supabase.functions.invoke(
         "create-stripe-subscription",
@@ -65,6 +86,7 @@ export const usePaymentHandlers = (
         description: errorMessage,
         variant: "destructive",
       });
+      return { success: false, error: errorMessage };
     } finally {
       setIsProcessing(false);
     }

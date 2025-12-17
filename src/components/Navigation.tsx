@@ -1,5 +1,6 @@
 // src/components/Navigation.tsx
 // Navigation component for parent and child pages
+// Features mobile-friendly hamburger menu with slide-out drawer
 
 import { NavLink } from "@/components/NavLink";
 import {
@@ -19,6 +20,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
@@ -33,6 +41,7 @@ import {
   Info,
   LayoutDashboard,
   LogOut,
+  Menu,
   MoreVertical,
   Settings,
   Shield,
@@ -40,6 +49,7 @@ import {
   Star,
   UserCheck,
   Users,
+  X,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -98,6 +108,7 @@ const Navigation = () => {
   >(getInitialUserType);
   const [loading, setLoading] = useState(false);
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [pendingConnectionsCount, setPendingConnectionsCount] = useState(0);
   const [newReportsCount, setNewReportsCount] = useState(0);
   const [blockedContactsCount, setBlockedContactsCount] = useState(0);
@@ -416,12 +427,85 @@ const Navigation = () => {
   if (userType === "family_member") {
     // Family members have limited navigation - just Home and More menu
     // They can only call/message children, not manage settings or view reports
+    
+    // Mobile navigation item component for the drawer
+    const MobileNavItemFamily = ({
+      to,
+      icon: Icon,
+      label,
+    }: {
+      to: string;
+      icon: React.ElementType;
+      label: string;
+    }) => {
+      const isActive =
+        location.pathname === to ||
+        location.pathname === to + "/";
+
+      const handleClick = () => {
+        setMobileMenuOpen(false);
+        navigate(to);
+      };
+
+      return (
+        <button
+          onClick={handleClick}
+          className={cn(
+            "flex items-center gap-3 w-full px-4 py-3 rounded-lg text-base font-medium transition-colors",
+            isActive
+              ? "bg-primary text-primary-foreground"
+              : "text-foreground hover:bg-accent"
+          )}
+        >
+          <Icon className="h-5 w-5" />
+          <span>{label}</span>
+        </button>
+      );
+    };
+
     return (
       <>
         <nav className="fixed top-0 left-0 right-0 z-50 border-b bg-background w-full overflow-x-hidden safe-area-top">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
             <div className="flex items-center justify-between h-16 min-w-0">
-              <div className="flex items-center gap-4 min-w-0 flex-shrink">
+              {/* Mobile hamburger menu */}
+              <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+                <SheetTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="sm:hidden"
+                    aria-label="Open menu"
+                  >
+                    <Menu className="h-6 w-6" />
+                  </Button>
+                </SheetTrigger>
+                <SheetContent side="left" className="w-[280px] p-0">
+                  <SheetHeader className="p-4 border-b">
+                    <SheetTitle className="text-left">Menu</SheetTitle>
+                  </SheetHeader>
+                  <div className="flex flex-col gap-1 p-4">
+                    <MobileNavItemFamily to="/family-member" icon={Home} label="Home" />
+                    <MobileNavItemFamily to="/info" icon={Info} label="App Information" />
+                    
+                    <div className="h-px bg-border my-2" />
+                    
+                    <button
+                      onClick={() => {
+                        setMobileMenuOpen(false);
+                        setShowLogoutDialog(true);
+                      }}
+                      className="flex items-center gap-3 w-full px-4 py-3 rounded-lg text-base font-medium text-destructive hover:bg-destructive/10 transition-colors"
+                    >
+                      <LogOut className="h-5 w-5" />
+                      <span>Logout</span>
+                    </button>
+                  </div>
+                </SheetContent>
+              </Sheet>
+
+              {/* Desktop navigation */}
+              <div className="hidden sm:flex items-center gap-4 min-w-0 flex-shrink">
                 <NavLink
                   to="/family-member"
                   className={getNavLinkClassName("/family-member")}
@@ -451,6 +535,12 @@ const Navigation = () => {
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
+
+              {/* App name/logo for mobile (centered) */}
+              <span className="sm:hidden text-lg font-semibold text-primary">
+                KidsCallHome
+              </span>
+
               <Button
                 variant="outline"
                 size="sm"
@@ -489,13 +579,132 @@ const Navigation = () => {
   }
 
   if (userType === "parent") {
+    // Mobile navigation item component for the drawer
+    const MobileNavItem = ({
+      to,
+      icon: Icon,
+      label,
+      badge,
+      onClick,
+    }: {
+      to?: string;
+      icon: React.ElementType;
+      label: string;
+      badge?: number;
+      onClick?: () => void;
+    }) => {
+      const isActive = to
+        ? location.pathname === to ||
+          location.pathname === to + "/" ||
+          (to !== "/parent" && location.pathname.startsWith(to + "/"))
+        : false;
+
+      const handleClick = () => {
+        setMobileMenuOpen(false);
+        if (onClick) {
+          onClick();
+        } else if (to) {
+          navigate(to);
+        }
+      };
+
+      return (
+        <button
+          onClick={handleClick}
+          className={cn(
+            "flex items-center gap-3 w-full px-4 py-3 rounded-lg text-base font-medium transition-colors",
+            isActive
+              ? "bg-primary text-primary-foreground"
+              : "text-foreground hover:bg-accent"
+          )}
+        >
+          <div className="relative">
+            <Icon className="h-5 w-5" />
+            {badge && badge > 0 && (
+              <span className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground text-xs font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+                {badge > 99 ? "99+" : badge}
+              </span>
+            )}
+          </div>
+          <span>{label}</span>
+        </button>
+      );
+    };
+
     return (
       <>
         <nav className="fixed top-0 left-0 right-0 z-50 border-b bg-background w-full overflow-x-hidden safe-area-top">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
             <div className="flex items-center justify-between h-16 min-w-0">
+              {/* Mobile hamburger menu */}
+              <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+                <SheetTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="md:hidden"
+                    aria-label="Open menu"
+                  >
+                    <Menu className="h-6 w-6" />
+                  </Button>
+                </SheetTrigger>
+                <SheetContent side="left" className="w-[280px] p-0">
+                  <SheetHeader className="p-4 border-b">
+                    <SheetTitle className="text-left">Menu</SheetTitle>
+                  </SheetHeader>
+                  <div className="flex flex-col gap-1 p-4" data-tour="parent-menu-mobile">
+                    <MobileNavItem to="/parent" icon={Home} label="Home" />
+                    <MobileNavItem
+                      to="/parent/dashboard"
+                      icon={LayoutDashboard}
+                      label="Dashboard"
+                      badge={missedCallCount}
+                    />
+                    <MobileNavItem
+                      icon={UserCheck}
+                      label="Connections"
+                      badge={pendingConnectionsCount}
+                      onClick={() => navigate("/parent/dashboard?tab=connections")}
+                    />
+                    <MobileNavItem
+                      icon={Shield}
+                      label="Safety"
+                      badge={newReportsCount + blockedContactsCount}
+                      onClick={() => navigate("/parent/dashboard?tab=safety")}
+                    />
+                    <MobileNavItem
+                      to="/parent/children"
+                      icon={Users}
+                      label="Children"
+                      badge={unreadMessageCount}
+                    />
+                    
+                    <div className="h-px bg-border my-2" />
+                    
+                    <MobileNavItem to="/parent/devices" icon={Smartphone} label="Devices" />
+                    <MobileNavItem to="/parent/settings" icon={Settings} label="Settings" />
+                    <MobileNavItem to="/info" icon={Info} label="App Information" />
+                    <MobileNavItem to="/beta" icon={Star} label="Beta Testing" />
+                    
+                    <div className="h-px bg-border my-2" />
+                    
+                    <button
+                      onClick={() => {
+                        setMobileMenuOpen(false);
+                        setShowLogoutDialog(true);
+                      }}
+                      className="flex items-center gap-3 w-full px-4 py-3 rounded-lg text-base font-medium text-destructive hover:bg-destructive/10 transition-colors"
+                    >
+                      <LogOut className="h-5 w-5" />
+                      <span>Logout</span>
+                    </button>
+                  </div>
+                </SheetContent>
+              </Sheet>
+
+              {/* Desktop navigation */}
               <div
-                className="flex items-center gap-4 min-w-0 flex-shrink"
+                className="hidden md:flex items-center gap-4 min-w-0 flex-shrink"
                 data-tour="parent-menu"
               >
                 <NavLink
@@ -530,7 +739,7 @@ const Navigation = () => {
                     <UserCheck className="h-4 w-4" />
                     <Badge count={pendingConnectionsCount} />
                   </div>
-                  <span className="hidden sm:inline">Connections</span>
+                  <span className="hidden lg:inline">Connections</span>
                 </button>
                 <button
                   onClick={() => navigate("/parent/dashboard?tab=safety")}
@@ -547,7 +756,7 @@ const Navigation = () => {
                     <Shield className="h-4 w-4" />
                     <Badge count={newReportsCount + blockedContactsCount} />
                   </div>
-                  <span className="hidden sm:inline">Safety</span>
+                  <span className="hidden lg:inline">Safety</span>
                 </button>
                 <NavLink
                   to="/parent/children"
@@ -557,7 +766,7 @@ const Navigation = () => {
                     <Users className="h-4 w-4" />
                     <Badge count={unreadMessageCount} />
                   </div>
-                  <span>Children</span>
+                  <span className="hidden lg:inline">Children</span>
                 </NavLink>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -572,7 +781,7 @@ const Navigation = () => {
                       )}
                     >
                       <MoreVertical className="h-4 w-4" />
-                      <span className="hidden sm:inline">More</span>
+                      <span className="hidden lg:inline">More</span>
                     </button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-48">
@@ -599,6 +808,12 @@ const Navigation = () => {
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
+
+              {/* App name/logo for mobile (centered) */}
+              <span className="md:hidden text-lg font-semibold text-primary">
+                KidsCallHome
+              </span>
+
               <Button
                 variant="outline"
                 size="sm"
@@ -637,13 +852,97 @@ const Navigation = () => {
   }
 
   if (userType === "child") {
+    // Mobile navigation item component for the drawer
+    const MobileNavItemChild = ({
+      to,
+      icon: Icon,
+      label,
+      badge,
+    }: {
+      to: string;
+      icon: React.ElementType;
+      label: string;
+      badge?: number;
+    }) => {
+      const isActive =
+        location.pathname === to ||
+        location.pathname === to + "/" ||
+        (to !== "/child" && location.pathname.startsWith(to + "/"));
+
+      const handleClick = () => {
+        setMobileMenuOpen(false);
+        navigate(to);
+      };
+
+      return (
+        <button
+          onClick={handleClick}
+          className={cn(
+            "flex items-center gap-3 w-full px-4 py-3 rounded-lg text-base font-medium transition-colors",
+            isActive
+              ? "bg-primary text-primary-foreground"
+              : "text-foreground hover:bg-accent"
+          )}
+        >
+          <div className="relative">
+            <Icon className="h-5 w-5" />
+            {badge && badge > 0 && (
+              <span className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground text-xs font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+                {badge > 99 ? "99+" : badge}
+              </span>
+            )}
+          </div>
+          <span>{label}</span>
+        </button>
+      );
+    };
+
     return (
       <>
         <nav className="fixed top-0 left-0 right-0 z-50 border-b bg-background w-full overflow-x-hidden safe-area-top">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
             <div className="flex items-center justify-between h-16 min-w-0">
+              {/* Mobile hamburger menu */}
+              <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+                <SheetTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="sm:hidden"
+                    aria-label="Open menu"
+                  >
+                    <Menu className="h-6 w-6" />
+                  </Button>
+                </SheetTrigger>
+                <SheetContent side="left" className="w-[280px] p-0">
+                  <SheetHeader className="p-4 border-b">
+                    <SheetTitle className="text-left">Menu</SheetTitle>
+                  </SheetHeader>
+                  <div className="flex flex-col gap-1 p-4" data-tour="child-help-mobile">
+                    <MobileNavItemChild to="/child" icon={Home} label="Home" />
+                    <MobileNavItemChild
+                      to="/child/dashboard"
+                      icon={LayoutDashboard}
+                      label="Dashboard"
+                      badge={missedCallCount}
+                    />
+                    <MobileNavItemChild
+                      to="/child/parents"
+                      icon={Users}
+                      label="Family"
+                      badge={unreadMessageCount}
+                    />
+                    
+                    <div className="h-px bg-border my-2" />
+                    
+                    <MobileNavItemChild to="/info" icon={Info} label="App Information" />
+                  </div>
+                </SheetContent>
+              </Sheet>
+
+              {/* Desktop navigation */}
               <div
-                className="flex items-center gap-4 min-w-0 flex-shrink"
+                className="hidden sm:flex items-center gap-4 min-w-0 flex-shrink"
                 data-tour="child-help"
               >
                 <NavLink to="/child" className={getNavLinkClassName("/child")}>
@@ -692,7 +991,14 @@ const Navigation = () => {
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
-              {/* Children don't have logout - they stay logged in for easy access */}
+
+              {/* App name/logo for mobile (centered) */}
+              <span className="sm:hidden text-lg font-semibold text-primary">
+                KidsCallHome
+              </span>
+
+              {/* Spacer for mobile to balance layout (children don't have logout) */}
+              <div className="sm:hidden w-10" />
             </div>
           </div>
         </nav>

@@ -330,17 +330,23 @@ export function useParentPresence({
             }
             // Don't reset state on binding mismatch - it's often transient
           } else {
-            safeLog.error("❌ [PARENT PRESENCE] Subscription error", {
+            // CHANNEL_ERROR often happens when connection closes - Supabase will auto-retry
+            // Don't reset state immediately as it's likely transient
+            if (import.meta.env.DEV) {
+              safeLog.debug("⚠️ [PARENT PRESENCE] Channel error (will auto-retry)", {
+                parentId,
+                status,
+                channelName,
+              });
+            }
+            // Only reset state if we've been disconnected for a while (handled by timeout logic)
+          }
+        } else if (status === "SUBSCRIBED") {
+          // Successfully subscribed - check initial presence state
+          if (import.meta.env.DEV) {
+            safeLog.debug("✅ [PARENT PRESENCE] Subscribed successfully", {
               parentId,
-              status,
-              error: err,
               channelName,
-            });
-
-            // Reset presence state on actual error (not timeout or binding mismatch)
-            setPresence({
-              isOnline: false,
-              lastSeen: null,
             });
           }
         }

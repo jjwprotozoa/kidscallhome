@@ -9,6 +9,7 @@ import { useChildrenPresence } from "@/features/presence/useChildrenPresence";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useUnreadBadgeForChild } from "@/stores/badgeStore";
+import { setUserStartedCall } from "@/utils/userInteraction";
 import { MessageSquare, Phone } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -314,6 +315,8 @@ const FamilyMemberDashboard = () => {
   };
 
   const handleCall = (childId: string) => {
+    // CRITICAL: User clicked Call - enable audio for the call
+    setUserStartedCall();
     navigate(`/family-member/call/${childId}`);
   };
 
@@ -333,7 +336,7 @@ const FamilyMemberDashboard = () => {
       }
 
       // Use familyMember state if available, otherwise fetch with fallback
-      let memberData = familyMember;
+      const memberData = familyMember;
       let parentId: string | null = null;
 
       if (memberData) {

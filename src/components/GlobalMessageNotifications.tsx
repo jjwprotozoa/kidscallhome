@@ -374,11 +374,19 @@ export const GlobalMessageNotifications = () => {
                   "mismatch between server and client bindings"
                 )
               ) {
-                // Only log non-binding-mismatch CHANNEL_ERRORs
-                console.error(
-                  "❌ [GLOBAL MESSAGE] Child subscription failed:",
-                  status
-                );
+                // CHANNEL_ERROR often happens when connection closes - Supabase will auto-retry
+                // Only log in dev mode for debugging
+                if (import.meta.env.DEV) {
+                  console.debug(
+                    "⚠️ [GLOBAL MESSAGE] Child subscription channel error (will auto-retry):",
+                    status
+                  );
+                }
+              }
+            } else if (status === "SUBSCRIBED") {
+              // Successfully subscribed
+              if (import.meta.env.DEV) {
+                console.debug("✅ [GLOBAL MESSAGE] Child subscription active");
               }
             }
             // CLOSED is normal cleanup, don't log as error
@@ -490,10 +498,11 @@ export const GlobalMessageNotifications = () => {
       // Start polling check
       startPollingIfNeeded();
 
-      // Re-check polling when realtime status changes
+      // Re-check polling when realtime status changes (only needed if realtime reconnects)
+      // Using longer interval since realtime status changes trigger immediate re-evaluation
       const statusCheckInterval = setInterval(() => {
         startPollingIfNeeded();
-      }, 5000); // Check every 5 seconds
+      }, 120000); // Check every 2 minutes (reduced overhead)
 
       return () => {
         if (channelRef.current) {

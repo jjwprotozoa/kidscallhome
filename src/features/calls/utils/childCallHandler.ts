@@ -3,9 +3,9 @@
 
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
+import { safeLog } from "@/utils/security";
 import type { CallRecord, ChildSession } from "../types/call";
 import { isCallTerminal } from "./callEnding";
-import { safeLog } from "@/utils/security";
 
 export const handleChildCall = async (
   pc: RTCPeerConnection,
@@ -96,25 +96,27 @@ export const handleChildCall = async (
   // 2. We're explicitly looking for incoming calls (not making a new call)
   let incomingCallData = null;
   let incomingCallError = null;
-  
+
   // Only check for incoming calls if we don't have a specific call to handle
   // If specificCallId is null/undefined, child is making an outgoing call - skip incoming check
   if (specificCallId === null || specificCallId === undefined) {
-    safeLog.log("📞 [CHILD CALL] Child initiating outgoing call - skipping incoming call check");
+    safeLog.log(
+      "📞 [CHILD CALL] Child initiating outgoing call - skipping incoming call check"
+    );
   } else {
     // We have a specificCallId but it didn't match - might be looking for incoming calls
-    // Still check for incoming calls in this case
+    // Still check for incoming calls in this case (from parent or family member)
     const result = await supabase
       .from("calls")
       .select("*")
       .eq("child_id", child.id)
-      .eq("caller_type", "parent")
+      .in("caller_type", ["parent", "family_member"])
       .eq("status", "ringing") // CRITICAL: Only answer ringing calls
       .not("offer", "is", null) // Must have an offer to answer
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
-    
+
     incomingCallData = result.data;
     incomingCallError = result.error;
   }
@@ -126,10 +128,11 @@ export const handleChildCall = async (
   if (incomingCallData) {
     if (incomingCallData.offer && incomingCallData.status === "ringing") {
       safeLog.log(
-        "📞 [CHILD CALL] Found incoming RINGING call from parent with offer:",
+        "📞 [CHILD CALL] Found incoming RINGING call from adult (parent or family member) with offer:",
         {
           callId: incomingCallData.id,
           status: incomingCallData.status,
+          callerType: incomingCallData.caller_type,
           hasOffer: true,
         }
       );
@@ -151,8 +154,11 @@ export const handleChildCall = async (
         // Don't wait for offer if call is not ringing - create new call instead
       } else {
         safeLog.log(
-          "📞 [CHILD CALL] Found incoming call from parent but offer not ready yet, waiting...",
-          incomingCallData.id
+          "📞 [CHILD CALL] Found incoming call from adult (parent or family member) but offer not ready yet, waiting...",
+          {
+            callId: incomingCallData.id,
+            callerType: incomingCallData.caller_type,
+          }
         );
         setCallId(incomingCallData.id);
 
@@ -171,7 +177,7 @@ export const handleChildCall = async (
               const updatedCall = payload.new as CallRecord;
               if (updatedCall.offer && pc.remoteDescription === null) {
                 safeLog.log(
-                  "📞 [CHILD CALL] Offer received, answering incoming call from parent"
+                  "📞 [CHILD CALL] Offer received, answering incoming call from adult (parent or family member)"
                 );
                 // Unsubscribe from this channel and handle the call
                 supabase.removeChannel(channel);
@@ -479,7 +485,9 @@ const handleExistingCall = async (
           if (
             isTerminal &&
             statusChanged &&
-            (wasTerminal === false || oldCall === undefined || (oldCall !== undefined && oldCall.status === undefined)) &&
+            (wasTerminal === false ||
+              oldCall === undefined ||
+              (oldCall !== undefined && oldCall.status === undefined)) &&
             pc.signalingState !== "closed"
           ) {
             const iceState = pc.iceConnectionState;
@@ -510,14 +518,18 @@ const handleExistingCall = async (
 
             // CRITICAL: Stop connecting immediately to stop ringtone when call ends
             setIsConnecting(false);
-            
-            if (pc.signalingState !== "closed") {
+
+            // Check connection state instead of signaling state (signalingState doesn't include "closed")
+            if (
+              pc.connectionState !== "closed" &&
+              pc.connectionState !== "failed"
+            ) {
               pc.close();
             }
-            
+
             // NOTE: Cleanup and navigation will be handled by useVideoCall's termination listener
             // which listens to the same database UPDATE event. We just close the PC here.
-            
+
             return;
           }
 
@@ -628,12 +640,17 @@ const handleIncomingCallFromParent = async (
   setIsConnecting: (value: boolean) => void,
   iceCandidatesQueue: React.MutableRefObject<RTCIceCandidateInit[]>
 ) => {
-  // Answer incoming call from parent
-  safeLog.log("✅ [CHILD HANDLER] Answering incoming call from parent:", {
-    callId: call.id,
-    hasOffer: !!call.offer,
-    offerType: (call.offer as any)?.type,
-  });
+  // Answer incoming call from parent or family member (same handling)
+  safeLog.log(
+    "✅ [CHILD HANDLER] Answering incoming call from adult (parent or family member):",
+    {
+      callId: call.id,
+      callerType: call.caller_type,
+      hasOffer: !!call.offer,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      offerType: (call.offer as any)?.type,
+    }
+  );
   setCallId(call.id);
 
   if (!call.offer) {
@@ -642,7 +659,7 @@ const handleIncomingCallFromParent = async (
 
   const offerDesc = call.offer as unknown as RTCSessionDescriptionInit;
   safeLog.log(
-    "✅ [CHILD HANDLER] Setting remote description with parent's offer..."
+    "✅ [CHILD HANDLER] Setting remote description with adult's offer..."
   );
 
   // Set the remote description (mirror parent's approach)
@@ -902,7 +919,9 @@ const handleIncomingCallFromParent = async (
         if (
           isTerminal &&
           statusChanged &&
-          (wasTerminal === false || oldCall === undefined || (oldCall !== undefined && oldCall.status === undefined)) &&
+          (wasTerminal === false ||
+            oldCall === undefined ||
+            (oldCall !== undefined && oldCall.status === undefined)) &&
           pc.signalingState !== "closed"
         ) {
           const iceState = pc.iceConnectionState;
@@ -933,14 +952,18 @@ const handleIncomingCallFromParent = async (
 
           // CRITICAL: Stop connecting immediately to stop ringtone when call ends
           setIsConnecting(false);
-          
-          if (pc.signalingState !== "closed") {
+
+          // Check connection state instead of signaling state (signalingState doesn't include "closed")
+          if (
+            pc.connectionState !== "closed" &&
+            pc.connectionState !== "failed"
+          ) {
             pc.close();
           }
-          
+
           // NOTE: Cleanup and navigation will be handled by useVideoCall's termination listener
           // which listens to the same database UPDATE event. We just close the PC here.
-          
+
           return;
         }
 
@@ -1042,46 +1065,107 @@ const handleChildInitiatedCall = async (
   safeLog.log(
     "📞 [CHILD CALL] Creating call for child:",
     child.id,
-    "parent:",
+    "recipient:",
     parentId
   );
 
-  // Verify child exists and parent_id matches before attempting insert
+  // CRITICAL: parentId parameter can be either a parent OR family member user_id
+  // We need to detect which one it is before creating the call record
+
+  // First, verify child exists
   const { data: childData, error: childCheckError } = await supabase
     .from("children")
     .select("id, parent_id")
     .eq("id", child.id)
-    .eq("parent_id", parentId)
     .single();
 
   if (childCheckError || !childData) {
     safeLog.error("❌ [CHILD CALL] Child verification failed:", {
       childId: child.id,
-      parentId: parentId,
       error: childCheckError,
       childData,
     });
     throw new Error(
       `Child verification failed: ${
-        childCheckError?.message || "Child not found or parent mismatch"
+        childCheckError?.message || "Child not found"
       }`
     );
   }
 
-  safeLog.log("✅ [CHILD CALL] Child verified, attempting insert:", {
+  safeLog.log("✅ [CHILD CALL] Child verified:", {
     childId: child.id,
-    parentId: parentId,
-    childData,
+    childParentId: childData.parent_id,
+    recipientId: parentId,
   });
+
+  // Detect if recipient is a family member or parent
+  // Check adult_profiles first (canonical source)
+  // adult_profiles table exists but is not in generated Supabase types
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: adultProfile } = (await (supabase as any)
+    .from("adult_profiles")
+    .select("role, user_id")
+    .eq("user_id", parentId)
+    .maybeSingle()) as {
+    data: { role: string; user_id: string } | null;
+  };
+
+  // Check if recipient is a family member
+  let isFamilyMember = false;
+
+  if (adultProfile) {
+    isFamilyMember = adultProfile.role === "family_member";
+  }
+
+  // Fallback: Check family_members table if not found in adult_profiles
+  if (!isFamilyMember) {
+    const { data: fm } = await supabase
+      .from("family_members")
+      .select("id")
+      .eq("id", parentId)
+      .maybeSingle();
+    isFamilyMember = !!fm;
+  }
+
+  safeLog.log("🔍 [CHILD CALL] Recipient detection:", {
+    recipientId: parentId,
+    isFamilyMember,
+    adultProfileRole: adultProfile?.role ?? null,
+    childParentId: childData.parent_id,
+    matchesChildParent: parentId === childData.parent_id,
+  });
+
+  // Build call data based on recipient type
+  const callData: Record<string, unknown> = {
+    child_id: child.id,
+    caller_type: "child",
+    status: "ringing",
+  };
+
+  if (isFamilyMember) {
+    // Child calling family member
+    callData.family_member_id = parentId;
+    // Also need parent_id for RLS compatibility
+    callData.parent_id = childData.parent_id;
+    safeLog.log("📞 [CHILD CALL] Creating call to FAMILY MEMBER:", {
+      child_id: callData.child_id,
+      family_member_id: callData.family_member_id,
+      parent_id: callData.parent_id,
+      caller_type: callData.caller_type,
+    });
+  } else {
+    // Child calling parent (normal case)
+    callData.parent_id = parentId;
+    safeLog.log("📞 [CHILD CALL] Creating call to PARENT:", {
+      child_id: callData.child_id,
+      parent_id: callData.parent_id,
+      caller_type: callData.caller_type,
+    });
+  }
 
   const { data: call, error: callError } = await supabase
     .from("calls")
-    .insert({
-      child_id: child.id,
-      parent_id: parentId,
-      caller_type: "child",
-      status: "ringing",
-    })
+    .insert(callData)
     .select()
     .single();
 
@@ -1293,7 +1377,9 @@ const handleChildInitiatedCall = async (
         if (
           isTerminal &&
           statusChanged &&
-          (wasTerminal === false || oldCall === undefined || (oldCall !== undefined && oldCall.status === undefined)) &&
+          (wasTerminal === false ||
+            oldCall === undefined ||
+            (oldCall !== undefined && oldCall.status === undefined)) &&
           pc.signalingState !== "closed"
         ) {
           const iceState = pc.iceConnectionState;
@@ -1324,14 +1410,18 @@ const handleChildInitiatedCall = async (
 
           // CRITICAL: Stop connecting immediately to stop ringtone when call ends
           setIsConnecting(false);
-          
-          if (pc.signalingState !== "closed") {
+
+          // Check connection state instead of signaling state (signalingState doesn't include "closed")
+          if (
+            pc.connectionState !== "closed" &&
+            pc.connectionState !== "failed"
+          ) {
             pc.close();
           }
-          
+
           // NOTE: Cleanup and navigation will be handled by useVideoCall's termination listener
           // which listens to the same database UPDATE event. We just close the PC here.
-          
+
           return;
         }
 
@@ -1343,6 +1433,7 @@ const handleChildInitiatedCall = async (
               {
                 callId: updatedCall.id,
                 hasAnswer: !!updatedCall.answer,
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 answerType: (updatedCall.answer as any)?.type,
                 currentRemoteDesc: !!pc.remoteDescription,
               }
@@ -1378,7 +1469,7 @@ const handleChildInitiatedCall = async (
             safeLog.log(
               "✅ [CHILD HANDLER] Call connected! Child received answer from parent."
             );
-            
+
             // CRITICAL: Process any existing ICE candidates from parent immediately
             // Parent may have already sent candidates before child's listener processed the answer
             // Process in background but await properly to ensure candidates are added
@@ -1414,7 +1505,9 @@ const handleChildInitiatedCall = async (
                         if (!candidate.candidate) continue;
                         if (pc.remoteDescription) {
                           // CRITICAL: Await to ensure candidate is added properly
-                          await pc.addIceCandidate(new RTCIceCandidate(candidate));
+                          await pc.addIceCandidate(
+                            new RTCIceCandidate(candidate)
+                          );
                         } else {
                           iceCandidatesQueue.current.push(candidate);
                         }

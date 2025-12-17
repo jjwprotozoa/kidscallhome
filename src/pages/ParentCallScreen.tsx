@@ -8,6 +8,7 @@ import { useCallEngine } from "@/features/calls/hooks/useCallEngine";
 import { useIncomingCallNotifications } from "@/features/calls/hooks/useIncomingCallNotifications";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { setUserStartedCall } from "@/utils/userInteraction";
 import { useFamilyMemberRedirect } from "@/hooks/useFamilyMemberRedirect";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -62,6 +63,9 @@ const ParentCallScreen = () => {
   // Automatically start call when component mounts (no extra "Start Call" step)
   useEffect(() => {
     if (callEngine.state === "idle" && parentId && childId) {
+      // CRITICAL: User navigated to call screen - enable audio
+      setUserStartedCall();
+      
       callEngine.startOutgoingCall(childId).catch((error) => {
         console.error("Failed to start call:", error);
         toast({
@@ -95,6 +99,21 @@ const ParentCallScreen = () => {
           <div className="text-center space-y-4">
             <h2 className="text-2xl font-semibold">Calling {childName}...</h2>
             <p className="text-muted-foreground">Waiting for answer</p>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                callEngine.endCall().catch((error) => {
+                  console.error("Failed to end call:", error);
+                  toast({
+                    title: "Error",
+                    description: "Failed to end call",
+                    variant: "destructive",
+                  });
+                });
+              }}
+            >
+              End Call
+            </Button>
           </div>
         </Card>
       </div>
@@ -112,6 +131,8 @@ const ParentCallScreen = () => {
               <Button
                 onClick={() => {
                   if (callEngine.callId) {
+                    // CRITICAL: User clicked Accept - enable audio
+                    setUserStartedCall();
                     // CRITICAL: Stop incoming call ringtone immediately when Accept is clicked
                     stopIncomingCall(callEngine.callId);
                     callEngine.acceptIncomingCall(callEngine.callId);
@@ -153,6 +174,7 @@ const ParentCallScreen = () => {
       onToggleMute={callEngine.toggleMute}
       onToggleVideo={callEngine.toggleVideo}
       onEndCall={callEngine.endCall}
+      networkQuality={callEngine.networkQuality}
     />
   );
 };

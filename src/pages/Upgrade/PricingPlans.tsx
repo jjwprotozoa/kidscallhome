@@ -27,7 +27,8 @@ export const PricingPlans = ({
     if (hasActiveSubscription) {
       const isUpgrade = 
         plan.id === "annual-family-plan" || 
-        (plan.id === "family-bundle-monthly" && subscriptionType !== "annual-family-plan" && subscriptionType !== "family-bundle-monthly") ||
+        (plan.id === "family-bundle-monthly" && subscriptionType !== "annual-family-plan" && subscriptionType !== "family-bundle-monthly" && subscriptionType !== "family-bundle-annual") ||
+        (plan.id === "family-bundle-annual" && subscriptionType !== "annual-family-plan" && subscriptionType !== "family-bundle-annual" && subscriptionType !== "family-bundle-monthly") ||
         (plan.id.includes("additional") && !subscriptionType.includes("additional"));
       
       const isDowngrade = 
@@ -48,7 +49,8 @@ export const PricingPlans = ({
         const isCurrent = isCurrentPlan(plan);
         const isUpgrade = hasActiveSubscription && 
           (plan.id === "annual-family-plan" || 
-           (plan.id === "family-bundle-monthly" && subscriptionType !== "annual-family-plan" && subscriptionType !== "family-bundle-monthly") ||
+           (plan.id === "family-bundle-monthly" && subscriptionType !== "annual-family-plan" && subscriptionType !== "family-bundle-monthly" && subscriptionType !== "family-bundle-annual") ||
+           (plan.id === "family-bundle-annual" && subscriptionType !== "annual-family-plan" && subscriptionType !== "family-bundle-annual" && subscriptionType !== "family-bundle-monthly") ||
            (plan.id.includes("additional") && !subscriptionType.includes("additional")));
         const isDowngrade = hasActiveSubscription && 
           subscriptionType === "annual-family-plan" && 
@@ -97,11 +99,11 @@ export const PricingPlans = ({
                 <div className="flex items-center gap-2 text-sm">
                   <Check className="h-4 w-4 text-primary" />
                   <span>
-                    {plan.kidsSupported === "unlimited"
-                      ? "Unlimited children"
-                      : `Up to ${plan.kidsSupported} ${
+                    {typeof plan.kidsSupported === "number"
+                      ? `Up to ${plan.kidsSupported} ${
                           plan.kidsSupported === 1 ? "child" : "children"
-                        }`}
+                        }`
+                      : "Unlimited children"}
                   </span>
                 </div>
               </div>

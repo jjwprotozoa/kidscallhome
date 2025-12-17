@@ -38,7 +38,7 @@ export const PricingSection = ({ isParent }: PricingSectionProps) => {
               <div className="border rounded-lg p-4">
                 <div className="flex items-center justify-between mb-2">
                   <h4 className="font-medium">Additional Kid Monthly</h4>
-                  <span className="text-lg font-bold">$2.99/month</span>
+                  <span className="text-lg font-bold">$4.99/month</span>
                 </div>
                 <p className="text-sm text-muted-foreground">
                   Add one more child to your account
@@ -46,11 +46,16 @@ export const PricingSection = ({ isParent }: PricingSectionProps) => {
               </div>
               <div className="border rounded-lg p-4">
                 <div className="flex items-center justify-between mb-2">
-                  <h4 className="font-medium">Additional Kid Annual</h4>
-                  <span className="text-lg font-bold">$29.99/year</span>
+                  <div className="flex items-center gap-2">
+                    <h4 className="font-medium">Additional Kid Annual</h4>
+                    <span className="text-xs bg-primary text-primary-foreground px-2 py-0.5 rounded">
+                      Save 17%
+                    </span>
+                  </div>
+                  <span className="text-lg font-bold">$49.99/year</span>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  Add one more child (save 17% vs monthly)
+                  Add one more child - Save 2 months with annual billing!
                 </p>
               </div>
               <div className="border rounded-lg p-4 border-primary/50">
@@ -65,6 +70,21 @@ export const PricingSection = ({ isParent }: PricingSectionProps) => {
                   Perfect for families with up to 5 kids
                 </p>
               </div>
+              <div className="border rounded-lg p-4 border-primary/50">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <h4 className="font-medium">Family Bundle Annual</h4>
+                    <Crown className="h-4 w-4 text-primary" />
+                    <span className="text-xs bg-primary text-primary-foreground px-2 py-0.5 rounded">
+                      Save 17%
+                    </span>
+                  </div>
+                  <span className="text-lg font-bold">$149.99/year</span>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Up to 5 kids - Save 17% vs monthly
+                </p>
+              </div>
               <div className="border-2 border-primary rounded-lg p-4 bg-primary/5">
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
@@ -74,10 +94,15 @@ export const PricingSection = ({ isParent }: PricingSectionProps) => {
                       Best Value
                     </span>
                   </div>
-                  <span className="text-lg font-bold">$99/year</span>
+                  <div className="text-right">
+                    <span className="text-lg font-bold">$99/year</span>
+                    <div className="text-xs text-muted-foreground">
+                      Just $8.25/month
+                    </div>
+                  </div>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  Best value - unlimited kids for the whole family
+                  Best value - up to 10 kids for the whole family. Billed annually only.
                 </p>
               </div>
             </div>

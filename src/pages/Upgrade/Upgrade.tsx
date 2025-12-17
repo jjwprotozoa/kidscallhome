@@ -126,23 +126,81 @@ const Upgrade = () => {
     }
   };
 
-  // Hide upgrade page for native apps (they use in-app purchases)
+  // Show native purchase UI for native apps
   if (!isPWA()) {
     return (
       <div className="min-h-[100dvh] bg-background w-full overflow-x-hidden">
         <Navigation />
-        <div className="flex items-center justify-center min-h-[60vh] px-4">
-          <Card className="p-8 max-w-md text-center">
-            <h2 className="text-2xl font-bold mb-4">In-App Purchases</h2>
-            <p className="text-muted-foreground mb-4">
-              This app uses in-app purchases through the App Store or Play Store.
-              Please upgrade your subscription through your device's app store.
-            </p>
-            <Button onClick={() => navigate("/parent/dashboard")}>
-              Go to Dashboard
-            </Button>
-          </Card>
+        <OnboardingTour role="parent" pageKey="parent_upgrade" />
+        <HelpBubble role="parent" pageKey="parent_upgrade" />
+        <div
+          className="px-4 pb-4"
+          style={{
+            paddingTop: "calc(0.5rem + 64px + var(--safe-area-inset-top) * 0.15)",
+          }}
+        >
+          <div className="max-w-6xl mx-auto">
+            <div className="mt-4 mb-8">
+              <h1 className="text-3xl font-bold mb-2">Upgrade Your Plan</h1>
+              <p className="text-muted-foreground">
+                Choose a plan that fits your family's needs
+              </p>
+            </div>
+
+            <CurrentPlanDisplay
+              hasActiveSubscription={subscriptionData?.hasActiveSubscription || false}
+              subscriptionType={subscriptionData?.subscriptionType || "free"}
+              currentChildrenCount={subscriptionData?.currentChildrenCount || 0}
+              allowedChildren={subscriptionData?.allowedChildren || 1}
+              isManagingSubscription={isManagingSubscription}
+              onManageSubscription={handleManageSubscription}
+            />
+
+            <PricingPlans
+              subscriptionType={subscriptionData?.subscriptionType || "free"}
+              hasActiveSubscription={subscriptionData?.hasActiveSubscription || false}
+              isProcessing={isProcessing}
+              onPlanSelect={handlePlanSelect}
+            />
+
+            {/* Info Section */}
+            <Card className="p-6 bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
+              <div className="flex items-start gap-3">
+                <Sparkles className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
+                <div className="space-y-2">
+                  <h3 className="font-semibold text-blue-900 dark:text-blue-100">
+                    In-App Purchases
+                  </h3>
+                  <ul className="text-sm text-blue-800 dark:text-blue-200 space-y-1 list-disc list-inside">
+                    <li>Purchases are processed through your device's app store</li>
+                    <li>Subscriptions are managed through your app store account</li>
+                    <li>Your subscription syncs across all your devices</li>
+                    <li>Start adding more children right away!</li>
+                  </ul>
+                </div>
+              </div>
+            </Card>
+          </div>
         </div>
+
+        <PaymentDialog
+          open={showEmailDialog}
+          onOpenChange={setShowEmailDialog}
+          selectedPlan={selectedPlan}
+          email={email}
+          onEmailChange={setEmail}
+          emailLocked={true}
+          isProcessing={isProcessing}
+          onPayment={handlePaymentClick}
+          onManualUpgrade={handleManualUpgradeClick}
+        />
+
+        <SuccessDialog
+          open={showSuccessDialog}
+          onOpenChange={setShowSuccessDialog}
+          message={successMessage}
+          onNavigateToDashboard={() => navigate("/parent/dashboard")}
+        />
       </div>
     );
   }

@@ -12,9 +12,12 @@ export interface SubscriptionPlan {
   description: string;
   recommended?: boolean;
   allowQuantity?: boolean;
+  // Native app store product IDs
+  playStoreProductId?: string; // Google Play subscription ID
+  appStoreProductId?: string; // Apple App Store product ID
 }
 
-export type SubscriptionTier = "free" | "additional-kid-monthly" | "additional-kid-annual" | "family-bundle-monthly" | "annual-family-plan";
+export type SubscriptionTier = "free" | "additional-kid-monthly" | "additional-kid-annual" | "family-bundle-monthly" | "family-bundle-annual" | "annual-family-plan";
 
 export type PaymentState = "idle" | "processing" | "success" | "error";
 

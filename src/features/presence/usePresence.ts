@@ -102,13 +102,14 @@ export function usePresence({
                 console.log("💓 [PRESENCE] Heartbeat sent", { userId });
               }
             }
-          }, 60000); // 60 seconds
+          }, 120000); // 120 seconds (reduced to save bandwidth)
           
         } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
           isConnectedRef.current = false;
-          // Only log errors in development, and only if it's not a common timeout
-          if (import.meta.env.DEV && status !== "TIMED_OUT") {
-            console.error("❌ [PRESENCE] Presence channel error", {
+          // CHANNEL_ERROR and TIMED_OUT are often transient - Supabase will auto-retry
+          // Only log in development for debugging, but don't treat as fatal
+          if (import.meta.env.DEV && status === "CHANNEL_ERROR") {
+            console.debug("⚠️ [PRESENCE] Presence channel error (will auto-retry)", {
               status,
               channelName,
               userId,
@@ -117,6 +118,11 @@ export function usePresence({
         } else if (status === "CLOSED") {
           isConnectedRef.current = false;
           // Silent close - normal cleanup
+        } else if (status === "SUBSCRIBED") {
+          // Successfully subscribed - ensure we're tracking
+          if (isConnectedRef.current && channelRef.current) {
+            channelRef.current.track(presence);
+          }
         }
       });
 

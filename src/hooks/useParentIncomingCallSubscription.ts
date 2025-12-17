@@ -19,6 +19,7 @@ interface CallRecord {
   id: string;
   child_id: string;
   parent_id: string;
+  recipient_type?: string;
   caller_type: string;
   status: string;
   created_at: string;
@@ -101,7 +102,10 @@ export const useParentIncomingCallSubscription = ({
 
         if (childData) {
           if (import.meta.env.DEV) {
-            console.log("📞 [PARENT DASHBOARD] Incoming call:", childData.name);
+            console.warn(
+              "📞 [PARENT DASHBOARD] Incoming call:",
+              childData.name
+            );
           }
           const incomingCall: IncomingCall = {
             id: call.id,
@@ -129,15 +133,17 @@ export const useParentIncomingCallSubscription = ({
         const twoMinutesAgo = new Date(
           Date.now() - 2 * 60 * 1000
         ).toISOString();
-        const { data: existingCalls } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: existingCalls } = (await (supabase as any)
           .from("calls")
           .select("*")
           .eq("parent_id", userId)
+          .eq("recipient_type", "parent") // CRITICAL: Only match calls for parent
           .eq("caller_type", "child")
           .eq("status", "ringing")
           .gte("created_at", twoMinutesAgo)
           .order("created_at", { ascending: false })
-          .limit(1);
+          .limit(1)) as { data: CallRecord[] | null };
 
         if (existingCalls && existingCalls.length > 0) {
           const call = existingCalls[0];
@@ -152,15 +158,17 @@ export const useParentIncomingCallSubscription = ({
       // Use a 1-minute window since we poll every 60 seconds
       const pollForCalls = async () => {
         const oneMinuteAgo = new Date(Date.now() - 60 * 1000).toISOString();
-        const { data: newCalls, error: pollError } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: newCalls, error: pollError } = (await (supabase as any)
           .from("calls")
           .select("*")
           .eq("parent_id", userId)
+          .eq("recipient_type", "parent") // CRITICAL: Only match calls for parent
           .eq("caller_type", "child") // Only child-initiated calls
           .eq("status", "ringing")
           .gte("created_at", oneMinuteAgo)
           .order("created_at", { ascending: false })
-          .limit(1);
+          .limit(1)) as { data: CallRecord[] | null; error: unknown };
 
         if (pollError) {
           console.error("❌ [PARENT DASHBOARD] Polling error:", pollError);
@@ -180,10 +188,11 @@ export const useParentIncomingCallSubscription = ({
 
       // Set up polling as a fallback (every 60 seconds - reduced frequency to minimize console noise)
       // Realtime subscriptions should handle most cases, this is just a safety net
-      pollInterval = setInterval(pollForCalls, 60000);
+      pollInterval = setInterval(pollForCalls, 90000); // 90 seconds (fallback only)
 
       // Subscribe to new calls from children
       // Listen to both INSERT and UPDATE events to catch calls that are reset to ringing
+      // CRITICAL: Use recipient_type filter to prevent matching family member calls
       channelRef.current = supabase
         .channel("parent-incoming-calls")
         .on(
@@ -192,10 +201,23 @@ export const useParentIncomingCallSubscription = ({
             event: "INSERT",
             schema: "public",
             table: "calls",
-            filter: `parent_id=eq.${userId}`,
+            filter: `recipient_type=eq.parent`, // CRITICAL: Only match calls for parent
           },
           async (payload) => {
             const call = payload.new as CallRecord;
+
+            // CRITICAL: Verify recipient_type matches before processing
+            if (call.recipient_type !== "parent") {
+              console.warn(
+                "❌ [PARENT DASHBOARD] Rejecting call with wrong recipient_type:",
+                {
+                  callId: call.id,
+                  recipient_type: call.recipient_type,
+                  expected: "parent",
+                }
+              );
+              return;
+            }
 
             // Verify this call is from a child, for this parent, and is ringing
             // IMPORTANT: Only show incoming call dialog for child-initiated calls, not parent-initiated ones
@@ -214,11 +236,24 @@ export const useParentIncomingCallSubscription = ({
             event: "UPDATE",
             schema: "public",
             table: "calls",
-            filter: `parent_id=eq.${userId}`,
+            filter: `recipient_type=eq.parent`, // CRITICAL: Only match calls for parent
           },
           async (payload) => {
             const call = payload.new as CallRecord;
             const oldCall = payload.old as CallRecord;
+
+            // CRITICAL: Verify recipient_type matches before processing
+            if (call.recipient_type !== "parent") {
+              console.warn(
+                "❌ [PARENT DASHBOARD] Rejecting UPDATE call with wrong recipient_type:",
+                {
+                  callId: call.id,
+                  recipient_type: call.recipient_type,
+                  expected: "parent",
+                }
+              );
+              return;
+            }
 
             // CRITICAL: Always ignore parent-initiated calls - they should never show notifications
             // Parent-initiated calls are handled by the call page, not the dashboard
@@ -276,7 +311,5 @@ export const useParentIncomingCallSubscription = ({
     };
     // Only re-run subscription when location changes (e.g., navigating between pages)
     // We use refs for callbacks and currentIncomingCall to avoid recreating subscription
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, location.pathname]);
 };
-

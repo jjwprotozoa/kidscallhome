@@ -15,6 +15,7 @@ import { useDashboardData } from "./useDashboardData";
 import { DashboardHeader } from "./DashboardHeader";
 import { DashboardWidgets } from "./DashboardWidgets";
 import { IncomingCallDialog } from "./IncomingCallDialog";
+import { setUserStartedCall } from "@/utils/userInteraction";
 
 const ChildDashboard = () => {
   const navigate = useNavigate();
@@ -37,15 +38,23 @@ const ChildDashboard = () => {
     enabled: !!(selectedParentId || child?.parent_id),
   });
 
-  const handleCall = async () => {
+  const handleCall = () => {
     if (child && selectedParentId) {
-      try {
-        const { acknowledgeMissedCalls } = await import("@/utils/acknowledgeMissedCalls");
-        await acknowledgeMissedCalls(child.id, "parent");
-      } catch (error) {
-        console.error("Error acknowledging missed calls:", error);
-      }
-      navigate(`/call/${child.id}`);
+      // CRITICAL: User clicked Call - enable audio for the call
+      setUserStartedCall();
+      
+      // Navigate IMMEDIATELY - don't wait for async operations
+      navigate(`/child/call/${selectedParentId}`);
+      
+      // Acknowledge missed calls in background (don't block navigation)
+      (async () => {
+        try {
+          const { acknowledgeMissedCalls } = await import("@/utils/acknowledgeMissedCalls");
+          await acknowledgeMissedCalls(child.id, "parent");
+        } catch (error) {
+          console.error("Error acknowledging missed calls:", error);
+        }
+      })();
     } else if (!selectedParentId) {
       navigate("/child/parents");
     }
@@ -60,12 +69,16 @@ const ChildDashboard = () => {
   };
 
   const handleAnswerCall = () => {
-    if (incomingCall && child) {
+    if (incomingCall && child && incomingCall.parent_id) {
+      // CRITICAL: User clicked Accept - enable audio for the call
+      setUserStartedCall();
+      
       stopIncomingCall(incomingCall.id);
       isAnsweringRef.current = true;
       const callId = incomingCall.id;
       setIncomingCall(null);
-      navigate(`/call/${child.id}?callId=${callId}`);
+      // Navigate to child call screen with parentId (not childId)
+      navigate(`/child/call/${incomingCall.parent_id}?callId=${callId}`);
       setTimeout(() => {
         isAnsweringRef.current = false;
       }, 2000);

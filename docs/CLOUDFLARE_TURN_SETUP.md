@@ -15,6 +15,7 @@ This guide explains how to configure Cloudflare TURN servers for reliable WebRTC
 ### Step 1: Get Cloudflare TURN Credentials
 
 1. **Log in to Cloudflare Dashboard**
+
    - Go to: https://dash.cloudflare.com/
    - Navigate to: **RTC** → **TURN Keys**
 
@@ -38,6 +39,7 @@ In your Vercel project settings (or deployment platform):
    ```
 
    **Important:**
+
    - `TURN_KEY_ID` and `TURN_KEY_API_TOKEN` are **server-side only** (not prefixed with `VITE_`)
    - `VITE_USE_CLOUDFLARE_TURN` is **client-side** (prefixed with `VITE_`) and enables Cloudflare TURN
 
@@ -48,6 +50,7 @@ In your Vercel project settings (or deployment platform):
 ### Step 3: Deploy
 
 1. **Commit and push your changes:**
+
    ```bash
    git add api/turn-credentials.ts src/features/calls/hooks/useWebRTC.ts
    git commit -m "Add Cloudflare TURN server support"
@@ -91,6 +94,7 @@ curl -X POST https://your-domain.com/api/turn-credentials \
 ```
 
 **Expected Response:**
+
 ```json
 {
   "iceServers": {
@@ -125,11 +129,13 @@ curl -X POST https://your-domain.com/api/turn-credentials \
 ### Issue: "Failed to fetch TURN credentials"
 
 **Possible Causes:**
+
 1. Environment variables not set in Vercel
 2. API endpoint not deployed
 3. Cloudflare credentials invalid
 
 **Solutions:**
+
 1. Verify environment variables in Vercel dashboard
 2. Check deployment logs for API endpoint errors
 3. Verify Cloudflare TURN Key ID and API Token are correct
@@ -143,11 +149,13 @@ curl -X POST https://your-domain.com/api/turn-credentials \
 ### Issue: Calls still not connecting
 
 **Check:**
+
 1. Browser console for ICE connection errors
 2. Network tab for `/api/turn-credentials` request status
 3. Cloudflare dashboard for TURN key usage/quota
 
 **Common Issues:**
+
 - TURN key expired or revoked
 - API token incorrect
 - Network blocking TURN traffic (corporate firewalls)

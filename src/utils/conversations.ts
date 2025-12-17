@@ -240,6 +240,59 @@ export async function getChildConversations(
 
           // Check for RLS/access errors (406, 403, etc.) or missing data
           if (profileError || !adultProfile) {
+            // CRITICAL: For calls, we need user_id (auth.users.id), not adult_id (adult_profiles.id)
+            // Try to get user_id using an RPC function if available, or log error
+            let userId: string | null = null;
+            
+            try {
+              // Try to get user_id from adult_profiles using RPC (bypasses RLS)
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const { data: rpcResult, error: rpcError } = await (supabase as any).rpc(
+                "get_user_id_from_adult_profile_id",
+                { p_adult_profile_id: conv.adult_id }
+              );
+              
+              if (!rpcError && rpcResult) {
+                userId = rpcResult;
+                console.warn("✅ [CONVERSATIONS] Got user_id from RPC:", userId);
+              }
+            } catch (rpcErr) {
+              // RPC function might not exist - that's OK, we'll log and use fallback
+              console.warn("RPC function not available, will need to handle differently");
+            }
+            
+            // If we still don't have user_id, try direct query with minimal columns
+            // Sometimes RLS allows certain columns even if full query fails
+            if (!userId) {
+              try {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const { data: minimalProfile } = await (supabase as any)
+                  .from("adult_profiles")
+                  .select("user_id")
+                  .eq("id", conv.adult_id)
+                  .maybeSingle();
+                
+                if (minimalProfile?.user_id) {
+                  userId = minimalProfile.user_id;
+                  console.warn("✅ [CONVERSATIONS] Got user_id from minimal query:", userId);
+                }
+              } catch (minimalErr) {
+                console.warn("Minimal query also failed:", minimalErr);
+              }
+            }
+            
+            // Log warning if we couldn't get user_id
+            if (!userId) {
+              console.error(
+                "❌ [CONVERSATIONS] CRITICAL: Cannot get user_id for call - using adult_id as fallback (calls may fail)",
+                {
+                  adult_id: conv.adult_id,
+                  adult_role: conv.adult_role,
+                  error: profileError?.message || "No profile found",
+                }
+              );
+            }
+            
             // If we can't fetch adult profile (e.g., anonymous user), return conversation with default participant info
             // This is expected behavior for children, so we don't log it as an error
             if (profileError?.code !== "PGRST116") {
@@ -252,7 +305,7 @@ export async function getChildConversations(
             return {
               conversation: conv as Conversation,
               participant: {
-                id: conv.adult_id, // Use adult_id as fallback
+                id: userId || conv.adult_id, // Use user_id if available, otherwise adult_id (calls may fail)
                 name: conv.adult_role === "parent" ? "Parent" : "Family Member",
                 type: (conv.adult_role || "parent") as
                   | "parent"
@@ -277,10 +330,38 @@ export async function getChildConversations(
         } catch (error) {
           // If query fails (e.g., RLS policy blocks anonymous users), return conversation with default info
           console.warn("Error fetching adult profile, using fallback:", error);
+          
+          // CRITICAL: Try to get user_id even if query failed
+          let userId: string | null = null;
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const { data: minimalProfile } = await (supabase as any)
+              .from("adult_profiles")
+              .select("user_id")
+              .eq("id", conv.adult_id)
+              .maybeSingle();
+            
+            if (minimalProfile?.user_id) {
+              userId = minimalProfile.user_id;
+            }
+          } catch (minimalErr) {
+            console.warn("Could not get user_id from minimal query:", minimalErr);
+          }
+          
+          if (!userId) {
+            console.error(
+              "❌ [CONVERSATIONS] CRITICAL: Cannot get user_id for call - using adult_id as fallback (calls may fail)",
+              {
+                adult_id: conv.adult_id,
+                adult_role: conv.adult_role,
+              }
+            );
+          }
+          
           return {
             conversation: conv as Conversation,
             participant: {
-              id: conv.adult_id, // Use adult_id as fallback
+              id: userId || conv.adult_id, // Use user_id if available, otherwise adult_id (calls may fail)
               name: conv.adult_role === "parent" ? "Parent" : "Family Member",
               type: (conv.adult_role || "parent") as "parent" | "family_member",
               avatar_color: "#3B82F6", // Default color if query fails

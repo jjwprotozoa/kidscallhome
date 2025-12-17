@@ -348,14 +348,19 @@ const ChildParentsList = () => {
     participantId: string,
     participantType: "parent" | "family_member"
   ) => {
-    if (participantType === "parent") {
-      navigate(`/child/call/${participantId}`);
-    } else {
-      // For family members, we might need a different call route
-      // For now, navigate to dashboard
-      localStorage.setItem("selectedParentId", participantId);
-      navigate("/child/dashboard");
-    }
+    // Store participant info for the call screen BEFORE navigation
+    localStorage.setItem("selectedParentId", participantId);
+    localStorage.setItem("selectedParticipantType", participantType);
+    
+    console.log("📞 [CHILD PARENTS LIST] handleCall:", {
+      participantId,
+      participantType,
+      storedParentId: localStorage.getItem("selectedParentId"),
+      storedType: localStorage.getItem("selectedParticipantType"),
+    });
+    
+    // Navigate to call screen - it will handle both parents and family members
+    navigate(`/child/call/${participantId}`);
   };
 
   // CLS: Reserve space for loading state to match final layout structure

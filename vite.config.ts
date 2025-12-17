@@ -146,16 +146,46 @@ export default defineConfig(({ mode }) => {
           // The navigateFallbackDenylist above prevents workbox from trying to handle
           // source files and API endpoints, which reduces the number of log messages
           // In development, disable precaching to reduce console noise
-          ...(mode === "development" && {
-            // Disable precaching in development to reduce console noise
-            // Workbox will still function for runtime caching
-            // Note: This prevents workbox from trying to precache source files
-            // which causes hundreds of "Precaching did not find a match" messages
-            // The precache manifest will be empty in development
-            globPatterns: [], // Don't precache anything in development
-          }),
+          // In production, precache critical app shell assets
+          // In development, disable precaching to reduce console noise
+          globPatterns:
+            mode === "development"
+              ? [] // Don't precache anything in development
+              : [
+                  "**/*.{js,css,html,ico,png,svg,woff,woff2}", // Precache all static assets
+                ],
           // Runtime caching strategies
           runtimeCaching: [
+            // Cache Google Fonts stylesheets (font metadata)
+            {
+              urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
+              handler: "CacheFirst",
+              options: {
+                cacheName: "google-fonts-stylesheets",
+                expiration: {
+                  maxEntries: 10,
+                  maxAgeSeconds: 60 * 60 * 24 * 365, // 1 year
+                },
+                cacheableResponse: {
+                  statuses: [0, 200],
+                },
+              },
+            },
+            // Cache Google Fonts webfont files (actual font binaries)
+            {
+              urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/i,
+              handler: "CacheFirst",
+              options: {
+                cacheName: "google-fonts-webfonts",
+                expiration: {
+                  maxEntries: 30,
+                  maxAgeSeconds: 60 * 60 * 24 * 365, // 1 year
+                },
+                cacheableResponse: {
+                  statuses: [0, 200],
+                },
+              },
+            },
             // CacheFirst strategy for vendor chunks - these rarely change
             // Cache for 30 days to maximize repeat visit performance
             {
@@ -216,6 +246,22 @@ export default defineConfig(({ mode }) => {
                 expiration: {
                   maxEntries: 100,
                   maxAgeSeconds: 30 * 24 * 60 * 60, // 30 days
+                },
+              },
+            },
+            // Cache Supabase Storage images (avatars, uploads)
+            {
+              urlPattern:
+                /^https:\/\/.*\.supabase\.co\/storage\/v1\/object\/.*/i,
+              handler: "CacheFirst",
+              options: {
+                cacheName: "supabase-storage",
+                expiration: {
+                  maxEntries: 100,
+                  maxAgeSeconds: 7 * 24 * 60 * 60, // 7 days
+                },
+                cacheableResponse: {
+                  statuses: [0, 200],
                 },
               },
             },

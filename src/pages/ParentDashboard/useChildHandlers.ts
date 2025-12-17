@@ -5,6 +5,7 @@ import { useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { setUserStartedCall } from "@/utils/userInteraction";
 import { Child } from "./types";
 
 export const useChildHandlers = (
@@ -39,6 +40,9 @@ export const useChildHandlers = (
   }, [toast, onChildrenUpdated]);
 
   const handleCall = useCallback(async (childId: string) => {
+    // CRITICAL: User clicked Call - enable audio for the call
+    setUserStartedCall();
+    
     try {
       const { acknowledgeMissedCalls } = await import("@/utils/acknowledgeMissedCalls");
       await acknowledgeMissedCalls(childId, "child");
@@ -58,6 +62,7 @@ export const useChildHandlers = (
     handleChat,
   };
 };
+
 
 
 
