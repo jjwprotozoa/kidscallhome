@@ -8,7 +8,7 @@ const Index = () => {
   const navigate = useNavigate();
 
   return (
-    <div className="min-h-[100dvh] bg-gradient-to-b from-primary/10 to-background">
+    <main className="min-h-[100dvh] bg-gradient-to-b from-primary/10 to-background">
       <div className="container mx-auto px-4 py-16">
         <div className="text-center space-y-6 mb-16">
           {/* CLS: Reserve space with aspect-square wrapper to prevent layout shift */}
@@ -101,7 +101,7 @@ const Index = () => {
         </div>
 
         {/* Footer Links */}
-        <div className="mt-16 pt-8 border-t text-center">
+        <footer className="mt-16 pt-8 border-t text-center">
           <Button
             variant="ghost"
             onClick={() => navigate("/info")}
@@ -109,9 +109,9 @@ const Index = () => {
           >
             App Information & Legal
           </Button>
-        </div>
+        </footer>
       </div>
-    </div>
+    </main>
   );
 };
 
