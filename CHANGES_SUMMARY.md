@@ -2,7 +2,123 @@
 
 > **Note**: For detailed technical information, complete file lists, testing recommendations, and implementation specifics, see [CHANGES_DETAILED.md](./CHANGES_DETAILED.md).
 
-## Latest Changes (2025-12-18) - Referral System & Pricing Update
+## Latest Changes (2025-12-19) - Family Member Login & RLS Policy Fixes
+
+### -11. Critical Fix: Family Member Login After Email Verification
+
+- **Purpose**: Fix family members unable to log in after clicking email verification link
+- **Issues Identified**:
+  1. **Trigger Not Firing**: The `on_family_member_signup` trigger on `auth.users` was not properly linking family members when they signed up
+  2. **Missing `adult_profiles` Record**: Even when `family_members` was partially linked, no `adult_profiles` record was created
+  3. **Missing RLS Policies**: Multiple tables had missing or incomplete RLS policies for authenticated users
+  4. **Recursive RLS Policy**: An RLS policy on `adult_profiles` caused infinite recursion and 500 errors
+  5. **Auth Metadata Issue**: `email_verified` in `raw_user_meta_data` was `false` even when `email_confirmed_at` was set
+
+#### Root Cause Analysis
+
+When a family member clicked the invitation link and signed up:
+1. The `handle_new_family_member()` trigger should fire on `auth.users` INSERT
+2. It should update `family_members.id` and `status`, and create `adult_profiles`
+3. But the trigger wasn't firing or failing silently
+4. Result: `family_members.id = NULL`, `status = 'pending'`, no `adult_profiles` record
+5. Login failed because dashboard queries couldn't find the user
+
+#### Fixes Applied
+
+- **Updated `link_family_member_by_email` RPC Function**:
+  - Now also creates `adult_profiles` record when linking during login
+  - Sets `status = 'active'` and `invitation_accepted_at`
+  - Serves as fallback when trigger doesn't fire
+
+- **Created `admin_fix_family_member_by_email` Function**:
+  - Admin helper function to fix stuck family member accounts
+  - Links auth user to `family_members` record
+  - Creates `adult_profiles` record with correct relationship data
+  - Usage: `SELECT admin_fix_family_member_by_email('email@example.com');`
+
+- **Recreated `on_family_member_signup` Trigger**:
+  - Ensures trigger exists on `auth.users` table
+  - Fires when `raw_user_meta_data->>'invitation_token'` is not null
+  - Creates both `family_members` link and `adult_profiles` record
+
+- **Fixed RLS Policies for `adult_profiles`**:
+  - Added "Users can view own adult profile" - `user_id = auth.uid()`
+  - Added "Users can update own adult profile" - for profile updates
+  - **Removed recursive policy** that caused 500 errors (was querying `adult_profiles` within its own policy)
+
+- **Fixed RLS Policies for `family_members`**:
+  - Added "Parents can view their family members" - `parent_id = auth.uid()`
+  - Added "Parents can insert/update/delete family members"
+  - Parents can now see and manage family members they invited
+
+- **Fixed RLS Policies for `children`**:
+  - Added "Parents can view own children" - `parent_id = auth.uid()`
+  - Added INSERT/UPDATE/DELETE policies for authenticated parents
+  - Preserved "Anyone can verify login codes" for anonymous child login
+
+- **Fixed Auth Metadata**:
+  - Updated `raw_user_meta_data.email_verified` to `true`
+  - Ensured `email_confirmed_at` matches `confirmed_at`
+
+#### Technical Details
+
+| Table | Issue | Fix |
+|-------|-------|-----|
+| `family_members` | `id = NULL`, `status = 'pending'` | `link_family_member_by_email` RPC links on login |
+| `adult_profiles` | Record missing | RPC now creates during linking |
+| `adult_profiles` | No SELECT policy for users | Added `user_id = auth.uid()` policy |
+| `adult_profiles` | Recursive policy → 500 errors | Removed recursive policy |
+| `family_members` | Parents couldn't see invitations | Added `parent_id = auth.uid()` policy |
+| `children` | Parents couldn't see children | Added `parent_id = auth.uid()` policy |
+| `auth.users` | `email_verified = false` in metadata | Manual fix via SQL UPDATE |
+
+#### Files Created
+
+- `supabase/migrations/20251219010000_fix_link_family_member_create_adult_profile.sql`
+- `supabase/migrations/20251219020000_fix_parent_view_family_members.sql`
+- `supabase/migrations/20251219030000_fix_children_rls_policies.sql`
+
+#### Critical Lesson Learned
+
+**Never create an RLS policy that queries the same table it's protecting** without using a `SECURITY DEFINER` helper function. This causes infinite recursion and 500 errors.
+
+Bad (causes infinite recursion):
+```sql
+CREATE POLICY "Adults can view profiles in their family"
+  ON public.adult_profiles FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.adult_profiles ap  -- ❌ Queries same table!
+      WHERE ap.user_id = auth.uid()
+        AND ap.family_id = adult_profiles.family_id
+    )
+  );
+```
+
+Good (use helper function):
+```sql
+CREATE FUNCTION get_user_family_id(p_user_id UUID) RETURNS UUID
+LANGUAGE sql SECURITY DEFINER AS $$
+  SELECT family_id FROM adult_profiles WHERE user_id = p_user_id LIMIT 1;
+$$;
+
+CREATE POLICY "Adults can view profiles in their family"
+  ON public.adult_profiles FOR SELECT
+  USING (family_id = get_user_family_id(auth.uid()));  -- ✅ Uses helper
+```
+
+#### Impact
+
+- **Family Members Can Log In**: After email verification, family members can now successfully log in
+- **Proper Profile Data**: `adult_profiles` record created with correct `relationship_type` (Grandparent, Aunt, Uncle, etc.)
+- **Parents See Children**: Fixed 500 errors when loading children list
+- **Parents See Family Members**: Parents can view and manage invited family members
+- **Admin Tooling**: Helper function available to fix any stuck accounts
+- **Future-Proof**: Trigger and fallback RPC ensure robust signup flow
+
+---
+
+## Previous Changes (2025-12-18) - Referral System & Pricing Update
 
 ### -10. PageSpeed Performance Optimizations & WCAG Compliance
 
