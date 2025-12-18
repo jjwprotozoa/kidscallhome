@@ -2,7 +2,9 @@
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { SafeAreaLayout } from "@/components/layout/SafeAreaLayout";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient } from "@tanstack/react-query";
+import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
+import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useNavigate } from "react-router-dom";
 
@@ -133,6 +135,7 @@ const PageLoader = () => {
 };
 
 // Configure QueryClient with error handling and caching
+// gcTime must be >= maxAge for persistence to work properly
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -140,7 +143,7 @@ const queryClient = new QueryClient({
       refetchOnWindowFocus: false,
       refetchOnReconnect: true,
       staleTime: 5 * 60 * 1000, // 5 minutes - data is fresh for 5 min by default
-      gcTime: 10 * 60 * 1000, // 10 minutes - keep in cache for 10 min (formerly cacheTime)
+      gcTime: 1000 * 60 * 60 * 24, // 24 hours - keep in cache for persistence
       // Prevent queries from throwing errors that break the app
       throwOnError: false,
     },
@@ -151,6 +154,27 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+// Create localStorage persister for instant dashboard loading
+// Data survives page refreshes and browser restarts
+const localStoragePersister = createSyncStoragePersister({
+  storage: typeof window !== "undefined" ? window.localStorage : undefined,
+  key: "kidscallhome-query-cache",
+  // Throttle writes to localStorage (reduce write frequency)
+  throttleTime: 1000,
+});
+
+// Persistence options
+const persistOptions = {
+  persister: localStoragePersister,
+  maxAge: 1000 * 60 * 60 * 24, // 24 hours - cache persists for a day
+  // Don't persist error states or loading states
+  dehydrateOptions: {
+    shouldDehydrateQuery: (query: { state: { status: string } }) => {
+      return query.state.status === "success";
+    },
+  },
+};
 
 // Badge initialization component (runs once per session)
 const BadgeProvider = () => {
@@ -316,7 +340,10 @@ const App = () => {
   // Wrap critical components in error boundaries to prevent app crashes
   return (
     <ErrorBoundary>
-      <QueryClientProvider client={queryClient}>
+      <PersistQueryClientProvider
+        client={queryClient}
+        persistOptions={persistOptions}
+      >
         <TooltipProvider>
           <ErrorBoundary fallback={null}>
             <BadgeProvider />
@@ -416,7 +443,7 @@ const App = () => {
             </BrowserRouter>
           </SafeAreaLayout>
         </TooltipProvider>
-      </QueryClientProvider>
+      </PersistQueryClientProvider>
     </ErrorBoundary>
   );
 };
