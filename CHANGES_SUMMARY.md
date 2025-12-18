@@ -198,27 +198,30 @@ Comprehensive performance optimization focused on reducing database calls, impro
 
 ### Summary of Efficiency Gains
 
-| Metric | Before | After | Improvement |
-|--------|--------|-------|-------------|
-| REST calls/min (idle) | ~15-20 | ~2-3 | **-85%** |
-| Bandwidth/repeat visit | 100% | ~20-30% | **-70-80%** |
-| Profile queries | Every render | 30 min cache | **-95%** |
-| Font downloads | Every visit | Once per year | **-99%** |
-| Call termination detection | ~5-6 sec | ~2.7 sec | **-55%** |
+| Metric                     | Before       | After         | Improvement |
+| -------------------------- | ------------ | ------------- | ----------- |
+| REST calls/min (idle)      | ~15-20       | ~2-3          | **-85%**    |
+| Bandwidth/repeat visit     | 100%         | ~20-30%       | **-70-80%** |
+| Profile queries            | Every render | 30 min cache  | **-95%**    |
+| Font downloads             | Every visit  | Once per year | **-99%**    |
+| Call termination detection | ~5-6 sec     | ~2.7 sec      | **-55%**    |
 
 ### Files Modified
 
 **Call Flow Fixes:**
+
 - `src/features/calls/hooks/useCallEngine.ts` - Termination detection for family members
 - `src/components/GlobalIncomingCall/useIncomingCallState.ts` - Caller name resolution
 - `src/components/GlobalIncomingCall/types.ts` - Added recipient_type to CallRecord
 - `src/features/calls/hooks/useWebRTC.ts` - Reduced disconnection timeout
 
 **RLS Policies (SQL):**
+
 - `fix_child_update_rls.sql` - Children can update their calls
 - `fix_family_member_update_rls.sql` - Family members can update calls
 
 **Performance Optimizations:**
+
 - `vite.config.ts` - Google Fonts, Supabase Storage caching, precaching
 - `src/components/GlobalMessageNotifications.tsx` - Status check interval
 - `src/components/GlobalIncomingCall/useIncomingCallState.ts` - Polling interval
@@ -228,6 +231,7 @@ Comprehensive performance optimization focused on reducing database calls, impro
 - `src/features/calls/components/VideoCallUI.tsx` - UI check interval
 
 **New Files:**
+
 - `src/hooks/useProfileCache.ts` - Centralized profile caching hook
 
 ### Future Optimizations (Optional)
@@ -313,6 +317,58 @@ These remaining optimizations primarily improve UX/perceived performance rather 
   - **User Feedback**: Clear UI shows current connection quality
   - **No More Failed Calls**: Calls that would have failed on poor networks now succeed in audio-only mode
   - **Better Mobile Experience**: Especially important for kids on tablets using mobile hotspots or weak WiFi
+
+### 2. Network Quality Bug Fixes & UI Improvements
+
+- **Purpose**: Fix bugs introduced by adaptive quality changes and improve video call UI for poor connections
+- **Bug Fixes**:
+  - **Callback Recreation Bug**: Removed `networkQuality` from dependency arrays of `initializeConnection` and `cleanup` callbacks in `useWebRTC.ts` - was causing callbacks to recreate every 2 seconds when stats were collected
+  - **Premature Monitoring Start**: Moved `startMonitoring(pc)` call to AFTER tracks are added to peer connection - `applyQualityPreset` was being called before senders existed
+  - **Video Track Missing**: Fixed `getUserMedia` to always request video track regardless of initial network quality - video was set to `false` on 2G preventing any video track creation
+  - **Defensive applyQualityPreset**: Added early return if no senders exist, skip tracks without encodings
+  - **Connection State Checks**: Added checks for "failed" and "disconnected" states in `collectStats` to prevent errors
+- **UI Improvements**:
+  - **Collapsible Diagnostic Panels** (`DiagnosticPanel.tsx`):
+    - Created collapsible panel system with Video State, Audio State, and Track Info panels
+    - Hidden behind **? icon button** by default - click to reveal diagnostic panels
+    - Each panel individually expandable/collapsible
+    - Development mode only
+  - **Network Quality in Navigation Bar** (`NetworkQualityBadge.tsx`):
+    - Added network quality indicator to top navigation (visible when NOT in a call)
+    - Shows connection type (WiFi, 5G, 4G, 3G, 2G, Offline) with colored icon
+    - **Color coding**: Green for fast (excellent/good), Yellow for moderate, Orange for poor, Red for critical
+    - Hover tooltip shows speed (Mbps), latency (ms), and quality level
+    - Updates automatically on network changes and every 30 seconds
+    - **Debug mode**: Add `?network=5g` to URL or press `Ctrl+Shift+N` to cycle through connection types for testing
+  - **Kid-Friendly Video Placeholder** (`VideoPlaceholder.tsx`):
+    - Animated placeholder shown instead of frozen video frame on poor connections
+    - **Remote video placeholder**: Animated avatar with person's initial, pulsing audio waves, "Audio Call" messaging
+    - **Local video placeholder**: Poor connection icon with warning badge
+    - **Connecting state**: Pulsing phone icon with animated signal bars
+    - Kid-friendly colors, animations, and messaging
+  - **Retry Video Button**: Colorful gradient button with bouncing phone emoji - "Audio Call Mode / Tap to try video again!"
+  - **Non-Overlapping Layout**: Repositioned all UI elements to prevent overlaps:
+    - Audio indicators moved from `top-4` → `top-44` (below PIP)
+    - Diagnostic panels moved from `top-36` → `bottom-24` (bottom-left corner)
+    - Local PIP z-index increased to `z-30` (above placeholders)
+    - Network quality at `top-4 left-4 z-40`
+    - All elements have proper z-index layering
+- **Files Created**:
+  - `src/features/calls/components/DiagnosticPanel.tsx` - Collapsible diagnostic panels
+  - `src/features/calls/components/VideoPlaceholder.tsx` - Kid-friendly video placeholders
+  - `src/components/NetworkQualityBadge.tsx` - Navigation bar network indicator
+- **Files Modified**:
+  - `src/features/calls/hooks/useWebRTC.ts` - Bug fixes for callbacks and monitoring
+  - `src/features/calls/hooks/useNetworkQuality.ts` - Defensive coding improvements
+  - `src/features/calls/components/VideoCallUI.tsx` - Integrated placeholders, fixed layout
+  - `src/features/calls/components/ConnectionQualityIndicator.tsx` - Made collapsible with expand/collapse
+  - `src/components/Navigation.tsx` - Added NetworkQualityBadge to all user types (parent, child, family_member)
+- **Impact**:
+  - **Calls Work Again**: Fixed bugs that broke call functionality after adaptive quality changes
+  - **Better Poor Connection UX**: Kids see friendly animated placeholders instead of frozen video
+  - **Network Awareness**: Users can see connection quality before starting calls (in navbar)
+  - **Debug Tools**: Developers can test different network conditions with URL params or keyboard shortcut
+  - **Clean UI**: No overlapping elements on video call screen
 
 ## Latest Changes (2025-12-17)
 

@@ -117,29 +117,15 @@ export const useWebRTC = (
       try {
         safeLog.log("🎥 [MEDIA] Requesting camera and microphone access...");
 
-        // ADAPTIVE: Get video constraints based on current network quality
-        // Start with appropriate resolution to avoid overwhelming poor connections
-        const currentPreset = networkQuality.currentPreset;
-        const videoConstraints: MediaTrackConstraints | boolean =
-          currentPreset.enableVideo
-            ? {
-                width: { ideal: currentPreset.maxWidth, max: 1280 },
-                height: { ideal: currentPreset.maxHeight, max: 720 },
-                frameRate: { ideal: currentPreset.maxFramerate, max: 30 },
-                facingMode: "user", // Front-facing camera
-              }
-            : false; // Audio-only for critical network conditions
-
-        safeLog.log("🎥 [MEDIA] Using adaptive video constraints:", {
-          preset: currentPreset.name,
-          width: currentPreset.maxWidth,
-          height: currentPreset.maxHeight,
-          frameRate: currentPreset.maxFramerate,
-          enableVideo: currentPreset.enableVideo,
-        });
-
+        // ALWAYS request video at a reasonable default resolution
+        // The adaptive quality control will adjust bitrate/disable video AFTER connection if needed
+        // This ensures video track exists for the peer connection
         stream = await navigator.mediaDevices.getUserMedia({
-          video: videoConstraints,
+          video: {
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            facingMode: "user", // Front-facing camera
+          },
           audio: {
             echoCancellation: true,
             noiseSuppression: true,
@@ -1007,14 +993,8 @@ export const useWebRTC = (
       processedTrackIds.current.clear();
       remoteStreamRef.current = null;
 
-      // ADAPTIVE: Start network quality monitoring for this peer connection
-      // This enables automatic bitrate adjustment based on network conditions
-      safeLog.log(
-        "📊 [QUALITY] Starting network quality monitoring for peer connection"
-      );
-      networkQuality.startMonitoring(pc);
-
       // CRITICAL: Add local stream tracks and ensure audio tracks are enabled
+      // NOTE: Must add tracks BEFORE starting quality monitoring so senders exist
       stream.getTracks().forEach((track) => {
         // Explicitly enable audio tracks before adding to peer connection
         if (track.kind === "audio") {
@@ -1111,6 +1091,13 @@ export const useWebRTC = (
           );
         }
       }
+
+      // ADAPTIVE: Start network quality monitoring AFTER tracks are added
+      // This ensures senders exist when applyQualityPreset is called
+      safeLog.log(
+        "📊 [QUALITY] Starting network quality monitoring for peer connection"
+      );
+      networkQuality.startMonitoring(pc);
 
       // Handle remote stream
       // DIAGNOSTIC: Log when ontrack fires - this is critical for diagnosing media binding issues
@@ -1852,7 +1839,10 @@ export const useWebRTC = (
       safeLog.error("Error initializing WebRTC connection:", error);
       throw error;
     }
-  }, [localVideoRef, remoteVideoRef, isChild, networkQuality]);
+    // NOTE: networkQuality is intentionally excluded from deps to prevent recreation on stats updates
+    // The startMonitoring function is stable and handles quality internally
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [localVideoRef, remoteVideoRef, isChild]);
 
   const cleanup = useCallback(
     (force: boolean = false) => {
@@ -1970,7 +1960,10 @@ export const useWebRTC = (
       remoteStreamRef.current = null;
       processedTrackIds.current.clear();
     },
-    [localVideoRef, remoteVideoRef, networkQuality]
+    // NOTE: networkQuality is intentionally excluded from deps to prevent recreation on stats updates
+    // The stopMonitoring function is stable and handles cleanup internally
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [localVideoRef, remoteVideoRef]
   );
 
   // Function to explicitly play remote video (called after user interaction)

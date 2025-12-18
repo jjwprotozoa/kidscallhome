@@ -10,6 +10,8 @@ import {
   ConnectionQualityIndicator, 
   ConnectionQualityBadge 
 } from "./ConnectionQualityIndicator";
+import { DiagnosticContainer } from "./DiagnosticPanel";
+import { VideoPlaceholder } from "./VideoPlaceholder";
 import type { NetworkQualityLevel, ConnectionType, NetworkStats } from "../hooks/useNetworkQuality";
 
 // Network quality props for adaptive streaming
@@ -875,10 +877,33 @@ export const VideoCallUI = ({
           }}
         />
 
+        {/* Video placeholder - shown when video is disabled due to poor network */}
+        {/* Kid-friendly animated placeholder instead of frozen video frame */}
+        {networkQuality?.isVideoPausedDueToNetwork && (
+          <div className="absolute inset-0 z-10">
+            <VideoPlaceholder
+              type="remote"
+              reason="network"
+              name={undefined} // TODO: Pass remote user's name if available
+            />
+          </div>
+        )}
+
+        {/* Connecting placeholder - shown when no remote stream yet */}
+        {!remoteStream && isConnecting && (
+          <div className="absolute inset-0 z-10">
+            <VideoPlaceholder
+              type="remote"
+              reason="connecting"
+            />
+          </div>
+        )}
+
         {/* CRITICAL: Audio muted indicator - shown prominently when browser blocked audio */}
+        {/* Positioned below the PIP video (top-44 = 176px, PIP is top-4 + h-36 = 160px) */}
         {showAudioMutedIndicator && videoState === "playing" && (
           <div 
-            className="absolute top-4 left-1/2 -translate-x-1/2 z-50 animate-pulse"
+            className="absolute top-44 left-1/2 -translate-x-1/2 z-50 animate-pulse"
             onClick={handleVideoClick}
           >
             <div className="bg-red-500 text-white px-6 py-3 rounded-full shadow-lg flex items-center gap-3 cursor-pointer">
@@ -889,9 +914,10 @@ export const VideoCallUI = ({
         )}
 
         {/* Audio hint button - shown for first 10 seconds in case audio doesn't work */}
+        {/* Positioned below PIP to avoid overlap */}
         {showAudioHint && videoState === "playing" && !showAudioMutedIndicator && (
           <div 
-            className="absolute top-4 left-1/2 -translate-x-1/2 z-50"
+            className="absolute top-44 left-1/2 -translate-x-1/2 z-50"
             onClick={() => {
               forceAudioPlayback();
               setShowAudioHint(false);
@@ -905,9 +931,10 @@ export const VideoCallUI = ({
         )}
 
         {/* Warning when no audio data ever received - only shows if we've NEVER detected audio */}
+        {/* Positioned below audio hint to stack properly */}
         {showNoRemoteAudioWarning && videoState === "playing" && !showAudioMutedIndicator && (
           <div 
-            className="absolute top-16 left-1/2 -translate-x-1/2 z-50 max-w-[90%] cursor-pointer"
+            className="absolute top-56 left-1/2 -translate-x-1/2 z-50 max-w-[90%] cursor-pointer"
             onClick={() => setShowNoRemoteAudioWarning(false)}  
           >
             <div className="bg-orange-500 text-white px-4 py-2 rounded-lg shadow-lg text-sm text-center">
@@ -947,39 +974,27 @@ export const VideoCallUI = ({
           </div>
         )}
 
-        {/* Debug info (remove in production) */}
-        {process.env.NODE_ENV === "development" && remoteStream && (
-          <div className="absolute top-20 left-4 bg-black/50 text-white text-xs p-2 rounded max-w-[250px]">
-            <div>State: {videoState}</div>
-            <div>ReadyState: {remoteVideoRef.current?.readyState ?? "N/A"}</div>
-            <div>Paused: {remoteVideoRef.current?.paused ? "Yes" : "No"}</div>
-            <div>Video Muted: {remoteVideoRef.current?.muted ? "Yes" : "No"}</div>
-            <div>Video Vol: {remoteVideoRef.current?.volume?.toFixed(1) ?? "N/A"}</div>
-            <div>AudioBlocked: {isAudioMutedByBrowser ? "Yes" : "No"}</div>
-            <div>AudioEl: {audioElementRef.current ? `vol:${audioElementRef.current.volume?.toFixed(1)} muted:${audioElementRef.current.muted ? "Y" : "N"} paused:${audioElementRef.current.paused ? "Y" : "N"}` : "None"}</div>
-            <div>
-              Tracks:{" "}
-              {remoteStream
-                .getTracks()
-                .map((t) => `${t.kind}:${t.muted ? "m" : "um"}:${t.enabled ? "en" : "dis"}`)
-                .join(", ")}
-            </div>
-          </div>
-        )}
-
-        {/* Local video (picture-in-picture) */}
-        <div className="absolute top-4 right-4 w-48 h-36 rounded-2xl overflow-hidden shadow-xl border-2 border-white">
-          <video
-            ref={localVideoRef}
-            autoPlay
-            playsInline
-            muted
-            className="w-full h-full object-cover"
-          />
+        {/* Local video (picture-in-picture) - high z-index to stay above placeholders */}
+        <div className="absolute top-4 right-4 w-48 h-36 rounded-2xl overflow-hidden shadow-xl border-2 border-white/50 z-30">
+          {/* Show placeholder when video is off or paused due to network */}
+          {(isVideoOff || networkQuality?.isVideoPausedDueToNetwork) ? (
+            <VideoPlaceholder
+              type="local"
+              reason={networkQuality?.isVideoPausedDueToNetwork ? "network" : "disabled"}
+            />
+          ) : (
+            <video
+              ref={localVideoRef}
+              autoPlay
+              playsInline
+              muted
+              className="w-full h-full object-cover"
+            />
+          )}
         </div>
 
         {/* Network Quality Indicator - shows connection quality for adaptive streaming */}
-        {/* Supports all network conditions from 2G to 5G/WiFi */}
+        {/* Supports all network conditions from 2G to 5G/WiFi - collapsed by default, click to expand */}
         {networkQuality && (
           <div className="absolute top-4 left-4 z-40">
             <ConnectionQualityIndicator
@@ -988,21 +1003,36 @@ export const VideoCallUI = ({
               networkStats={networkQuality.networkStats}
               isVideoPausedDueToNetwork={networkQuality.isVideoPausedDueToNetwork}
               showDetails={process.env.NODE_ENV === "development"}
+              defaultExpanded={false}
             />
           </div>
         )}
 
-        {/* Video paused due to poor network - show prominent indicator */}
+        {/* Diagnostic panels (development only) - positioned in bottom-left corner to avoid overlaps */}
+        {process.env.NODE_ENV === "development" && remoteStream && (
+          <DiagnosticContainer
+            videoRef={remoteVideoRef}
+            videoState={videoState}
+            isAudioMutedByBrowser={isAudioMutedByBrowser}
+            audioElementRef={audioElementRef}
+            remoteStream={remoteStream}
+            className="absolute bottom-24 left-4 z-35"
+          />
+        )}
+
+        {/* Video paused due to poor network - kid-friendly indicator */}
         {networkQuality?.isVideoPausedDueToNetwork && (
           <div className="absolute bottom-32 left-1/2 -translate-x-1/2 z-50">
-            <div 
-              className="bg-orange-500/90 text-white px-4 py-2 rounded-lg shadow-lg flex items-center gap-2 cursor-pointer"
+            <button 
+              className="bg-gradient-to-r from-orange-500 to-amber-500 text-white px-5 py-3 rounded-full shadow-lg flex items-center gap-3 hover:scale-105 transition-transform active:scale-95"
               onClick={() => networkQuality.enableVideoIfPossible()}
             >
-              <span>📡</span>
-              <span className="text-sm font-medium">Poor connection - Audio only</span>
-              <span className="text-xs opacity-75">(tap to retry video)</span>
-            </div>
+              <span className="text-2xl animate-bounce">📞</span>
+              <div className="text-left">
+                <span className="block text-sm font-bold">Audio Call Mode</span>
+                <span className="block text-xs opacity-90">Tap to try video again!</span>
+              </div>
+            </button>
           </div>
         )}
 

@@ -257,63 +257,74 @@ export const useNetworkQuality = (): UseNetworkQualityReturn => {
   ): Promise<void> => {
     const presetToApply = preset || currentPreset;
     
+    const senders = pc.getSenders();
+    
+    // Skip if no senders yet (tracks not added)
+    if (senders.length === 0) {
+      safeLog.log("📊 [QUALITY] No senders yet, skipping quality preset application");
+      return;
+    }
+    
     safeLog.log("📊 [QUALITY] Applying quality preset:", {
       name: presetToApply.name,
       maxBitrate: presetToApply.maxBitrate,
       maxFramerate: presetToApply.maxFramerate,
       resolution: `${presetToApply.maxWidth}x${presetToApply.maxHeight}`,
       enableVideo: presetToApply.enableVideo,
+      senderCount: senders.length,
     });
-    
-    const senders = pc.getSenders();
     
     for (const sender of senders) {
       if (!sender.track) continue;
       
-      const params = sender.getParameters();
-      if (!params.encodings || params.encodings.length === 0) {
-        params.encodings = [{}];
-      }
-      
-      if (sender.track.kind === "video") {
-        // Handle video track
-        if (!presetToApply.enableVideo || forceAudioOnlyRef.current) {
-          // Disable video by setting maxBitrate to 0 and pausing track
-          params.encodings[0].maxBitrate = 0;
-          params.encodings[0].active = false;
-          sender.track.enabled = false;
-          setIsVideoPausedDueToNetwork(!forceAudioOnlyRef.current);
-          
-          safeLog.log("🎥 [QUALITY] Video DISABLED due to network conditions");
-        } else {
-          // Apply video quality settings
-          params.encodings[0].maxBitrate = presetToApply.maxBitrate * 1000; // Convert to bps
-          params.encodings[0].maxFramerate = presetToApply.maxFramerate;
+      try {
+        const params = sender.getParameters();
+        
+        // Some browsers may not support encodings - skip if not available
+        if (!params.encodings || params.encodings.length === 0) {
+          safeLog.log("📊 [QUALITY] No encodings available for", sender.track.kind, "- skipping");
+          continue;
+        }
+        
+        if (sender.track.kind === "video") {
+          // Handle video track
+          if (!presetToApply.enableVideo || forceAudioOnlyRef.current) {
+            // Disable video by setting maxBitrate to 0 and pausing track
+            params.encodings[0].maxBitrate = 0;
+            params.encodings[0].active = false;
+            sender.track.enabled = false;
+            setIsVideoPausedDueToNetwork(!forceAudioOnlyRef.current);
+            
+            safeLog.log("🎥 [QUALITY] Video DISABLED due to network conditions");
+          } else {
+            // Apply video quality settings
+            params.encodings[0].maxBitrate = presetToApply.maxBitrate * 1000; // Convert to bps
+            params.encodings[0].maxFramerate = presetToApply.maxFramerate;
+            params.encodings[0].active = true;
+            
+            if (presetToApply.scaleResolutionDownBy) {
+              params.encodings[0].scaleResolutionDownBy = presetToApply.scaleResolutionDownBy;
+            }
+            
+            sender.track.enabled = true;
+            setIsVideoPausedDueToNetwork(false);
+            
+            safeLog.log("🎥 [QUALITY] Video bitrate set to:", presetToApply.maxBitrate, "kbps");
+          }
+        } else if (sender.track.kind === "audio") {
+          // Apply audio quality settings
+          params.encodings[0].maxBitrate = presetToApply.audioBitrate * 1000; // Convert to bps
           params.encodings[0].active = true;
           
-          if (presetToApply.scaleResolutionDownBy) {
-            params.encodings[0].scaleResolutionDownBy = presetToApply.scaleResolutionDownBy;
-          }
-          
+          // CRITICAL: Audio is ALWAYS enabled, even when video is disabled
           sender.track.enabled = true;
-          setIsVideoPausedDueToNetwork(false);
           
-          safeLog.log("🎥 [QUALITY] Video bitrate set to:", presetToApply.maxBitrate, "kbps");
+          safeLog.log("🔊 [QUALITY] Audio bitrate set to:", presetToApply.audioBitrate, "kbps");
         }
-      } else if (sender.track.kind === "audio") {
-        // Apply audio quality settings
-        params.encodings[0].maxBitrate = presetToApply.audioBitrate * 1000; // Convert to bps
-        params.encodings[0].active = true;
         
-        // CRITICAL: Audio is ALWAYS enabled, even when video is disabled
-        sender.track.enabled = true;
-        
-        safeLog.log("🔊 [QUALITY] Audio bitrate set to:", presetToApply.audioBitrate, "kbps");
-      }
-      
-      try {
         await sender.setParameters(params);
       } catch (error) {
+        // setParameters can fail for various reasons - log but don't break the call
         safeLog.warn("⚠️ [QUALITY] Failed to set parameters for", sender.track.kind, ":", error);
       }
     }
@@ -322,7 +333,14 @@ export const useNetworkQuality = (): UseNetworkQualityReturn => {
   // Collect stats from peer connection
   const collectStats = useCallback(async (): Promise<void> => {
     const pc = peerConnectionRef.current;
-    if (!pc || pc.connectionState === "closed") return;
+    // Skip if no peer connection or if it's in an unusable state
+    if (!pc) return;
+    
+    const state = pc.connectionState;
+    if (state === "closed" || state === "failed" || state === "disconnected") {
+      safeLog.log("📊 [QUALITY] Skipping stats collection - connection state:", state);
+      return;
+    }
     
     try {
       const stats = await pc.getStats();

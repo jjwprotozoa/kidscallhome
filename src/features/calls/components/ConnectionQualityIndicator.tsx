@@ -2,6 +2,7 @@
 // Visual indicator showing current connection quality during video calls
 // Shows network type, quality level, and whether video is paused due to poor connection
 
+import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { 
   NetworkQualityLevel, 
@@ -17,6 +18,8 @@ import {
   SignalHigh,
   VideoOff,
   AlertTriangle,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 
 interface ConnectionQualityIndicatorProps {
@@ -26,6 +29,7 @@ interface ConnectionQualityIndicatorProps {
   isVideoPausedDueToNetwork: boolean;
   className?: string;
   showDetails?: boolean;
+  defaultExpanded?: boolean;
 }
 
 // Colors for each quality level
@@ -91,17 +95,24 @@ export const ConnectionQualityIndicator = ({
   isVideoPausedDueToNetwork,
   className,
   showDetails = false,
+  defaultExpanded = true,
 }: ConnectionQualityIndicatorProps) => {
+  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const colorClass = qualityColors[qualityLevel];
   const label = qualityLabels[qualityLevel];
   
   return (
-    <div className={cn("flex flex-col gap-1", className)}>
-      {/* Main indicator */}
-      <div 
+    <div 
+      className={cn("flex flex-col gap-1", className)}
+      onClick={(e) => e.stopPropagation()} // Prevent video click handler
+    >
+      {/* Main indicator - clickable to expand/collapse */}
+      <button 
+        onClick={() => setIsExpanded(!isExpanded)}
         className={cn(
-          "flex items-center gap-2 px-2 py-1 rounded-lg backdrop-blur-sm",
-          colorClass
+          "flex items-center gap-2 px-2 py-1 rounded-lg backdrop-blur-sm transition-all",
+          colorClass,
+          "hover:opacity-90"
         )}
       >
         <QualityIcon level={qualityLevel} />
@@ -115,57 +126,65 @@ export const ConnectionQualityIndicator = ({
         {isVideoPausedDueToNetwork && (
           <div className="flex items-center gap-1 ml-1 text-orange-400">
             <VideoOff className="h-3 w-3" />
-            <span className="text-[10px]">Video paused</span>
           </div>
         )}
-      </div>
+        
+        {/* Expand/collapse indicator */}
+        {showDetails && (
+          isExpanded ? (
+            <ChevronUp className="h-3 w-3 opacity-50" />
+          ) : (
+            <ChevronDown className="h-3 w-3 opacity-50" />
+          )
+        )}
+      </button>
       
-      {/* Critical connection warning */}
+      {/* Critical connection warning - always visible */}
       {qualityLevel === "critical" && (
         <div className="flex items-center gap-1.5 px-2 py-1 bg-red-500/30 rounded text-red-300 text-[10px]">
           <AlertTriangle className="h-3 w-3" />
-          <span>Audio only mode - poor connection</span>
+          <span>Audio only - poor connection</span>
         </div>
       )}
       
-      {/* Detailed stats (optional) */}
-      {showDetails && (
-        <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 px-2 py-1 bg-black/40 rounded text-[10px] text-white/70">
+      {/* Detailed stats (collapsible) */}
+      {showDetails && isExpanded && (
+        <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 px-2 py-1.5 bg-black/60 rounded text-[10px] text-white/80 backdrop-blur-sm">
           <div className="flex justify-between">
-            <span>Bandwidth:</span>
+            <span className="text-white/50">Bandwidth:</span>
             <span className="font-mono">
               {networkStats.availableBandwidth.toFixed(0)} kbps
             </span>
           </div>
           <div className="flex justify-between">
-            <span>Latency:</span>
+            <span className="text-white/50">Latency:</span>
             <span className="font-mono">
               {networkStats.roundTripTime.toFixed(0)} ms
             </span>
           </div>
           <div className="flex justify-between">
-            <span>Out bitrate:</span>
+            <span className="text-white/50">Out bitrate:</span>
             <span className="font-mono">
               {networkStats.outboundBitrate.toFixed(0)} kbps
             </span>
           </div>
           <div className="flex justify-between">
-            <span>In bitrate:</span>
+            <span className="text-white/50">In bitrate:</span>
             <span className="font-mono">
               {networkStats.inboundBitrate.toFixed(0)} kbps
             </span>
           </div>
           <div className="flex justify-between">
-            <span>Pkt loss:</span>
+            <span className="text-white/50">Pkt loss:</span>
             <span className={cn(
               "font-mono",
-              networkStats.inboundPacketLoss > 5 && "text-red-400"
+              Math.max(networkStats.outboundPacketLoss, networkStats.inboundPacketLoss) > 5 && "text-red-400"
             )}>
               {Math.max(networkStats.outboundPacketLoss, networkStats.inboundPacketLoss).toFixed(1)}%
             </span>
           </div>
           <div className="flex justify-between">
-            <span>Score:</span>
+            <span className="text-white/50">Score:</span>
             <span className={cn(
               "font-mono",
               networkStats.qualityScore < 50 && "text-red-400",

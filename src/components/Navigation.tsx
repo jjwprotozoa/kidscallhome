@@ -3,6 +3,7 @@
 // Features mobile-friendly hamburger menu with slide-out drawer
 
 import { NavLink } from "@/components/NavLink";
+import { NetworkQualityBadge } from "@/components/NetworkQualityBadge";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -541,15 +542,18 @@ const Navigation = () => {
                 KidsCallHome
               </span>
 
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowLogoutDialog(true)}
-                className="flex-shrink-0"
-              >
-                <LogOut className="h-4 w-4 md:mr-2" />
-                <span className="hidden md:inline">Logout</span>
-              </Button>
+              {/* Right side: Network quality + Logout */}
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <NetworkQualityBadge />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowLogoutDialog(true)}
+                >
+                  <LogOut className="h-4 w-4 md:mr-2" />
+                  <span className="hidden md:inline">Logout</span>
+                </Button>
+              </div>
             </div>
           </div>
         </nav>
@@ -814,15 +818,18 @@ const Navigation = () => {
                 KidsCallHome
               </span>
 
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowLogoutDialog(true)}
-                className="flex-shrink-0"
-              >
-                <LogOut className="h-4 w-4 md:mr-2" />
-                <span className="hidden md:inline">Logout</span>
-              </Button>
+              {/* Right side: Network quality + Logout */}
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <NetworkQualityBadge />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowLogoutDialog(true)}
+                >
+                  <LogOut className="h-4 w-4 md:mr-2" />
+                  <span className="hidden md:inline">Logout</span>
+                </Button>
+              </div>
             </div>
           </div>
         </nav>
@@ -997,8 +1004,10 @@ const Navigation = () => {
                 KidsCallHome
               </span>
 
-              {/* Spacer for mobile to balance layout (children don't have logout) */}
-              <div className="sm:hidden w-10" />
+              {/* Right side: Network quality (children don't have logout) */}
+              <div className="flex items-center flex-shrink-0">
+                <NetworkQualityBadge />
+              </div>
             </div>
           </div>
         </nav>
