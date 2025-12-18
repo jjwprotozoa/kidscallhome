@@ -7,6 +7,7 @@ import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client
 import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useNavigate } from "react-router-dom";
+import { SpeedInsights } from "@vercel/speed-insights/react";
 
 // Deferred UI components - loaded after initial paint for faster FCP
 // These are non-critical for the initial page render but provide enhanced UX
@@ -442,6 +443,7 @@ const App = () => {
               </Suspense>
             </BrowserRouter>
           </SafeAreaLayout>
+          <SpeedInsights />
         </TooltipProvider>
       </PersistQueryClientProvider>
     </ErrorBoundary>
