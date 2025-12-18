@@ -37,38 +37,40 @@
   - **No Duplicate Files**: Clean file structure with single source of truth for DeviceManagement
   - **No Infinite Loops**: Device history fetches only once per tab switch instead of continuously
 
-### 0. Child Login Code Update Fix - Optimistic State Update
+### 0. Child Login Code Update Fix - RPC Function & Optimistic State Update
 
-- **Purpose**: Fix issue where generating a new login code for a child showed the new code in the toast notification but didn't update the dashboard UI
-- **Issue**: When clicking "Generate New Login Code" for a child, the toast message showed the new code correctly, but the code displayed on `/parent/dashboard?tab=children` didn't update
-- **Root Cause**: The previous implementation called `loadChildren()` to refetch all children after updating the code, but React.memo on `DashboardTabs` and `ChildrenTab` was preventing re-renders due to prop comparison timing issues
-- **Solution**: Implemented optimistic state update that directly modifies the child's `login_code` in the local state instead of refetching
+- **Purpose**: Fix issue where generating a new login code for a child showed the new code in the toast notification but didn't update the dashboard UI or persist to database
+- **Issues Identified**:
+  1. **UI Not Updating**: Toast showed new code but dashboard display didn't update
+  2. **Database Not Persisting**: After page refresh, the old code was still shown (database update silently failing)
+- **Root Causes**:
+  1. React.memo on `DashboardTabs` and `ChildrenTab` was preventing re-renders due to prop comparison timing issues
+  2. RLS policy for UPDATE on `children` table was silently rejecting updates (no error returned, but 0 rows affected)
+- **Solution**: Two-part fix:
+  1. **Optimistic State Update**: Directly modify local state instead of refetching
+  2. **RPC Function**: Created `SECURITY DEFINER` function to bypass RLS complexity
 - **Changes**:
+  - **New Migration** (`supabase/migrations/20251218100000_add_update_child_login_code_function.sql`):
+    - Created `update_child_login_code(p_child_id UUID, p_new_code TEXT)` RPC function
+    - Uses `SECURITY DEFINER` to bypass RLS and perform permission check internally
+    - Returns `TABLE(success BOOLEAN, login_code TEXT, error_message TEXT)`
+    - Checks `auth.uid()` matches child's `parent_id` before allowing update
   - **`useCodeHandlers.ts`**:
-    - Changed callback parameter from `onChildrenUpdated: () => void | Promise<void>` to `updateChildLoginCode: (childId: string, newCode: string) => void`
-    - Now calls `updateChildLoginCode(child.id, newCode)` immediately after successful database update
+    - Changed to use `update_child_login_code` RPC function instead of direct table UPDATE
+    - Calls `updateChildLoginCode(child.id, result.login_code)` after successful RPC call
   - **`ParentDashboard.tsx`**:
-    - Added new `updateChildLoginCode` callback that directly updates the child in the `children` state:
-      ```typescript
-      const updateChildLoginCode = useCallback((childId: string, newCode: string) => {
-        setChildren(prevChildren => 
-          prevChildren.map(child => 
-            child.id === childId 
-              ? { ...child, login_code: newCode }
-              : child
-          )
-        );
-      }, []);
-      ```
-    - Passes this function to `useCodeHandlers` instead of `loadChildren`
+    - Added `updateChildLoginCode` callback that directly updates the child in the `children` state
+- **Files Created**:
+  - `supabase/migrations/20251218100000_add_update_child_login_code_function.sql` - RPC function for secure login code update
 - **Files Modified**:
-  - `src/pages/ParentDashboard/useCodeHandlers.ts` - Changed to optimistic update pattern
+  - `src/pages/ParentDashboard/useCodeHandlers.ts` - Uses RPC function + optimistic update pattern
   - `src/pages/ParentDashboard/ParentDashboard.tsx` - Added `updateChildLoginCode` callback
 - **Impact**:
-  - **Guaranteed UI Update**: Creating a new array with a new child object guarantees React detects the state change
-  - **Instant Feedback**: UI updates immediately without waiting for network round-trip
-  - **No Race Conditions**: Avoids timing issues between refetch completion and React.memo comparison
-  - **Better Performance**: No unnecessary database query after update
+  - **Database Persistence**: RPC function with SECURITY DEFINER bypasses RLS complexity
+  - **Guaranteed UI Update**: Optimistic state update ensures React detects changes
+  - **Instant Feedback**: UI updates immediately after successful RPC call
+  - **Clear Error Messages**: RPC function returns detailed error messages if permission denied
+  - **Security Maintained**: Permission check performed inside the function using `auth.uid()`
 
 ### 1. Pricing Section Rewrite
 
