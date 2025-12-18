@@ -153,7 +153,7 @@ export const ChildConnectionsTab: React.FC<ChildConnectionsTabProps> = ({ childr
   };
 
   return (
-    <TabsContent value="connections" className="space-y-6 mt-6">
+    <TabsContent value="connections" className="space-y-6 mt-6 min-h-[400px]">
       {loading ? (
         <div className="space-y-6">
           <section>

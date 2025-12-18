@@ -14,7 +14,7 @@ import { SafetyModeSettings } from "./SafetyModeSettings";
 
 export const SafetyReportsTab: React.FC = () => {
   return (
-    <TabsContent value="safety" className="space-y-6 mt-6">
+    <TabsContent value="safety" className="space-y-6 mt-6 min-h-[400px]">
       {/* Blocked Contacts Section */}
       <section>
         <h2 className="text-xl font-semibold mb-4">Blocked Contacts</h2>

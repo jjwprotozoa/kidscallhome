@@ -164,7 +164,7 @@ export const FamilySetupTab: React.FC = () => {
   };
 
   return (
-    <TabsContent value="setup" className="space-y-6 mt-6">
+    <TabsContent value="setup" className="space-y-6 mt-6 min-h-[400px]">
       {loading ? (
         <div className="p-4">Loading family setup...</div>
       ) : (

@@ -62,7 +62,7 @@ export const ChildrenTab = ({
   const navigate = useNavigate();
 
   return (
-    <TabsContent value="children" className="space-y-6 mt-6">
+    <TabsContent value="children" className="space-y-6 mt-6 min-h-[400px]">
       {!canAddMoreChildren && (
         <Card className="p-4 bg-yellow-50 dark:bg-yellow-950 border-yellow-200 dark:border-yellow-800">
           <div className="space-y-3">

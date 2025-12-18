@@ -39,7 +39,7 @@ export const FamilyTab = ({
   onRemove,
 }: FamilyTabProps) => {
   return (
-    <TabsContent value="family" className="space-y-6 mt-6">
+    <TabsContent value="family" className="space-y-6 mt-6 min-h-[400px]">
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h2 className="text-2xl font-bold flex items-center gap-2">
