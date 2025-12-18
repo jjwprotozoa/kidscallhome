@@ -1,58 +1,27 @@
-// src/pages/ChildDashboard/IncomingCallDialog.tsx
-// Purpose: Full-screen incoming call dialog for children - fun and kid-friendly design
+// src/components/GlobalIncomingCall/ChildIncomingCallUI.tsx
+// Purpose: Kid-friendly full-screen incoming call notification
+// Fun purple gradient with sparkles and emojis - matches ChildDashboard theme
 
-import { Phone, PhoneOff, PhoneIncoming } from "lucide-react";
-import { IncomingCall, ChildSession } from "./types";
+import { Phone, PhoneIncoming, PhoneOff } from "lucide-react";
 import { useEffect, useState } from "react";
+import { IncomingCall } from "./types";
 
-interface IncomingCallDialogProps {
-  incomingCall: IncomingCall | null;
-  child: ChildSession | null;
-  parentName: string;
+interface ChildIncomingCallUIProps {
+  incomingCall: IncomingCall;
   isAnsweringRef: React.MutableRefObject<boolean>;
   onAnswer: () => void;
   onDecline: () => void;
 }
 
-export const IncomingCallDialog = ({
+export const ChildIncomingCallUI = ({
   incomingCall,
-  child,
-  parentName,
   isAnsweringRef,
   onAnswer,
   onDecline,
-}: IncomingCallDialogProps) => {
-  // Don't render if no incoming call
-  if (!incomingCall) return null;
-
-  return (
-    <IncomingCallScreen
-      parentName={parentName}
-      avatarColor={child?.avatar_color || "#8B5CF6"}
-      isAnsweringRef={isAnsweringRef}
-      onAnswer={onAnswer}
-      onDecline={onDecline}
-    />
-  );
-};
-
-// Separate component to avoid hooks issues with conditional rendering
-const IncomingCallScreen = ({
-  parentName,
-  avatarColor,
-  isAnsweringRef,
-  onAnswer,
-  onDecline,
-}: {
-  parentName: string;
-  avatarColor: string;
-  isAnsweringRef: React.MutableRefObject<boolean>;
-  onAnswer: () => void;
-  onDecline: () => void;
-}) => {
+}: ChildIncomingCallUIProps) => {
   // Fun bouncing animation for the phone icon
   const [bounce, setBounce] = useState(false);
-  
+
   useEffect(() => {
     const interval = setInterval(() => {
       setBounce((prev) => !prev);
@@ -76,11 +45,14 @@ const IncomingCallScreen = ({
     onDecline();
   };
 
-  // Get caller initial
-  const callerInitial = parentName[0]?.toUpperCase() || "👋";
+  // Get caller name and initial - for children, the caller is a parent or family member
+  const callerName = incomingCall.parent_name || "Someone";
+  const callerInitial = callerName[0]?.toUpperCase() || "👋";
+  // Use a kid-friendly purple color as default
+  const avatarColor = "#8B5CF6";
 
   return (
-    <div 
+    <div
       className="fixed inset-0 z-[100] bg-gradient-to-b from-violet-900 via-purple-800 to-indigo-900"
       role="alertdialog"
       aria-labelledby="incoming-call-title"
@@ -89,30 +61,30 @@ const IncomingCallScreen = ({
       {/* Animated background stars/sparkles for kids */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         {/* Animated circles */}
-        <div 
+        <div
           className="absolute top-1/4 left-1/4 w-4 h-4 bg-yellow-300 rounded-full animate-ping opacity-60"
           style={{ animationDuration: "2s" }}
         />
-        <div 
+        <div
           className="absolute top-1/3 right-1/4 w-3 h-3 bg-pink-300 rounded-full animate-ping opacity-60"
           style={{ animationDuration: "2.5s", animationDelay: "0.5s" }}
         />
-        <div 
+        <div
           className="absolute bottom-1/3 left-1/3 w-5 h-5 bg-cyan-300 rounded-full animate-ping opacity-60"
           style={{ animationDuration: "3s", animationDelay: "1s" }}
         />
-        <div 
+        <div
           className="absolute top-1/2 right-1/3 w-3 h-3 bg-green-300 rounded-full animate-ping opacity-60"
           style={{ animationDuration: "2.2s", animationDelay: "0.3s" }}
         />
-        
+
         {/* Large pulsing rings behind avatar */}
         <div className="absolute inset-0 flex items-center justify-center">
-          <div 
+          <div
             className="absolute w-[350px] h-[350px] rounded-full border-2 border-white/10 animate-ping"
             style={{ animationDuration: "3s" }}
           />
-          <div 
+          <div
             className="absolute w-[250px] h-[250px] rounded-full border-2 border-white/15 animate-ping"
             style={{ animationDuration: "2.5s", animationDelay: "0.5s" }}
           />
@@ -120,13 +92,17 @@ const IncomingCallScreen = ({
       </div>
 
       {/* Main content - centered */}
-      <div className="relative h-full flex flex-col items-center justify-between py-12 px-6 safe-area-layout">
+      <div className="relative z-10 h-full flex flex-col items-center justify-between py-6 sm:py-12 px-6 safe-area-layout">
         {/* Top section - Caller info */}
         <div className="flex-1 flex flex-col items-center justify-center space-y-6">
           {/* Big phone icon - bouncing */}
-          <div 
+          <div
             className="text-6xl transition-transform duration-300"
-            style={{ transform: bounce ? "translateY(-10px) rotate(-10deg)" : "translateY(0) rotate(10deg)" }}
+            style={{
+              transform: bounce
+                ? "translateY(-10px) rotate(-10deg)"
+                : "translateY(0) rotate(10deg)",
+            }}
           >
             📞
           </div>
@@ -134,7 +110,7 @@ const IncomingCallScreen = ({
           {/* Caller avatar */}
           <div className="relative">
             {/* Glowing ring */}
-            <div 
+            <div
               className="absolute inset-0 rounded-full animate-pulse"
               style={{
                 backgroundColor: avatarColor,
@@ -158,13 +134,13 @@ const IncomingCallScreen = ({
 
           {/* Caller name and status */}
           <div className="text-center space-y-3">
-            <h1 
+            <h1
               id="incoming-call-title"
               className="text-4xl font-bold text-white tracking-tight drop-shadow-lg"
             >
-              {parentName}
+              {callerName}
             </h1>
-            <p 
+            <p
               id="incoming-call-desc"
               className="text-xl text-white/80 flex items-center justify-center gap-3"
             >
@@ -175,9 +151,21 @@ const IncomingCallScreen = ({
 
           {/* Fun emoji decoration */}
           <div className="flex gap-4 text-3xl">
-            <span className="animate-bounce" style={{ animationDelay: "0ms" }}>🎉</span>
-            <span className="animate-bounce" style={{ animationDelay: "150ms" }}>✨</span>
-            <span className="animate-bounce" style={{ animationDelay: "300ms" }}>💜</span>
+            <span className="animate-bounce" style={{ animationDelay: "0ms" }}>
+              🎉
+            </span>
+            <span
+              className="animate-bounce"
+              style={{ animationDelay: "150ms" }}
+            >
+              ✨
+            </span>
+            <span
+              className="animate-bounce"
+              style={{ animationDelay: "300ms" }}
+            >
+              💜
+            </span>
           </div>
         </div>
 

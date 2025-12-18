@@ -80,7 +80,7 @@ export const ChildOutgoingCallUI = ({
       </div>
 
       {/* Main content - centered */}
-      <div className="relative h-full flex flex-col items-center justify-between py-12 px-6 safe-area-inset">
+      <div className="relative z-10 h-full flex flex-col items-center justify-between py-6 sm:py-12 px-6 safe-area-layout">
         {/* Top section - Callee info */}
         <div className="flex-1 flex flex-col items-center justify-center space-y-6">
           {/* Big phone icon - bouncing */}
@@ -147,8 +147,10 @@ export const ChildOutgoingCallUI = ({
         <div className="w-full max-w-sm space-y-4">
           {/* End Call button */}
           <button
+            type="button"
             onClick={onEndCall}
             className="w-full py-5 px-8 bg-gradient-to-r from-red-400 to-rose-500 hover:from-red-300 hover:to-rose-400 text-white rounded-3xl shadow-lg shadow-red-500/40 flex items-center justify-center gap-4 transition-all duration-200 active:scale-95 hover:scale-[1.02] border-2 border-white/20"
+            style={{ touchAction: "manipulation" }}
           >
             <div className="bg-white/30 rounded-full p-3">
               <PhoneOff className="w-7 h-7" />

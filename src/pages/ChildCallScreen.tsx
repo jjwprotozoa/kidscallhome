@@ -21,6 +21,8 @@ const ChildCallScreen = () => {
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const autoAcceptAttemptedRef = useRef<string | null>(null);
+  // Track if call failed to prevent infinite retry loop and show error UI
+  const [callFailed, setCallFailed] = useState(false);
 
   useEffect(() => {
     const initialize = async () => {
@@ -245,6 +247,9 @@ const ChildCallScreen = () => {
 
   // Only auto-start outgoing call if there's no callId query param (not answering incoming call)
   useEffect(() => {
+    // Don't try to start call if previous attempt failed
+    if (callFailed) return;
+
     const urlCallId = searchParams.get("callId");
     const isAnsweringIncomingCall = !!urlCallId;
 
@@ -298,9 +303,14 @@ const ChildCallScreen = () => {
         console.error("❌ [CHILD CALL SCREEN] Failed to start call:", error);
         // Reset ref on error so we can retry
         lastCalledParentIdRef.current = null;
+        // Set callFailed to show error UI and prevent infinite retry
+        setCallFailed(true);
         toast({
           title: "Call Failed",
-          description: "Failed to start call",
+          description:
+            error instanceof Error
+              ? error.message
+              : "Failed to start call. Please check camera/microphone permissions.",
           variant: "destructive",
         });
       });
@@ -313,6 +323,7 @@ const ChildCallScreen = () => {
     searchParams,
     participantType,
     toast,
+    callFailed,
   ]);
 
   // Reset the ref when call ends
@@ -334,6 +345,40 @@ const ChildCallScreen = () => {
     return (
       <div className="min-h-[100dvh] bg-background flex items-center justify-center">
         <div>Loading...</div>
+      </div>
+    );
+  }
+
+  // Show kid-friendly error state with back button when call failed
+  if (callFailed) {
+    return (
+      <div className="fixed inset-0 z-[100] bg-gradient-to-b from-violet-900 via-purple-800 to-indigo-900 flex flex-col items-center justify-center p-6">
+        <div className="text-center space-y-6">
+          <div className="text-7xl animate-bounce">😢</div>
+          <h1 className="text-3xl font-bold text-white">Oops!</h1>
+          <p className="text-white/80 text-lg max-w-sm">
+            We couldn't start the call. Please make sure the camera and
+            microphone are allowed!
+          </p>
+          <button
+            type="button"
+            onClick={() => navigate("/child/dashboard")}
+            className="w-full max-w-sm py-5 px-8 bg-gradient-to-r from-pink-400 to-purple-500 hover:from-pink-300 hover:to-purple-400 text-white rounded-3xl shadow-lg shadow-purple-500/40 flex items-center justify-center gap-3 transition-all duration-200 active:scale-95 hover:scale-[1.02] border-2 border-white/20"
+          >
+            <span className="text-xl">🏠</span>
+            <span className="text-xl font-bold">Go Home</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setCallFailed(false);
+              lastCalledParentIdRef.current = null;
+            }}
+            className="text-white/60 hover:text-white text-sm underline"
+          >
+            Try Again
+          </button>
+        </div>
       </div>
     );
   }

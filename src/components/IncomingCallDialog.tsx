@@ -69,11 +69,16 @@ const IncomingCallScreen = ({
     if (isAnsweringRef.current) return;
     isAnsweringRef.current = true;
     onOpenChange(true); // Keep open during answer
-    onAnswer();
+    try {
+      onAnswer();
+    } catch (error) {
+      console.error("Error in handleAnswer:", error);
+      isAnsweringRef.current = false;
+    }
   };
 
   const handleDecline = () => {
-    if (isAnsweringRef.current) return;
+    // CRITICAL: Don't block decline if answer was attempted - user should always be able to decline
     onDecline();
     onOpenChange(false);
   };
@@ -107,7 +112,7 @@ const IncomingCallScreen = ({
       </div>
 
       {/* Main content - centered */}
-      <div className="relative h-full flex flex-col items-center justify-between py-16 px-6 safe-area-inset">
+      <div className="relative h-full flex flex-col items-center justify-between py-16 px-6 safe-area-layout">
         {/* Top section - Caller info */}
         <div className="flex-1 flex flex-col items-center justify-center space-y-8">
           {/* Animated avatar with pulsing ring */}
@@ -165,8 +170,10 @@ const IncomingCallScreen = ({
         <div className="w-full max-w-sm space-y-4">
           {/* Answer button - large and prominent */}
           <button
+            type="button"
             onClick={handleAnswer}
             className="w-full py-5 px-8 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-400 hover:to-emerald-500 text-white rounded-2xl shadow-lg shadow-green-500/30 flex items-center justify-center gap-4 transition-all duration-200 active:scale-95 hover:scale-[1.02]"
+            style={{ touchAction: "manipulation" }}
           >
             <div className="bg-white/20 rounded-full p-3">
               <Phone className="w-7 h-7" />
@@ -176,8 +183,10 @@ const IncomingCallScreen = ({
 
           {/* Decline button */}
           <button
+            type="button"
             onClick={handleDecline}
             className="w-full py-5 px-8 bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-400 hover:to-rose-500 text-white rounded-2xl shadow-lg shadow-red-500/30 flex items-center justify-center gap-4 transition-all duration-200 active:scale-95 hover:scale-[1.02]"
+            style={{ touchAction: "manipulation" }}
           >
             <div className="bg-white/20 rounded-full p-3">
               <PhoneOff className="w-7 h-7" />

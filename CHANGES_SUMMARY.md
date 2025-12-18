@@ -17,6 +17,7 @@
 #### Root Cause Analysis
 
 When a family member clicked the invitation link and signed up:
+
 1. The `handle_new_family_member()` trigger should fire on `auth.users` INSERT
 2. It should update `family_members.id` and `status`, and create `adult_profiles`
 3. But the trigger wasn't firing or failing silently
@@ -26,32 +27,38 @@ When a family member clicked the invitation link and signed up:
 #### Fixes Applied
 
 - **Updated `link_family_member_by_email` RPC Function**:
+
   - Now also creates `adult_profiles` record when linking during login
   - Sets `status = 'active'` and `invitation_accepted_at`
   - Serves as fallback when trigger doesn't fire
 
 - **Created `admin_fix_family_member_by_email` Function**:
+
   - Admin helper function to fix stuck family member accounts
   - Links auth user to `family_members` record
   - Creates `adult_profiles` record with correct relationship data
   - Usage: `SELECT admin_fix_family_member_by_email('email@example.com');`
 
 - **Recreated `on_family_member_signup` Trigger**:
+
   - Ensures trigger exists on `auth.users` table
   - Fires when `raw_user_meta_data->>'invitation_token'` is not null
   - Creates both `family_members` link and `adult_profiles` record
 
 - **Fixed RLS Policies for `adult_profiles`**:
+
   - Added "Users can view own adult profile" - `user_id = auth.uid()`
   - Added "Users can update own adult profile" - for profile updates
   - **Removed recursive policy** that caused 500 errors (was querying `adult_profiles` within its own policy)
 
 - **Fixed RLS Policies for `family_members`**:
+
   - Added "Parents can view their family members" - `parent_id = auth.uid()`
   - Added "Parents can insert/update/delete family members"
   - Parents can now see and manage family members they invited
 
 - **Fixed RLS Policies for `children`**:
+
   - Added "Parents can view own children" - `parent_id = auth.uid()`
   - Added INSERT/UPDATE/DELETE policies for authenticated parents
   - Preserved "Anyone can verify login codes" for anonymous child login
@@ -62,15 +69,15 @@ When a family member clicked the invitation link and signed up:
 
 #### Technical Details
 
-| Table | Issue | Fix |
-|-------|-------|-----|
-| `family_members` | `id = NULL`, `status = 'pending'` | `link_family_member_by_email` RPC links on login |
-| `adult_profiles` | Record missing | RPC now creates during linking |
-| `adult_profiles` | No SELECT policy for users | Added `user_id = auth.uid()` policy |
-| `adult_profiles` | Recursive policy → 500 errors | Removed recursive policy |
-| `family_members` | Parents couldn't see invitations | Added `parent_id = auth.uid()` policy |
-| `children` | Parents couldn't see children | Added `parent_id = auth.uid()` policy |
-| `auth.users` | `email_verified = false` in metadata | Manual fix via SQL UPDATE |
+| Table            | Issue                                | Fix                                              |
+| ---------------- | ------------------------------------ | ------------------------------------------------ |
+| `family_members` | `id = NULL`, `status = 'pending'`    | `link_family_member_by_email` RPC links on login |
+| `adult_profiles` | Record missing                       | RPC now creates during linking                   |
+| `adult_profiles` | No SELECT policy for users           | Added `user_id = auth.uid()` policy              |
+| `adult_profiles` | Recursive policy → 500 errors        | Removed recursive policy                         |
+| `family_members` | Parents couldn't see invitations     | Added `parent_id = auth.uid()` policy            |
+| `children`       | Parents couldn't see children        | Added `parent_id = auth.uid()` policy            |
+| `auth.users`     | `email_verified = false` in metadata | Manual fix via SQL UPDATE                        |
 
 #### Files Created
 
@@ -83,6 +90,7 @@ When a family member clicked the invitation link and signed up:
 **Never create an RLS policy that queries the same table it's protecting** without using a `SECURITY DEFINER` helper function. This causes infinite recursion and 500 errors.
 
 Bad (causes infinite recursion):
+
 ```sql
 CREATE POLICY "Adults can view profiles in their family"
   ON public.adult_profiles FOR SELECT
@@ -96,6 +104,7 @@ CREATE POLICY "Adults can view profiles in their family"
 ```
 
 Good (use helper function):
+
 ```sql
 CREATE FUNCTION get_user_family_id(p_user_id UUID) RETURNS UUID
 LANGUAGE sql SECURITY DEFINER AS $$

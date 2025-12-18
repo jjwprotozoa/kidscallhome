@@ -63,7 +63,7 @@ export const OutgoingCallUI = ({
       </div>
 
       {/* Main content - centered */}
-      <div className="relative h-full flex flex-col items-center justify-between py-16 px-6 safe-area-inset">
+      <div className="relative z-10 h-full flex flex-col items-center justify-between py-8 sm:py-16 px-6 safe-area-layout">
         {/* Top section - Callee info */}
         <div className="flex-1 flex flex-col items-center justify-center space-y-8">
           {/* Animated avatar with pulsing ring */}
@@ -140,8 +140,10 @@ export const OutgoingCallUI = ({
         <div className="w-full max-w-sm">
           {/* End Call button */}
           <button
+            type="button"
             onClick={onEndCall}
             className="w-full py-5 px-8 bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-400 hover:to-rose-500 text-white rounded-2xl shadow-lg shadow-red-500/30 flex items-center justify-center gap-4 transition-all duration-200 active:scale-95 hover:scale-[1.02]"
+            style={{ touchAction: "manipulation" }}
           >
             <div className="bg-white/20 rounded-full p-3">
               <PhoneOff className="w-7 h-7" />

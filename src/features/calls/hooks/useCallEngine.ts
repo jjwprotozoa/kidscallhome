@@ -10,6 +10,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { isCallTerminal } from "../utils/callEnding";
 import { useWebRTC } from "./useWebRTC";
+import { useAudioNotifications } from "./useAudioNotifications";
 // Import modular components
 import { useCallConnectionState } from "./modules/useCallConnectionState";
 import { useCallMedia } from "./modules/useCallMedia";
@@ -100,6 +101,43 @@ export const useCallEngine = ({
     playRemoteVideo,
     networkQuality, // Network quality for adaptive streaming
   } = useWebRTC(callId, localVideoRef, remoteVideoRef, role === "child");
+
+  // Audio notifications for outgoing calls
+  const { playOutgoingRingtone, stopOutgoingRingtone, playCallAnswered } =
+    useAudioNotifications({ enabled: true, volume: 0.7 });
+
+  // Play outgoing ringtone when in "calling" state (waiting for answer)
+  useEffect(() => {
+    if (state === "calling" && callId) {
+      // Outgoing call - play waiting tone
+      // eslint-disable-next-line no-console
+      console.log("🔔 [CALL ENGINE AUDIO] Starting outgoing waiting tone", {
+        callId,
+        state,
+        timestamp: new Date().toISOString(),
+      });
+      playOutgoingRingtone();
+    } else if (state === "in_call" || state === "ended" || state === "idle") {
+      // Stop waiting tone when call connects or ends
+      // eslint-disable-next-line no-console
+      console.log("🔇 [CALL ENGINE AUDIO] Stopping outgoing waiting tone", {
+        callId,
+        state,
+        timestamp: new Date().toISOString(),
+      });
+      stopOutgoingRingtone();
+      
+      // Play happy chime when call connects
+      if (state === "in_call" && remoteStream) {
+        playCallAnswered();
+      }
+    }
+
+    // Cleanup on unmount
+    return () => {
+      stopOutgoingRingtone();
+    };
+  }, [state, callId, remoteStream, playOutgoingRingtone, stopOutgoingRingtone, playCallAnswered]);
 
   // Initialize WebRTC connection
   useEffect(() => {

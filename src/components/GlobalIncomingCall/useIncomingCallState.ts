@@ -76,15 +76,9 @@ export const useIncomingCallState = () => {
           return;
         }
 
-        // CRITICAL: Don't process for children on dashboard pages
-        // ChildDashboard has its own incoming call handling via useDashboardData
-        // This prevents duplicate notifications and UI
-        if (
-          isChild &&
-          (location.pathname === "/child/dashboard" ||
-           location.pathname === "/child" ||
-           location.pathname === "/child/parents")
-        ) {
+        // CRITICAL: Only skip /child/dashboard which has its own incoming call handling via useDashboardData
+        // Other child pages (/child, /child/parents) need to use GlobalIncomingCall
+        if (isChild && location.pathname === "/child/dashboard") {
           return;
         }
 
@@ -293,14 +287,9 @@ export const useIncomingCallState = () => {
           return;
         }
 
-        // CRITICAL: Don't process for children on dashboard pages
-        // ChildDashboard has its own incoming call handling via useDashboardData
-        if (
-          isChild &&
-          (location.pathname === "/child/dashboard" ||
-           location.pathname === "/child" ||
-           location.pathname === "/child/parents")
-        ) {
+        // CRITICAL: Only skip /child/dashboard which has its own incoming call handling via useDashboardData
+        // Other child pages (/child, /child/parents) need to use GlobalIncomingCall
+        if (isChild && location.pathname === "/child/dashboard") {
           return;
         }
 

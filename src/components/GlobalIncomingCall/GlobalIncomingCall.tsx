@@ -10,6 +10,7 @@ import { AndroidIncomingCall } from "@/components/native/AndroidIncomingCall";
 import { isNativeAndroid } from "@/utils/nativeAndroid";
 import { useIncomingCallState } from "./useIncomingCallState";
 import { IncomingCallUI } from "./IncomingCallUI";
+import { ChildIncomingCallUI } from "./ChildIncomingCallUI";
 import { IncomingCall } from "./types";
 import { setUserStartedCall } from "@/utils/userInteraction";
 
@@ -26,60 +27,77 @@ export const GlobalIncomingCall = () => {
       
       // Prevent double-clicks
       isAnsweringRef.current = true;
-      stopIncomingCall(incomingCall.id);
-      const callId = incomingCall.id;
       
-      // Determine user role to route correctly
-      const { data: { session } } = await supabase.auth.getSession();
-      const childSession = localStorage.getItem("childSession");
-      const isChild = !session && !!childSession;
-      
-      let isFamilyMember = false;
-      if (session?.user?.id) {
-        const { getUserRole } = await import("@/utils/userRole");
-        const userRole = await getUserRole(session.user.id);
-        isFamilyMember = userRole === "family_member";
-        console.log("🔍 [GLOBAL INCOMING CALL] User role detection:", {
-          userId: session.user.id,
-          userRole,
-          isFamilyMember,
-        });
-      }
-      
-      console.log("🔍 [GLOBAL INCOMING CALL] Routing decision:", {
-        isChild,
-        isFamilyMember,
-        hasChildId: !!incomingCall.child_id,
-        hasParentId: !!incomingCall.parent_id,
-        callId,
-      });
-      
-      if (incomingCall.child_id) {
-        // Adult (parent or family member) answering child's call
-        if (isFamilyMember) {
-          console.log("✅ [GLOBAL INCOMING CALL] Routing family member to:", `/family-member/call/${incomingCall.child_id}?callId=${callId}`);
-          navigate(`/family-member/call/${incomingCall.child_id}?callId=${callId}`);
-        } else {
-          // Parent answering child's call - use /parent/call/ route which uses useCallEngine with role="parent"
-          console.log("✅ [GLOBAL INCOMING CALL] Routing parent to:", `/parent/call/${incomingCall.child_id}?callId=${callId}`);
-          navigate(`/parent/call/${incomingCall.child_id}?callId=${callId}`);
+      try {
+        stopIncomingCall(incomingCall.id);
+        const callId = incomingCall.id;
+        
+        // Determine user role to route correctly
+        const { data: { session } } = await supabase.auth.getSession();
+        const childSession = localStorage.getItem("childSession");
+        const isChild = !session && !!childSession;
+        
+        let isFamilyMember = false;
+        if (session?.user?.id) {
+          try {
+            const { getUserRole } = await import("@/utils/userRole");
+            const userRole = await getUserRole(session.user.id);
+            isFamilyMember = userRole === "family_member";
+            console.log("🔍 [GLOBAL INCOMING CALL] User role detection:", {
+              userId: session.user.id,
+              userRole,
+              isFamilyMember,
+            });
+          } catch (roleError) {
+            console.error("Error getting user role, defaulting to parent:", roleError);
+            // Default to parent if role check fails
+            isFamilyMember = false;
+          }
         }
-      } else if (incomingCall.parent_id) {
-        // Child answering parent's or family member's call - navigate to child call route
-        console.log("✅ [GLOBAL INCOMING CALL] Routing child to:", `/child/call/${incomingCall.parent_id}?callId=${callId}`);
-        navigate(`/child/call/${incomingCall.parent_id}?callId=${callId}`);
-      } else {
-        console.error("❌ [GLOBAL INCOMING CALL] No child_id or parent_id in incoming call:", incomingCall);
+        
+        console.log("🔍 [GLOBAL INCOMING CALL] Routing decision:", {
+          isChild,
+          isFamilyMember,
+          hasChildId: !!incomingCall.child_id,
+          hasParentId: !!incomingCall.parent_id,
+          callId,
+        });
+        
+        // Clear the incoming call state BEFORE navigation to ensure UI updates
+        setIncomingCall(null);
+        
+        if (incomingCall.child_id) {
+          // Adult (parent or family member) answering child's call
+          if (isFamilyMember) {
+            console.log("✅ [GLOBAL INCOMING CALL] Routing family member to:", `/family-member/call/${incomingCall.child_id}?callId=${callId}`);
+            navigate(`/family-member/call/${incomingCall.child_id}?callId=${callId}`);
+          } else {
+            // Parent answering child's call - use /parent/call/ route which uses useCallEngine with role="parent"
+            console.log("✅ [GLOBAL INCOMING CALL] Routing parent to:", `/parent/call/${incomingCall.child_id}?callId=${callId}`);
+            navigate(`/parent/call/${incomingCall.child_id}?callId=${callId}`);
+          }
+        } else if (incomingCall.parent_id) {
+          // Child answering parent's or family member's call - navigate to child call route
+          console.log("✅ [GLOBAL INCOMING CALL] Routing child to:", `/child/call/${incomingCall.parent_id}?callId=${callId}`);
+          navigate(`/child/call/${incomingCall.parent_id}?callId=${callId}`);
+        } else {
+          console.error("❌ [GLOBAL INCOMING CALL] No child_id or parent_id in incoming call:", incomingCall);
+        }
+      } catch (error) {
+        console.error("❌ [GLOBAL INCOMING CALL] Error handling answer:", error);
+        // Reset the ref on error so user can try again
+        isAnsweringRef.current = false;
       }
       
-      setIncomingCall(null);
+      // Reset after navigation attempt
       setTimeout(() => {
         isAnsweringRef.current = false;
-      }, 5000); // Increased timeout to prevent race conditions
+      }, 3000); // Reduced from 5000 to allow faster retry
     }
   };
 
   const handleDeclineCall = async () => {
+    // CRITICAL: Always allow decline regardless of isAnsweringRef state
     if (incomingCall) {
       const { data: { session } } = await supabase.auth.getSession();
       const childSession = localStorage.getItem("childSession");
@@ -90,10 +108,14 @@ export const GlobalIncomingCall = () => {
       if (isChild) {
         by = "child";
       } else if (session?.user?.id) {
-        const { getUserRole } = await import("@/utils/userRole");
-        const userRole = await getUserRole(session.user.id);
-        if (userRole === "family_member") {
-          by = "family_member";
+        try {
+          const { getUserRole } = await import("@/utils/userRole");
+          const userRole = await getUserRole(session.user.id);
+          if (userRole === "family_member") {
+            by = "family_member";
+          }
+        } catch (roleError) {
+          console.error("Error getting user role for decline:", roleError);
         }
       }
 
@@ -105,22 +127,22 @@ export const GlobalIncomingCall = () => {
 
       stopIncomingCall(incomingCall.id);
       setIncomingCall(null);
+      isAnsweringRef.current = false; // Reset in case it was stuck from answer attempt
     }
   };
 
   if (!incomingCall) return null;
 
-  // CRITICAL: Don't render GlobalIncomingCall UI for children on the dashboard
-  // ChildDashboard has its own kid-friendly IncomingCallDialog
-  // This prevents showing both the purple (kid-friendly) and blue (adult) UIs
+  // Check if user is a child
   const childSession = localStorage.getItem("childSession");
   const isChild = !!childSession;
-  const isOnChildDashboard = location.pathname === "/child/dashboard" || 
-                             location.pathname === "/child" ||
-                             location.pathname === "/child/parents";
+  
+  // CRITICAL: Only suppress GlobalIncomingCall on ChildDashboard which has its own kid-friendly IncomingCallDialog
+  // Other child pages (like /child/parents) will use the ChildIncomingCallUI below
+  const isOnChildDashboard = location.pathname === "/child/dashboard";
   
   if (isChild && isOnChildDashboard) {
-    // Child is on a page with its own incoming call UI - don't show GlobalIncomingCall
+    // ChildDashboard has its own incoming call UI - don't show GlobalIncomingCall
     return null;
   }
 
@@ -137,12 +159,22 @@ export const GlobalIncomingCall = () => {
           isActive={!!incomingCall}
         />
       )}
-      <IncomingCallUI
-        incomingCall={incomingCall}
-        isAnsweringRef={isAnsweringRef}
-        onAnswer={handleAnswerCall}
-        onDecline={handleDeclineCall}
-      />
+      {/* Use kid-friendly UI for children, adult UI for parents/family members */}
+      {isChild ? (
+        <ChildIncomingCallUI
+          incomingCall={incomingCall}
+          isAnsweringRef={isAnsweringRef}
+          onAnswer={handleAnswerCall}
+          onDecline={handleDeclineCall}
+        />
+      ) : (
+        <IncomingCallUI
+          incomingCall={incomingCall}
+          isAnsweringRef={isAnsweringRef}
+          onAnswer={handleAnswerCall}
+          onDecline={handleDeclineCall}
+        />
+      )}
     </>
   );
 };

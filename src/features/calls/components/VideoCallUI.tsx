@@ -65,6 +65,10 @@ export const VideoCallUI = ({
   const audioEnabledRef = useRef(getUserHasStartedCall());
   // Ref to a hidden audio element for audio-only playback (mobile workaround)
   const audioElementRef = useRef<HTMLAudioElement | null>(null);
+  // Volume boost state - uses Web Audio API gain node for louder audio
+  const [isVolumeBoosted, setIsVolumeBoosted] = useState(false);
+  const gainNodeRef = useRef<GainNode | null>(null);
+  const audioDestinationConnectedRef = useRef(false);
 
   // Set volume via ref (volume is not a valid HTML prop)
   useEffect(() => {
@@ -672,12 +676,14 @@ export const VideoCallUI = ({
     
     // 6. CRITICAL: Route audio directly through Web Audio API to speakers
     // This bypasses video/audio element playback entirely
-    routeAudioViaWebAudioAPI();
+    // Use current boost state
+    routeAudioViaWebAudioAPI(isVolumeBoosted);
   };
 
   // CRITICAL: Route remote audio directly through Web Audio API to speakers
   // This bypasses video/audio element playback entirely
-  const routeAudioViaWebAudioAPI = () => {
+  // Supports volume boost via gain node
+  const routeAudioViaWebAudioAPI = (boost: boolean = isVolumeBoosted) => {
     if (!remoteStream) {
       console.error("❌ [AUDIO] No remote stream to route");
       return;
@@ -705,6 +711,14 @@ export const VideoCallUI = ({
         });
       }
       
+      // If already connected, just update gain
+      if (audioDestinationConnectedRef.current && gainNodeRef.current) {
+        const gainValue = boost ? 3.0 : 1.0; // 3x boost when enabled
+        gainNodeRef.current.gain.setValueAtTime(gainValue, audioCtx.currentTime);
+        console.warn(`🔊 [AUDIO] Updated gain to ${gainValue}x (boost: ${boost})`);
+        return;
+      }
+      
       // Disconnect old source if exists
       if (audioSourceRef.current) {
         try {
@@ -718,14 +732,26 @@ export const VideoCallUI = ({
       const source = audioCtx.createMediaStreamSource(remoteStream);
       audioSourceRef.current = source;
       
+      // Create gain node for volume control
       const gainNode = audioCtx.createGain();
-      gainNode.gain.value = 1.0;
+      const gainValue = boost ? 3.0 : 1.0; // 3x boost when enabled
+      gainNode.gain.value = gainValue;
+      gainNodeRef.current = gainNode;
       
-      // Connect to destination (speakers)
+      // Connect: source -> gain -> analyser (for monitoring) -> destination
       source.connect(gainNode);
-      gainNode.connect(audioCtx.destination);
       
-      console.warn("🔊 [AUDIO] Routed remote audio directly through Web Audio API to speakers!");
+      // Reconnect analyser in the chain if it exists
+      if (analyserRef.current) {
+        gainNode.connect(analyserRef.current);
+        analyserRef.current.connect(audioCtx.destination);
+      } else {
+        gainNode.connect(audioCtx.destination);
+      }
+      
+      audioDestinationConnectedRef.current = true;
+      
+      console.warn(`🔊 [AUDIO] Routed remote audio through Web Audio API (gain: ${gainValue}x)!`);
       console.warn("🔊 [AUDIO] AudioContext state:", audioCtx.state, "Sample rate:", audioCtx.sampleRate);
       
       // Check audio level to verify data is flowing
@@ -743,6 +769,33 @@ export const VideoCallUI = ({
       
     } catch (error) {
       console.error("❌ [AUDIO] Failed to route via Web Audio API:", error);
+    }
+  };
+
+  // Toggle volume boost - increases audio gain for louder playback
+  const toggleVolumeBoost = () => {
+    const newBoostState = !isVolumeBoosted;
+    setIsVolumeBoosted(newBoostState);
+    
+    console.warn(`🔊 [VOLUME] ${newBoostState ? "Boosting" : "Normalizing"} volume`);
+    
+    // Update gain node if already routing
+    if (gainNodeRef.current && audioContextRef.current) {
+      const gainValue = newBoostState ? 3.0 : 1.0;
+      gainNodeRef.current.gain.setValueAtTime(gainValue, audioContextRef.current.currentTime);
+    }
+    
+    // Also update video/audio element volumes
+    if (remoteVideoRef.current) {
+      remoteVideoRef.current.volume = newBoostState ? 1.0 : 1.0; // Max out video volume
+    }
+    if (audioElementRef.current) {
+      audioElementRef.current.volume = newBoostState ? 1.0 : 1.0; // Max out audio volume
+    }
+    
+    // If not yet routing through Web Audio API, start now
+    if (!audioDestinationConnectedRef.current && remoteStream) {
+      routeAudioViaWebAudioAPI(newBoostState);
     }
   };
 
@@ -1004,10 +1057,10 @@ export const VideoCallUI = ({
           </div>
         )}
 
-        {/* Connection status overlay */}
+        {/* Connection status overlay - z-20 to stay below controls (z-50) */}
         {statusMessage && (
           <div
-            className="absolute inset-0 flex items-center justify-center bg-gradient-to-b from-slate-900/95 via-slate-800/95 to-slate-900/95 cursor-pointer"
+            className="absolute inset-0 z-20 flex items-center justify-center bg-gradient-to-b from-slate-900/95 via-slate-800/95 to-slate-900/95 cursor-pointer"
             onClick={handleVideoClick}
           >
             <div className="text-center space-y-6 px-8">
@@ -1163,6 +1216,8 @@ export const VideoCallUI = ({
           onToggleMute={onToggleMute}
           onToggleVideo={onToggleVideo}
           onEndCall={onEndCall}
+          isVolumeBoosted={isVolumeBoosted}
+          onToggleVolume={toggleVolumeBoost}
         />
       </div>
     </div>

@@ -39,6 +39,7 @@ const qualityColors: Record<NetworkQualityLevel, string> = {
   moderate: "text-yellow-500 bg-yellow-500/20",
   good: "text-green-500 bg-green-500/20",
   excellent: "text-emerald-500 bg-emerald-500/20",
+  premium: "text-cyan-400 bg-cyan-500/20", // Special color for fiber/premium connections
 };
 
 // Labels for quality levels
@@ -48,6 +49,7 @@ const qualityLabels: Record<NetworkQualityLevel, string> = {
   moderate: "Fair",
   good: "Good",
   excellent: "Excellent",
+  premium: "Premium HD", // Shows users they're on the best quality tier
 };
 
 // Icons for quality levels
@@ -65,6 +67,8 @@ const QualityIcon = ({ level }: { level: NetworkQualityLevel }) => {
       return <SignalHigh className={cn(iconClass, "text-green-500")} />;
     case "excellent":
       return <Signal className={cn(iconClass, "text-emerald-500")} />;
+    case "premium":
+      return <Signal className={cn(iconClass, "text-cyan-400")} />;
   }
 };
 

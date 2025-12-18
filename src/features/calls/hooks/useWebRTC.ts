@@ -117,19 +117,22 @@ export const useWebRTC = (
       try {
         safeLog.log("🎥 [MEDIA] Requesting camera and microphone access...");
 
-        // ALWAYS request video at a reasonable default resolution
-        // The adaptive quality control will adjust bitrate/disable video AFTER connection if needed
-        // This ensures video track exists for the peer connection
+        // Request 1080p video to enable high quality for fiber/premium connections
+        // The adaptive quality control will adjust bitrate/resolution AFTER connection if needed
+        // This ensures video track exists at the highest quality the camera supports
         stream = await navigator.mediaDevices.getUserMedia({
           video: {
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
+            width: { ideal: 1920, max: 1920 },
+            height: { ideal: 1080, max: 1080 },
+            frameRate: { ideal: 30, max: 30 },
             facingMode: "user", // Front-facing camera
           },
           audio: {
             echoCancellation: true,
             noiseSuppression: true,
             autoGainControl: true,
+            // Higher sample rate for better audio quality on good connections
+            sampleRate: { ideal: 48000 },
           },
         });
 

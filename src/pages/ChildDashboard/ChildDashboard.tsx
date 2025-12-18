@@ -86,11 +86,8 @@ const ChildDashboard = () => {
   };
 
   const handleDeclineCall = async () => {
+    // CRITICAL: Don't block decline if answer was attempted - user should always be able to decline
     if (incomingCall) {
-      if (isAnsweringRef.current) {
-        return;
-      }
-
       try {
         await endCallUtil({
           callId: incomingCall.id,
@@ -108,6 +105,7 @@ const ChildDashboard = () => {
       }
       stopIncomingCall(incomingCall.id);
       setIncomingCall(null);
+      isAnsweringRef.current = false; // Reset in case it was stuck
     }
   };
 

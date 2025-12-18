@@ -34,10 +34,7 @@ export const useIncomingCallHandlers = () => {
   }, [navigate, stopIncomingCall]);
 
   const handleDecline = useCallback(async (incomingCall: IncomingCall, setIncomingCall: (call: IncomingCall | null) => void) => {
-    if (isAnsweringRef.current) {
-      return;
-    }
-
+    // CRITICAL: Don't block decline if answer was attempted - user should always be able to decline
     try {
       await endCallUtil({
         callId: incomingCall.id,
@@ -55,6 +52,7 @@ export const useIncomingCallHandlers = () => {
     }
     stopIncomingCall(incomingCall.id);
     setIncomingCall(null);
+    isAnsweringRef.current = false; // Reset in case it was stuck
   }, [toast, stopIncomingCall]);
 
   return {
