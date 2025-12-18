@@ -1,60 +1,8 @@
 # https://www.kidscallhome.com robots.txt
-# Last updated: December 2025
 
-# Default rule - allow all crawlers
 User-agent: *
 Allow: /
 Disallow: /api/
-Disallow: /error/
 
-# Google bots
-User-agent: Googlebot
-Allow: /
-
-User-agent: Googlebot-Image
-Allow: /
-
-User-agent: Google-Extended
-Allow: /
-
-# Other search engines
-User-agent: Bingbot
-Allow: /
-
-User-agent: DuckDuckBot
-Allow: /
-
-# Social media crawlers
-User-agent: Twitterbot
-Allow: /
-
-User-agent: facebookexternalhit
-Allow: /
-
-User-agent: LinkedInBot
-Allow: /
-
-# AI assistants
-User-agent: ChatGPT-User
-Allow: /
-
-User-agent: anthropic-ai
-Allow: /
-
-User-agent: Claude-Web
-Allow: /
-
-User-agent: PerplexityBot
-Allow: /
-
-User-agent: Applebot
-Allow: /
-
-User-agent: Applebot-Extended
-Allow: /
-
-# Sitemap location
+# Sitemap
 Sitemap: https://www.kidscallhome.com/sitemap.xml
-
-# Host directive (helps some crawlers)
-Host: https://www.kidscallhome.com
