@@ -37,7 +37,7 @@ import DevelopmentHelper from '../components/shared/DevelopmentHelper';
 import LoadingSpinner from '../components/shared/LoadingSpinner';
 import PermissionHelper from '../components/shared/PermissionHelper';
 import { useSimpleWebRTC } from '../hooks/useSimpleWebRTC';
-import { useAppStore, useCurrentUser, useFamily } from '../stores/useAppStore';
+import { useAppStore, useCurrentUser, useFamily, usePusherConnected } from '../stores/useAppStore';
 
 /**
  * KidsDashboard - Playful interface for children
@@ -49,6 +49,7 @@ const KidsDashboard: React.FC = () => {
   const navigate = useNavigate();
   const family = useFamily();
   const currentUser = useCurrentUser();
+  const pusherConnected = usePusherConnected();
   const { setTheme, setIncomingCall } = useAppStore();
   
   const [emergencyStep, setEmergencyStep] = useState(0);
@@ -284,9 +285,21 @@ const KidsDashboard: React.FC = () => {
             <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-theme mb-4">
               Hi {currentUser.name}! 👋
             </h1>
-            <p className="text-lg sm:text-xl md:text-2xl text-theme-secondary">
+            <p className="text-lg sm:text-xl md:text-2xl text-theme-secondary mb-4">
               Who would you like to call today?
             </p>
+            
+            {/* Connection Status */}
+            <div className="flex items-center justify-center space-x-2">
+              <div className={`w-3 h-3 rounded-full ${
+                pusherConnected ? 'bg-green-400 shadow-lg shadow-green-400/50' : 'bg-red-400'
+              }`} />
+              <span className={`text-sm font-medium ${
+                pusherConnected ? 'text-green-300' : 'text-red-300'
+              }`}>
+                {pusherConnected ? 'Connected' : 'Not Connected'}
+              </span>
+            </div>
           </motion.div>
         </header>
         

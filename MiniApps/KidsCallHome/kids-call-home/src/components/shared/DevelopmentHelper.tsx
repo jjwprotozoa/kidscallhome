@@ -207,6 +207,58 @@ const DevelopmentHelper: React.FC = () => {
           </div>
         </div>
 
+        {/* Status Update Debug */}
+        <div className="p-6 border-t border-gray-200">
+          <h4 className="text-lg font-semibold text-gray-800 mb-3 flex items-center">
+            <CheckCircleIcon className="w-5 h-5 text-blue-500 mr-2" />
+            Status Update Debug
+          </h4>
+          <div className="space-y-3">
+            <div className="text-sm text-gray-600">
+              <strong>Pusher Connection:</strong> Check browser console for Pusher connection status
+            </div>
+            <div className="text-sm text-gray-600">
+              <strong>Status Updates:</strong> Look for "Received status update from family member" in console
+            </div>
+            <div className="text-sm text-gray-600">
+              <strong>API Endpoints:</strong> 
+              <ul className="ml-4 mt-1 space-y-1">
+                <li>• <code>/api/signaling</code> - Handles status updates</li>
+                <li>• <code>/api/pusher-auth</code> - Pusher authentication</li>
+              </ul>
+            </div>
+            <div className="text-sm text-gray-600">
+              <strong>Test Status Update:</strong>
+              <button
+                onClick={async () => {
+                  try {
+                    const response = await fetch('/api/signaling', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        action: 'status-update',
+                        fromDeviceId: 'test-device',
+                        toDeviceId: 'all',
+                        familyId: 'test-family',
+                        data: { isOnline: true, lastSeen: new Date().toISOString() }
+                      })
+                    });
+                    const result = await response.json();
+                    console.log('Test status update result:', result);
+                    alert('Test status update sent! Check console for result.');
+                  } catch (error) {
+                    console.error('Test status update failed:', error);
+                    alert('Test status update failed! Check console for error.');
+                  }
+                }}
+                className="ml-2 px-3 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600"
+              >
+                Send Test
+              </button>
+            </div>
+          </div>
+        </div>
+
         {/* Actions */}
         <div className="p-6 border-t border-gray-200 flex space-x-3">
           <button

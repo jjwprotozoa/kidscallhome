@@ -241,8 +241,8 @@ export interface AppState {
   networkInfo: NetworkInfo | null;
   isOnline: boolean;
   
-  // WebSocket connection
-  socketConnected: boolean;
+  // Pusher connection
+  pusherConnected: boolean;
   lastHeartbeat: Date | null;
 }
 

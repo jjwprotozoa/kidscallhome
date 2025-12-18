@@ -82,13 +82,9 @@ const IncomingCallPage: React.FC = () => {
         targetId
       });
     } else {
-      // Fallback: try to get from store or show mock data
-      setIncomingCall({
-        callId: 'mock-call-' + Date.now(),
-        callerName: 'Family Member',
-        callType: 'voice',
-        targetId: 'mock-target'
-      });
+      // No call data available, redirect to dashboard
+      console.warn('No incoming call data found, redirecting to dashboard');
+      navigate('/');
     }
   }, []);
 

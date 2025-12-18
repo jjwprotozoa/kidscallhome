@@ -149,6 +149,34 @@ app.post('/api/signaling', async (req, res) => {
   }
 });
 
+// Pusher authentication endpoint
+app.post('/api/pusher-auth', (req, res) => {
+  try {
+    const { socket_id, channel_name } = req.body;
+
+    if (!socket_id || !channel_name) {
+      return res.status(400).json({ error: 'Missing socket_id or channel_name' });
+    }
+
+    // For now, we'll allow all family channels without authentication
+    // In a production app, you would validate the user's access to the family
+    if (!channel_name.startsWith('family-')) {
+      return res.status(403).json({ error: 'Access denied to channel' });
+    }
+
+    // Generate auth response for the channel
+    const authResponse = pusher.authenticate(socket_id, channel_name);
+
+    res.status(200).json(authResponse);
+
+  } catch (error) {
+    console.error('Pusher auth error:', error);
+    res.status(500).json({ 
+      error: error.message || 'Authentication failed' 
+    });
+  }
+});
+
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });

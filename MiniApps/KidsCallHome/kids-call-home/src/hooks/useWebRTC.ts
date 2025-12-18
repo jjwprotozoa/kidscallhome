@@ -485,66 +485,55 @@ export const useWebRTC = ({
     setAppError(null);
   }, [setAppError]);
   
-  // Initialize Pusher connection
+  // Set up Pusher event listeners (connection is handled in App.tsx)
   useEffect(() => {
     if (!familyId || !deviceId) return;
     
     const service = pusherService;
-    console.log(`🔧 Using real Pusher service`);
+    console.log(`🔧 Setting up WebRTC event listeners`);
     
-    // Add a small delay to avoid React strict mode double-connection issues
-    const connectTimer = setTimeout(() => {
-      service.connect(familyId, deviceId);
-      
-      // Set up event listeners
-      service.onIncomingCall((data: CallNotification) => {
-        console.log('📞 Incoming call:', data);
-        setIncomingCall(data);
-      });
-      
-      service.onOffer(async (data: SignalingData) => {
-        console.log('📡 Received offer:', data);
-        if (peerRef.current && data.offer) {
-          peerRef.current.signal(data.offer);
-        }
-      });
-      
-      service.onAnswer(async (data: SignalingData) => {
-        console.log('📡 Received answer:', data);
-        if (peerRef.current && data.answer) {
-          peerRef.current.signal(data.answer);
-        }
-      });
-      
-      service.onIceCandidate(async (data: SignalingData) => {
-        console.log('🧊 Received ICE candidate:', data);
-        if (peerRef.current && data.candidate) {
-          peerRef.current.signal(data.candidate);
-        }
-      });
-      
-      service.onCallAccepted((data: SignalingData) => {
-        console.log('✅ Call accepted:', data);
-        setIncomingCall(null);
-      });
-      
-      service.onCallRejected((data: SignalingData) => {
-        console.log('❌ Call rejected:', data);
-        setIncomingCall(null);
-        endCall();
-      });
-      
-      service.onEndCall((data: SignalingData) => {
-        console.log('📴 Call ended:', data);
-        endCall();
-      });
-    }, 100);
+    // Set up event listeners (Pusher connection is handled in App.tsx)
+    service.onIncomingCall((data: CallNotification) => {
+      console.log('📞 Incoming call:', data);
+      setIncomingCall(data);
+    });
     
-    return () => {
-      clearTimeout(connectTimer);
-      // Don't disconnect immediately - let the service manage its own connection
-      // service.disconnect();
-    };
+    service.onOffer(async (data: SignalingData) => {
+      console.log('📡 Received offer:', data);
+      if (peerRef.current && data.offer) {
+        peerRef.current.signal(data.offer);
+      }
+    });
+    
+    service.onAnswer(async (data: SignalingData) => {
+      console.log('📡 Received answer:', data);
+      if (peerRef.current && data.answer) {
+        peerRef.current.signal(data.answer);
+      }
+    });
+    
+    service.onIceCandidate(async (data: SignalingData) => {
+      console.log('🧊 Received ICE candidate:', data);
+      if (peerRef.current && data.candidate) {
+        peerRef.current.signal(data.candidate);
+      }
+    });
+    
+    service.onCallAccepted((data: SignalingData) => {
+      console.log('✅ Call accepted:', data);
+      setIncomingCall(null);
+    });
+    
+    service.onCallRejected((data: SignalingData) => {
+      console.log('❌ Call rejected:', data);
+      setIncomingCall(null);
+      endCall();
+    });
+    
+    service.onEndCall((data: SignalingData) => {
+      console.log('📴 Call ended:', data);
+      endCall();
+    });
   }, [familyId, deviceId, endCall]);
   
   // Update call state in store when it changes

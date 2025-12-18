@@ -25,6 +25,7 @@
 
 import { create } from 'zustand';
 import { devtools, persist } from 'zustand/middleware';
+import FamilyDataService from '../services/familyDataService';
 import type {
     AppState,
     CallState,
@@ -64,8 +65,8 @@ interface AppStore extends AppState {
   setNetworkInfo: (network: NetworkInfo | null) => void;
   setOnlineStatus: (online: boolean) => void;
   
-  // WebSocket actions
-  setSocketConnected: (connected: boolean) => void;
+  // Pusher connection actions
+  setPusherConnected: (connected: boolean) => void;
   setLastHeartbeat: (timestamp: Date | null) => void;
   
   // Family member status actions
@@ -102,8 +103,8 @@ const initialState: AppState = {
   networkInfo: null,
   isOnline: true,
   
-  // WebSocket connection
-  socketConnected: false,
+  // Pusher connection
+  pusherConnected: false,
   lastHeartbeat: null,
 };
 
@@ -179,9 +180,9 @@ export const useAppStore = create<AppStore>()(
         setOnlineStatus: (online) => 
           set({ isOnline: online }, false, 'setOnlineStatus'),
         
-        // WebSocket actions
-        setSocketConnected: (connected) => 
-          set({ socketConnected: connected }, false, 'setSocketConnected'),
+        // Pusher connection actions
+        setPusherConnected: (connected) => 
+          set({ pusherConnected: connected }, false, 'setPusherConnected'),
         
         setLastHeartbeat: (timestamp) => 
           set({ lastHeartbeat: timestamp }, false, 'setLastHeartbeat'),
@@ -189,23 +190,48 @@ export const useAppStore = create<AppStore>()(
         // Family member status actions
         updateFamilyMemberStatus: (userId, isOnline, lastSeen) => 
           set((state) => {
-            if (!state.currentFamily) return state;
+            if (!state.currentFamily) {
+              console.warn('Cannot update family member status: no current family');
+              return state;
+            }
+            
+            console.log('Updating family member status:', {
+              userId,
+              isOnline,
+              lastSeen,
+              familyId: state.currentFamily.id
+            });
             
             const updatedFamily = { ...state.currentFamily };
+            let memberFound = false;
             
-            // Update guardian status
-            updatedFamily.guardians = updatedFamily.guardians.map(guardian => 
-              guardian.id === userId 
-                ? { ...guardian, isOnline, lastSeen }
-                : guardian
-            );
+            // Update guardian status (match by deviceId since that's what's sent in status updates)
+            console.log('🔍 Checking guardians for deviceId:', userId);
+            console.log('🔍 Available guardian deviceIds:', updatedFamily.guardians.map(g => g.deviceId));
+            updatedFamily.guardians = updatedFamily.guardians.map(guardian => {
+              if (guardian.deviceId === userId) {
+                memberFound = true;
+                console.log('✅ Updated guardian status:', guardian.name, 'to', isOnline ? 'online' : 'offline');
+                return { ...guardian, isOnline, lastSeen };
+              }
+              return guardian;
+            });
             
-            // Update child status
-            updatedFamily.children = updatedFamily.children.map(child => 
-              child.id === userId 
-                ? { ...child, isOnline, lastSeen }
-                : child
-            );
+            // Update child status (match by deviceId since that's what's sent in status updates)
+            console.log('🔍 Checking children for deviceId:', userId);
+            console.log('🔍 Available child deviceIds:', updatedFamily.children.map(c => c.deviceId));
+            updatedFamily.children = updatedFamily.children.map(child => {
+              if (child.deviceId === userId) {
+                memberFound = true;
+                console.log('✅ Updated child status:', child.name, 'to', isOnline ? 'online' : 'offline');
+                return { ...child, isOnline, lastSeen };
+              }
+              return child;
+            });
+            
+            if (!memberFound) {
+              console.warn('Family member not found for status update:', userId);
+            }
             
             return { currentFamily: updatedFamily };
           }, false, 'updateFamilyMemberStatus'),
@@ -219,7 +245,7 @@ export const useAppStore = create<AppStore>()(
           // Update user's offline status before logging out
           if (state.currentUser) {
             const { updateFamilyMemberStatus } = get();
-            updateFamilyMemberStatus(state.currentUser.id, false, new Date());
+            updateFamilyMemberStatus(state.currentUser.deviceId, false, new Date());
           }
           
           set({
@@ -231,7 +257,7 @@ export const useAppStore = create<AppStore>()(
             messages: [],
             unreadCount: 0,
             error: null,
-            socketConnected: false,
+            pusherConnected: false,
             lastHeartbeat: null,
           }, false, 'logout');
         },
@@ -253,7 +279,14 @@ export const useAppStore = create<AppStore>()(
               
               // Update user's online status when app initializes
               const { updateFamilyMemberStatus } = get();
-              updateFamilyMemberStatus(state.currentUser.id, true, new Date());
+              updateFamilyMemberStatus(state.currentUser.deviceId, true, new Date());
+              
+              // Also update the family data service to persist the online status
+              FamilyDataService.updateFamilyMemberStatus(
+                state.currentFamily.id, 
+                state.currentUser.deviceId, 
+                true
+              );
             }
             
             set({ isLoading: false }, false, 'initializeApp/success');
@@ -297,4 +330,4 @@ export const useError = () => useAppStore((state) => state.error);
 export const useDeviceInfo = () => useAppStore((state) => state.deviceInfo);
 export const useNetworkInfo = () => useAppStore((state) => state.networkInfo);
 export const useIsOnline = () => useAppStore((state) => state.isOnline);
-export const useSocketConnected = () => useAppStore((state) => state.socketConnected);
+export const usePusherConnected = () => useAppStore((state) => state.pusherConnected);

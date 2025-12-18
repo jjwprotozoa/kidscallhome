@@ -130,6 +130,14 @@ export default async function handler(req, res) {
         });
         break;
 
+      case 'status-update':
+        await sendPusherEvent(channel, 'client-status-update', {
+          userId: fromDeviceId,
+          isOnline: data.isOnline,
+          lastSeen: data.lastSeen || timestamp
+        });
+        break;
+
       default:
         return res.status(400).json({ error: 'Invalid action' });
     }

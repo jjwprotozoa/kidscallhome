@@ -1,0 +1,33 @@
+{
+  "name": "kids-call-home-root",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "dev": "cd kidscallhome && npm run dev",
+    "dev:local": "cd kidscallhome && npm run dev:local",
+    "build": "cd kidscallhome && npm run build",
+    "build:dev": "cd kidscallhome && npm run build:dev",
+    "lint": "cd kidscallhome && npm run lint",
+    "lint:security": "cd kidscallhome && npm run lint:security",
+    "preview": "cd kidscallhome && npm run preview",
+    "tunnel": "cd kidscallhome && npm run tunnel",
+    "tunnel:ngrok": "cd kidscallhome && npm run tunnel:ngrok",
+    "tunnel:cloudflare": "cd kidscallhome && npm run tunnel:cloudflare",
+    "generate-icons": "cd kidscallhome && npm run generate-icons",
+    "cap:sync": "cd kidscallhome && npm run cap:sync",
+    "cap:android": "cd kidscallhome && npm run cap:android",
+    "cap:ios": "cd kidscallhome && npm run cap:ios"
+  }
+}
+
+
+
+
+
+
+
+
+
+
+
+

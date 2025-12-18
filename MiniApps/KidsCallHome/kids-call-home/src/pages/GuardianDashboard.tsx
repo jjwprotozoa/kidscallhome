@@ -44,7 +44,7 @@ import LoadingSpinner from '../components/shared/LoadingSpinner';
 import PermissionHelper from '../components/shared/PermissionHelper';
 import { useSimpleWebRTC } from '../hooks/useSimpleWebRTC';
 import FamilyDataService from '../services/familyDataService';
-import { useAppStore, useCurrentUser, useFamily } from '../stores/useAppStore';
+import { useAppStore, useCurrentUser, useFamily, usePusherConnected } from '../stores/useAppStore';
 
 /**
  * GuardianDashboard - Professional interface for guardians
@@ -55,6 +55,20 @@ import { useAppStore, useCurrentUser, useFamily } from '../stores/useAppStore';
 const GuardianDashboard: React.FC = () => {
   const navigate = useNavigate();
   const family = useFamily();
+  const pusherConnected = usePusherConnected();
+  
+  // Debug: Log family code when component loads
+  React.useEffect(() => {
+    if (family) {
+      console.log('GuardianDashboard loaded with family:', {
+        id: family.id,
+        name: family.name,
+        code: family.code,
+        guardians: family.guardians.map(g => g.name),
+        children: family.children.map(c => c.name)
+      });
+    }
+  }, [family]);
   const currentUser = useCurrentUser();
   const { setTheme, setIncomingCall, setCurrentFamily } = useAppStore();
   
@@ -379,6 +393,18 @@ const GuardianDashboard: React.FC = () => {
           </div>
           
           <div className="flex items-center space-x-4">
+            {/* Pusher Connection Status */}
+            <div className="card-surface p-3">
+              <div className="flex items-center space-x-2">
+                <div className={`w-3 h-3 rounded-full ${
+                  pusherConnected ? 'bg-green-500' : 'bg-red-500'
+                }`} />
+                <span className="text-footnote font-medium text-theme">
+                  {pusherConnected ? 'Connected' : 'Disconnected'}
+                </span>
+              </div>
+            </div>
+            
             {/* Network Status */}
             <div className="card-surface p-3">
               <div className="flex items-center space-x-2">

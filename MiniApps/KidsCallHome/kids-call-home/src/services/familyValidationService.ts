@@ -34,8 +34,16 @@ export class FamilyValidationService {
     familyCode: string,
     userName: string
   ): FamilyValidationResult {
+    console.log('Validating family join:');
+    console.log('- Family code in family:', family.code);
+    console.log('- Family code provided:', familyCode);
+    console.log('- User name provided:', userName);
+    console.log('- Family guardians:', family.guardians.map(g => g.name));
+    console.log('- Family children:', family.children.map(c => c.name));
+    
     // Check family code
     if (family.code.toUpperCase() !== familyCode.trim().toUpperCase()) {
+      console.log('Family code mismatch!');
       return {
         isValid: false,
         error: `Invalid family code. Please check the code and try again, or ask your family for the correct code.`
@@ -60,6 +68,10 @@ export class FamilyValidationService {
       c => c.name.toLowerCase() === userName.trim().toLowerCase()
     );
 
+    console.log('Looking for child:', userName.trim().toLowerCase());
+    console.log('Available children:', family.children.map(c => c.name.toLowerCase()));
+    console.log('Found child:', child ? `${child.name} (${child.id})` : 'null');
+
     if (child) {
       return {
         isValid: true,
@@ -69,6 +81,12 @@ export class FamilyValidationService {
     }
 
     // User not found in family
+    console.log('User not found in family. Available names:', {
+      guardians: family.guardians.map(g => g.name),
+      children: family.children.map(c => c.name),
+      searchedFor: userName.trim().toLowerCase()
+    });
+    
     return {
       isValid: false,
       error: `Sorry, "${userName}" is not a member of the "${family.name}" family. Please check your name or ask your parents to add you to the family first.`

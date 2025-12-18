@@ -31,6 +31,7 @@ import {
 import { motion } from 'framer-motion';
 import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import FamilyListModal from '../components/shared/FamilyListModal';
 import LoadingSpinner from '../components/shared/LoadingSpinner';
 import PWAInstallPrompt from '../components/shared/PWAInstallPrompt';
 import FamilyDataService from '../services/familyDataService';
@@ -53,23 +54,69 @@ const SetupPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [showFamilyList, setShowFamilyList] = useState(false);
   
   // Guardian setup state
   const [familyName, setFamilyName] = useState('');
   const [guardianName, setGuardianName] = useState('');
   const [childrenNames, setChildrenNames] = useState<string[]>(['']);
   
-  // Child setup state
-  const [familyCode, setFamilyCode] = useState('');
-  const [childName, setChildName] = useState('');
+  // Child setup state - explicitly initialize as empty
+  const [familyCode, setFamilyCode] = useState<string>('');
+  const [childName, setChildName] = useState<string>('');
   
-  // Get family code from location state if coming from landing page
+  // Debug: Log family code state changes
   useEffect(() => {
-    if (location.state?.familyCode) {
+    console.log('SetupPage familyCode state changed:', familyCode);
+  }, [familyCode]);
+  
+  // Clear form state on mount to prevent stale data - run this FIRST
+  useEffect(() => {
+    console.log('SetupPage mounting - clearing all form state');
+    setFamilyCode('');
+    setChildName('');
+    setFamilyName('');
+    setGuardianName('');
+    setChildrenNames(['']);
+    setError(null);
+    setSuccess(false);
+    console.log('Form state cleared - familyCode should be empty now');
+  }, []);
+
+  // Get family code from location state if coming from landing page - run this AFTER clearing
+  useEffect(() => {
+    // Only set family code if it's explicitly passed from location state
+    // and only if it's not empty
+    if (location.state?.familyCode && location.state.familyCode.trim()) {
+      console.log('Setting family code from location state:', location.state.familyCode);
       setFamilyCode(location.state.familyCode);
       setMode('child');
     }
   }, [location.state]);
+
+  // Force clear inputs after component is fully mounted
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      console.log('Force clearing inputs after mount');
+      setFamilyCode('');
+      setChildName('');
+      
+      // Also clear the DOM elements directly
+      const familyCodeInput = document.getElementById('familyCode') as HTMLInputElement;
+      const childNameInput = document.getElementById('childName') as HTMLInputElement;
+      
+      if (familyCodeInput) {
+        familyCodeInput.value = '';
+        console.log('Cleared familyCode input DOM element');
+      }
+      if (childNameInput) {
+        childNameInput.value = '';
+        console.log('Cleared childName input DOM element');
+      }
+    }, 100); // Small delay to ensure component is fully mounted
+    
+    return () => clearTimeout(timer);
+  }, []);
   
   
   // Handle guardian family creation
@@ -81,6 +128,13 @@ const SetupPage: React.FC = () => {
     setError(null);
     
     try {
+      // Check for duplicate family name
+      if (FamilyDataService.isFamilyNameTaken(familyName.trim())) {
+        setError('A family with this name already exists. Please choose a different name or join the existing family.');
+        setIsLoading(false);
+        return;
+      }
+      
       // Use real family data service to create family
       const family = FamilyDataService.createFamily({
         familyName: familyName.trim(),
@@ -109,7 +163,7 @@ const SetupPage: React.FC = () => {
       
       // Update user's online status
       const { updateFamilyMemberStatus } = useAppStore.getState();
-      updateFamilyMemberStatus(updatedFamily.guardians[0].id, true, new Date());
+      updateFamilyMemberStatus(updatedFamily.guardians[0].deviceId, true, new Date());
       
       setSuccess(true);
       
@@ -128,17 +182,37 @@ const SetupPage: React.FC = () => {
   // Handle child family joining
   const handleChildSetup = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!familyCode.trim() || !childName.trim()) return;
+    
+    // Get the current form values directly from the form elements
+    const form = e.target as HTMLFormElement;
+    const familyCodeInput = form.querySelector('#familyCode') as HTMLInputElement;
+    const childNameInput = form.querySelector('#childName') as HTMLInputElement;
+    
+    const actualFamilyCode = familyCodeInput?.value || '';
+    const actualChildName = childNameInput?.value || '';
+    
+    console.log('Form submission debug:', {
+      familyCodeFromState: familyCode,
+      familyCodeFromInput: actualFamilyCode,
+      childNameFromState: childName,
+      childNameFromInput: actualChildName,
+      formElement: form,
+      familyCodeInput: familyCodeInput
+    });
+    
+    if (!actualFamilyCode.trim() || !actualChildName.trim()) return;
     
     setIsLoading(true);
     setError(null);
     
     try {
-      // Use real family data service to join family
+      
+      // Use real family data service to join family with actual input values
       const result = FamilyDataService.joinFamily({
-        familyCode: familyCode.trim(),
-        userName: childName.trim(),
+        familyCode: actualFamilyCode.trim(),
+        userName: actualChildName.trim(),
       });
+      
       
       if (!result) {
         setError('Invalid family code or child not found. Please check your information and try again.');
@@ -161,7 +235,7 @@ const SetupPage: React.FC = () => {
       
       // Update user's online status
       const { updateFamilyMemberStatus } = useAppStore.getState();
-      updateFamilyMemberStatus(user.id, true, new Date());
+      updateFamilyMemberStatus(user.deviceId, true, new Date());
       
       setSuccess(true);
       
@@ -192,6 +266,18 @@ const SetupPage: React.FC = () => {
     const updated = [...childrenNames];
     updated[index] = value;
     setChildrenNames(updated);
+  };
+
+  // Handle family selection from modal
+  const handleSelectFamily = (familyCode: string) => {
+    setFamilyCode(familyCode);
+    setMode('child');
+  };
+
+  // Handle joining family from modal
+  const handleJoinFamily = (familyCode: string) => {
+    setFamilyCode(familyCode);
+    setMode('child');
   };
   
   if (success) {
@@ -230,7 +316,7 @@ const SetupPage: React.FC = () => {
               Set Up Your Family
             </h1>
             
-            <div className="grid md:grid-cols-2 gap-8">
+            <div className="grid md:grid-cols-2 gap-8 mb-8">
               <button
                 onClick={() => setMode('guardian')}
                 className="card hover:scale-105 transition-transform duration-200"
@@ -256,6 +342,19 @@ const SetupPage: React.FC = () => {
                   Enter your family code to connect with your parents.
                 </p>
               </button>
+            </div>
+            
+            {/* View Existing Families Button */}
+            <div className="text-center">
+              <button
+                onClick={() => setShowFamilyList(true)}
+                className="btn-outline text-lg px-8 py-4"
+              >
+                View Existing Families
+              </button>
+              <p className="text-gray-600 text-sm mt-2">
+                See all families and their codes, or join an existing family
+              </p>
             </div>
           </motion.div>
         )}
@@ -385,8 +484,12 @@ const SetupPage: React.FC = () => {
                   type="text"
                   id="familyCode"
                   value={familyCode}
-                  onChange={(e) => setFamilyCode(e.target.value.toUpperCase())}
+                  onChange={(e) => {
+                    console.log('Family code input changed:', e.target.value);
+                    setFamilyCode(e.target.value.toUpperCase());
+                  }}
                   placeholder="BEAR-CAKE-2024"
+                  autoComplete="off"
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-center font-mono tracking-wider"
                   required
                 />
@@ -405,6 +508,7 @@ const SetupPage: React.FC = () => {
                   value={childName}
                   onChange={(e) => setChildName(e.target.value)}
                   placeholder="Your name"
+                  autoComplete="off"
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                   required
                 />
@@ -419,17 +523,52 @@ const SetupPage: React.FC = () => {
                 </div>
               )}
               
-              <button
-                type="submit"
-                disabled={isLoading || !familyCode.trim() || !childName.trim()}
-                className="w-full btn-primary text-lg py-4 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isLoading ? 'Joining Family...' : 'Join Family'}
-              </button>
+              <div className="flex flex-col gap-4">
+                <button
+                  type="submit"
+                  disabled={isLoading || !familyCode.trim() || !childName.trim()}
+                  className="w-full btn-primary text-lg py-4 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isLoading ? 'Joining Family...' : 'Join Family'}
+                </button>
+                
+                <button
+                  type="button"
+                  onClick={() => setShowFamilyList(true)}
+                  className="w-full btn-outline text-lg py-4"
+                >
+                  View All Families
+                </button>
+                
+                {/* Temporary debug button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const families = FamilyDataService.getAllFamilies();
+                    const family = families.find(f => f.code.toUpperCase() === familyCode.toUpperCase());
+                    if (family) {
+                      alert(`Family: ${family.name}\nCode: ${family.code}\nGuardians: ${family.guardians.map(g => g.name).join(', ')}\nChildren: ${family.children.map(c => c.name).join(', ')}`);
+                    } else {
+                      alert('No family found with that code');
+                    }
+                  }}
+                  className="w-full bg-yellow-500 hover:bg-yellow-600 text-white font-semibold py-2 px-4 rounded-lg transition-colors"
+                >
+                  Debug: Check Family Members
+                </button>
+              </div>
             </form>
           </motion.div>
         )}
       </div>
+      
+      {/* Family List Modal */}
+      <FamilyListModal
+        isOpen={showFamilyList}
+        onClose={() => setShowFamilyList(false)}
+        onSelectFamily={handleSelectFamily}
+        onJoinFamily={handleJoinFamily}
+      />
     </div>
   );
 };

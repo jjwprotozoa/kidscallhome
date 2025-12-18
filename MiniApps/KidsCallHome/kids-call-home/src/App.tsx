@@ -25,8 +25,8 @@
 
 import { useEffect } from 'react';
 import { Navigate, Route, BrowserRouter as Router, Routes, useLocation } from 'react-router-dom';
+import FamilyDataService from './services/familyDataService';
 import pusherService from './services/pusherService';
-import websocketService from './services/websocketService';
 import { useAppStore } from './stores/useAppStore';
 
 // Import pages
@@ -105,28 +105,36 @@ function App() {
   // Handle user going offline when page is closed or refreshed
   useEffect(() => {
     const handleBeforeUnload = () => {
-      if (currentUser) {
+      if (currentUser && currentFamily) {
         // Update user's offline status
         const { updateFamilyMemberStatus } = useAppStore.getState();
-        updateFamilyMemberStatus(currentUser.id, false, new Date());
+        updateFamilyMemberStatus(currentUser.deviceId, false, new Date());
         // Also send via Pusher
         pusherService.sendStatusUpdate(false).catch(console.error);
+        // Update persistent family data
+        FamilyDataService.updateFamilyMemberStatus(currentFamily.id, currentUser.deviceId, false);
       }
     };
 
     const handleVisibilityChange = () => {
-      if (document.hidden && currentUser) {
+      if (document.hidden && currentUser && currentFamily) {
         // User switched tabs or minimized browser
+        console.log('User went offline (tab hidden):', currentUser.name);
         const { updateFamilyMemberStatus } = useAppStore.getState();
-        updateFamilyMemberStatus(currentUser.id, false, new Date());
+        updateFamilyMemberStatus(currentUser.deviceId, false, new Date());
         // Also send via Pusher
         pusherService.sendStatusUpdate(false).catch(console.error);
-      } else if (!document.hidden && currentUser) {
+        // Update persistent family data
+        FamilyDataService.updateFamilyMemberStatus(currentFamily.id, currentUser.deviceId, false);
+      } else if (!document.hidden && currentUser && currentFamily) {
         // User came back to the tab
+        console.log('User came back online (tab visible):', currentUser.name);
         const { updateFamilyMemberStatus } = useAppStore.getState();
-        updateFamilyMemberStatus(currentUser.id, true, new Date());
+        updateFamilyMemberStatus(currentUser.deviceId, true, new Date());
         // Also send via Pusher
         pusherService.sendStatusUpdate(true).catch(console.error);
+        // Update persistent family data
+        FamilyDataService.updateFamilyMemberStatus(currentFamily.id, currentUser.deviceId, true);
       }
     };
 
@@ -139,44 +147,46 @@ function App() {
     };
   }, [currentUser]);
 
-  // Initialize WebSocket connection when user is logged in (production only)
-  useEffect(() => {
-    // Skip WebSocket in development since we're using Pusher
-    if (import.meta.env.DEV) {
-      console.log('WebSocket disabled in development - using Pusher instead');
-      return;
-    }
-
-    if (currentFamily && currentUser) {
-      websocketService.connect(currentFamily.id, currentUser.id);
-      
-      // Cleanup on unmount or when dependencies change
-      return () => {
-        websocketService.disconnect();
-      };
-    } else {
-      // Disconnect if no user is logged in
-      websocketService.disconnect();
-    }
-  }, [currentFamily?.id, currentUser?.id]); // Only depend on IDs to prevent unnecessary reconnections
+  // WebSocket functionality is now handled entirely by Pusher service
 
   // Initialize Pusher connection and status updates when user is logged in
   useEffect(() => {
     if (currentFamily && currentUser) {
-      // Connect to Pusher
-      pusherService.connect(currentFamily.id, currentUser.deviceId);
+      console.log('Setting up Pusher connection for user:', currentUser.name, 'in family:', currentFamily.name);
+      console.log('User device ID:', currentUser.deviceId);
+      console.log('Family guardians device IDs:', currentFamily.guardians.map(g => ({ name: g.name, deviceId: g.deviceId })));
+      console.log('Family children device IDs:', currentFamily.children.map(c => ({ name: c.name, deviceId: c.deviceId })));
       
-      // Send initial online status
-      pusherService.sendStatusUpdate(true).catch(console.error);
-      
-      // Listen for status updates from other family members
-      pusherService.onStatusUpdate((data) => {
-        const { updateFamilyMemberStatus } = useAppStore.getState();
-        updateFamilyMemberStatus(data.userId, data.isOnline, new Date(data.lastSeen));
-      });
+      // Add a small delay to prevent React Strict Mode double-connection issues
+      let statusInterval: NodeJS.Timeout;
+      const connectTimer = setTimeout(() => {
+        // Connect to Pusher
+        pusherService.connect(currentFamily.id, currentUser.deviceId);
+        
+        // Wait a bit for connection to establish, then send initial status
+        setTimeout(() => {
+          console.log('Sending initial online status for user:', currentUser.name);
+          pusherService.sendStatusUpdate(true).catch(console.error);
+        }, 500);
+        
+        // Status updates are now handled directly in the Pusher service
+
+        // Send periodic status updates to keep status fresh (every 30 seconds)
+        statusInterval = setInterval(() => {
+          if (!document.hidden) {
+            console.log('Sending periodic status update for user:', currentUser.name);
+            pusherService.sendStatusUpdate(true).catch(console.error);
+            // Also update persistent family data to keep it in sync
+            FamilyDataService.updateFamilyMemberStatus(currentFamily.id, currentUser.deviceId, true);
+          }
+        }, 30000);
+      }, 100);
       
       // Cleanup on unmount or when dependencies change
       return () => {
+        clearTimeout(connectTimer);
+        clearInterval(statusInterval);
+        console.log('Sending offline status before disconnect for user:', currentUser.name);
         // Send offline status before disconnecting
         pusherService.sendStatusUpdate(false).catch(console.error);
         pusherService.disconnect();

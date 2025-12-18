@@ -79,7 +79,7 @@ const LoginPage: React.FC = () => {
       
       // Update user's online status
       const { updateFamilyMemberStatus } = useAppStore.getState();
-      updateFamilyMemberStatus(user.id, true, new Date());
+      updateFamilyMemberStatus(user.deviceId, true, new Date());
       
       // Set appropriate theme and redirect
       if (userType === 'guardian') {

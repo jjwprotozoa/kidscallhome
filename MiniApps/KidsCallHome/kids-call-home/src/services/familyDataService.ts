@@ -44,7 +44,6 @@ export interface AddChildRequest {
 
 export class FamilyDataService {
   private static readonly STORAGE_KEY = 'kids-call-home-families';
-  private static readonly CURRENT_FAMILY_KEY = 'kids-call-home-current-family';
 
   /**
    * Generate a secure, memorable family code
@@ -65,7 +64,8 @@ export class FamilyDataService {
     const adjective = adjectives[Math.floor(Math.random() * adjectives.length)];
     const noun = nouns[Math.floor(Math.random() * nouns.length)];
     
-    return `${adjective}-${noun}-${numbers}`;
+    const familyCode = `${adjective}-${noun}-${numbers}`;
+    return familyCode;
   }
 
   /**
@@ -81,7 +81,7 @@ export class FamilyDataService {
       name: request.guardianName,
       email: request.guardianEmail || '',
       avatar: '👨‍💼',
-      isOnline: true,
+      isOnline: false, // Will be set to true when user actually connects
       lastSeen: new Date(),
       deviceId: this.generateDeviceId(),
       preferences: {
@@ -139,18 +139,18 @@ export class FamilyDataService {
       return null;
     }
 
-    // Update user's online status
+    // Update user's last seen time (online status will be managed by real-time system)
     if (validation.userType === 'guardian') {
       const guardian = family.guardians.find(g => g.id === validation.user!.id);
       if (guardian) {
-        guardian.isOnline = true;
         guardian.lastSeen = new Date();
+        // isOnline will be set by the real-time status system
       }
     } else {
       const child = family.children.find(c => c.id === validation.user!.id);
       if (child) {
-        child.isOnline = true;
         child.lastSeen = new Date();
+        // isOnline will be set by the real-time status system
       }
     }
 
@@ -174,13 +174,14 @@ export class FamilyDataService {
     }
 
     const childId = `child-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    
     const child: Child = {
       id: childId,
       name: request.childName,
       age: request.childAge,
       avatar: request.childAvatar || '👶',
       deviceId: this.generateDeviceId(),
-      isOnline: false,
+      isOnline: false, // Will be set to true when user actually connects
       lastSeen: new Date(),
       preferences: {
         theme: 'kids',
@@ -206,7 +207,8 @@ export class FamilyDataService {
    */
   static findFamilyByCode(code: string): Family | null {
     const families = this.getAllFamilies();
-    return families.find(f => f.code.toUpperCase() === code.toUpperCase()) || null;
+    const found = families.find(f => f.code.toUpperCase() === code.toUpperCase());
+    return found || null;
   }
 
   /**
@@ -225,17 +227,17 @@ export class FamilyDataService {
       const stored = localStorage.getItem(this.STORAGE_KEY);
       if (!stored) return [];
       
-      const families = JSON.parse(stored);
+      const families = JSON.parse(stored) as Family[];
       // Convert date strings back to Date objects
-      return families.map((family: any) => ({
+      return families.map((family) => ({
         ...family,
         created: new Date(family.created),
         lastActive: new Date(family.lastActive),
-        guardians: family.guardians.map((guardian: any) => ({
+        guardians: family.guardians.map((guardian) => ({
           ...guardian,
           lastSeen: new Date(guardian.lastSeen),
         })),
-        children: family.children.map((child: any) => ({
+        children: family.children.map((child) => ({
           ...child,
           lastSeen: new Date(child.lastSeen),
         })),
@@ -249,7 +251,7 @@ export class FamilyDataService {
   /**
    * Save family to storage
    */
-  static saveFamily(family: Family): void {
+  private static saveFamily(family: Family): void {
     try {
       const families = this.getAllFamilies();
       const existingIndex = families.findIndex(f => f.id === family.id);
@@ -274,24 +276,34 @@ export class FamilyDataService {
   }
 
   /**
-   * Update family member status
+   * Update family member status by deviceId
    */
-  static updateFamilyMemberStatus(familyId: string, userId: string, isOnline: boolean): void {
+  static updateFamilyMemberStatus(familyId: string, deviceId: string, isOnline: boolean): void {
     const family = this.findFamilyById(familyId);
-    if (!family) return;
+    if (!family) {
+      return;
+    }
 
-    // Update guardian status
-    const guardian = family.guardians.find(g => g.id === userId);
+    let memberFound = false;
+
+    // Update guardian status (search by deviceId)
+    const guardian = family.guardians.find(g => g.deviceId === deviceId);
     if (guardian) {
       guardian.isOnline = isOnline;
       guardian.lastSeen = new Date();
+      memberFound = true;
     }
 
-    // Update child status
-    const child = family.children.find(c => c.id === userId);
+    // Update child status (search by deviceId)
+    const child = family.children.find(c => c.deviceId === deviceId);
     if (child) {
       child.isOnline = isOnline;
       child.lastSeen = new Date();
+      memberFound = true;
+    }
+
+    if (!memberFound) {
+      return;
     }
 
     family.lastActive = new Date();
@@ -299,19 +311,39 @@ export class FamilyDataService {
   }
 
   /**
-   * Delete family (for testing/cleanup)
+   * Sync device ID for a family member (useful when user logs in with different device)
    */
-  static deleteFamily(familyId: string): boolean {
-    try {
-      const families = this.getAllFamilies();
-      const filteredFamilies = families.filter(f => f.id !== familyId);
-      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(filteredFamilies));
-      return true;
-    } catch (error) {
-      console.error('Error deleting family:', error);
-      return false;
+  static syncDeviceId(familyId: string, userId: string, newDeviceId: string): void {
+    const family = this.findFamilyById(familyId);
+    if (!family) {
+      return;
+    }
+
+    let memberFound = false;
+
+    // Update guardian device ID
+    const guardian = family.guardians.find(g => g.id === userId);
+    if (guardian) {
+      console.log(`🔄 Syncing device ID for guardian ${guardian.name}: ${guardian.deviceId} -> ${newDeviceId}`);
+      guardian.deviceId = newDeviceId;
+      memberFound = true;
+    }
+
+    // Update child device ID
+    const child = family.children.find(c => c.id === userId);
+    if (child) {
+      console.log(`🔄 Syncing device ID for child ${child.name}: ${child.deviceId} -> ${newDeviceId}`);
+      child.deviceId = newDeviceId;
+      memberFound = true;
+    }
+
+    if (memberFound) {
+      family.lastActive = new Date();
+      this.saveFamily(family);
     }
   }
+
+
 
   /**
    * Add a guardian to an existing family
@@ -430,16 +462,21 @@ export class FamilyDataService {
   }
 
   /**
-   * Clear all family data (for testing/cleanup)
+   * Check if a family name already exists
    */
-  static clearAllFamilies(): void {
-    try {
-      localStorage.removeItem(this.STORAGE_KEY);
-      localStorage.removeItem(this.CURRENT_FAMILY_KEY);
-    } catch (error) {
-      console.error('Error clearing families:', error);
-    }
+  static isFamilyNameTaken(familyName: string): boolean {
+    const families = this.getAllFamilies();
+    return families.some(f => f.name.toLowerCase() === familyName.toLowerCase());
   }
+
+  /**
+   * Check if a family code already exists
+   */
+  static isFamilyCodeTaken(familyCode: string): boolean {
+    const families = this.getAllFamilies();
+    return families.some(f => f.code.toUpperCase() === familyCode.toUpperCase());
+  }
+
 }
 
 export default FamilyDataService;
