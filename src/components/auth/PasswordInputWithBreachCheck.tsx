@@ -78,7 +78,7 @@ function PasswordStrengthIndicator({ password }: { password: string }) {
       </div>
 
       {/* Requirements List */}
-      <div className="grid grid-cols-2 gap-x-2 gap-y-1 p-2 bg-muted/50 rounded-md">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-2 gap-y-1 p-2 bg-muted/50 rounded-md">
         {requirements.map((req) => (
           <div
             key={req.key}

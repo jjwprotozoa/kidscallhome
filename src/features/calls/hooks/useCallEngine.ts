@@ -248,8 +248,11 @@ export const useCallEngine = ({
           // Handle answer received (for outgoing calls)
           // CRITICAL: Check for both "in_call" and "active" status for compatibility
           // Also handle "connecting" state (when accepting incoming calls)
+          // IMPORTANT: Only process answer if we're in "calling" state (outgoing call waiting for answer)
+          // If we're in "connecting" state with a local description, we're accepting an incoming call
+          // and created the answer ourselves - don't process it as a remote answer!
           if (
-            (state === "calling" || state === "connecting") &&
+            state === "calling" &&
             updatedCall.answer &&
             (updatedCall.status === "in_call" ||
               updatedCall.status === "active")
@@ -258,14 +261,24 @@ export const useCallEngine = ({
             console.log(
               "📞 [CALL ENGINE] Answer received, setting remote description"
             );
-            // CRITICAL: Only set remote description if it's null AND signaling state allows it
-            // Check signaling state to prevent "Called in wrong state: stable" error
-            // Stable state means we already have both local and remote descriptions set
+            // CRITICAL: Only set remote description if:
+            // - remoteDescription is null (haven't set it yet)
+            // - signalingState is "have-local-offer" (we made an offer, waiting for answer)
+            // OR localDescription is null and state is not stable/closed
+            // The key insight: For outgoing calls, we HAVE a localDescription (our offer)
+            // and are waiting for the answer. So we should NOT check localDescription === null
+            // Instead, check if signalingState === "have-local-offer" which means we're the caller
+            const isWaitingForAnswer =
+              pc?.signalingState === "have-local-offer";
+            const canAcceptAnswer =
+              pc?.remoteDescription === null &&
+              pc?.signalingState !== "closed" &&
+              pc?.signalingState !== "stable";
+
             if (
               pc &&
-              pc.remoteDescription === null &&
-              pc.signalingState !== "closed" &&
-              pc.signalingState !== "stable"
+              canAcceptAnswer &&
+              (isWaitingForAnswer || pc.localDescription === null)
             ) {
               const answerDesc =
                 updatedCall.answer as unknown as RTCSessionDescriptionInit;
@@ -471,15 +484,26 @@ export const useCallEngine = ({
                   let addedCount = 0;
                   for (const candidate of remoteCandidates) {
                     try {
+                      // CRITICAL: Check if peer connection is still valid before processing each candidate
+                      // Note: We rely on error handling to catch closed connection errors
+                      // as TypeScript types don't include "closed" for signalingState/connectionState
+                      if (!pc) {
+                        // Peer connection is null - stop processing candidates
+                        console.warn(
+                          "⚠️ [CALL ENGINE STATUS] Peer connection is null, skipping remaining ICE candidates"
+                        );
+                        break;
+                      }
                       if (!candidate.candidate) continue;
                       await pc.addIceCandidate(new RTCIceCandidate(candidate));
                       addedCount++;
                     } catch (err) {
                       const error = err as Error;
-                      // Silently handle duplicates - this is expected
+                      // Silently handle duplicates and closed connection errors - these are expected
                       if (
                         !error.message?.includes("duplicate") &&
-                        !error.message?.includes("already")
+                        !error.message?.includes("already") &&
+                        !error.message?.includes("closed")
                       ) {
                         console.error(
                           "Error adding remote ICE candidate:",
@@ -864,8 +888,39 @@ export const useCallEngine = ({
               // CRITICAL: Process answer when it appears - don't wait for status change
               // This matches the old childCallHandler pattern EXACTLY
               // Only process answer if remoteDescription is not already set (prevents duplicate processing)
-              if (updatedCall.answer && pc && pc.remoteDescription === null) {
+              // IMPORTANT: For outgoing calls (caller), we HAVE a localDescription (our offer) and are
+              // waiting for the answer. So we should NOT check localDescription === null.
+              // Instead, check if signalingState === "have-local-offer" which means we're the caller waiting for answer
+              const isWaitingForAnswer =
+                pc?.signalingState === "have-local-offer";
+              // CRITICAL: Only accept answer if:
+              // 1. Remote description is not already set
+              // 2. Signaling state is "have-local-offer" (we sent offer, waiting for answer)
+              //    This is the ONLY valid state to accept an answer
+              // Note: We don't check connectionState here as TypeScript types don't include "closed"
+              // The error handler will catch attempts to use a closed connection
+              const canAcceptAnswer =
+                pc?.remoteDescription === null &&
+                pc?.signalingState === "have-local-offer";
+
+              if (
+                updatedCall.answer &&
+                pc &&
+                canAcceptAnswer &&
+                isWaitingForAnswer
+              ) {
                 try {
+                  // Double-check remote description is still null before setting (race condition protection)
+                  if (pc.remoteDescription !== null) {
+                    console.warn(
+                      "⚠️ [CALL ENGINE] Answer received but remoteDescription already set - skipping",
+                      {
+                        callId,
+                        signalingState: pc.signalingState,
+                      }
+                    );
+                    return;
+                  }
                   console.warn(
                     "📞 [CALL ENGINE] Received answer, setting remote description...",
                     {
@@ -873,6 +928,8 @@ export const useCallEngine = ({
                       hasAnswer: !!updatedCall.answer,
                       status: updatedCall.status,
                       currentRemoteDesc: !!pc.remoteDescription,
+                      currentLocalDesc: !!pc.localDescription,
+                      signalingState: pc.signalingState,
                     }
                   );
                   const answerDesc =
@@ -887,12 +944,24 @@ export const useCallEngine = ({
                   // Process queued ICE candidates now that remote description is set
                   for (const candidate of iceCandidatesQueue.current) {
                     try {
+                      // CRITICAL: Check if peer connection is still valid before processing each candidate
+                      // Note: We rely on error handling to catch closed connection errors
+                      // as TypeScript types don't include "closed" for signalingState/connectionState
+                      if (!pc) {
+                        // Peer connection is null - stop processing candidates
+                        console.warn(
+                          "⚠️ [CALL ENGINE] Peer connection is null, skipping remaining queued ICE candidates"
+                        );
+                        break;
+                      }
                       await pc.addIceCandidate(new RTCIceCandidate(candidate));
                     } catch (err) {
                       const error = err as Error;
+                      // Silently handle duplicate candidates and closed connection errors
                       if (
                         !error.message?.includes("duplicate") &&
-                        !error.message?.includes("already")
+                        !error.message?.includes("already") &&
+                        !error.message?.includes("closed")
                       ) {
                         console.error(
                           "Error adding queued ICE candidate:",
@@ -946,6 +1015,16 @@ export const useCallEngine = ({
 
                           for (const candidate of existingCandidates) {
                             try {
+                              // CRITICAL: Check if peer connection is still valid before processing each candidate
+                              // Note: We rely on error handling to catch closed connection errors
+                              // as TypeScript types don't include "closed" for signalingState/connectionState
+                              if (!pc) {
+                                // Peer connection is null - stop processing candidates
+                                console.warn(
+                                  "⚠️ [CALL ENGINE] Peer connection is null, skipping remaining existing ICE candidates"
+                                );
+                                break;
+                              }
                               if (!candidate.candidate) continue;
                               if (pc.remoteDescription) {
                                 // CRITICAL: Await to ensure candidate is added properly
@@ -957,9 +1036,11 @@ export const useCallEngine = ({
                               }
                             } catch (err) {
                               const error = err as Error;
+                              // Silently handle duplicate candidates and closed connection errors
                               if (
                                 !error.message?.includes("duplicate") &&
-                                !error.message?.includes("already")
+                                !error.message?.includes("already") &&
+                                !error.message?.includes("closed")
                               ) {
                                 console.error(
                                   "❌ [CALL ENGINE] Error adding existing ICE candidate:",
@@ -1078,6 +1159,16 @@ export const useCallEngine = ({
 
                 for (const candidate of candidatesToProcess) {
                   try {
+                    // CRITICAL: Check if peer connection is still valid before processing each candidate
+                    // Note: We rely on error handling to catch closed connection errors
+                    // as TypeScript types don't include "closed" for signalingState/connectionState
+                    if (!pc) {
+                      // Peer connection is null - stop processing candidates
+                      console.warn(
+                        "⚠️ [CALL ENGINE] Peer connection is null, skipping remaining ICE candidates"
+                      );
+                      break;
+                    }
                     // Validate candidate before adding
                     if (!candidate.candidate) {
                       continue; // Skip invalid candidates silently
@@ -1094,10 +1185,11 @@ export const useCallEngine = ({
                     }
                   } catch (err) {
                     const error = err as Error;
-                    // Silently handle duplicate candidates
+                    // Silently handle duplicate candidates and closed connection errors
                     if (
                       !error.message?.includes("duplicate") &&
-                      !error.message?.includes("already")
+                      !error.message?.includes("already") &&
+                      !error.message?.includes("closed")
                     ) {
                       console.error(
                         "❌ [CALL ENGINE] Error adding ICE candidate:",
@@ -1212,17 +1304,28 @@ export const useCallEngine = ({
                 hint?: string;
               } | null = null;
 
-              // CRITICAL: For family member calls, we need to ensure we can read the answer
-              // Try reading with explicit RLS bypass hint by including child_id in the query
-              // This helps when child_id is set but RLS might be blocking due to family_member_id
-              const { data: fullCall, error: fullError } = await supabase
+              // CRITICAL: Filter by the correct ID field based on user role
+              // - child: filter by child_id
+              // - parent: filter by parent_id
+              // - family_member: filter by family_member_id
+              // This ensures RLS policies work correctly for each role
+              let query = supabase
                 .from("calls")
                 .select(
                   "answer, status, caller_type, family_member_id, parent_id, child_id"
                 )
-                .eq("id", callId)
-                .eq("child_id", localProfileId) // CRITICAL: Explicitly filter by child_id to help RLS
-                .single();
+                .eq("id", callId);
+
+              // Add role-specific filter to help with RLS
+              if (role === "child") {
+                query = query.eq("child_id", localProfileId);
+              } else if (role === "parent") {
+                query = query.eq("parent_id", localProfileId);
+              } else if (role === "family_member") {
+                query = query.eq("family_member_id", localProfileId);
+              }
+
+              const { data: fullCall, error: fullError } = await query.single();
 
               if (fullError) {
                 console.warn(

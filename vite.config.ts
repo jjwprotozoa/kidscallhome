@@ -152,6 +152,70 @@ export default defineConfig(({ mode }) => {
           // Import custom notification handlers into the generated service worker
           // This file contains push notification and notificationclick event handlers
           importScripts: ["/notification-handlers.js"],
+          // Runtime caching rules for external resources
+          runtimeCaching: [
+            {
+              // Supabase REST API calls - always go to network, never cache
+              // This prevents "No route found" console spam from polling calls
+              urlPattern: /^https:\/\/.*\.supabase\.co\/rest\/v1\/.*/i,
+              handler: "NetworkOnly",
+            },
+            {
+              // Supabase Auth API calls - always go to network
+              urlPattern: /^https:\/\/.*\.supabase\.co\/auth\/v1\/.*/i,
+              handler: "NetworkOnly",
+            },
+            {
+              // Supabase Realtime WebSocket - always go to network
+              urlPattern: /^https:\/\/.*\.supabase\.co\/realtime\/.*/i,
+              handler: "NetworkOnly",
+            },
+            {
+              // Supabase Storage images - cache for 7 days
+              urlPattern: /^https:\/\/.*\.supabase\.co\/storage\/v1\/object\/.*/i,
+              handler: "CacheFirst",
+              options: {
+                cacheName: "supabase-storage",
+                expiration: {
+                  maxEntries: 100,
+                  maxAgeSeconds: 60 * 60 * 24 * 7, // 7 days
+                },
+                cacheableResponse: {
+                  statuses: [0, 200],
+                },
+              },
+            },
+            {
+              // Google Fonts stylesheets
+              urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
+              handler: "CacheFirst",
+              options: {
+                cacheName: "google-fonts-stylesheets",
+                expiration: {
+                  maxEntries: 10,
+                  maxAgeSeconds: 60 * 60 * 24 * 365, // 1 year
+                },
+                cacheableResponse: {
+                  statuses: [0, 200],
+                },
+              },
+            },
+            {
+              // Google Fonts webfonts
+              urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/i,
+              handler: "CacheFirst",
+              options: {
+                cacheName: "google-fonts-webfonts",
+                expiration: {
+                  maxEntries: 30,
+                  maxAgeSeconds: 60 * 60 * 24 * 365, // 1 year
+                },
+                cacheableResponse: {
+                  statuses: [0, 200],
+                },
+              },
+            },
+          ],
         },
         // PWA manifest configuration
         manifest: {
@@ -176,11 +240,11 @@ export default defineConfig(({ mode }) => {
             },
           ],
         },
-        // Disable dev options in production
+        // Disable PWA in development to avoid Workbox console spam
+        // In dev mode, Vite serves files from /src/, /@vite/, /node_modules/.vite/deps/
+        // which would all trigger "No route found" warnings from the service worker
         devOptions: {
-          enabled: mode === "development",
-          type: "module",
-          navigateFallback: undefined, // Don't use navigation fallback in dev
+          enabled: false,
         },
       }),
     ].filter(Boolean),

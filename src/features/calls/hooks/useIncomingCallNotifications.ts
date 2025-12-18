@@ -52,8 +52,6 @@ export const useIncomingCallNotifications = (
   // Handle notification body click - navigate to call and start ringing
   useEffect(() => {
     onNotificationClick((data) => {
-      console.log("🔔 [CALL NOTIFICATIONS] Notification clicked, starting ringtone", data);
-      
       // Close the notification
       closeNotification("incoming-call");
 
@@ -65,7 +63,9 @@ export const useIncomingCallNotifications = (
       // Start ringing immediately (notification click = user gesture)
       if (data.callId === activeCallRef.current) {
         playRingtone().catch((error) => {
-          console.error("❌ [CALL NOTIFICATIONS] Failed to play ringtone after notification click:", error);
+          if (import.meta.env.DEV) {
+            console.error("[CALL NOTIFICATIONS] Failed to play ringtone after notification click:", error);
+          }
         });
       }
     });
@@ -74,8 +74,6 @@ export const useIncomingCallNotifications = (
   // Handle Answer button click from notification
   useEffect(() => {
     onNotificationAnswer(async (data) => {
-      console.log("📞 [CALL NOTIFICATIONS] Answer clicked from notification", data);
-      
       // Close notification and stop ringtone
       closeNotification("incoming-call");
       stopRingtone();
@@ -99,8 +97,6 @@ export const useIncomingCallNotifications = (
   // Handle Decline button click from notification
   useEffect(() => {
     onNotificationDecline(async (data) => {
-      console.log("📞 [CALL NOTIFICATIONS] Decline clicked from notification", data);
-      
       // Close notification and stop ringtone
       closeNotification("incoming-call");
       stopRingtone();
@@ -134,7 +130,9 @@ export const useIncomingCallNotifications = (
             reason: "declined",
           });
         } catch (error) {
-          console.error("❌ [CALL NOTIFICATIONS] Failed to decline call:", error);
+          if (import.meta.env.DEV) {
+            console.error("[CALL NOTIFICATIONS] Failed to decline call:", error);
+          }
         }
       }
       
@@ -158,21 +156,15 @@ export const useIncomingCallNotifications = (
       activeCallDataRef.current = callData;
       notificationShownRef.current = false;
 
-      console.log("📞 [CALL NOTIFICATIONS] Handling incoming call:", {
-        callId: callData.callId,
-        isVisible,
-        hasBeenVisible,
-      });
-
       // If tab is visible and has been visible (user has interacted), play ringtone immediately
       if (isVisible && hasBeenVisible) {
-        console.log("🔔 [CALL NOTIFICATIONS] Tab is active, playing ringtone immediately");
         playRingtone().catch((error) => {
-          console.error("❌ [CALL NOTIFICATIONS] Failed to play ringtone:", error);
+          if (import.meta.env.DEV) {
+            console.error("[CALL NOTIFICATIONS] Failed to play ringtone:", error);
+          }
         });
       } else {
         // Tab is not visible or hasn't been interacted with - show push notification
-        console.log("🔔 [CALL NOTIFICATIONS] Tab is not active, showing push notification");
 
         // Request notification permission if needed
         if (!hasPermission) {
@@ -216,9 +208,10 @@ export const useIncomingCallNotifications = (
       // Tab just became visible - check if we should start ringing
       // Only if notification was shown (meaning we didn't ring before)
       if (notificationShownRef.current) {
-        console.log("🔔 [CALL NOTIFICATIONS] Tab became visible, starting ringtone");
         playRingtone().catch((error) => {
-          console.error("❌ [CALL NOTIFICATIONS] Failed to play ringtone when tab became visible:", error);
+          if (import.meta.env.DEV) {
+            console.error("[CALL NOTIFICATIONS] Failed to play ringtone when tab became visible:", error);
+          }
         });
       }
     }
@@ -231,11 +224,6 @@ export const useIncomingCallNotifications = (
     async (callId?: string) => {
       // Stop if callId matches, OR if there's any active call (callId not provided means stop any active call)
       if (!callId || activeCallRef.current === callId || activeCallRef.current !== null) {
-        console.log("🔇 [CALL NOTIFICATIONS] Stopping incoming call notifications:", {
-          callId: callId || "any",
-          activeCallId: activeCallRef.current,
-          reason: !callId ? "Stop any active call" : activeCallRef.current === callId ? "CallId matches" : "Active call exists",
-        });
         stopRingtone();
         await closeNotification("incoming-call");
         activeCallRef.current = null;

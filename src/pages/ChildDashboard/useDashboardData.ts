@@ -68,7 +68,9 @@ export const useDashboardData = () => {
               .single();
 
             if (childError || !childRecord) {
-              console.error("Error fetching child record:", childError);
+              if (import.meta.env.DEV) {
+                console.error("[CHILD DASHBOARD] Error fetching child record:", childError);
+              }
               return;
             }
             parentIdToFetch = childRecord.parent_id;
@@ -162,18 +164,13 @@ export const useDashboardData = () => {
           } else {
             // Fallback to "Parent" if we couldn't find the name
             // This is expected if the parent_id is invalid or RLS blocks access
-            if (import.meta.env.DEV) {
-              console.warn(
-                "Parent name not found for parent_id:",
-                parentIdToFetch,
-                "- using fallback 'Parent'"
-              );
-            }
             setParentName("Parent");
             parentNameRef.current = "Parent";
           }
         } catch (error) {
-          console.error("Error fetching parent name:", error);
+          if (import.meta.env.DEV) {
+            console.error("[CHILD DASHBOARD] Error fetching parent name:", error);
+          }
           setParentName("Parent");
           parentNameRef.current = "Parent";
         }
@@ -312,11 +309,8 @@ export const useDashboardData = () => {
             }
           )
           .subscribe((status, err) => {
-            if (err) {
-              console.error(
-                "❌ [CHILD DASHBOARD] Realtime subscription error:",
-                err
-              );
+            if (err && import.meta.env.DEV) {
+              console.error("[CHILD DASHBOARD] Realtime subscription error:", err);
             }
           });
       };

@@ -533,14 +533,28 @@ export const useIncomingCallState = () => {
               if (call.caller_type === "child") return;
 
               if (call.status === "active" || call.status === "ended") {
+                // Stop ringtone immediately
+                stopIncomingCall(call.id);
+                
                 if (
                   incomingCallRef.current &&
                   incomingCallRef.current.id === call.id
                 ) {
-                  setIncomingCall(null);
-                  incomingCallRef.current = null;
+                  // CRITICAL: If status is 'active', clear immediately (user is answering)
+                  // If status is 'ended', add a brief delay to allow button handlers to complete
+                  if (call.status === "active") {
+                    setIncomingCall(null);
+                    incomingCallRef.current = null;
+                  } else {
+                    // Small delay for 'ended' to let any pending button clicks complete
+                    setTimeout(() => {
+                      if (incomingCallRef.current?.id === call.id) {
+                        setIncomingCall(null);
+                        incomingCallRef.current = null;
+                      }
+                    }, 500);
+                  }
                 }
-                stopIncomingCall(call.id);
               }
 
               // Accept calls from parent OR family member
@@ -968,6 +982,9 @@ export const useIncomingCallState = () => {
               // CRITICAL: Clear and stop notifications for active/ended calls, then return early
               // This prevents processing updates for calls that are already accepted
               if (call.status === "active" || call.status === "ended") {
+                // Stop ringtone immediately
+                stopIncomingCall(call.id);
+                
                 if (
                   incomingCallRef.current &&
                   incomingCallRef.current.id === call.id
@@ -979,10 +996,24 @@ export const useIncomingCallState = () => {
                       status: call.status,
                     }
                   );
-                  setIncomingCall(null);
-                  incomingCallRef.current = null;
+                  
+                  // CRITICAL: If status is 'active', clear immediately (user is answering)
+                  // If status is 'ended', add a brief delay to allow button handlers to complete
+                  // This prevents race conditions where realtime updates clear state before handlers run
+                  if (call.status === "active") {
+                    setIncomingCall(null);
+                    incomingCallRef.current = null;
+                  } else {
+                    // Small delay for 'ended' to let any pending button clicks complete
+                    setTimeout(() => {
+                      // Only clear if still the same call (hasn't been replaced by a new call)
+                      if (incomingCallRef.current?.id === call.id) {
+                        setIncomingCall(null);
+                        incomingCallRef.current = null;
+                      }
+                    }, 500);
+                  }
                 }
-                stopIncomingCall(call.id);
                 // CRITICAL: Return early - don't process active/ended calls
                 return;
               }

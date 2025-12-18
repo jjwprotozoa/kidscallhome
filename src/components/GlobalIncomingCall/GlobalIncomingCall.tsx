@@ -2,7 +2,7 @@
 // Purpose: Main orchestrator component for global incoming calls (max 250 lines)
 // CRITICAL: Preserves all WebRTC functionality - do not modify call handling logic
 
-import { useRef } from "react";
+import { useRef, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { endCall as endCallUtil } from "@/features/calls/utils/callEnding";
@@ -20,19 +20,47 @@ export const GlobalIncomingCall = () => {
   const isAnsweringRef = useRef(false);
   const navigate = useNavigate();
   const location = useLocation();
+  
+  // CRITICAL: Store a stable reference to the incoming call
+  // This prevents race conditions where realtime updates clear incomingCall
+  // before the click handler can process it
+  const incomingCallRef = useRef<IncomingCall | null>(null);
+  useEffect(() => {
+    incomingCallRef.current = incomingCall;
+  }, [incomingCall]);
 
   const handleAnswerCall = async () => {
-    if (incomingCall && !isAnsweringRef.current) {
+    // CRITICAL: Use ref instead of state to avoid race conditions
+    // The realtime subscription might clear incomingCall before this handler runs
+    const currentCall = incomingCallRef.current || incomingCall;
+    
+    if (currentCall && !isAnsweringRef.current) {
       // CRITICAL: User clicked Accept - enable audio for the call
       setUserStartedCall();
       
       // Prevent double-clicks
       isAnsweringRef.current = true;
       
+      // CRITICAL: Store call data locally BEFORE any async operations
+      // This prevents data loss if realtime updates clear the state
+      const callId = currentCall.id;
+      const childId = currentCall.child_id;
+      const parentId = currentCall.parent_id;
+      const familyMemberId = currentCall.family_member_id;
+      
+      console.log("📞 [GLOBAL INCOMING CALL] Answer button clicked:", {
+        callId,
+        childId,
+        parentId,
+        familyMemberId,
+        timestamp: new Date().toISOString(),
+      });
+      
+      // CRITICAL: Stop ringtone IMMEDIATELY before any async operations
+      // This matches the child dashboard pattern and ensures ringtone stops even if navigation fails
+      stopIncomingCall(callId);
+      
       try {
-        stopIncomingCall(incomingCall.id);
-        const callId = incomingCall.id;
-        
         // Determine user role to route correctly
         const { data: { session } } = await supabase.auth.getSession();
         const childSession = localStorage.getItem("childSession");
@@ -59,30 +87,32 @@ export const GlobalIncomingCall = () => {
         console.log("🔍 [GLOBAL INCOMING CALL] Routing decision:", {
           isChild,
           isFamilyMember,
-          hasChildId: !!incomingCall.child_id,
-          hasParentId: !!incomingCall.parent_id,
+          hasChildId: !!childId,
+          hasParentId: !!parentId,
           callId,
         });
         
         // Clear the incoming call state BEFORE navigation to ensure UI updates
         setIncomingCall(null);
+        incomingCallRef.current = null;
         
-        if (incomingCall.child_id) {
+        if (childId) {
           // Adult (parent or family member) answering child's call
           if (isFamilyMember) {
-            console.log("✅ [GLOBAL INCOMING CALL] Routing family member to:", `/family-member/call/${incomingCall.child_id}?callId=${callId}`);
-            navigate(`/family-member/call/${incomingCall.child_id}?callId=${callId}`);
+            console.log("✅ [GLOBAL INCOMING CALL] Routing family member to:", `/family-member/call/${childId}?callId=${callId}`);
+            navigate(`/family-member/call/${childId}?callId=${callId}`);
           } else {
             // Parent answering child's call - use /parent/call/ route which uses useCallEngine with role="parent"
-            console.log("✅ [GLOBAL INCOMING CALL] Routing parent to:", `/parent/call/${incomingCall.child_id}?callId=${callId}`);
-            navigate(`/parent/call/${incomingCall.child_id}?callId=${callId}`);
+            console.log("✅ [GLOBAL INCOMING CALL] Routing parent to:", `/parent/call/${childId}?callId=${callId}`);
+            navigate(`/parent/call/${childId}?callId=${callId}`);
           }
-        } else if (incomingCall.parent_id) {
+        } else if (parentId || familyMemberId) {
           // Child answering parent's or family member's call - navigate to child call route
-          console.log("✅ [GLOBAL INCOMING CALL] Routing child to:", `/child/call/${incomingCall.parent_id}?callId=${callId}`);
-          navigate(`/child/call/${incomingCall.parent_id}?callId=${callId}`);
+          const targetId = parentId || familyMemberId;
+          console.log("✅ [GLOBAL INCOMING CALL] Routing child to:", `/child/call/${targetId}?callId=${callId}`);
+          navigate(`/child/call/${targetId}?callId=${callId}`);
         } else {
-          console.error("❌ [GLOBAL INCOMING CALL] No child_id or parent_id in incoming call:", incomingCall);
+          console.error("❌ [GLOBAL INCOMING CALL] No child_id, parent_id, or family_member_id in incoming call:", currentCall);
         }
       } catch (error) {
         console.error("❌ [GLOBAL INCOMING CALL] Error handling answer:", error);
@@ -98,8 +128,19 @@ export const GlobalIncomingCall = () => {
   };
 
   const handleDeclineCall = async () => {
+    // CRITICAL: Use ref to get the call data, as state might be cleared by realtime updates
+    const currentCall = incomingCallRef.current || incomingCall;
+    
     // CRITICAL: Always allow decline regardless of isAnsweringRef state
-    if (incomingCall) {
+    if (currentCall) {
+      // Store call ID locally before any async operations
+      const callId = currentCall.id;
+      
+      console.log("📞 [GLOBAL INCOMING CALL] Decline button clicked:", {
+        callId,
+        timestamp: new Date().toISOString(),
+      });
+      
       const { data: { session } } = await supabase.auth.getSession();
       const childSession = localStorage.getItem("childSession");
       const isChild = !session && !!childSession;
@@ -121,7 +162,7 @@ export const GlobalIncomingCall = () => {
       }
 
       try {
-        await endCallUtil({ callId: incomingCall.id, by, reason: 'declined' });
+        await endCallUtil({ callId, by, reason: 'declined' });
       } catch (error) {
         console.error("Error declining call:", error);
       }
@@ -130,8 +171,9 @@ export const GlobalIncomingCall = () => {
       // In case camera was started (e.g., from a previous call or pre-warm)
       stopAllActiveStreams();
 
-      stopIncomingCall(incomingCall.id);
+      stopIncomingCall(callId);
       setIncomingCall(null);
+      incomingCallRef.current = null;
       isAnsweringRef.current = false; // Reset in case it was stuck from answer attempt
     }
   };

@@ -2,10 +2,9 @@
 // Parent Call Screen (childId)
 
 import { useEffect, useRef, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { VideoCallUI } from "@/features/calls/components/VideoCallUI";
 import { OutgoingCallUI } from "@/features/calls/components/OutgoingCallUI";
-import { IncomingCallUI } from "@/components/GlobalIncomingCall/IncomingCallUI";
 import { useCallEngine } from "@/features/calls/hooks/useCallEngine";
 import { useIncomingCallNotifications } from "@/features/calls/hooks/useIncomingCallNotifications";
 import { supabase } from "@/integrations/supabase/client";
@@ -24,7 +23,6 @@ const ParentCallScreen = () => {
   const [childAvatarColor, setChildAvatarColor] = useState<string>("#3B82F6");
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
-  const isAnsweringRef = useRef(false);
   // Track if call failed to prevent infinite retry loop
   const [callFailed, setCallFailed] = useState(false);
   // Track if call was started to prevent re-triggering
@@ -69,8 +67,58 @@ const ParentCallScreen = () => {
     remoteVideoRef,
   });
 
-  // Automatically start call when component mounts (no extra "Start Call" step)
+  const autoAcceptAttemptedRef = useRef<string | null>(null);
+  const [searchParams] = useSearchParams();
+
+  // Auto-accept incoming call when navigating with callId in URL
+  // This handles both cases: state is "incoming" or state is "idle" (will transition to "incoming" first)
   useEffect(() => {
+    const urlCallId = searchParams.get("callId");
+    if (!urlCallId || !parentId || !childId) return;
+
+    // Prevent duplicate acceptance attempts
+    if (autoAcceptAttemptedRef.current === urlCallId) {
+      return;
+    }
+
+    // Only auto-accept when state becomes "incoming" - wait for useCallEngine to detect the call first
+    // This prevents the "not a valid incoming call" error when localProfileId is empty
+    if (callEngine.state === "incoming" && callEngine.callId === urlCallId) {
+      console.log("📞 [PARENT CALL SCREEN] Auto-accepting incoming call from URL:", {
+        urlCallId,
+        state: callEngine.state,
+        callId: callEngine.callId,
+      });
+      
+      // CRITICAL: Mark user as having started the call (enables audio)
+      setUserStartedCall();
+      
+      autoAcceptAttemptedRef.current = urlCallId;
+      stopIncomingCall(urlCallId);
+      
+      // Accept the call - state is already "incoming" so this should work
+      callEngine.acceptIncomingCall(urlCallId).catch((error) => {
+        console.error("Failed to accept call:", error);
+        // Reset ref on error so we can retry
+        autoAcceptAttemptedRef.current = null;
+        toast({
+          title: "Call Failed",
+          description: "Failed to accept call",
+          variant: "destructive",
+        });
+      });
+    }
+  }, [callEngine.state, callEngine.callId, parentId, childId, callEngine, stopIncomingCall, toast]);
+
+  // Automatically start call when component mounts (only if not answering incoming call)
+  useEffect(() => {
+    // Check if we're answering an incoming call (has callId in URL)
+    const urlCallId = searchParams.get("callId");
+    if (urlCallId) {
+      // Don't start outgoing call if we're answering an incoming call
+      return;
+    }
+
     // Prevent re-triggering if already started or if previous attempt failed
     if (callStartedRef.current || callFailed) {
       return;
@@ -91,7 +139,7 @@ const ParentCallScreen = () => {
         });
       });
     }
-  }, [callEngine.state, parentId, childId, callEngine, callFailed, toast]);
+  }, [callEngine.state, parentId, childId, callEngine, callFailed, toast, searchParams]);
 
   // Handle ended state redirect
   useEffect(() => {
@@ -161,38 +209,17 @@ const ParentCallScreen = () => {
     );
   }
 
-  if (callEngine.state === "incoming") {
-    return (
-      <IncomingCallUI
-        incomingCall={{
-          id: callEngine.callId || "",
-          child_id: childId || "",
-          child_name: childName,
-          child_avatar_color: childAvatarColor,
-        }}
-        isAnsweringRef={isAnsweringRef}
-        onAnswer={() => {
-          if (callEngine.callId) {
-            // CRITICAL: User clicked Accept - enable audio
-            setUserStartedCall();
-            // CRITICAL: Stop incoming call ringtone immediately when Accept is clicked
-            stopIncomingCall(callEngine.callId);
-            callEngine.acceptIncomingCall(callEngine.callId);
-          }
-        }}
-        onDecline={() => {
-          if (callEngine.callId) {
-            // CRITICAL: Stop incoming call ringtone immediately when Reject is clicked
-            stopIncomingCall(callEngine.callId);
-            callEngine.rejectIncomingCall(callEngine.callId);
-          }
-        }}
-      />
-    );
+  // Don't render ended state - redirect will happen
+  if (callEngine.state === "ended") {
+    return null;
   }
 
-  // Show VideoCallUI for connecting and in_call states
-  // connecting: local preview visible, remote showing "Connecting..."
+  // Don't show incoming call UI here - IncomingCallDialog on dashboard handles it
+  // This prevents double "Accept" buttons and matches ChildCallScreen behavior
+  // The auto-accept logic will handle accepting when navigating with callId
+
+  // Show VideoCallUI for incoming, connecting, and in_call states
+  // incoming/connecting: local preview visible, remote showing "Connecting..."
   // in_call: both streams visible
   return (
     <VideoCallUI
@@ -200,7 +227,7 @@ const ParentCallScreen = () => {
       remoteVideoRef={remoteVideoRef}
       remoteStream={callEngine.remoteStream}
       localStream={callEngine.localStream}
-      isConnecting={callEngine.state === "calling" || callEngine.state === "connecting"}
+      isConnecting={callEngine.state === "calling" || callEngine.state === "connecting" || callEngine.state === "incoming"}
       isMuted={callEngine.isMuted}
       isVideoOff={callEngine.isVideoOff}
       onToggleMute={callEngine.toggleMute}

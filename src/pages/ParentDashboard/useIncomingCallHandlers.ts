@@ -28,7 +28,9 @@ export const useIncomingCallHandlers = () => {
     const childId = incomingCall.child_id;
     const callId = incomingCall.id;
     setIncomingCall(null);
-    navigate(`/call/${childId}?callId=${callId}`);
+    // CRITICAL: Use /parent/call/ route which uses useCallEngine with role="parent"
+    // Using /call/ route would use the old VideoCall component with useVideoCall hook
+    navigate(`/parent/call/${childId}?callId=${callId}`);
     setTimeout(() => {
       isAnsweringRef.current = false;
     }, 2000);

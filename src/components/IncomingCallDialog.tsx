@@ -1,7 +1,7 @@
 // src/components/IncomingCallDialog.tsx
 // Purpose: Full-screen incoming call dialog for parents - mobile-friendly design
 
-import { Phone, PhoneOff, PhoneIncoming } from "lucide-react";
+import { Phone, PhoneIncoming, PhoneOff } from "lucide-react";
 import { useEffect, useState } from "react";
 
 interface IncomingCall {
@@ -56,7 +56,7 @@ const IncomingCallScreen = ({
 }) => {
   // Pulse animation state for the avatar
   const [pulseScale, setPulseScale] = useState(1);
-  
+
   // Create pulsing animation for the avatar ring
   useEffect(() => {
     const interval = setInterval(() => {
@@ -66,15 +66,10 @@ const IncomingCallScreen = ({
   }, []);
 
   const handleAnswer = () => {
-    if (isAnsweringRef.current) return;
-    isAnsweringRef.current = true;
+    // Don't check/set isAnsweringRef here - let the parent handler manage it
+    // to avoid race condition where we set it true before the parent checks it
     onOpenChange(true); // Keep open during answer
-    try {
-      onAnswer();
-    } catch (error) {
-      console.error("Error in handleAnswer:", error);
-      isAnsweringRef.current = false;
-    }
+    onAnswer();
   };
 
   const handleDecline = () => {
@@ -89,7 +84,7 @@ const IncomingCallScreen = ({
   const avatarColor = incomingCall.child_avatar_color || "#3B82F6";
 
   return (
-    <div 
+    <div
       className="fixed inset-0 z-[100] bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900"
       role="alertdialog"
       aria-labelledby="incoming-call-title"
@@ -97,38 +92,38 @@ const IncomingCallScreen = ({
     >
       {/* Animated background rings */}
       <div className="absolute inset-0 flex items-center justify-center overflow-hidden pointer-events-none">
-        <div 
+        <div
           className="absolute w-[400px] h-[400px] rounded-full border border-white/5 animate-ping"
           style={{ animationDuration: "3s" }}
         />
-        <div 
+        <div
           className="absolute w-[300px] h-[300px] rounded-full border border-white/10 animate-ping"
           style={{ animationDuration: "2.5s", animationDelay: "0.5s" }}
         />
-        <div 
+        <div
           className="absolute w-[200px] h-[200px] rounded-full border border-white/15 animate-ping"
           style={{ animationDuration: "2s", animationDelay: "1s" }}
         />
       </div>
 
       {/* Main content - centered */}
-      <div className="relative h-full flex flex-col items-center justify-between py-16 px-6 safe-area-layout">
+      <div className="relative z-10 h-full flex flex-col items-center justify-between py-16 px-6 safe-area-layout">
         {/* Top section - Caller info */}
         <div className="flex-1 flex flex-col items-center justify-center space-y-8">
           {/* Animated avatar with pulsing ring */}
           <div className="relative">
-            {/* Outer pulsing ring */}
-            <div 
-              className="absolute inset-0 rounded-full transition-transform duration-1000 ease-in-out"
+            {/* Outer pulsing ring - pointer-events-none to prevent blocking button clicks */}
+            <div
+              className="absolute inset-0 rounded-full transition-transform duration-1000 ease-in-out pointer-events-none"
               style={{
                 backgroundColor: avatarColor,
                 opacity: 0.2,
                 transform: `scale(${pulseScale * 1.3})`,
               }}
             />
-            {/* Inner pulsing ring */}
-            <div 
-              className="absolute inset-0 rounded-full transition-transform duration-1000 ease-in-out"
+            {/* Inner pulsing ring - pointer-events-none to prevent blocking button clicks */}
+            <div
+              className="absolute inset-0 rounded-full transition-transform duration-1000 ease-in-out pointer-events-none"
               style={{
                 backgroundColor: avatarColor,
                 opacity: 0.3,
@@ -150,13 +145,13 @@ const IncomingCallScreen = ({
 
           {/* Caller name and status */}
           <div className="text-center space-y-2">
-            <h1 
+            <h1
               id="incoming-call-title"
               className="text-3xl font-bold text-white tracking-tight"
             >
               {callerName}
             </h1>
-            <p 
+            <p
               id="incoming-call-desc"
               className="text-lg text-white/70 flex items-center justify-center gap-2"
             >
@@ -166,29 +161,29 @@ const IncomingCallScreen = ({
           </div>
         </div>
 
-        {/* Bottom section - Action buttons */}
-        <div className="w-full max-w-sm space-y-4">
-          {/* Answer button - large and prominent */}
+        {/* Bottom section - Action buttons - pointer-events-auto ensures clicks work */}
+        <div className="w-full max-w-sm space-y-4 pointer-events-auto relative z-20">
+          {/* Answer button - large and prominent, matching child UI for consistency */}
           <button
             type="button"
             onClick={handleAnswer}
-            className="w-full py-5 px-8 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-400 hover:to-emerald-500 text-white rounded-2xl shadow-lg shadow-green-500/30 flex items-center justify-center gap-4 transition-all duration-200 active:scale-95 hover:scale-[1.02]"
+            className="w-full py-6 px-8 bg-gradient-to-r from-green-400 to-emerald-500 hover:from-green-300 hover:to-emerald-400 text-white rounded-3xl shadow-lg shadow-green-500/40 flex items-center justify-center gap-4 transition-all duration-200 active:scale-95 hover:scale-[1.02] border-2 border-white/20"
             style={{ touchAction: "manipulation" }}
           >
-            <div className="bg-white/20 rounded-full p-3">
-              <Phone className="w-7 h-7" />
+            <div className="bg-white/30 rounded-full p-3">
+              <Phone className="w-8 h-8" />
             </div>
-            <span className="text-xl font-semibold">Answer</span>
+            <span className="text-2xl font-bold">Answer</span>
           </button>
 
           {/* Decline button */}
           <button
             type="button"
             onClick={handleDecline}
-            className="w-full py-5 px-8 bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-400 hover:to-rose-500 text-white rounded-2xl shadow-lg shadow-red-500/30 flex items-center justify-center gap-4 transition-all duration-200 active:scale-95 hover:scale-[1.02]"
+            className="w-full py-5 px-8 bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-400 hover:to-rose-500 text-white rounded-2xl shadow-lg shadow-red-500/30 flex items-center justify-center gap-4 transition-all duration-200 active:scale-95 hover:scale-[1.02] border-2 border-white/20"
             style={{ touchAction: "manipulation" }}
           >
-            <div className="bg-white/20 rounded-full p-3">
+            <div className="bg-white/30 rounded-full p-3">
               <PhoneOff className="w-7 h-7" />
             </div>
             <span className="text-xl font-semibold">Decline</span>

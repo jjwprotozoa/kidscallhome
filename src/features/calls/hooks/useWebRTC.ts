@@ -491,11 +491,31 @@ export const useWebRTC = (
             );
 
             // Warn if tracks are muted
+            // NOTE: Tracks can be temporarily muted during connection establishment
+            // Only log as error if track is live (receiving data) but muted
             audioTracks.forEach((track) => {
               if (track.muted) {
-                safeLog.error(
-                  "❌ [CONNECTION STATE] Audio track is muted when connected!"
-                );
+                // If track is live but muted, this might indicate an issue
+                // Otherwise, it's likely just temporary during connection setup
+                if (track.readyState === "live") {
+                  safeLog.warn(
+                    "⚠️ [CONNECTION STATE] Audio track is muted when connected (may be temporary or user-muted)",
+                    {
+                      trackId: track.id,
+                      readyState: track.readyState,
+                      enabled: track.enabled,
+                    }
+                  );
+                } else {
+                  // Track not live yet - muted state is expected during connection setup
+                  safeLog.log(
+                    "ℹ️ [CONNECTION STATE] Audio track is muted but not live yet (normal during connection setup)",
+                    {
+                      trackId: track.id,
+                      readyState: track.readyState,
+                    }
+                  );
+                }
               }
             });
             videoTracks.forEach((track) => {
@@ -949,29 +969,30 @@ export const useWebRTC = (
           timestamp: new Date().toISOString(),
         });
 
-        // Auto-end call after timeout if connection fails or disconnects
-        if (iceState === "failed" || iceState === "disconnected") {
+        // Auto-end call after timeout if connection fails
+        // CRITICAL: "disconnected" is TRANSIENT and can recover - give it more time
+        // "failed" is terminal - end quickly
+        if (iceState === "failed") {
           safeLog.warn(
-            "⚠️ [CONNECTION STATE] Connection failure detected, scheduling auto-cleanup",
+            "⚠️ [CONNECTION STATE] ICE connection FAILED - ending call",
             {
               iceState,
               connectionState,
             }
           );
 
-          // Auto-end call after timeout if connection doesn't recover
+          // For "failed" state, end quickly (2 seconds)
           setTimeout(() => {
             const currentPC = peerConnectionRef.current;
             if (
               currentPC &&
-              currentPC.iceConnectionState !== "connected" &&
-              currentPC.iceConnectionState !== "completed" &&
+              currentPC.iceConnectionState === "failed" &&
               currentPC.signalingState !== "closed"
             ) {
               const activeCallId = currentCallIdRef.current;
               if (activeCallId) {
                 safeLog.error(
-                  "❌ [CONNECTION STATE] Connection failed to recover, ending call",
+                  "❌ [CONNECTION STATE] ICE connection failed, ending call",
                   {
                     iceState: currentPC.iceConnectionState,
                     connectionState: currentPC.connectionState,
@@ -979,7 +1000,50 @@ export const useWebRTC = (
                   }
                 );
 
-                // Determine role from isChild prop
+                const isChildUser = isChild;
+                const by = isChildUser ? "child" : "parent";
+
+                endCallUtil({
+                  callId: activeCallId,
+                  by,
+                  reason: "failed",
+                }).catch(() => {
+                  // Ignore errors - call might already be ended
+                });
+              }
+            }
+          }, 2000);
+        } else if (iceState === "disconnected") {
+          safeLog.warn(
+            "⚠️ [CONNECTION STATE] ICE connection disconnected (can recover)",
+            {
+              iceState,
+              connectionState,
+            }
+          );
+
+          // For "disconnected" state, give more time to recover (10 seconds)
+          // This is especially important on mobile networks
+          setTimeout(() => {
+            const currentPC = peerConnectionRef.current;
+            if (
+              currentPC &&
+              currentPC.iceConnectionState !== "connected" &&
+              currentPC.iceConnectionState !== "completed" &&
+              currentPC.iceConnectionState !== "checking" &&
+              currentPC.signalingState !== "closed"
+            ) {
+              const activeCallId = currentCallIdRef.current;
+              if (activeCallId) {
+                safeLog.error(
+                  "❌ [CONNECTION STATE] Connection did not recover after 10 seconds, ending call",
+                  {
+                    iceState: currentPC.iceConnectionState,
+                    connectionState: currentPC.connectionState,
+                    callId: activeCallId,
+                  }
+                );
+
                 const isChildUser = isChild;
                 const by = isChildUser ? "child" : "parent";
 
@@ -992,7 +1056,7 @@ export const useWebRTC = (
                 });
               }
             }
-          }, 2000); // 2 second timeout before auto-ending (reduced for faster call termination)
+          }, 10000); // 10 seconds for disconnected to recover (was 2 seconds)
         }
       };
 

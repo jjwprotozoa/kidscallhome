@@ -35,7 +35,9 @@ export const ChildIncomingCallUI = ({
     try {
       onAnswer();
     } catch (error) {
-      console.error("Error in handleAnswer:", error);
+      if (import.meta.env.DEV) {
+        console.error("[CHILD INCOMING CALL] Error in handleAnswer:", error);
+      }
       isAnsweringRef.current = false;
     }
   };
@@ -109,9 +111,9 @@ export const ChildIncomingCallUI = ({
 
           {/* Caller avatar */}
           <div className="relative">
-            {/* Glowing ring */}
+            {/* Glowing ring - pointer-events-none to prevent blocking button clicks */}
             <div
-              className="absolute inset-0 rounded-full animate-pulse"
+              className="absolute inset-0 rounded-full animate-pulse pointer-events-none"
               style={{
                 backgroundColor: avatarColor,
                 opacity: 0.4,

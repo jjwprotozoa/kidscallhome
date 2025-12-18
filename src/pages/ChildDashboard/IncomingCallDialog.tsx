@@ -133,9 +133,9 @@ const IncomingCallScreen = ({
 
           {/* Caller avatar */}
           <div className="relative">
-            {/* Glowing ring */}
+            {/* Glowing ring - pointer-events-none to prevent blocking button clicks */}
             <div 
-              className="absolute inset-0 rounded-full animate-pulse"
+              className="absolute inset-0 rounded-full animate-pulse pointer-events-none"
               style={{
                 backgroundColor: avatarColor,
                 opacity: 0.4,

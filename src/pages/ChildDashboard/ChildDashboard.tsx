@@ -53,7 +53,9 @@ const ChildDashboard = () => {
           const { acknowledgeMissedCalls } = await import("@/utils/acknowledgeMissedCalls");
           await acknowledgeMissedCalls(child.id, "parent");
         } catch (error) {
-          console.error("Error acknowledging missed calls:", error);
+          if (import.meta.env.DEV) {
+            console.error("[CHILD DASHBOARD] Error acknowledging missed calls:", error);
+          }
         }
       })();
     } else if (!selectedParentId) {
@@ -96,7 +98,9 @@ const ChildDashboard = () => {
           reason: "declined",
         });
       } catch (error: unknown) {
-        console.error("❌ [USER ACTION] Error declining call:", error);
+        if (import.meta.env.DEV) {
+          console.error("[CHILD DASHBOARD] Error declining call:", error);
+        }
         const errorMessage = error instanceof Error ? error.message : "Unknown error";
         toast({
           title: "Error",

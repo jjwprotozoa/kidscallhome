@@ -48,9 +48,11 @@ export const useCallConnectionState = ({
         setIsConnecting(false);
       } else if (
         connectionState === "failed" ||
-        connectionState === "disconnected" ||
         connectionState === "closed"
       ) {
+        // CRITICAL: Only end on terminal states "failed" or "closed"
+        // "disconnected" is TRANSIENT and can recover - don't end the call on disconnected!
+        // See: https://developer.mozilla.org/en-US/docs/Web/API/RTCPeerConnection/connectionState
         if (state === "connecting" || state === "in_call") {
           setStateWithLogging("ended", "WebRTC connection failed", {
             connectionState,
@@ -58,6 +60,13 @@ export const useCallConnectionState = ({
           });
         }
         setIsConnecting(false);
+      } else if (connectionState === "disconnected") {
+        // Log disconnected but DON'T end the call - it can recover
+        console.warn("⚠️ [CONNECTION STATE] Connection temporarily disconnected (can recover):", {
+          connectionState,
+          iceConnectionState,
+        });
+        // Keep isConnecting as-is - don't change state
       }
     };
 

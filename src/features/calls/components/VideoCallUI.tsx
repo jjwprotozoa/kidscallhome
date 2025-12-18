@@ -1178,8 +1178,9 @@ export const VideoCallUI = ({
           </div>
         )}
 
-        {/* Diagnostic panels - positioned in bottom-left corner to avoid overlaps */}
+        {/* Diagnostic panels - positioned in bottom-left corner above CallControls */}
         {/* Help icon (?) allows users to access debugging info when troubleshooting */}
+        {/* z-[60] to be above CallControls which is z-50 */}
         {remoteStream && (
           <DiagnosticContainer
             videoRef={remoteVideoRef}
@@ -1187,7 +1188,7 @@ export const VideoCallUI = ({
             isAudioMutedByBrowser={isAudioMutedByBrowser}
             audioElementRef={audioElementRef}
             remoteStream={remoteStream}
-            className="absolute bottom-24 left-4 z-50"
+            className="absolute bottom-28 left-4 z-[60]"
           />
         )}
 

@@ -259,7 +259,12 @@ export const DiagnosticContainer = ({
         onClick={(e) => e.stopPropagation()}
       >
         <button
-          onClick={() => setShowDiagnostics(true)}
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            setShowDiagnostics(true);
+          }}
           className="flex items-center justify-center w-9 h-9 rounded-full transition-all bg-black/50 text-white/70 hover:bg-black/70 hover:text-white backdrop-blur-sm border border-white/10"
           title="Show diagnostics"
         >
@@ -287,7 +292,11 @@ export const DiagnosticContainer = ({
                 <h2 className="text-white font-semibold">Call Diagnostics</h2>
               </div>
               <button
-                onClick={() => setShowDiagnostics(false)}
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowDiagnostics(false);
+                }}
                 className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white/80 hover:text-white transition-colors"
               >
                 <X className="h-4 w-4" />

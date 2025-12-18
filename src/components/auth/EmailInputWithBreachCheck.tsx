@@ -30,7 +30,7 @@ export const EmailInputWithBreachCheck = ({
       <div className="relative">
         <Input
           type="email"
-          placeholder="parent@email.com"
+          placeholder="your@email.com"
           value={email}
           onChange={(e) => onChange(e.target.value)}
           required={required}

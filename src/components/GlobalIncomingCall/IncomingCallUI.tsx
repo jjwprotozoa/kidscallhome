@@ -36,15 +36,9 @@ export const IncomingCallUI = ({
   const avatarColor = incomingCall.child_avatar_color || "#3B82F6";
 
   const handleAnswer = () => {
-    if (isAnsweringRef.current) return;
-    isAnsweringRef.current = true;
-    // Call onAnswer - if it's async and fails, the ref will be reset by the parent component's timeout
-    try {
-      onAnswer();
-    } catch (error) {
-      console.error("Error in handleAnswer:", error);
-      isAnsweringRef.current = false;
-    }
+    // Don't check/set isAnsweringRef here - let GlobalIncomingCall.handleAnswerCall handle it
+    // to avoid race condition where we set it true before the parent checks it
+    onAnswer();
   };
 
   const handleDecline = () => {
@@ -82,18 +76,18 @@ export const IncomingCallUI = ({
         <div className="flex-1 flex flex-col items-center justify-center space-y-8">
           {/* Animated avatar with pulsing ring */}
           <div className="relative">
-            {/* Outer pulsing ring */}
+            {/* Outer pulsing ring - pointer-events-none to prevent blocking button clicks */}
             <div 
-              className="absolute inset-0 rounded-full transition-transform duration-1000 ease-in-out"
+              className="absolute inset-0 rounded-full transition-transform duration-1000 ease-in-out pointer-events-none"
               style={{
                 backgroundColor: avatarColor,
                 opacity: 0.2,
                 transform: `scale(${pulseScale * 1.3})`,
               }}
             />
-            {/* Inner pulsing ring */}
+            {/* Inner pulsing ring - pointer-events-none to prevent blocking button clicks */}
             <div 
-              className="absolute inset-0 rounded-full transition-transform duration-1000 ease-in-out"
+              className="absolute inset-0 rounded-full transition-transform duration-1000 ease-in-out pointer-events-none"
               style={{
                 backgroundColor: avatarColor,
                 opacity: 0.3,
@@ -133,34 +127,34 @@ export const IncomingCallUI = ({
 
         {/* Bottom section - Action buttons */}
         <div className="w-full max-w-sm space-y-4">
-          {/* Answer button - large and prominent */}
+          {/* Answer button - big and green (matches working child UI) */}
           <button
             type="button"
             onClick={handleAnswer}
-            className="w-full py-5 px-8 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-400 hover:to-emerald-500 text-white rounded-2xl shadow-lg shadow-green-500/30 flex items-center justify-center gap-4 transition-all duration-200 active:scale-95 hover:scale-[1.02]"
+            className="w-full py-6 px-8 bg-gradient-to-r from-green-400 to-emerald-500 hover:from-green-300 hover:to-emerald-400 text-white rounded-3xl shadow-lg shadow-green-500/40 flex items-center justify-center gap-4 transition-all duration-200 active:scale-95 hover:scale-[1.02] border-2 border-white/20"
             style={{ touchAction: "manipulation" }}
           >
-            <div className="bg-white/20 rounded-full p-3">
-              <Phone className="w-7 h-7" />
+            <div className="bg-white/30 rounded-full p-3">
+              <Phone className="w-8 h-8" />
             </div>
-            <span className="text-xl font-semibold">Answer</span>
+            <span className="text-2xl font-bold">Answer</span>
           </button>
 
           {/* Decline button */}
           <button
             type="button"
             onClick={handleDecline}
-            className="w-full py-5 px-8 bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-400 hover:to-rose-500 text-white rounded-2xl shadow-lg shadow-red-500/30 flex items-center justify-center gap-4 transition-all duration-200 active:scale-95 hover:scale-[1.02]"
+            className="w-full py-5 px-8 bg-gradient-to-r from-red-400 to-rose-500 hover:from-red-300 hover:to-rose-400 text-white rounded-3xl shadow-lg shadow-red-500/40 flex items-center justify-center gap-4 transition-all duration-200 active:scale-95 hover:scale-[1.02] border-2 border-white/20"
             style={{ touchAction: "manipulation" }}
           >
-            <div className="bg-white/20 rounded-full p-3">
+            <div className="bg-white/30 rounded-full p-3">
               <PhoneOff className="w-7 h-7" />
             </div>
-            <span className="text-xl font-semibold">Decline</span>
+            <span className="text-xl font-bold">Decline</span>
           </button>
 
-          {/* Swipe hint for mobile - subtle text */}
-          <p className="text-center text-white/40 text-sm pt-4">
+          {/* Hint text */}
+          <p className="text-center text-white/40 text-sm pt-2">
             Tap to answer or decline
           </p>
         </div>

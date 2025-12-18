@@ -104,8 +104,91 @@ export const useIncomingCall = ({
         }
 
         // Set remote description (offer)
-        const offerDesc = call.offer as unknown as RTCSessionDescriptionInit;
-        await pc.setRemoteDescription(new RTCSessionDescription(offerDesc));
+        // CRITICAL: Check if remote description is already set (not signaling state)
+        // "stable" is the INITIAL state before any offer/answer - it's fine to set remote description
+        // Only skip if remote description is already set (already processed)
+        if (pc.remoteDescription !== null) {
+          console.warn(
+            "⚠️ [INCOMING CALL] Remote description already set - call may have already been processed",
+            {
+              signalingState: pc.signalingState,
+              hasRemoteDescription: pc.remoteDescription !== null,
+              hasLocalDescription: pc.localDescription !== null,
+            }
+          );
+          // If remote description is already set, check if we need to create answer
+          if (pc.localDescription === null) {
+            // Remote description is set but no local description - create answer
+            console.warn(
+              "📞 [INCOMING CALL] Remote description set but no answer - creating answer now"
+            );
+            // Continue to create answer below
+          } else {
+            // Both descriptions are set - call is already processed
+            setCallId(incomingCallId);
+            setIsConnecting(false);
+            return;
+          }
+        }
+
+        // Only set remote description if it's not already set
+        const justSetRemoteDescription = pc.remoteDescription === null;
+        if (justSetRemoteDescription) {
+          const offerDesc = call.offer as unknown as RTCSessionDescriptionInit;
+          await pc.setRemoteDescription(new RTCSessionDescription(offerDesc));
+          
+          // Wait for signaling state to change to have-remote-offer
+          // This ensures the offer is properly set before creating the answer
+          await new Promise<void>((resolve, reject) => {
+            const timeout = setTimeout(() => {
+              reject(new Error("Timeout waiting for signaling state change"));
+            }, 5000);
+
+            const checkState = () => {
+              if (
+                pc.signalingState === "have-remote-offer" ||
+                pc.signalingState === "have-local-pranswer"
+              ) {
+                clearTimeout(timeout);
+                resolve();
+              } else if (pc.signalingState === "closed") {
+                clearTimeout(timeout);
+                reject(new Error("Peer connection closed"));
+              } else {
+                setTimeout(checkState, 100);
+              }
+            };
+            checkState();
+          });
+        } else {
+          // Remote description already set - verify we're in the right state
+          if (
+            pc.signalingState !== "have-remote-offer" &&
+            pc.signalingState !== "have-local-pranswer" &&
+            pc.signalingState !== "stable"
+          ) {
+            console.warn(
+              "⚠️ [INCOMING CALL] Unexpected signaling state with remote description set:",
+              pc.signalingState
+            );
+          }
+        }
+
+        // Check if answer is already created
+        if (pc.localDescription !== null) {
+          console.warn(
+            "⚠️ [INCOMING CALL] Local description (answer) already set - call may have already been accepted",
+            {
+              signalingState: pc.signalingState,
+              hasRemoteDescription: pc.remoteDescription !== null,
+              hasLocalDescription: pc.localDescription !== null,
+            }
+          );
+          // Answer already created - just set call ID and return
+          setCallId(incomingCallId);
+          setIsConnecting(false);
+          return;
+        }
 
         // Verify tracks are added before creating answer
         const senderTracks = pc

@@ -188,7 +188,7 @@ describe("ParentAuth", () => {
   describe("Form Validation", () => {
     it("should require email in login form", () => {
       renderWithRouter(<ParentAuth />);
-      const emailInput = screen.getByPlaceholderText(/parent@email.com/i);
+      const emailInput = screen.getByPlaceholderText(/your@email.com/i);
       expect(emailInput).toBeRequired();
     });
 
@@ -217,7 +217,7 @@ describe("ParentAuth", () => {
 
       renderWithRouter(<ParentAuth />);
 
-      const emailInput = screen.getByPlaceholderText(/parent@email.com/i);
+      const emailInput = screen.getByPlaceholderText(/your@email.com/i);
       const passwordInput = screen.getByPlaceholderText(/••••••••/i);
       const submitButton = screen.getByText("Sign In");
 
@@ -249,7 +249,7 @@ describe("ParentAuth", () => {
         expect(screen.getByText("Sign In")).toBeInTheDocument();
       });
 
-      const emailInput = screen.getByPlaceholderText(/parent@email.com/i);
+      const emailInput = screen.getByPlaceholderText(/your@email.com/i);
       const passwordInput = screen.getByPlaceholderText(/••••••••/i);
       const submitButton = screen.getByText("Sign In");
 
@@ -290,7 +290,7 @@ describe("ParentAuth", () => {
       fireEvent.click(toggleButton);
 
       const nameInput = screen.getByPlaceholderText("Mom / Dad / Guardian");
-      const emailInput = screen.getByPlaceholderText(/parent@email.com/i);
+      const emailInput = screen.getByPlaceholderText(/your@email.com/i);
       const passwordInput = screen.getByPlaceholderText(/••••••••/i);
       const submitButton = screen.getByText("Create Account");
 
@@ -329,7 +329,7 @@ describe("ParentAuth", () => {
 
     it("should validate email format", async () => {
       renderWithRouter(<ParentAuth />);
-      const emailInput = screen.getByPlaceholderText(/parent@email.com/i);
+      const emailInput = screen.getByPlaceholderText(/your@email.com/i);
       fireEvent.change(emailInput, { target: { value: "invalid-email" } });
 
       const submitButton = screen.getByText("Sign In");
