@@ -3,7 +3,7 @@
 // CRITICAL: Preserves all WebRTC functionality - do not modify call handling logic
 
 import { useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { endCall as endCallUtil } from "@/features/calls/utils/callEnding";
 import { AndroidIncomingCall } from "@/components/native/AndroidIncomingCall";
@@ -17,6 +17,7 @@ export const GlobalIncomingCall = () => {
   const { incomingCall, setIncomingCall, stopIncomingCall } = useIncomingCallState();
   const isAnsweringRef = useRef(false);
   const navigate = useNavigate();
+  const location = useLocation();
 
   const handleAnswerCall = async () => {
     if (incomingCall && !isAnsweringRef.current) {
@@ -59,9 +60,9 @@ export const GlobalIncomingCall = () => {
           console.log("✅ [GLOBAL INCOMING CALL] Routing family member to:", `/family-member/call/${incomingCall.child_id}?callId=${callId}`);
           navigate(`/family-member/call/${incomingCall.child_id}?callId=${callId}`);
         } else {
-          // Parent answering child's call
-          console.log("✅ [GLOBAL INCOMING CALL] Routing parent to:", `/call/${incomingCall.child_id}?callId=${callId}`);
-          navigate(`/call/${incomingCall.child_id}?callId=${callId}`);
+          // Parent answering child's call - use /parent/call/ route which uses useCallEngine with role="parent"
+          console.log("✅ [GLOBAL INCOMING CALL] Routing parent to:", `/parent/call/${incomingCall.child_id}?callId=${callId}`);
+          navigate(`/parent/call/${incomingCall.child_id}?callId=${callId}`);
         }
       } else if (incomingCall.parent_id) {
         // Child answering parent's or family member's call - navigate to child call route
@@ -108,6 +109,20 @@ export const GlobalIncomingCall = () => {
   };
 
   if (!incomingCall) return null;
+
+  // CRITICAL: Don't render GlobalIncomingCall UI for children on the dashboard
+  // ChildDashboard has its own kid-friendly IncomingCallDialog
+  // This prevents showing both the purple (kid-friendly) and blue (adult) UIs
+  const childSession = localStorage.getItem("childSession");
+  const isChild = !!childSession;
+  const isOnChildDashboard = location.pathname === "/child/dashboard" || 
+                             location.pathname === "/child" ||
+                             location.pathname === "/child/parents";
+  
+  if (isChild && isOnChildDashboard) {
+    // Child is on a page with its own incoming call UI - don't show GlobalIncomingCall
+    return null;
+  }
 
   return (
     <>

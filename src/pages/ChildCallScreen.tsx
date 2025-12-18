@@ -1,8 +1,7 @@
 // src/pages/ChildCallScreen.tsx
 // Child Call Screen (parentId)
 
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { ChildOutgoingCallUI } from "@/features/calls/components/ChildOutgoingCallUI";
 import { VideoCallUI } from "@/features/calls/components/VideoCallUI";
 import { useCallEngine } from "@/features/calls/hooks/useCallEngine";
 import { useIncomingCallNotifications } from "@/features/calls/hooks/useIncomingCallNotifications";
@@ -346,29 +345,20 @@ const ChildCallScreen = () => {
 
   if (callEngine.state === "calling") {
     return (
-      <div className="min-h-[100dvh] bg-background flex items-center justify-center">
-        <Card className="p-8">
-          <div className="text-center space-y-4">
-            <h2 className="text-2xl font-semibold">Calling {parentName}...</h2>
-            <p className="text-muted-foreground">Waiting for answer</p>
-            <Button
-              variant="destructive"
-              onClick={() => {
-                callEngine.endCall().catch((error) => {
-                  console.error("Failed to end call:", error);
-                  toast({
-                    title: "Error",
-                    description: "Failed to end call",
-                    variant: "destructive",
-                  });
-                });
-              }}
-            >
-              End Call
-            </Button>
-          </div>
-        </Card>
-      </div>
+      <ChildOutgoingCallUI
+        calleeName={parentName || "Parent"}
+        calleeAvatarColor="#8B5CF6" // Purple for parents/family members (kid-friendly)
+        onEndCall={() => {
+          callEngine.endCall().catch((error) => {
+            console.error("Failed to end call:", error);
+            toast({
+              title: "Error",
+              description: "Failed to end call",
+              variant: "destructive",
+            });
+          });
+        }}
+      />
     );
   }
 
@@ -384,6 +374,7 @@ const ChildCallScreen = () => {
       localVideoRef={localVideoRef}
       remoteVideoRef={remoteVideoRef}
       remoteStream={callEngine.remoteStream}
+      localStream={callEngine.localStream}
       isConnecting={
         callEngine.state === "connecting" || callEngine.state === "incoming"
       }

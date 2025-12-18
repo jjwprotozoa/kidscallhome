@@ -2,15 +2,31 @@
 // Purpose: Dashboard tabs container - memoized to prevent re-renders on parent state changes
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ChildConnectionsTab } from "@/features/family/components/ChildConnectionsTab";
 import { ChildrenTab } from "@/features/family/components/ChildrenTab";
 import { FamilySetupTab } from "@/features/family/components/FamilySetupTab";
 import { FamilyTab } from "@/features/family/components/FamilyTab";
 import { ReferralsTab } from "@/features/referrals";
 import { SafetyReportsTab } from "@/features/safety/components/SafetyReportsTab";
-import { Gift } from "lucide-react";
+import { Baby, Gift, Link2, Settings, Shield, Users } from "lucide-react";
 import React from "react";
 import { Child, FamilyMember, ValidTab } from "./types";
+
+const TAB_OPTIONS: { value: ValidTab; label: string; icon: React.ElementType }[] = [
+  { value: "children", label: "Children", icon: Baby },
+  { value: "family", label: "Family", icon: Users },
+  { value: "connections", label: "Connections", icon: Link2 },
+  { value: "safety", label: "Safety", icon: Shield },
+  { value: "referrals", label: "Referrals", icon: Gift },
+  { value: "setup", label: "Setup", icon: Settings },
+];
 
 interface DashboardTabsProps {
   activeTab: ValidTab;
@@ -75,19 +91,48 @@ export const DashboardTabs = React.memo((props: DashboardTabsProps) => {
     onRemove,
   } = props;
 
+  const currentTab = TAB_OPTIONS.find((tab) => tab.value === activeTab);
+
   return (
     <Tabs value={activeTab} onValueChange={onTabChange} className="w-full">
-      <TabsList className="grid w-full grid-cols-3 sm:grid-cols-6">
+      {/* Mobile: Dropdown selector */}
+      <div className="sm:hidden mb-2">
+        <Select value={activeTab} onValueChange={onTabChange}>
+          <SelectTrigger className="w-full">
+            <SelectValue>
+              {currentTab && (
+                <span className="flex items-center gap-2">
+                  <currentTab.icon className="h-4 w-4" />
+                  {currentTab.label}
+                </span>
+              )}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {TAB_OPTIONS.map((tab) => {
+              const Icon = tab.icon;
+              return (
+                <SelectItem key={tab.value} value={tab.value}>
+                  <span className="flex items-center gap-2">
+                    <Icon className="h-4 w-4" />
+                    {tab.label}
+                  </span>
+                </SelectItem>
+              );
+            })}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Desktop: Tab list */}
+      <TabsList className="hidden sm:grid w-full grid-cols-6">
         <TabsTrigger value="children">Children</TabsTrigger>
         <TabsTrigger value="family">Family</TabsTrigger>
-        <TabsTrigger value="connections" className="hidden sm:flex">
-          Connections
-        </TabsTrigger>
+        <TabsTrigger value="connections">Connections</TabsTrigger>
         <TabsTrigger value="safety">Safety</TabsTrigger>
         <TabsTrigger value="referrals" className="flex items-center gap-1">
           <Gift className="h-3 w-3" />
-          <span className="hidden sm:inline">Referrals</span>
-          <span className="sm:hidden">Refer</span>
+          Referrals
         </TabsTrigger>
         <TabsTrigger value="setup">Setup</TabsTrigger>
       </TabsList>

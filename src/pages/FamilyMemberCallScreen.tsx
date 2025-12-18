@@ -4,13 +4,12 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { VideoCallUI } from "@/features/calls/components/VideoCallUI";
+import { OutgoingCallUI } from "@/features/calls/components/OutgoingCallUI";
 import { useCallEngine } from "@/features/calls/hooks/useCallEngine";
 import { useIncomingCallNotifications } from "@/features/calls/hooks/useIncomingCallNotifications";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { setUserStartedCall } from "@/utils/userInteraction";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 
 const FamilyMemberCallScreen = () => {
   const { childId } = useParams<{ childId: string }>();
@@ -18,6 +17,7 @@ const FamilyMemberCallScreen = () => {
   const { toast } = useToast();
   const [familyMemberId, setFamilyMemberId] = useState<string | null>(null);
   const [childName, setChildName] = useState<string>("");
+  const [childAvatarColor, setChildAvatarColor] = useState<string>("#8B5CF6");
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
 
@@ -33,19 +33,21 @@ const FamilyMemberCallScreen = () => {
       }
       setFamilyMemberId(user.id);
 
-      // Get child name - try children table first, then child_profiles
+      // Get child name and avatar color - try children table first, then child_profiles
       if (childId) {
-        let childName: string | null = null;
+        let foundChildName: string | null = null;
+        let foundAvatarColor: string | null = null;
         
         // Try children table (legacy)
         const { data: child } = await supabase
           .from("children")
-          .select("name")
+          .select("name, avatar_color")
           .eq("id", childId)
           .maybeSingle();
         
         if (child?.name) {
-          childName = child.name;
+          foundChildName = child.name;
+          foundAvatarColor = child.avatar_color;
         } else {
           // Fallback to child_profiles
           const { data: childProfile } = await supabase
@@ -55,12 +57,15 @@ const FamilyMemberCallScreen = () => {
             .maybeSingle();
           
           if (childProfile?.name) {
-            childName = childProfile.name;
+            foundChildName = childProfile.name;
           }
         }
         
-        if (childName) {
-          setChildName(childName);
+        if (foundChildName) {
+          setChildName(foundChildName);
+        }
+        if (foundAvatarColor) {
+          setChildAvatarColor(foundAvatarColor);
         }
       }
     };
@@ -163,29 +168,20 @@ const FamilyMemberCallScreen = () => {
 
   if (callEngine.state === "calling") {
     return (
-      <div className="min-h-[100dvh] bg-background flex items-center justify-center">
-        <Card className="p-8">
-          <div className="text-center space-y-4">
-            <h2 className="text-2xl font-semibold">Calling {childName}...</h2>
-            <p className="text-muted-foreground">Waiting for answer</p>
-            <Button
-              variant="destructive"
-              onClick={() => {
-                callEngine.endCall().catch((error) => {
-                  console.error("Failed to end call:", error);
-                  toast({
-                    title: "Error",
-                    description: "Failed to end call",
-                    variant: "destructive",
-                  });
-                });
-              }}
-            >
-              End Call
-            </Button>
-          </div>
-        </Card>
-      </div>
+      <OutgoingCallUI
+        calleeName={childName || "Child"}
+        calleeAvatarColor={childAvatarColor}
+        onEndCall={() => {
+          callEngine.endCall().catch((error) => {
+            console.error("Failed to end call:", error);
+            toast({
+              title: "Error",
+              description: "Failed to end call",
+              variant: "destructive",
+            });
+          });
+        }}
+      />
     );
   }
 
@@ -199,6 +195,7 @@ const FamilyMemberCallScreen = () => {
       localVideoRef={localVideoRef}
       remoteVideoRef={remoteVideoRef}
       remoteStream={callEngine.remoteStream}
+      localStream={callEngine.localStream}
       isConnecting={callEngine.state === "calling" || callEngine.state === "connecting"}
       isMuted={callEngine.isMuted}
       isVideoOff={callEngine.isVideoOff}

@@ -4,14 +4,14 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { VideoCallUI } from "@/features/calls/components/VideoCallUI";
+import { OutgoingCallUI } from "@/features/calls/components/OutgoingCallUI";
+import { IncomingCallUI } from "@/components/GlobalIncomingCall/IncomingCallUI";
 import { useCallEngine } from "@/features/calls/hooks/useCallEngine";
 import { useIncomingCallNotifications } from "@/features/calls/hooks/useIncomingCallNotifications";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { setUserStartedCall } from "@/utils/userInteraction";
 import { useFamilyMemberRedirect } from "@/hooks/useFamilyMemberRedirect";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 
 const ParentCallScreen = () => {
   // Redirect family members away from parent routes
@@ -21,8 +21,10 @@ const ParentCallScreen = () => {
   const { toast } = useToast();
   const [parentId, setParentId] = useState<string | null>(null);
   const [childName, setChildName] = useState<string>("");
+  const [childAvatarColor, setChildAvatarColor] = useState<string>("#3B82F6");
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  const isAnsweringRef = useRef(false);
 
   useEffect(() => {
     const initialize = async () => {
@@ -36,15 +38,18 @@ const ParentCallScreen = () => {
       }
       setParentId(user.id);
 
-      // Get child name
+      // Get child name and avatar color
       if (childId) {
         const { data: child } = await supabase
           .from("children")
-          .select("name")
+          .select("name, avatar_color")
           .eq("id", childId)
           .single();
         if (child) {
           setChildName(child.name);
+          if (child.avatar_color) {
+            setChildAvatarColor(child.avatar_color);
+          }
         }
       }
     };
@@ -94,69 +99,50 @@ const ParentCallScreen = () => {
 
   if (callEngine.state === "calling") {
     return (
-      <div className="min-h-[100dvh] bg-background flex items-center justify-center">
-        <Card className="p-8">
-          <div className="text-center space-y-4">
-            <h2 className="text-2xl font-semibold">Calling {childName}...</h2>
-            <p className="text-muted-foreground">Waiting for answer</p>
-            <Button
-              variant="destructive"
-              onClick={() => {
-                callEngine.endCall().catch((error) => {
-                  console.error("Failed to end call:", error);
-                  toast({
-                    title: "Error",
-                    description: "Failed to end call",
-                    variant: "destructive",
-                  });
-                });
-              }}
-            >
-              End Call
-            </Button>
-          </div>
-        </Card>
-      </div>
+      <OutgoingCallUI
+        calleeName={childName || "Child"}
+        calleeAvatarColor={childAvatarColor}
+        onEndCall={() => {
+          callEngine.endCall().catch((error) => {
+            console.error("Failed to end call:", error);
+            toast({
+              title: "Error",
+              description: "Failed to end call",
+              variant: "destructive",
+            });
+          });
+        }}
+      />
     );
   }
 
   if (callEngine.state === "incoming") {
     return (
-      <div className="min-h-[100dvh] bg-background flex items-center justify-center">
-        <Card className="p-8">
-          <div className="text-center space-y-4">
-            <h2 className="text-2xl font-semibold">Incoming Call</h2>
-            <p className="text-muted-foreground">From {childName}</p>
-            <div className="flex gap-4 justify-center">
-              <Button
-                onClick={() => {
-                  if (callEngine.callId) {
-                    // CRITICAL: User clicked Accept - enable audio
-                    setUserStartedCall();
-                    // CRITICAL: Stop incoming call ringtone immediately when Accept is clicked
-                    stopIncomingCall(callEngine.callId);
-                    callEngine.acceptIncomingCall(callEngine.callId);
-                  }
-                }}
-              >
-                Accept
-              </Button>
-              <Button
-                variant="destructive"
-                onClick={() => {
-                  if (callEngine.callId) {
-                    // CRITICAL: Stop incoming call ringtone immediately when Reject is clicked
-                    stopIncomingCall(callEngine.callId);
-                    callEngine.rejectIncomingCall(callEngine.callId);
-                  }
-                }}
-              >
-                Reject
-              </Button>
-            </div>
-          </div>
-        </Card>
-      </div>
+      <IncomingCallUI
+        incomingCall={{
+          id: callEngine.callId || "",
+          child_id: childId || "",
+          child_name: childName,
+          child_avatar_color: childAvatarColor,
+        }}
+        isAnsweringRef={isAnsweringRef}
+        onAnswer={() => {
+          if (callEngine.callId) {
+            // CRITICAL: User clicked Accept - enable audio
+            setUserStartedCall();
+            // CRITICAL: Stop incoming call ringtone immediately when Accept is clicked
+            stopIncomingCall(callEngine.callId);
+            callEngine.acceptIncomingCall(callEngine.callId);
+          }
+        }}
+        onDecline={() => {
+          if (callEngine.callId) {
+            // CRITICAL: Stop incoming call ringtone immediately when Reject is clicked
+            stopIncomingCall(callEngine.callId);
+            callEngine.rejectIncomingCall(callEngine.callId);
+          }
+        }}
+      />
     );
   }
 
@@ -168,6 +154,7 @@ const ParentCallScreen = () => {
       localVideoRef={localVideoRef}
       remoteVideoRef={remoteVideoRef}
       remoteStream={callEngine.remoteStream}
+      localStream={callEngine.localStream}
       isConnecting={callEngine.state === "calling" || callEngine.state === "connecting"}
       isMuted={callEngine.isMuted}
       isVideoOff={callEngine.isVideoOff}

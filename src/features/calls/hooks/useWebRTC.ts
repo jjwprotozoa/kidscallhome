@@ -2157,6 +2157,25 @@ export const useWebRTC = (
     });
   }, [remoteStream, remoteVideoRef]);
 
+  // CRITICAL: Monitor local stream and ensure video element is updated
+  // This fixes the issue where initializeConnection runs before VideoCallUI mounts
+  // (e.g., on child side during "calling" state, the video element doesn't exist yet)
+  useEffect(() => {
+    if (localStream && localVideoRef.current) {
+      // Only update srcObject if it's different to avoid interrupting playback
+      if (localVideoRef.current.srcObject !== localStream) {
+        safeLog.log(
+          "✅ [LOCAL STREAM] Syncing local stream to video element (useEffect)"
+        );
+        localVideoRef.current.srcObject = localStream;
+        localVideoRef.current.muted = true; // Local video should always be muted to prevent echo
+        localVideoRef.current.play().catch((error) => {
+          safeLog.error("Error playing local video in useEffect:", error);
+        });
+      }
+    }
+  }, [localStream, localVideoRef]);
+
   // Monitor remote stream changes and ensure video element is updated
   useEffect(() => {
     if (remoteStream && remoteVideoRef.current) {

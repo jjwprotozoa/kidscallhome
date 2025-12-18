@@ -62,18 +62,40 @@ Supabase provides basic email sending, but it's limited and may not work reliabl
 4. **Test** the configuration
 5. Save settings
 
-#### C. Using Resend API (Recommended for Production)
+#### C. Using Hostinger SMTP (For Hostinger Customers)
 
-Resend is a modern email API that's easy to set up:
+If you have a Hostinger hosting account with email:
+
+1. Go to Supabase Dashboard → **Project Settings** → **Auth** → **SMTP Settings**
+2. Configure Hostinger SMTP:
+   - **SMTP Host**: `smtp.hostinger.com` (or `smtp.titan.email` for Titan Email)
+   - **SMTP Port**: `465` (SSL) or `587` (TLS)
+   - **SMTP User**: Your Hostinger email (e.g., `noreply@kidscallhome.com`)
+   - **SMTP Password**: Your email password
+   - **Sender Email**: Same as SMTP User
+   - **Sender Name**: `Kids Call Home`
+
+3. **Test** the configuration using Supabase's test button
+4. Save settings
+
+**Note:** Hostinger SMTP works for Supabase Auth emails (signup confirmation, password reset). For family member invitation emails sent via edge functions, use Resend API instead (see below).
+
+#### D. Using Resend API (Recommended for Transactional Emails)
+
+Resend is a modern email API that's easy to set up and works reliably with Supabase Edge Functions:
 
 1. Sign up at [resend.com](https://resend.com)
-2. Get your API key
-3. In Supabase Dashboard → **Project Settings** → **Auth** → **Email Templates**
-4. Configure Resend:
-   - Add `RESEND_API_KEY` as an environment variable
-   - Or use Supabase's email function with Resend
+2. Add and verify your domain (`kidscallhome.com`)
+3. Get your API key
+4. Add `RESEND_API_KEY` to Supabase Edge Function secrets:
+   - Go to Supabase Dashboard → **Project Settings** → **Edge Functions**
+   - Or use CLI: `supabase secrets set RESEND_API_KEY=re_xxxxxxxxx`
 
-**Note:** The codebase already has Resend integration in `supabase/functions/send-family-member-invitation/index.ts` for invitation emails, but Supabase Auth confirmation emails need to be configured separately.
+**Note:** The codebase uses Resend for:
+- Family member invitation emails (`supabase/functions/send-family-member-invitation/index.ts`)
+- Beta signup confirmation emails (`supabase/functions/send-beta-signup-confirmation/index.ts`)
+
+Supabase Auth emails (signup confirmation, password reset) should be configured separately using SMTP settings in the dashboard.
 
 ### Option 3: Manual Verification (Development/Testing)
 
@@ -137,12 +159,23 @@ This uses Supabase's `auth.resend()` method to send a new confirmation email.
 
 Before going to production:
 
-- [ ] Configure SMTP or Resend API
+- [ ] Configure SMTP for Supabase Auth emails (Hostinger or other provider)
+- [ ] Configure `RESEND_API_KEY` secret for Edge Function emails
 - [ ] Test email delivery (send test confirmation email)
+- [ ] Test family member invitation email
 - [ ] Verify email templates are customized (optional)
 - [ ] Set up email monitoring/alerts
 - [ ] Document email provider credentials securely
 - [ ] Test the "Resend Confirmation Email" flow
+
+### Environment Variables for Edge Functions
+
+Set these in Supabase Dashboard → Project Settings → Edge Functions → Secrets:
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `RESEND_API_KEY` | Resend API key for sending emails | Yes (for invitations) |
+| `SITE_URL` | Your site URL (e.g., `https://kidscallhome.com`) | Recommended |
 
 ## Related Files
 

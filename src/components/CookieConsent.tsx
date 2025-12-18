@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { Cookie, Mail, Shield } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 const CONSENT_STORAGE_KEY = "kch_cookie_consent";
 const CONSENT_VERSION = "1.0"; // Increment when policy changes
@@ -17,13 +17,28 @@ const CONSENT_VERSION = "1.0"; // Increment when policy changes
 // Dev mode: Set to true to force show banner for testing
 const FORCE_SHOW_BANNER = import.meta.env.DEV && false; // Set to true to test
 
+// Routes where privacy consent should NOT be shown (child-facing pages)
+const EXCLUDED_ROUTES = ["/child"];
+
 export const CookieConsent = () => {
   const [showBanner, setShowBanner] = useState(FORCE_SHOW_BANNER);
   const [isChecking, setIsChecking] = useState(true);
   const [emailUpdatesOptIn, setEmailUpdatesOptIn] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Don't show cookie consent on child routes - children don't need to consent
+  const isChildRoute = EXCLUDED_ROUTES.some((route) =>
+    location.pathname.startsWith(route)
+  );
 
   useEffect(() => {
+    // Skip consent check entirely for child routes
+    if (isChildRoute) {
+      setShowBanner(false);
+      setIsChecking(false);
+      return;
+    }
     // Dev mode: Skip check if forcing banner to show
     if (FORCE_SHOW_BANNER) {
       setIsChecking(false);
@@ -263,8 +278,8 @@ export const CookieConsent = () => {
     setShowBanner(false);
   };
 
-  // Don't show banner while checking or if it shouldn't be shown
-  if (isChecking || !showBanner) {
+  // Don't show banner while checking, if it shouldn't be shown, or on child routes
+  if (isChecking || !showBanner || isChildRoute) {
     return null;
   }
 

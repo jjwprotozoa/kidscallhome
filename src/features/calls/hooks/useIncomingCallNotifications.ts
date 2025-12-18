@@ -1,6 +1,6 @@
 // src/features/calls/hooks/useIncomingCallNotifications.ts
 // Combined hook for handling incoming call notifications with WhatsApp Web-like behavior
-// - Shows push notification when tab is not in focus
+// - Shows push notification when tab is not in focus (with Answer/Decline buttons on Windows/Chrome/Edge)
 // - Plays ringtone/vibration when tab is active or after notification click
 // - Handles browser autoplay restrictions properly
 
@@ -9,6 +9,8 @@ import { useNavigate } from "react-router-dom";
 import { useTabVisibility } from "@/hooks/useTabVisibility";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { useAudioNotifications } from "./useAudioNotifications";
+import { setUserStartedCall } from "@/utils/userInteraction";
+import { endCall as endCallUtil } from "@/features/calls/utils/callEnding";
 
 interface IncomingCallData {
   callId: string;
@@ -20,27 +22,36 @@ interface IncomingCallData {
 interface UseIncomingCallNotificationsOptions {
   enabled?: boolean;
   volume?: number;
+  onAnswerFromNotification?: (callId: string, url?: string) => void;
+  onDeclineFromNotification?: (callId: string) => void;
 }
 
 export const useIncomingCallNotifications = (
   options: UseIncomingCallNotificationsOptions = {}
 ) => {
-  const { enabled = true, volume = 0.7 } = options;
+  const { enabled = true, volume = 0.7, onAnswerFromNotification, onDeclineFromNotification } = options;
   const navigate = useNavigate();
   const { isVisible, hasBeenVisible } = useTabVisibility();
-  const { sendNotification, closeNotification, onNotificationClick, hasPermission } =
-    usePushNotifications();
-  const { playRingtone, stopRingtone, startVibration } = useAudioNotifications({
+  const { 
+    sendNotification, 
+    closeNotification, 
+    onNotificationClick, 
+    onNotificationAnswer,
+    onNotificationDecline,
+    hasPermission 
+  } = usePushNotifications();
+  const { playRingtone, stopRingtone } = useAudioNotifications({
     enabled,
     volume,
   });
 
   const activeCallRef = useRef<string | null>(null);
   const notificationShownRef = useRef(false);
+  const activeCallDataRef = useRef<IncomingCallData | null>(null);
 
-  // Handle notification click - this is a user gesture, so we can play audio
+  // Handle notification body click - navigate to call and start ringing
   useEffect(() => {
-    onNotificationClick((data: { callId: string; url?: string }) => {
+    onNotificationClick((data) => {
       console.log("🔔 [CALL NOTIFICATIONS] Notification clicked, starting ringtone", data);
       
       // Close the notification
@@ -60,12 +71,91 @@ export const useIncomingCallNotifications = (
     });
   }, [onNotificationClick, closeNotification, navigate, playRingtone]);
 
+  // Handle Answer button click from notification
+  useEffect(() => {
+    onNotificationAnswer(async (data) => {
+      console.log("📞 [CALL NOTIFICATIONS] Answer clicked from notification", data);
+      
+      // Close notification and stop ringtone
+      closeNotification("incoming-call");
+      stopRingtone();
+      
+      // Enable audio for the call (user gesture from notification)
+      setUserStartedCall();
+      
+      // Call the external handler if provided
+      if (onAnswerFromNotification) {
+        onAnswerFromNotification(data.callId, data.url);
+      } else if (data.url) {
+        // Default: navigate to call URL
+        navigate(data.url);
+      }
+      
+      activeCallRef.current = null;
+      notificationShownRef.current = false;
+    });
+  }, [onNotificationAnswer, closeNotification, stopRingtone, navigate, onAnswerFromNotification]);
+
+  // Handle Decline button click from notification
+  useEffect(() => {
+    onNotificationDecline(async (data) => {
+      console.log("📞 [CALL NOTIFICATIONS] Decline clicked from notification", data);
+      
+      // Close notification and stop ringtone
+      closeNotification("incoming-call");
+      stopRingtone();
+      
+      // End the call in the database - determine who is declining
+      if (data.callId) {
+        try {
+          // Determine the correct 'by' value based on user session
+          let by: "child" | "parent" | "family_member" = "parent";
+          
+          // Check for child session first
+          const childSession = localStorage.getItem("childSession");
+          if (childSession) {
+            by = "child";
+          } else {
+            // Check for adult session and role
+            const { supabase } = await import("@/integrations/supabase/client");
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session?.user?.id) {
+              const { getUserRole } = await import("@/utils/userRole");
+              const userRole = await getUserRole(session.user.id);
+              if (userRole === "family_member") {
+                by = "family_member";
+              }
+            }
+          }
+          
+          await endCallUtil({
+            callId: data.callId,
+            by,
+            reason: "declined",
+          });
+        } catch (error) {
+          console.error("❌ [CALL NOTIFICATIONS] Failed to decline call:", error);
+        }
+      }
+      
+      // Call the external handler if provided
+      if (onDeclineFromNotification) {
+        onDeclineFromNotification(data.callId);
+      }
+      
+      activeCallRef.current = null;
+      activeCallDataRef.current = null;
+      notificationShownRef.current = false;
+    });
+  }, [onNotificationDecline, closeNotification, stopRingtone, onDeclineFromNotification]);
+
   // Handle incoming call
   const handleIncomingCall = useCallback(
     async (callData: IncomingCallData) => {
       if (!enabled) return;
 
       activeCallRef.current = callData.callId;
+      activeCallDataRef.current = callData;
       notificationShownRef.current = false;
 
       console.log("📞 [CALL NOTIFICATIONS] Handling incoming call:", {
@@ -89,7 +179,8 @@ export const useIncomingCallNotifications = (
           // Permission will be requested by sendNotification
         }
 
-        // Show push notification
+        // Show push notification with Answer/Decline action buttons
+        // Action buttons work on Windows (Chrome/Edge), Android Chrome, and desktop Chrome/Edge
         await sendNotification({
           title: "Incoming Call",
           body: callData.callerName
@@ -106,6 +197,11 @@ export const useIncomingCallNotifications = (
             callerId: callData.callerId,
             url: callData.url,
           },
+          // Action buttons (supported in Chrome/Edge on Windows, macOS, Linux, Android)
+          actions: [
+            { action: "answer", title: "✓ Answer" },
+            { action: "decline", title: "✕ Decline" },
+          ],
         });
 
         notificationShownRef.current = true;
@@ -143,6 +239,7 @@ export const useIncomingCallNotifications = (
         stopRingtone();
         await closeNotification("incoming-call");
         activeCallRef.current = null;
+        activeCallDataRef.current = null;
         notificationShownRef.current = false;
       }
     },

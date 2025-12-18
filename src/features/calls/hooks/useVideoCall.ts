@@ -91,6 +91,7 @@ export const useVideoCall = () => {
     peerConnectionRef,
     playRemoteVideo,
     isConnected, // Add connection state from useWebRTC
+    networkQuality, // Network quality info for adaptive streaming
   } = useWebRTC(callId, localVideoRef, remoteVideoRef, isChild);
 
   // Track if we've already attempted to play to avoid multiple calls
@@ -1475,5 +1476,6 @@ export const useVideoCall = () => {
     toggleMute,
     toggleVideo,
     endCall,
+    networkQuality, // Network quality info for adaptive streaming UI
   };
 };

@@ -17,22 +17,68 @@ export const useCallMedia = (
   const [isVideoOff, setIsVideoOff] = useState(false);
 
   const toggleMute = useCallback(() => {
+    console.log("🎤 [MEDIA CONTROLS] toggleMute called", {
+      hasLocalStream: !!localStream,
+      currentIsMuted: isMuted,
+      audioTracks: localStream?.getAudioTracks().length ?? 0,
+    });
+
     if (localStream) {
-      const newMutedState = !isMuted;
-      localStream.getAudioTracks().forEach((track) => {
-        track.enabled = !newMutedState;
+      const audioTracks = localStream.getAudioTracks();
+      if (audioTracks.length === 0) {
+        console.warn("⚠️ [MEDIA CONTROLS] No audio tracks to toggle!");
+        return;
+      }
+
+      // Use functional update to avoid stale closure issues
+      setIsMuted((prevMuted) => {
+        const newMutedState = !prevMuted;
+        audioTracks.forEach((track) => {
+          track.enabled = !newMutedState;
+          console.log("🎤 [MEDIA CONTROLS] Audio track toggled:", {
+            trackId: track.id,
+            enabled: track.enabled,
+            newMutedState,
+          });
+        });
+        return newMutedState;
       });
-      setIsMuted(newMutedState);
+    } else {
+      console.warn("⚠️ [MEDIA CONTROLS] Cannot toggle mute - no local stream!");
     }
   }, [localStream, isMuted]);
 
   const toggleVideo = useCallback(() => {
+    console.log("📹 [MEDIA CONTROLS] toggleVideo called", {
+      hasLocalStream: !!localStream,
+      currentIsVideoOff: isVideoOff,
+      videoTracks: localStream?.getVideoTracks().length ?? 0,
+    });
+
     if (localStream) {
-      const newVideoOffState = !isVideoOff;
-      localStream.getVideoTracks().forEach((track) => {
-        track.enabled = !newVideoOffState;
+      const videoTracks = localStream.getVideoTracks();
+      if (videoTracks.length === 0) {
+        console.warn("⚠️ [MEDIA CONTROLS] No video tracks to toggle!");
+        return;
+      }
+
+      // Use functional update to avoid stale closure issues
+      setIsVideoOff((prevVideoOff) => {
+        const newVideoOffState = !prevVideoOff;
+        videoTracks.forEach((track) => {
+          track.enabled = !newVideoOffState;
+          console.log("📹 [MEDIA CONTROLS] Video track toggled:", {
+            trackId: track.id,
+            enabled: track.enabled,
+            newVideoOffState,
+          });
+        });
+        return newVideoOffState;
       });
-      setIsVideoOff(newVideoOffState);
+    } else {
+      console.warn(
+        "⚠️ [MEDIA CONTROLS] Cannot toggle video - no local stream!"
+      );
     }
   }, [localStream, isVideoOff]);
 

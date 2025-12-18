@@ -167,14 +167,20 @@ export const PricingSection = ({ isParent }: PricingSectionProps) => {
                     <strong className="text-primary">1 week free</strong> on
                     your subscriptions.
                   </p>
-                  {isParent && (
+                  {isParent ? (
                     <Button
-                      variant="link"
-                      className="p-0 h-auto mt-2 text-purple-600 hover:text-purple-700"
+                      variant="default"
+                      size="sm"
+                      className="mt-3 bg-purple-600 hover:bg-purple-700"
                       onClick={() => navigate("/parent/dashboard?tab=referrals")}
                     >
-                      Get your referral link →
+                      <Gift className="h-4 w-4 mr-2" />
+                      Get Your Referral Link & Share
                     </Button>
+                  ) : (
+                    <p className="text-sm text-purple-600 dark:text-purple-400 mt-2">
+                      Parents can access their referral link from the Dashboard → Referrals tab.
+                    </p>
                   )}
                 </div>
               </div>

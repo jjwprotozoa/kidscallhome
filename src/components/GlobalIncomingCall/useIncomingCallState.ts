@@ -66,10 +66,24 @@ export const useIncomingCallState = () => {
         if (call.id === lastCheckedCallId) return;
 
         // CRITICAL: Don't show incoming call notification if user is already on the call page
-        // Check for both parent and family member call paths
+        // Check for all call screen paths (child, parent, family member)
         if (
           location.pathname.startsWith("/call/") ||
+          location.pathname.startsWith("/child/call/") ||
+          location.pathname.startsWith("/parent/call/") ||
           location.pathname.startsWith("/family-member/call/")
+        ) {
+          return;
+        }
+
+        // CRITICAL: Don't process for children on dashboard pages
+        // ChildDashboard has its own incoming call handling via useDashboardData
+        // This prevents duplicate notifications and UI
+        if (
+          isChild &&
+          (location.pathname === "/child/dashboard" ||
+           location.pathname === "/child" ||
+           location.pathname === "/child/parents")
         ) {
           return;
         }
@@ -234,9 +248,11 @@ export const useIncomingCallState = () => {
             });
 
             // Use appropriate route based on user type
+            // CRITICAL: Parents must use /parent/call/ route which uses useCallEngine with role="parent"
+            // Using /call/ route would incorrectly detect them as child if childSession exists in localStorage
             const url = isFamilyMember
               ? `/family-member/call/${call.child_id}?callId=${call.id}`
-              : `/call/${call.child_id}?callId=${call.id}`;
+              : `/parent/call/${call.child_id}?callId=${call.id}`;
 
             console.warn("✅ [INCOMING CALL STATE] Routing incoming call:", {
               callId: call.id,
@@ -267,10 +283,23 @@ export const useIncomingCallState = () => {
 
       const checkExistingCalls = async () => {
         // CRITICAL: Don't check for incoming calls if user is already on the call page
-        // Check for both parent and family member call paths
+        // Check for all call screen paths (child, parent, family member)
         if (
           location.pathname.startsWith("/call/") ||
+          location.pathname.startsWith("/child/call/") ||
+          location.pathname.startsWith("/parent/call/") ||
           location.pathname.startsWith("/family-member/call/")
+        ) {
+          return;
+        }
+
+        // CRITICAL: Don't process for children on dashboard pages
+        // ChildDashboard has its own incoming call handling via useDashboardData
+        if (
+          isChild &&
+          (location.pathname === "/child/dashboard" ||
+           location.pathname === "/child" ||
+           location.pathname === "/child/parents")
         ) {
           return;
         }

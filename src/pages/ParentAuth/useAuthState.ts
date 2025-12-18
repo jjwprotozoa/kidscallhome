@@ -4,12 +4,15 @@
 import { useState, useEffect } from "react";
 import { getCookie } from "@/utils/cookies";
 import { AuthState } from "./types";
+import { FamilyRole } from "./SignupForm";
 
 export const useAuthState = () => {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [name, setName] = useState("");
+  const [familyRole, setFamilyRole] = useState<FamilyRole>("parent");
   const [staySignedIn, setStaySignedIn] = useState(true);
   const [loading, setLoading] = useState(false);
   const [parentName, setParentName] = useState<string | null>(null);
@@ -37,8 +40,12 @@ export const useAuthState = () => {
     setEmail,
     password,
     setPassword,
+    confirmPassword,
+    setConfirmPassword,
     name,
     setName,
+    familyRole,
+    setFamilyRole,
     staySignedIn,
     setStaySignedIn,
     loading,
@@ -53,6 +60,7 @@ export const useAuthState = () => {
     setUserId,
   };
 };
+
 
 
 

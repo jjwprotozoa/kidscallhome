@@ -4,6 +4,394 @@
 
 ## Latest Changes (2025-12-18) - Referral System & Pricing Update
 
+### -9. Global Share Button & Social Sharing Modal
+
+- **Purpose**: Add an easy-to-find share button throughout the app to encourage users to share Kids Call Home with friends and family
+- **Features Implemented**:
+  - **Global Share Button in Navigation Bar**:
+    - Added `Share2` icon button to the right side of the top navigation
+    - Visible for all user types: parents, children, and family members
+    - Subtle pulse animation (`animate-pulse-subtle`) draws attention without being distracting
+    - Primary color styling makes it stand out
+  - **Share Modal with Social Platform Buttons** (`ShareModal.tsx`):
+    - Beautiful dialog with "Share with Friends & Family" header
+    - **Share Link** button - uses native Web Share API on mobile, copies link on desktop
+    - **Copy Message** button - copies a formatted marketing message with app description
+    - **Platform-specific sharing buttons**:
+      - 🟢 **WhatsApp** - Green themed button with branded message including emojis and app benefits
+      - 🔵 **Facebook** - Blue themed button with family-focused quote
+      - ⬛ **X/Twitter** - Dark themed button with concise message and hashtags
+      - 🟠 **Email** - Orange themed button with comprehensive formatted email body
+    - Quick "Copy link" option at the bottom
+    - Purple referral hint directing parents to Dashboard → Referrals for personalized referral links
+  - **Pulse Animation** (`index.css`):
+    - Created `animate-pulse-subtle` CSS animation class
+    - Gentle scale (1.05x) and opacity (0.7) pulse every 2 seconds
+    - Smooth cubic-bezier easing for pleasant effect
+  - **Enhanced Referral Link in Info Page** (`PricingSection.tsx`):
+    - Changed from subtle text link to prominent purple button
+    - Button text: "Get Your Referral Link & Share" with Gift icon
+    - Non-parents see helpful message about where to find referral links
+- **Technical Implementation**:
+  - Share modal uses `navigator.share()` Web Share API with fallback to clipboard
+  - Platform share messages optimized for each network's character limits and formatting
+  - Modal properly handles cancellation without showing errors
+  - Share button appears in all three navigation sections (parent, child, family_member)
+- **Files Created**:
+  - `src/components/ShareModal.tsx` - Social sharing modal component
+- **Files Modified**:
+  - `src/components/Navigation.tsx` - Added share button and modal to all user types
+  - `src/index.css` - Added `animate-pulse-subtle` animation
+  - `src/components/info/PricingSection.tsx` - Enhanced referral link visibility
+  - `src/pages/Info.tsx` - Added page-specific share button in header
+- **Impact**:
+  - **Increased Visibility**: Share button prominently visible throughout the app
+  - **Easy Sharing**: One-tap access to share via any platform
+  - **Better Marketing**: Branded messages with app benefits for each platform
+  - **Mobile Optimized**: Native share sheet on mobile devices
+  - **User Engagement**: Pulse animation encourages users to share
+  - **Referral Awareness**: Clear path to referral rewards for parents
+
+### -8. Windows Incoming Call Notifications Fix
+
+- **Purpose**: Fix Windows push notifications for incoming calls not working in PWA
+- **Issue**: Windows users were not receiving incoming call notifications when the browser tab was in the background
+- **Root Cause**: The vite-plugin-pwa was using `generateSW` mode which creates a Workbox service worker WITHOUT the custom notification handlers needed for incoming calls. The custom `public/sw.js` file with notification handlers was not being used.
+- **Solution**: Added `importScripts` configuration to inject custom notification handlers into the Workbox-generated service worker
+- **Changes**:
+  - **`vite.config.ts`**:
+    - Added `importScripts: ["/notification-handlers.js"]` to workbox config
+    - This imports custom notification handlers into the generated service worker
+  - **Created `public/notification-handlers.js`**:
+    - `notificationclick` event handler for Answer/Decline button clicks and notification body clicks
+    - `push` event handler for server-sent push notifications
+    - `message` event handler for SKIP_WAITING messages from the app
+    - Handles focusing existing window, navigating to call screen, and sending messages back to the app
+  - **`src/hooks/usePushNotifications.ts`**:
+    - Simplified service worker registration to use `navigator.serviceWorker.ready` for both dev and production
+    - Added cleanup for message event listener on unmount
+    - Removed separate dev/prod service worker registration paths
+- **How Notifications Work for All Roles**:
+  - **Children** (receiving calls from parents/family members):
+    - `useDashboardData.ts` → `useIncomingCallNotifications` ✅
+    - `useIncomingCallState.ts` → `useIncomingCallNotifications` (non-dashboard pages) ✅
+  - **Parents** (receiving calls from children):
+    - `useParentIncomingCallSubscription.ts` → `useIncomingCallNotifications` ✅
+    - `useIncomingCallState.ts` → `useIncomingCallNotifications` (backup) ✅
+  - **Family Members** (receiving calls from children):
+    - `useIncomingCallState.ts` → `useIncomingCallNotifications` ✅
+    - Uses `recipient_type=eq.family_member` filter
+- **Files Created**:
+  - `public/notification-handlers.js` - Custom notification event handlers
+- **Files Modified**:
+  - `vite.config.ts` - Added importScripts for notification handlers
+  - `src/hooks/usePushNotifications.ts` - Simplified service worker registration
+- **Impact**:
+  - **Windows Notifications Work**: Push notifications now appear on Windows when browser tab is in background
+  - **Action Buttons Functional**: Answer/Decline buttons on notifications properly handle clicks
+  - **All Roles Supported**: Parents, children, and family members all receive incoming call notifications
+  - **Service Worker Unified**: Same notification handlers work in both development and production
+- **Testing Notes**:
+  - Notifications do NOT work in incognito mode (browser restriction)
+  - Ensure Windows Focus Assist (Do Not Disturb) is OFF
+  - May need to clear old service worker cache (DevTools → Application → Service Workers → Unregister)
+
+### -7. Video Call Network Quality & Diagnostic Panel Fixes
+
+- **Purpose**: Fix network quality indicator not showing on parent video call screen and diagnostic help icon not responding to clicks
+- **Issues Fixed**:
+  - **Network Quality Missing on Parent**: Parent video call screen showed "Checking..." instead of actual network quality (e.g., "Fair 4G")
+  - **Help Icon Not Working**: The "?" diagnostic icon was visible but clicking did nothing on both parent and child screens
+  - **Diagnostic Panels Hidden in Production**: Diagnostic panels were only available in development mode
+- **Root Causes**:
+  1. **Data Flow Gap**: `networkQuality` was calculated in `useNetworkQuality` → `useWebRTC`, but `useVideoCall` hook didn't destructure or return it, so `VideoCall.tsx` couldn't pass it to `VideoCallUI`
+  2. **Invalid CSS Class**: `z-35` is not a valid Tailwind class, causing the diagnostic container to have incorrect z-index and not respond to clicks
+  3. **Dev-Only Condition**: Diagnostic panels were wrapped in `process.env.NODE_ENV === "development"` check
+- **Changes**:
+  - **`useVideoCall.ts`**:
+    - Added `networkQuality` to destructured values from `useWebRTC`
+    - Added `networkQuality` to the hook's return statement
+  - **`VideoCall.tsx`**:
+    - Added `networkQuality` to destructured values from `useVideoCall()`
+    - Added `networkQuality` prop to `<VideoCallUI />`
+  - **`VideoCallUI.tsx`**:
+    - Changed DiagnosticContainer z-index from `z-35` to `z-50` (valid Tailwind class)
+    - Removed `process.env.NODE_ENV === "development"` condition from DiagnosticContainer
+    - Changed `showDetails` prop from dev-only to always `true`
+    - Added fallback indicator showing "Checking..." while network quality initializes
+- **Files Modified**:
+  - `src/features/calls/hooks/useVideoCall.ts` - Pass through networkQuality
+  - `src/pages/VideoCall.tsx` - Pass networkQuality to VideoCallUI
+  - `src/features/calls/components/VideoCallUI.tsx` - Fixed z-index, enabled diagnostic panels for production
+- **Impact**:
+  - **Network Quality Visible**: Parents now see actual network quality (Excellent/Good/Fair/Poor/Critical) with connection type (WiFi/5G/4G/3G/2G)
+  - **Diagnostic Panels Work**: Clicking "?" icon now shows Video State, Audio State, and Track Info diagnostic panels
+  - **Production Debugging**: Users can access diagnostic info when troubleshooting call issues (not just developers)
+  - **Consistent Experience**: Both parent and child video call screens now show identical network quality indicators
+
+### -6. Parent Signup Form UX Improvements & Password Security
+
+- **Purpose**: Improve the parent/family member signup experience with clearer role selection and enhanced password security
+- **Issues Fixed**:
+  - **Confusing Signup Form**: Family members landing on signup page saw "Mom / Dad / Guardian" placeholder which didn't apply to them
+  - **No Relationship Selection**: No way to indicate if signing up as grandparent, aunt, uncle, etc.
+  - **Hidden Password**: No way to see password while typing, leading to typos
+  - **No Password Confirmation**: Single password field meant typos went undetected
+  - **Missing Password Requirements**: Users didn't know Supabase password requirements upfront
+- **Changes**:
+  - **Family Role Selector** (`SignupForm.tsx`):
+    - Added "I am a..." dropdown at top of signup form
+    - Options: Parent/Guardian (default), Grandparent, Aunt, Uncle, Cousin, Other Family Member
+    - When Parent/Guardian selected: Shows full registration form
+    - When other role selected: Shows guidance message explaining they need an invitation from the parent
+    - Dynamic placeholder text based on role (e.g., "e.g., Grandma Sue, Papa Joe" for Grandparent)
+  - **Password Visibility Toggle** (`PasswordInputWithBreachCheck.tsx`):
+    - Added eye/eye-off icon button to show/hide password
+    - Works on both password and confirm password fields
+    - Accessible with screen reader support
+  - **Password Confirmation Field**:
+    - Added "Confirm Password" field for signup forms
+    - Real-time match/mismatch indicators (green checkmark or red warning)
+    - Visual feedback: "Passwords match!" or "Passwords don't match"
+    - Form validation prevents submission if passwords don't match
+  - **Password Strength Indicator**:
+    - Visual strength bar (5 segments): weak → fair → good → strong
+    - Color-coded: red (weak), orange (fair), yellow (good), green (strong)
+    - Requirements checklist with ✓/✗ icons:
+      - At least 8 characters
+      - Lowercase letter (a-z)
+      - Uppercase letter (A-Z)
+      - Number (0-9)
+      - Symbol (!@#$%...)
+  - **Password Requirements Hint**:
+    - Shows requirements before user starts typing
+    - "Password Requirements: Must include lowercase, uppercase, digits, and symbols"
+  - **Header Text Update** (`ParentAuth.tsx`):
+    - Changed "Create your parent account" to "Create your account" (more inclusive)
+    - Changed "Welcome back, parent!" to "Welcome back!" (more inclusive)
+- **Technical Implementation**:
+  - Added `FamilyRole` type: `"parent" | "grandparent" | "aunt" | "uncle" | "cousin" | "other"`
+  - Added `familyRole` and `confirmPassword` state to `useAuthState` hook
+  - Added `checkPasswordStrength()` function for real-time validation
+  - Created `PasswordStrengthIndicator` component with visual feedback
+  - Password confirmation validation in `handleAuth` function
+- **Files Modified**:
+  - `src/pages/ParentAuth/SignupForm.tsx` - Added role selector, updated props
+  - `src/pages/ParentAuth/useAuthState.ts` - Added familyRole and confirmPassword state
+  - `src/pages/ParentAuth/ParentAuth.tsx` - Added validation, updated header text
+  - `src/components/auth/PasswordInputWithBreachCheck.tsx` - Added show/hide toggle, confirmation field, strength indicator
+- **Impact**:
+  - **Clearer UX**: Users immediately identify their role and get appropriate guidance
+  - **Reduced Signup Errors**: Password visibility and confirmation prevent typos
+  - **Better Security**: Password strength indicator encourages strong passwords
+  - **Supabase Compliance**: Requirements match Supabase password policy
+  - **Inclusive Language**: Generic text works for all family member types
+
+### -5.5. Email Configuration Documentation Update
+
+- **Purpose**: Document email service configuration for family member invitations and auth emails
+- **Email Architecture**:
+  | Email Type | Service | Configuration |
+  |------------|---------|---------------|
+  | Auth emails (signup confirmation, password reset) | Hostinger SMTP | Supabase Dashboard → Auth → SMTP Settings |
+  | Family member invitations | Resend API | `RESEND_API_KEY` secret in Edge Functions |
+  | Beta signup confirmations | Resend API | `RESEND_API_KEY` secret in Edge Functions |
+- **Changes**:
+  - **Edge Function Update** (`send-family-member-invitation/index.ts`):
+    - Clarified that Resend API is primary for edge function emails
+    - Added logging for SMTP config detection (directs users to Supabase Dashboard)
+    - Improved error messages with configuration hints
+  - **Documentation Update** (`docs/EMAIL_VERIFICATION_SETUP.md`):
+    - Added Hostinger SMTP configuration section for Supabase Auth
+    - Clarified Resend API setup for transactional emails
+    - Added environment variables table for Edge Functions
+    - Updated production checklist
+- **Hostinger SMTP Settings** (for Supabase Dashboard):
+  - SMTP Host: `smtp.hostinger.com` or `smtp.titan.email`
+  - SMTP Port: `465` (SSL) or `587` (TLS)
+  - SMTP User: Your Hostinger email address
+  - SMTP Password: Your email password
+- **Files Modified**:
+  - `supabase/functions/send-family-member-invitation/index.ts` - Clarified email service priority
+  - `docs/EMAIL_VERIFICATION_SETUP.md` - Added Hostinger SMTP and Resend documentation
+- **Impact**:
+  - **Clear Documentation**: Users know which service to configure for each email type
+  - **Proper Architecture**: Auth emails via SMTP, transactional emails via Resend API
+  - **Production Ready**: Both email services documented with setup instructions
+
+### -5. Child Login Keypad UX Improvements - First-Time User Onboarding
+
+- **Purpose**: Make the child login keypad more obvious and reduce friction for first-time users who may not understand how to enter their family code
+- **Issues Fixed**:
+  - **Confusing Keypad**: First-time users didn't know to tap letters or swipe for more letters
+  - **No Help Available**: No way for confused users to get instructions
+  - **Privacy Banner on Child Routes**: Cookie consent banner was showing on child-facing pages where it shouldn't appear
+  - **Missing Bounce Animation**: Smiley icon bounce animation was only showing for first-time users, not always
+- **Changes**:
+  - **New Onboarding Animations** (`tailwind.config.ts`):
+    - `animate-gentle-pulse` - Pulsing glow effect to draw attention to first button
+    - `animate-swipe-hint-left/right` - Animated arrows showing swipe navigation
+    - `animate-tap-hint` - Pulsing hand gesture animation
+    - `animate-float-up` - Floating tooltip animation
+    - `animate-bounce-gentle` - Subtle bounce for smiley icon (always on)
+  - **New Onboarding Hints Component** (`KeypadOnboardingHints.tsx`):
+    - Swipe direction indicators on keypad edges
+    - Floating "Tap a letter!" hint above keypad
+    - `useFirstTimeUser` hook tracks if user has seen hints via localStorage
+    - Auto-dismisses after 8 seconds or on first interaction
+  - **Enhanced FamilyCodeKeypad** (`FamilyCodeKeypad.tsx`):
+    - **Help Button (?)**: Top-right corner button opens step-by-step instructions tooltip
+    - **Pulsing First Button**: Letter "A" pulses with blue glow for first-time users
+    - **Enhanced Instructions**: Shows "👆 Tap the letters below to spell your code!" with swipe hints
+    - **Animated Navigation Arrows**: Left/right arrows animate to show they're interactive
+    - **Block Labels**: Shows A-I, J-R, S-Z, 0-9 labels clearly beneath navigation dots
+    - **Always-Bouncing Smiley**: Icon now always bounces gently, not just for first-time users
+    - **Progressive Disclosure**: Hints disappear after first interaction, localStorage remembers returning users
+  - **Cookie Consent Exclusion** (`CookieConsent.tsx`):
+    - Added route detection using `useLocation`
+    - Created exclusion list for `/child` routes (matches `/child/login`, `/child/dashboard`, etc.)
+    - Privacy consent banner never appears on child-facing pages
+- **Technical Implementation**:
+  - First-time user state tracked via `localStorage.getItem('kidscallhome_seen_keypad_hints')`
+  - Help tooltip uses absolute positioning with z-50 for proper layering
+  - Animations defined in Tailwind config for consistent usage across components
+  - Route exclusion uses `location.pathname.startsWith('/child')` check
+- **Files Created**:
+  - `src/components/childLogin/KeypadOnboardingHints.tsx` - Animated hints component with useFirstTimeUser hook
+- **Files Modified**:
+  - `tailwind.config.ts` - Added 6 new keyframe animations and animation classes
+  - `src/components/childLogin/FamilyCodeKeypad.tsx` - Complete UX overhaul with onboarding hints
+  - `src/components/CookieConsent.tsx` - Added child route exclusion logic
+- **Impact**:
+  - **Reduced Friction**: First-time users immediately understand how to use the keypad
+  - **Self-Service Help**: Help button provides instructions without parent assistance
+  - **Progressive Disclosure**: Hints disappear after first interaction, don't annoy returning users
+  - **Cleaner Child Experience**: No privacy consent banners interrupting child login flow
+  - **Better Visual Feedback**: Pulsing button and animated arrows guide user attention
+  - **Accessibility**: ARIA labels on all interactive elements
+
+### -4. Info Page Navigation Improvements - Mobile-First Redesign
+
+- **Purpose**: Improve the Info page navigation flow and mobile experience by removing redundant elements and adding a sleeker section navigation
+- **Issues Fixed**:
+  - **Redundant Back Button**: The "Back to App" button in the header duplicated functionality already provided by the main Navigation component
+  - **Cluttered Mobile Navigation**: The sticky card with all section buttons took up too much space on mobile screens
+  - **Poor Mobile UX**: Section navigation wasn't optimized for touch devices
+- **Changes**:
+  - **InfoNavigation.tsx** - Complete redesign:
+    - **Mobile (< md)**: Replaced button strip with a **sleek dropdown selector** (`Select` component) that sticks below the main navigation
+    - **Desktop/Tablet**: Kept horizontal button strip, properly positioned below fixed nav at `top-[80px]`
+    - **Floating Navigation**: Simplified to bottom sheet menu (mobile) + back-to-top FAB
+    - Removed redundant floating Home button (main Navigation handles this)
+    - Bottom sheet slides up from bottom with `rounded-t-2xl` styling
+  - **Info.tsx** - Mobile-first improvements:
+    - **Removed redundant "Back to App" button** from header - Navigation component already provides this
+    - Made header **more compact on mobile** with responsive sizing (`text-xl md:text-3xl`, `w-14 md:w-16`)
+    - Improved **scroll-to-section offset** calculation (140px for fixed headers)
+    - Better spacing with `space-y-6 md:space-y-8` for content sections
+    - Responsive padding adjustments (`pb-8 md:pb-12`)
+    - Added `line-clamp-2` for subtitle text on mobile
+- **Technical Implementation**:
+  - Mobile dropdown uses shadcn/ui `Select` component with "Jump to section..." placeholder
+  - Floating nav shows after 200px scroll (reduced from 300px)
+  - Bottom sheet uses `side="bottom"` with `max-h-[70vh]` for better mobile UX
+  - Proper z-index layering: mobile dropdown at `z-40`, floating nav at `z-50`
+- **Files Modified**:
+  - `src/components/info/InfoNavigation.tsx` - Complete navigation redesign
+  - `src/pages/Info.tsx` - Mobile-first layout improvements
+- **Impact**:
+  - **Cleaner Mobile UX**: Single dropdown for section navigation instead of cluttered button strip
+  - **No Duplicate Navigation**: Removed redundant back button, relying on main Navigation
+  - **Better Touch Targets**: Bottom sheet with large touch-friendly buttons
+  - **Responsive Design**: Proper breakpoints for mobile, tablet, and desktop
+  - **Faster Navigation**: Dropdown provides quick access to any section
+
+### -3. Family Member Invitation Access & Profile Data Fix
+
+- **Purpose**: Fix two issues preventing family members from accepting invitations and having proper profile data
+- **Issues Fixed**:
+  1. **"Invalid invitation" error**: Family members clicking invitation links received "Invalid invitation" error even with valid tokens
+  2. **Missing relationship_type and name in adult_profiles**: When family members registered, their `relationship_type` (grandparent, aunt, uncle, cousin, other) and `name` weren't being properly synced to `adult_profiles`
+- **Root Causes**:
+  1. **RLS Policy Issue**: Anonymous users (unauthenticated visitors clicking invitation links) couldn't read from `family_members` table due to missing/conflicting RLS policies
+  2. **ON CONFLICT Bug**: The database functions `handle_new_family_member()` and `link_family_member_to_auth_user()` had ON CONFLICT clauses that only updated `updated_at`, not the actual `relationship_type`, `name`, or `email` fields
+- **Solutions**:
+  - **Migration 1** (`20251218210000_fix_adult_profiles_relationship_and_name.sql`):
+    - Updated `handle_new_family_member()` trigger to properly update `relationship_type`, `name`, and `email` on conflict
+    - Updated `link_family_member_to_auth_user()` RPC to properly update these fields on conflict
+    - Added backfill query to sync existing `adult_profiles` records with data from `family_members`
+    - Verification queries to check for missing data
+  - **Migration 2** (`20251218220000_fix_anonymous_invitation_access.sql`):
+    - Dropped conflicting/consolidated RLS policies on `family_members`
+    - Created clear `"Anonymous can verify invitation tokens"` policy for `anon` role
+    - Created separate `"Family members can view own profile"` policy for `authenticated` role
+    - Granted SELECT permission to `anon` role on `family_members` table
+    - Added verification to confirm policies exist
+- **Files Created**:
+  - `supabase/migrations/20251218210000_fix_adult_profiles_relationship_and_name.sql` - Fix relationship_type/name syncing
+  - `supabase/migrations/20251218220000_fix_anonymous_invitation_access.sql` - Fix anonymous invitation access
+- **Impact**:
+  - **Invitation Links Work**: Family members can now click invitation links and see their invitation details
+  - **Proper Profile Data**: `adult_profiles.relationship_type` now shows correct relationship (Grandparent, Aunt, etc.)
+  - **Name Synced**: `adult_profiles.name` properly populated from invitation
+  - **Child UI Improved**: Children see correct relationship badges (e.g., "Grandparent") instead of generic "Family"
+  - **Backfill Applied**: Existing family members with missing data are automatically fixed
+
+### -2. Parent Signup Fix - Family & Adult Profile Creation
+
+- **Purpose**: Fix "Parent profile not found" error during family setup after new parent signup
+- **Issue**: When a new parent signed up, only the `parents` table record was created. The `families` and `adult_profiles` records were NOT created, causing family setup to fail.
+- **Root Cause**: The `handle_new_parent()` trigger only inserted into `parents` table, not `families` or `adult_profiles`
+- **Solution** (`20251218200000_fix_handle_new_parent_create_family_and_profile.sql`):
+  - Updated `handle_new_parent()` trigger to create all three records:
+    1. `parents` record (existing behavior)
+    2. `families` record with `id = user_id`
+    3. `adult_profiles` record with `role = 'parent'` and `family_id = user_id`
+  - Added backfill queries for existing parents missing families or adult_profiles
+  - Added RLS policy for parents to update their own family
+- **Files Created**:
+  - `supabase/migrations/20251218200000_fix_handle_new_parent_create_family_and_profile.sql`
+- **Impact**:
+  - **New Parents Work**: Parent signup now properly creates all required records
+  - **Family Setup Works**: FamilySetupSelection can query adult_profiles and update families
+  - **Existing Parents Fixed**: Backfill ensures existing parents have proper records
+
+### -1.5. Family Setup Selection - Mobile UI & Error Handling Improvements
+
+- **Purpose**: Improve the household type selection screen for mobile devices and add better error handling
+- **Issues Fixed**:
+  1. **"Failed to save family setup" error**: Users saw generic browser alert on error
+  2. **Poor Mobile Layout**: Dialog too wide (`max-w-3xl`), text too large, buttons cramped on small screens
+  3. **Visual Clarity**: Choices not clearly distinguished, no visual checkmark indicator
+  4. **App Theme Inconsistency**: Component used blue gradient background instead of app's design system
+- **Changes**:
+  - **FamilySetupSelection.tsx** - Complete UI redesign:
+    - **Mobile-Optimized Layout**: Compact header, touch-friendly tap targets (44px+ hit areas)
+    - **Visual Selection Indicators**: Circular checkmarks with primary color when option selected
+    - **App Theme Consistency**: Uses design system variables (`primary`, `secondary`, `border`, `bg-card`)
+    - **Responsive Sizing**: `sm:` breakpoints for different screen sizes (text, padding, icons)
+    - **Scrollable Content**: `max-h-[85vh]` with overflow for smaller devices
+    - **Improved Error Handling**: Uses toast notifications instead of browser `alert()`
+    - **Fallback Query**: If `adult_profiles` query fails, tries using `userId` directly as `family_id`
+  - **ParentAuth.tsx** - Dialog sizing fix:
+    - Changed dialog from `max-w-3xl` to `max-w-lg sm:max-w-xl` for mobile screens
+    - Added responsive padding `p-4 sm:p-6`
+    - Set width to `w-[95vw]` for proper mobile viewport fit
+- **Technical Implementation**:
+  - Icon containers with responsive sizing (`w-10 h-10 sm:w-12 sm:h-12`)
+  - Selection state indicated by border color, background tint, and checkmark icon
+  - Uses `useToast` hook for consistent error messaging
+  - Fallback query pattern: `eq("id", userId)` if `adult_profiles` query returns null
+- **Files Modified**:
+  - `src/features/onboarding/components/FamilySetupSelection.tsx` - Complete UI redesign
+  - `src/pages/ParentAuth/ParentAuth.tsx` - Mobile-friendly dialog sizing
+- **Impact**:
+  - **Better Mobile UX**: Screen fits properly on all mobile devices (tested down to 320px width)
+  - **Clearer Selection**: Visual checkmarks and color changes make selected option obvious
+  - **Theme Consistency**: Matches app's design system instead of standalone blue gradient
+  - **Resilient Error Handling**: Fallback query prevents failures when records exist but query path differs
+  - **Better Error Messages**: Toast notifications instead of disruptive browser alerts
+
 ### -1. Devices Page RLS Policy Fix
 
 - **Purpose**: Fix devices page at `/parent/devices` not displaying any device data despite devices existing in database

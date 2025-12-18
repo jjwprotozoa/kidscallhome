@@ -107,187 +107,33 @@ export default defineConfig(({ mode }) => {
       // Console removal plugin disabled - regex-based removal is too aggressive and breaks builds
       // TODO: Implement proper AST-based console removal if needed
       // mode === "production" && removeConsolePlugin()
-      // PWA plugin with aggressive vendor caching for weak network conditions (LTE/2G)
-      // Caching strategy:
-      // - CacheFirst for vendor chunks (rarely change, can be cached 30 days)
-      // - NetworkFirst for main app bundle (frequently updated)
-      // - StaleWhileRevalidate for other chunks (balance freshness and speed)
+      // PWA plugin - use generateSW with importScripts to include custom notification handlers
+      // This imports notification-handlers.js which handles incoming call notifications on Windows
       VitePWA({
         registerType: "autoUpdate",
         workbox: {
           // Cache version for cache busting on deployment
           cacheId: "kidscallhome-v1",
-          // Maximum cache age: 30 days for vendors, 7 days for app code
           maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5MB
-          // Exclude source files and API endpoints from precaching
+          // In development, disable precaching to reduce console noise
+          globPatterns:
+            mode === "development"
+              ? [] // Don't precache anything in development
+              : ["**/*.{js,css,html,ico,png,svg,woff,woff2}"],
           globIgnores: [
             "**/node_modules/**/*",
             "**/src/**/*",
             "**/@vite/**/*",
             "**/@react-refresh/**/*",
             "**/*.map",
-            "**/*.html", // Exclude HTML files from precaching - they're served directly and cached at runtime
-          ],
-          // Exclude source files and API endpoints from navigation fallback
-          navigateFallbackDenylist: [
-            // Exclude source files
-            /^\/src\//,
-            // Exclude Vite dev server files
-            /^\/@vite\//,
-            /^\/@react-refresh\//,
-            /^\/node_modules\//,
-            // Exclude API endpoints
-            /^https:\/\/.*\.supabase\.co\//,
-            /^https:\/\/api\./,
-            /^https:\/\/fonts\./,
-            /^https:\/\/fonts\.gstatic\.com\//,
-          ],
-          // Suppress workbox console logs in development by filtering out noisy messages
-          // The navigateFallbackDenylist above prevents workbox from trying to handle
-          // source files and API endpoints, which reduces the number of log messages
-          // In development, disable precaching to reduce console noise
-          // In production, precache critical app shell assets
-          // In development, disable precaching to reduce console noise
-          globPatterns:
-            mode === "development"
-              ? [] // Don't precache anything in development
-              : [
-                  "**/*.{js,css,html,ico,png,svg,woff,woff2}", // Precache all static assets
-                ],
-          // Runtime caching strategies
-          runtimeCaching: [
-            // Cache Google Fonts stylesheets (font metadata)
-            {
-              urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
-              handler: "CacheFirst",
-              options: {
-                cacheName: "google-fonts-stylesheets",
-                expiration: {
-                  maxEntries: 10,
-                  maxAgeSeconds: 60 * 60 * 24 * 365, // 1 year
-                },
-                cacheableResponse: {
-                  statuses: [0, 200],
-                },
-              },
-            },
-            // Cache Google Fonts webfont files (actual font binaries)
-            {
-              urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/i,
-              handler: "CacheFirst",
-              options: {
-                cacheName: "google-fonts-webfonts",
-                expiration: {
-                  maxEntries: 30,
-                  maxAgeSeconds: 60 * 60 * 24 * 365, // 1 year
-                },
-                cacheableResponse: {
-                  statuses: [0, 200],
-                },
-              },
-            },
-            // CacheFirst strategy for vendor chunks - these rarely change
-            // Cache for 30 days to maximize repeat visit performance
-            {
-              urlPattern:
-                /\/assets\/(react-vendor|supabase-vendor|radix-vendor|query-vendor|capacitor-vendor)-.*\.js/,
-              handler: "CacheFirst",
-              options: {
-                cacheName: "vendor-cache",
-                expiration: {
-                  maxEntries: 10,
-                  maxAgeSeconds: 30 * 24 * 60 * 60, // 30 days
-                },
-                cacheableResponse: {
-                  statuses: [0, 200],
-                },
-              },
-            },
-            // NetworkFirst strategy for main app bundle - prioritize freshness
-            // Falls back to cache if network fails (offline support)
-            {
-              urlPattern: /\/assets\/index-.*\.js/,
-              handler: "NetworkFirst",
-              options: {
-                cacheName: "app-cache",
-                expiration: {
-                  maxEntries: 20,
-                  maxAgeSeconds: 7 * 24 * 60 * 60, // 7 days
-                },
-                cacheableResponse: {
-                  statuses: [0, 200],
-                },
-                networkTimeoutSeconds: 3, // Fallback to cache after 3s on slow networks
-              },
-            },
-            // StaleWhileRevalidate for other chunks - balance freshness and speed
-            // Serves from cache immediately, updates in background
-            {
-              urlPattern: /\/assets\/.*\.js/,
-              handler: "StaleWhileRevalidate",
-              options: {
-                cacheName: "chunks-cache",
-                expiration: {
-                  maxEntries: 50,
-                  maxAgeSeconds: 7 * 24 * 60 * 60, // 7 days
-                },
-                cacheableResponse: {
-                  statuses: [0, 200],
-                },
-              },
-            },
-            // Cache CSS and other static assets
-            {
-              urlPattern:
-                /\/assets\/.*\.(css|woff2?|ttf|eot|png|jpg|jpeg|gif|svg|ico)/,
-              handler: "CacheFirst",
-              options: {
-                cacheName: "static-assets",
-                expiration: {
-                  maxEntries: 100,
-                  maxAgeSeconds: 30 * 24 * 60 * 60, // 30 days
-                },
-              },
-            },
-            // Cache Supabase Storage images (avatars, uploads)
-            {
-              urlPattern:
-                /^https:\/\/.*\.supabase\.co\/storage\/v1\/object\/.*/i,
-              handler: "CacheFirst",
-              options: {
-                cacheName: "supabase-storage",
-                expiration: {
-                  maxEntries: 100,
-                  maxAgeSeconds: 7 * 24 * 60 * 60, // 7 days
-                },
-                cacheableResponse: {
-                  statuses: [0, 200],
-                },
-              },
-            },
-            // Cache HTML files at runtime (excluded from precaching to avoid 403 errors)
-            // Use NetworkFirst to ensure fresh content, but cache for offline support
-            {
-              urlPattern: /\/.*\.html$/,
-              handler: "NetworkFirst",
-              options: {
-                cacheName: "html-cache",
-                expiration: {
-                  maxEntries: 20,
-                  maxAgeSeconds: 7 * 24 * 60 * 60, // 7 days
-                },
-                cacheableResponse: {
-                  statuses: [0, 200],
-                },
-                networkTimeoutSeconds: 3, // Fallback to cache after 3s
-              },
-            },
           ],
           // Skip waiting and claim clients immediately for faster updates
           skipWaiting: true,
           clientsClaim: true,
-          // Clean up old caches on activation
           cleanupOutdatedCaches: true,
+          // Import custom notification handlers into the generated service worker
+          // This file contains push notification and notificationclick event handlers
+          importScripts: ["/notification-handlers.js"],
         },
         // PWA manifest configuration
         manifest: {
@@ -316,8 +162,6 @@ export default defineConfig(({ mode }) => {
         devOptions: {
           enabled: mode === "development",
           type: "module",
-          // Suppress workbox logs in development by disabling precaching
-          // This prevents workbox from trying to precache source files
           navigateFallback: undefined, // Don't use navigation fallback in dev
         },
       }),

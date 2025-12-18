@@ -16,49 +16,65 @@ interface NotificationOptions {
   actions?: NotificationAction[];
 }
 
+interface NotificationCallbackData {
+  callId: string;
+  url?: string;
+  action?: 'answer' | 'decline' | '';
+}
+
 export const usePushNotifications = () => {
   const serviceWorkerRegistrationRef = useRef<ServiceWorkerRegistration | null>(null);
-  const notificationClickHandlerRef = useRef<((data: any) => void) | null>(null);
+  const notificationClickHandlerRef = useRef<((data: NotificationCallbackData) => void) | null>(null);
+  const notificationAnswerHandlerRef = useRef<((data: NotificationCallbackData) => void) | null>(null);
+  const notificationDeclineHandlerRef = useRef<((data: NotificationCallbackData) => void) | null>(null);
 
-  // Register service worker
+  // Register or get service worker
   useEffect(() => {
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker
-        .register("/sw.js")
+      // Wait for vite-plugin-pwa's injectManifest service worker to be ready
+      // This works for both development and production since we now use injectManifest mode
+      navigator.serviceWorker.ready
         .then((registration) => {
-          console.log("✅ [PUSH] Service Worker registered:", registration);
+          console.log("✅ [PUSH] Service Worker ready:", registration);
           serviceWorkerRegistrationRef.current = registration;
-
-          // Listen for service worker updates
-          registration.addEventListener("updatefound", () => {
-            console.log("🔄 [PUSH] Service Worker update found");
-            const newWorker = registration.installing;
-            if (newWorker) {
-              newWorker.addEventListener("statechange", () => {
-                if (newWorker.state === "installed" && navigator.serviceWorker.controller) {
-                  console.log("🔄 [PUSH] New service worker installed, reload to activate");
-                }
-              });
-            }
-          });
         })
         .catch((error) => {
-          console.error("❌ [PUSH] Service Worker registration failed:", error);
+          console.error("❌ [PUSH] Service Worker not ready:", error);
         });
 
       // Listen for messages from service worker (notification clicks)
-      navigator.serviceWorker.addEventListener("message", (event) => {
+      const handleServiceWorkerMessage = (event: MessageEvent) => {
         console.log("📨 [PUSH] Message from service worker:", event.data);
         
-        if (event.data && event.data.type === "NOTIFICATION_CLICKED") {
-          const { callId, url } = event.data;
-          
-          // Call the registered handler
+        const { type, callId, url, action } = event.data || {};
+        
+        if (type === "NOTIFICATION_ACTION_ANSWER") {
+          // User clicked Answer button on notification
+          console.log("📞 [PUSH] Answer action from notification");
+          if (notificationAnswerHandlerRef.current) {
+            notificationAnswerHandlerRef.current({ callId, url, action: 'answer' });
+          }
+        } else if (type === "NOTIFICATION_ACTION_DECLINE") {
+          // User clicked Decline button on notification
+          console.log("📞 [PUSH] Decline action from notification");
+          if (notificationDeclineHandlerRef.current) {
+            notificationDeclineHandlerRef.current({ callId, url, action: 'decline' });
+          }
+        } else if (type === "NOTIFICATION_CLICKED") {
+          // User clicked notification body (not action buttons)
+          console.log("📞 [PUSH] Notification body clicked");
           if (notificationClickHandlerRef.current) {
-            notificationClickHandlerRef.current({ callId, url });
+            notificationClickHandlerRef.current({ callId, url, action: '' });
           }
         }
-      });
+      };
+
+      navigator.serviceWorker.addEventListener("message", handleServiceWorkerMessage);
+
+      // Cleanup listener on unmount
+      return () => {
+        navigator.serviceWorker.removeEventListener("message", handleServiceWorkerMessage);
+      };
     }
   }, []);
 
@@ -113,7 +129,7 @@ export const usePushNotifications = () => {
       // Use service worker notification if available, otherwise use regular Notification API
       if (serviceWorkerRegistrationRef.current) {
         try {
-          await serviceWorkerRegistrationRef.current.showNotification(options.title, {
+          const notificationOptions = {
             body: options.body,
             icon: options.icon || "/icon-192x192.png",
             badge: options.badge || "/icon-96x96.png",
@@ -122,8 +138,14 @@ export const usePushNotifications = () => {
             vibrate: options.vibrate || [200, 100, 200],
             data: options.data || {},
             actions: options.actions || [],
+          };
+          console.log("📤 [PUSH] Sending notification via service worker:", {
+            title: options.title,
+            hasActions: (options.actions?.length ?? 0) > 0,
+            actions: options.actions,
           });
-          console.log("✅ [PUSH] Notification sent via service worker");
+          await serviceWorkerRegistrationRef.current.showNotification(options.title, notificationOptions);
+          console.log("✅ [PUSH] Notification sent via service worker with actions:", options.actions);
         } catch (error) {
           console.error("❌ [PUSH] Failed to send notification:", error);
         }
@@ -156,9 +178,19 @@ export const usePushNotifications = () => {
     }
   }, []);
 
-  // Register handler for notification clicks
-  const onNotificationClick = useCallback((handler: (data: any) => void) => {
+  // Register handler for notification clicks (body click)
+  const onNotificationClick = useCallback((handler: (data: NotificationCallbackData) => void) => {
     notificationClickHandlerRef.current = handler;
+  }, []);
+
+  // Register handler for Answer button click on notification
+  const onNotificationAnswer = useCallback((handler: (data: NotificationCallbackData) => void) => {
+    notificationAnswerHandlerRef.current = handler;
+  }, []);
+
+  // Register handler for Decline button click on notification
+  const onNotificationDecline = useCallback((handler: (data: NotificationCallbackData) => void) => {
+    notificationDeclineHandlerRef.current = handler;
   }, []);
 
   return {
@@ -166,6 +198,8 @@ export const usePushNotifications = () => {
     sendNotification,
     closeNotification,
     onNotificationClick,
+    onNotificationAnswer,
+    onNotificationDecline,
     hasPermission: "Notification" in window && Notification.permission === "granted",
     permission: "Notification" in window ? Notification.permission : "default" as NotificationPermission,
   };

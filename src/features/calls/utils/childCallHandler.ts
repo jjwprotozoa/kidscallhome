@@ -1147,19 +1147,23 @@ const handleChildInitiatedCall = async (
     callData.family_member_id = parentId;
     // Also need parent_id for RLS compatibility
     callData.parent_id = childData.parent_id;
+    callData.recipient_type = "family_member"; // Required: child calling family_member
     safeLog.log("📞 [CHILD CALL] Creating call to FAMILY MEMBER:", {
       child_id: callData.child_id,
       family_member_id: callData.family_member_id,
       parent_id: callData.parent_id,
       caller_type: callData.caller_type,
+      recipient_type: callData.recipient_type,
     });
   } else {
     // Child calling parent (normal case)
     callData.parent_id = parentId;
+    callData.recipient_type = "parent"; // Required: child calling parent
     safeLog.log("📞 [CHILD CALL] Creating call to PARENT:", {
       child_id: callData.child_id,
       parent_id: callData.parent_id,
       caller_type: callData.caller_type,
+      recipient_type: callData.recipient_type,
     });
   }
 

@@ -88,7 +88,8 @@ export const useParentIncomingCallSubscription = ({
 
         // IMPORTANT: Don't show incoming call notification if user is already on the call page
         // This prevents showing notifications for calls the parent initiated
-        if (location.pathname.startsWith("/call/")) {
+        // Check both /call/ (legacy) and /parent/call/ routes
+        if (location.pathname.startsWith("/call/") || location.pathname.startsWith("/parent/call/")) {
           return;
         }
 
@@ -115,11 +116,12 @@ export const useParentIncomingCallSubscription = ({
           };
           onIncomingCallRef.current(incomingCall);
           // Handle incoming call with notifications (push notification if tab inactive, ringtone if active)
+          // CRITICAL: Use /parent/call/ route which uses useCallEngine with role="parent"
           handleIncomingCallRef.current({
             callId: call.id,
             callerName: childData.name,
             callerId: call.child_id,
-            url: `/call/${call.child_id}?callId=${call.id}`,
+            url: `/parent/call/${call.child_id}?callId=${call.id}`,
           });
         } else {
           console.error("Failed to fetch child data for call");
@@ -262,7 +264,8 @@ export const useParentIncomingCallSubscription = ({
             }
 
             // Don't process updates if user is on the call page
-            if (location.pathname.startsWith("/call/")) {
+            // Check both /call/ (legacy) and /parent/call/ routes
+            if (location.pathname.startsWith("/call/") || location.pathname.startsWith("/parent/call/")) {
               return;
             }
 

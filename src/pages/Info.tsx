@@ -1,5 +1,6 @@
 // src/pages/Info.tsx
 // App Store / Play Store compliance information page
+// Mobile-first design with responsive navigation
 
 import { AppDescription } from "@/components/info/AppDescription";
 import { BetaTestingSection } from "@/components/info/BetaTestingSection";
@@ -15,15 +16,16 @@ import { TermsSection } from "@/components/info/TermsSection";
 import Navigation from "@/components/Navigation";
 import { Button } from "@/components/ui/button";
 import { infoSections } from "@/data/infoSections";
+import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { safeLog, sanitizeError } from "@/utils/security";
-import { ArrowLeft, Home, Info as InfoIcon } from "lucide-react";
+import { Info as InfoIcon, Share2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 
 const Info = () => {
-  const navigate = useNavigate();
   const location = useLocation();
+  const { toast } = useToast();
   const [showFloatingNav, setShowFloatingNav] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [userType, setUserType] = useState<
@@ -31,7 +33,49 @@ const Info = () => {
   >(null);
   const [loading, setLoading] = useState(true);
 
-  // Determine user type and home route
+  // Share page functionality
+  const handleShare = async () => {
+    const shareUrl = window.location.origin + "/info";
+    const shareTitle = "Kids Call Home - App Information";
+    const shareText =
+      "Check out Kids Call Home - Safe video calls for kids! Here's information about the app:";
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: shareTitle,
+          text: shareText,
+          url: shareUrl,
+        });
+      } catch (error) {
+        // User cancelled or share failed - don't show error for cancellation
+        if ((error as Error).name !== "AbortError") {
+          toast({
+            title: "Share failed",
+            description: "Could not share. Try copying the link instead.",
+            variant: "destructive",
+          });
+        }
+      }
+    } else {
+      // Fallback: copy link to clipboard
+      try {
+        await navigator.clipboard.writeText(shareUrl);
+        toast({
+          title: "Link copied!",
+          description: "Page link copied to clipboard",
+        });
+      } catch {
+        toast({
+          title: "Copy failed",
+          description: "Please copy the URL manually",
+          variant: "destructive",
+        });
+      }
+    }
+  };
+
+  // Determine user type
   useEffect(() => {
     const determineUserType = async () => {
       try {
@@ -97,14 +141,6 @@ const Info = () => {
     determineUserType();
   }, []);
 
-  // Get home route based on user type
-  const getHomeRoute = () => {
-    if (userType === "parent") return "/parent";
-    if (userType === "family_member") return "/family-member/dashboard";
-    if (userType === "child") return "/child";
-    return "/"; // Landing page if not logged in
-  };
-
   // Check if user is likely a parent (synchronous, non-blocking)
   const isParent = useMemo(() => {
     return userType === "parent";
@@ -122,7 +158,7 @@ const Info = () => {
   useEffect(() => {
     const handleScroll = () => {
       const scrollY = window.scrollY;
-      setShowFloatingNav(scrollY > 300); // Show after scrolling 300px
+      setShowFloatingNav(scrollY > 200); // Show after scrolling 200px
     };
 
     window.addEventListener("scroll", handleScroll);
@@ -133,7 +169,16 @@ const Info = () => {
   const scrollToSection = useCallback((id: string) => {
     const element = document.getElementById(id);
     if (element) {
-      element.scrollIntoView({ behavior: "smooth", block: "start" });
+      // Account for fixed header height
+      const headerOffset = 140; // Navigation + sticky section nav
+      const elementPosition = element.getBoundingClientRect().top;
+      const offsetPosition =
+        elementPosition + window.pageYOffset - headerOffset;
+
+      window.scrollTo({
+        top: offsetPosition,
+        behavior: "smooth",
+      });
       // Update URL hash without triggering navigation
       window.history.replaceState(null, "", `/info#${id}`);
       setSheetOpen(false); // Close sheet after navigation
@@ -146,78 +191,65 @@ const Info = () => {
     if (hash) {
       // Small delay to ensure DOM is ready
       const timeoutId = setTimeout(() => {
-        const element = document.getElementById(hash);
-        if (element) {
-          element.scrollIntoView({ behavior: "smooth", block: "start" });
-        }
+        scrollToSection(hash);
       }, 100);
       return () => clearTimeout(timeoutId);
     }
-  }, [location.hash]);
+  }, [location.hash, scrollToSection]);
 
   const scrollToTop = () => {
     window.scrollTo({ top: 0, behavior: "smooth" });
     // Clear the hash from URL
     window.history.replaceState(null, "", "/info");
+    setSheetOpen(false);
   };
 
   return (
     <div className="min-h-[100dvh] bg-background w-full overflow-x-hidden">
       <Navigation />
       <div
-        className="px-4 pb-8"
+        className="px-4 pb-8 md:pb-12"
         style={{
           paddingTop: "calc(0.5rem + 64px + var(--safe-area-inset-top) * 0.15)",
         }}
       >
         <div className="max-w-4xl mx-auto">
-          {/* Header with App Icon and Back Button */}
-          <div className="mt-4 mb-8">
-            <div className="flex items-start justify-between gap-4 mb-4">
-              <div className="flex items-center gap-4 flex-1">
-                {/* App Icon */}
-                <div className="flex-shrink-0">
-                  <img
-                    src="/icon-192x192.png"
-                    alt="Kids Call Home"
-                    className="w-16 h-16 rounded-xl shadow-md"
-                    width="64"
-                    height="64"
-                  />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-3 mb-2">
-                    <InfoIcon className="h-6 w-6 flex-shrink-0" />
-                    <h1 className="text-3xl font-bold">App Information</h1>
-                  </div>
-                  <p className="text-muted-foreground">
-                    Important information about Kids Call Home
-                  </p>
-                </div>
+          {/* Header - Compact on mobile */}
+          <header className="py-4 md:py-6">
+            <div className="flex items-center gap-3 md:gap-4">
+              {/* App Icon */}
+              <div className="flex-shrink-0">
+                <img
+                  src="/icon-192x192.png"
+                  alt="Kids Call Home"
+                  className="w-14 h-14 md:w-16 md:h-16 rounded-xl shadow-md"
+                  width="64"
+                  height="64"
+                />
               </div>
-              {/* Back to App Button */}
-              {!loading && (
-                <Button
-                  onClick={() => navigate(getHomeRoute())}
-                  variant="default"
-                  size="lg"
-                  className="flex-shrink-0 shadow-md"
-                >
-                  <ArrowLeft className="h-4 w-4 mr-2" />
-                  <span className="hidden sm:inline">
-                    {userType === "parent"
-                      ? "Back to Parent Home"
-                      : userType === "family_member"
-                      ? "Back to Family Member Home"
-                      : userType === "child"
-                      ? "Back to Kid Home"
-                      : "Back to App"}
-                  </span>
-                  <Home className="h-4 w-4 sm:hidden" />
-                </Button>
-              )}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <InfoIcon className="h-5 w-5 md:h-6 md:w-6 text-primary flex-shrink-0" />
+                  <h1 className="text-xl md:text-3xl font-bold truncate">
+                    App Information
+                  </h1>
+                </div>
+                <p className="text-sm md:text-base text-muted-foreground line-clamp-2">
+                  Important information about Kids Call Home
+                </p>
+              </div>
+              {/* Share Button */}
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={handleShare}
+                className="flex-shrink-0 h-10 w-10 md:h-11 md:w-11 rounded-full bg-primary/10 hover:bg-primary/20 border-primary/30 text-primary"
+                aria-label="Share this page"
+              >
+                <Share2 className="h-5 w-5" />
+              </Button>
             </div>
-          </div>
+          </header>
 
           {/* Navigation */}
           <InfoNavigation
@@ -227,34 +259,26 @@ const Info = () => {
             sheetOpen={sheetOpen}
             setSheetOpen={setSheetOpen}
             showFloatingNav={showFloatingNav}
-            onBackToApp={() => navigate(getHomeRoute())}
-            backButtonTitle={
-              userType === "parent"
-                ? "Back to Parent Home"
-                : userType === "family_member"
-                ? "Back to Family Member Home"
-                : userType === "child"
-                ? "Back to Kid Home"
-                : "Back to App"
-            }
             loading={loading}
           />
 
-          {/* Sections */}
-          <AppDescription />
-          <BetaTestingSection />
-          <PricingSection isParent={isParent} />
-          <TermsSection />
-          {userType !== "child" && <PrivacySection />}
-          <SecuritySection />
-          <CancellationSection isParent={isParent} />
-          <DataRemovalSection />
-          <ContactSection />
-          <DemoSection />
+          {/* Content Sections */}
+          <div className="space-y-6 md:space-y-8">
+            <AppDescription />
+            <BetaTestingSection />
+            <PricingSection isParent={isParent} />
+            <TermsSection />
+            {userType !== "child" && <PrivacySection />}
+            <SecuritySection />
+            <CancellationSection isParent={isParent} />
+            <DataRemovalSection />
+            <ContactSection />
+            <DemoSection />
+          </div>
 
-          {/* Back to Top */}
-          <div className="text-center pt-8">
-            <Button variant="outline" onClick={scrollToTop}>
+          {/* Back to Top - Footer */}
+          <div className="text-center pt-8 md:pt-12 pb-4">
+            <Button variant="outline" size="lg" onClick={scrollToTop}>
               Back to Top
             </Button>
           </div>

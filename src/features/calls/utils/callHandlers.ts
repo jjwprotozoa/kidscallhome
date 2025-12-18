@@ -895,6 +895,7 @@ export const handleParentCall = async (
         child_id: childId,
         parent_id: userId,
         caller_type: "parent",
+        recipient_type: "child", // Required: parent calling child
         status: "ringing",
       })
       .select()

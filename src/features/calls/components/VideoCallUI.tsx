@@ -28,6 +28,7 @@ interface VideoCallUIProps {
   localVideoRef: React.RefObject<HTMLVideoElement>;
   remoteVideoRef: React.RefObject<HTMLVideoElement>;
   remoteStream: MediaStream | null;
+  localStream?: MediaStream | null; // Optional: for syncing local video when component mounts
   isConnecting: boolean;
   isMuted: boolean;
   isVideoOff: boolean;
@@ -43,6 +44,7 @@ export const VideoCallUI = ({
   localVideoRef,
   remoteVideoRef,
   remoteStream,
+  localStream,
   isConnecting,
   isMuted,
   isVideoOff,
@@ -71,6 +73,34 @@ export const VideoCallUI = ({
       console.warn("🔊 [VIDEO UI] Set video element volume to 1.0");
     }
   }, [remoteVideoRef]);
+
+  // CRITICAL: Sync local stream to video element when component mounts
+  // This fixes PIP not showing because initializeConnection runs before VideoCallUI mounts
+  // Also re-syncs when video is re-enabled (isVideoOff changes from true to false)
+  useEffect(() => {
+    // Only sync when video is enabled (not off)
+    if (isVideoOff || !localStream) return;
+
+    // Use requestAnimationFrame to ensure the video element is mounted after React renders
+    const syncLocalVideo = () => {
+      if (localVideoRef.current) {
+        if (localVideoRef.current.srcObject !== localStream) {
+          console.warn("🎬 [VIDEO UI] Syncing local stream to PIP video element");
+          localVideoRef.current.srcObject = localStream;
+          localVideoRef.current.muted = true; // Prevent echo
+          localVideoRef.current.play().catch((error) => {
+            console.warn("⚠️ [VIDEO UI] Error playing local video:", error);
+          });
+        }
+      } else {
+        // Video element not mounted yet, try again after next frame
+        requestAnimationFrame(syncLocalVideo);
+      }
+    };
+
+    // Start the sync process
+    requestAnimationFrame(syncLocalVideo);
+  }, [localStream, localVideoRef, isVideoOff]);
 
   // CRITICAL: Use Web Audio API to analyze actual audio level from remote stream
   // This helps diagnose if audio data is actually being received vs playback issues
@@ -572,8 +602,8 @@ export const VideoCallUI = ({
   const forceAudioPlayback = async () => {
     console.warn("🔊 [VIDEO UI] Forcing audio playback...");
     
-    // Play a test beep to verify audio output works
-    playTestBeep();
+    // NOTE: Test beep disabled as it was distracting during calls
+    // playTestBeep();
     
     const video = remoteVideoRef.current;
     const audio = audioElementRef.current;
@@ -804,7 +834,7 @@ export const VideoCallUI = ({
   }, [videoState]);
 
   return (
-    <div className="fixed inset-0 bg-black" onClick={handleVideoClick}>
+    <div className="fixed inset-0 bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950" onClick={handleVideoClick}>
       <div className="relative h-full w-full">
         {/* Remote video (full screen) - audio plays through this element */}
         {/* AUDIO: Starts muted, only unmuted after user clicks Call/Accept or taps video */}
@@ -891,30 +921,57 @@ export const VideoCallUI = ({
 
         {/* Connecting placeholder - shown when no remote stream yet */}
         {!remoteStream && isConnecting && (
-          <div className="absolute inset-0 z-10">
-            <VideoPlaceholder
-              type="remote"
-              reason="connecting"
-            />
-          </div>
-        )}
-
-        {/* CRITICAL: Audio muted indicator - shown prominently when browser blocked audio */}
-        {/* Positioned below the PIP video (top-44 = 176px, PIP is top-4 + h-36 = 160px) */}
-        {showAudioMutedIndicator && videoState === "playing" && (
-          <div 
-            className="absolute top-44 left-1/2 -translate-x-1/2 z-50 animate-pulse"
-            onClick={handleVideoClick}
-          >
-            <div className="bg-red-500 text-white px-6 py-3 rounded-full shadow-lg flex items-center gap-3 cursor-pointer">
-              <span className="text-2xl">🔇</span>
-              <span className="font-bold text-lg">TAP FOR AUDIO</span>
+          <div className="absolute inset-0 z-10 bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900">
+            {/* Animated background rings */}
+            <div className="absolute inset-0 flex items-center justify-center overflow-hidden pointer-events-none">
+              <div 
+                className="absolute w-[300px] h-[300px] rounded-full border border-white/10 animate-ping"
+                style={{ animationDuration: "3s" }}
+              />
+              <div 
+                className="absolute w-[200px] h-[200px] rounded-full border border-white/15 animate-ping"
+                style={{ animationDuration: "2.5s", animationDelay: "0.5s" }}
+              />
+            </div>
+            {/* Connecting content */}
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+              <div className="relative mb-8">
+                <div className="w-24 h-24 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-xl shadow-blue-500/30">
+                  <span className="text-5xl animate-pulse">📞</span>
+                </div>
+                <div className="absolute -bottom-2 -right-2 bg-green-500 rounded-full p-2 animate-bounce">
+                  <div className="w-3 h-3 bg-white rounded-full" />
+                </div>
+              </div>
+              <h2 className="text-2xl font-bold text-white mb-2">Connecting...</h2>
+              <p className="text-white/60 text-sm">Setting up your video call</p>
+              {/* Loading dots */}
+              <div className="flex gap-2 mt-6">
+                <div className="w-3 h-3 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+                <div className="w-3 h-3 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+                <div className="w-3 h-3 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+              </div>
             </div>
           </div>
         )}
 
+        {/* CRITICAL: Audio muted indicator - shown prominently when browser blocked audio */}
+        {/* Positioned below the PIP video */}
+        {showAudioMutedIndicator && videoState === "playing" && (
+          <div 
+            className="absolute top-44 left-1/2 -translate-x-1/2 z-50"
+            onClick={handleVideoClick}
+          >
+            <button className="bg-gradient-to-r from-red-500 to-rose-600 text-white px-6 py-3 rounded-2xl shadow-xl shadow-red-500/30 flex items-center gap-3 cursor-pointer animate-pulse hover:scale-105 transition-transform active:scale-95">
+              <div className="bg-white/20 rounded-full p-2">
+                <span className="text-xl">🔇</span>
+              </div>
+              <span className="font-bold text-lg">TAP FOR AUDIO</span>
+            </button>
+          </div>
+        )}
+
         {/* Audio hint button - shown for first 10 seconds in case audio doesn't work */}
-        {/* Positioned below PIP to avoid overlap */}
         {showAudioHint && videoState === "playing" && !showAudioMutedIndicator && (
           <div 
             className="absolute top-44 left-1/2 -translate-x-1/2 z-50"
@@ -923,22 +980,23 @@ export const VideoCallUI = ({
               setShowAudioHint(false);
             }}
           >
-            <div className="bg-blue-500/80 text-white px-4 py-2 rounded-full shadow-lg flex items-center gap-2 cursor-pointer text-sm">
+            <button className="bg-white/10 backdrop-blur-sm text-white px-5 py-2.5 rounded-full shadow-lg flex items-center gap-2 cursor-pointer text-sm hover:bg-white/20 transition-colors border border-white/20">
               <span>🔊</span>
               <span>No audio? Tap here</span>
-            </div>
+            </button>
           </div>
         )}
 
         {/* Warning when no audio data ever received - only shows if we've NEVER detected audio */}
-        {/* Positioned below audio hint to stack properly */}
         {showNoRemoteAudioWarning && videoState === "playing" && !showAudioMutedIndicator && (
           <div 
             className="absolute top-56 left-1/2 -translate-x-1/2 z-50 max-w-[90%] cursor-pointer"
             onClick={() => setShowNoRemoteAudioWarning(false)}  
           >
-            <div className="bg-orange-500 text-white px-4 py-2 rounded-lg shadow-lg text-sm text-center">
-              <div className="font-bold mb-1">⚠️ Checking audio...</div>
+            <div className="bg-gradient-to-r from-orange-500 to-amber-500 text-white px-5 py-3 rounded-2xl shadow-xl shadow-orange-500/30 text-sm text-center">
+              <div className="font-bold mb-1 flex items-center justify-center gap-2">
+                <span>⚠️</span> Checking audio...
+              </div>
               <div className="text-xs opacity-90">
                 If you can hear audio, tap to dismiss
               </div>
@@ -949,88 +1007,150 @@ export const VideoCallUI = ({
         {/* Connection status overlay */}
         {statusMessage && (
           <div
-            className="absolute inset-0 flex items-center justify-center bg-black/80 cursor-pointer"
+            className="absolute inset-0 flex items-center justify-center bg-gradient-to-b from-slate-900/95 via-slate-800/95 to-slate-900/95 cursor-pointer"
             onClick={handleVideoClick}
           >
-            <div className="text-center space-y-4">
-              <div className="text-6xl">
-                {videoState === "error"
-                  ? "❌"
-                  : videoState === "loading"
-                  ? "⏳"
-                  : "📞"}
+            <div className="text-center space-y-6 px-8">
+              {/* Status icon with animated background */}
+              <div className="relative inline-flex items-center justify-center">
+                <div 
+                  className={`absolute w-28 h-28 rounded-full ${
+                    videoState === "error" ? "bg-red-500/20" : "bg-blue-500/20"
+                  } animate-ping`}
+                  style={{ animationDuration: "2s" }}
+                />
+                <div 
+                  className={`relative w-24 h-24 rounded-full flex items-center justify-center shadow-xl ${
+                    videoState === "error" 
+                      ? "bg-gradient-to-br from-red-500 to-rose-600 shadow-red-500/30" 
+                      : "bg-gradient-to-br from-blue-500 to-indigo-600 shadow-blue-500/30"
+                  }`}
+                >
+                  <span className="text-5xl">
+                    {videoState === "error"
+                      ? "❌"
+                      : videoState === "loading"
+                      ? "⏳"
+                      : "📞"}
+                  </span>
+                </div>
               </div>
-              <p className="text-white text-2xl">{statusMessage}</p>
-              {remoteStream && (
-                <p className="text-white text-sm opacity-75">
-                  {videoState === "loading"
-                    ? "Establishing connection..."
-                    : videoState === "error"
-                    ? "Check your connection"
-                    : "Tap anywhere to interact"}
-                </p>
+              {/* Status text */}
+              <div className="space-y-2">
+                <p className="text-white text-2xl font-bold">{statusMessage}</p>
+                {remoteStream && (
+                  <p className="text-white/60 text-sm">
+                    {videoState === "loading"
+                      ? "Establishing connection..."
+                      : videoState === "error"
+                      ? "Check your connection"
+                      : "Tap anywhere to interact"}
+                  </p>
+                )}
+              </div>
+              {/* Loading indicator for non-error states */}
+              {videoState === "loading" && (
+                <div className="flex gap-2 justify-center">
+                  <div className="w-3 h-3 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+                  <div className="w-3 h-3 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+                  <div className="w-3 h-3 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+                </div>
+              )}
+              {/* Retry button for errors */}
+              {videoState === "error" && (
+                <button className="mt-4 bg-gradient-to-r from-blue-500 to-indigo-600 text-white px-6 py-3 rounded-xl shadow-lg hover:scale-105 transition-transform active:scale-95">
+                  Tap to retry
+                </button>
               )}
             </div>
           </div>
         )}
 
         {/* Local video (picture-in-picture) - high z-index to stay above placeholders */}
-        <div className="absolute top-4 right-4 w-48 h-36 rounded-2xl overflow-hidden shadow-xl border-2 border-white/50 z-30">
-          {/* Show placeholder when video is off or paused due to network */}
-          {(isVideoOff || networkQuality?.isVideoPausedDueToNetwork) ? (
-            <VideoPlaceholder
-              type="local"
-              reason={networkQuality?.isVideoPausedDueToNetwork ? "network" : "disabled"}
-            />
-          ) : (
-            <video
-              ref={localVideoRef}
-              autoPlay
-              playsInline
-              muted
-              className="w-full h-full object-cover"
-            />
-          )}
+        <div className="absolute top-4 right-4 z-30">
+          <div className="relative">
+            {/* Glowing border effect */}
+            <div className="absolute -inset-1 bg-gradient-to-br from-blue-500/50 to-purple-500/50 rounded-2xl blur-sm" />
+            {/* Video container */}
+            <div className="relative w-32 h-24 sm:w-40 sm:h-30 md:w-48 md:h-36 rounded-xl overflow-hidden shadow-2xl border-2 border-white/30 bg-slate-900">
+              {/* Show placeholder when video is off or paused due to network */}
+              {(isVideoOff || networkQuality?.isVideoPausedDueToNetwork) ? (
+                <VideoPlaceholder
+                  type="local"
+                  reason={networkQuality?.isVideoPausedDueToNetwork ? "network" : "disabled"}
+                />
+              ) : (
+                <video
+                  ref={localVideoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="w-full h-full object-cover"
+                />
+              )}
+              {/* "You" label */}
+              <div className="absolute bottom-1 left-1 bg-black/60 backdrop-blur-sm px-2 py-0.5 rounded-md">
+                <span className="text-white text-xs font-medium">You</span>
+              </div>
+              {/* Muted indicator on PIP */}
+              {isMuted && (
+                <div className="absolute top-1 right-1 bg-red-500/80 rounded-full p-1">
+                  <span className="text-xs">🔇</span>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Network Quality Indicator - shows connection quality for adaptive streaming */}
         {/* Supports all network conditions from 2G to 5G/WiFi - collapsed by default, click to expand */}
-        {networkQuality && (
+        {networkQuality ? (
           <div className="absolute top-4 left-4 z-40">
             <ConnectionQualityIndicator
               qualityLevel={networkQuality.qualityLevel}
               connectionType={networkQuality.connectionType}
               networkStats={networkQuality.networkStats}
               isVideoPausedDueToNetwork={networkQuality.isVideoPausedDueToNetwork}
-              showDetails={process.env.NODE_ENV === "development"}
+              showDetails={true}
               defaultExpanded={false}
             />
           </div>
+        ) : (
+          // Fallback when networkQuality is not yet available (initializing)
+          <div className="absolute top-4 left-4 z-40">
+            <div className="flex items-center gap-2 px-2 py-1 rounded-lg backdrop-blur-sm bg-gray-500/20 text-gray-400">
+              <span className="text-xs">📶</span>
+              <span className="text-xs font-medium">Checking...</span>
+            </div>
+          </div>
         )}
 
-        {/* Diagnostic panels (development only) - positioned in bottom-left corner to avoid overlaps */}
-        {process.env.NODE_ENV === "development" && remoteStream && (
+        {/* Diagnostic panels - positioned in bottom-left corner to avoid overlaps */}
+        {/* Help icon (?) allows users to access debugging info when troubleshooting */}
+        {remoteStream && (
           <DiagnosticContainer
             videoRef={remoteVideoRef}
             videoState={videoState}
             isAudioMutedByBrowser={isAudioMutedByBrowser}
             audioElementRef={audioElementRef}
             remoteStream={remoteStream}
-            className="absolute bottom-24 left-4 z-35"
+            className="absolute bottom-24 left-4 z-50"
           />
         )}
 
         {/* Video paused due to poor network - kid-friendly indicator */}
         {networkQuality?.isVideoPausedDueToNetwork && (
-          <div className="absolute bottom-32 left-1/2 -translate-x-1/2 z-50">
+          <div className="absolute bottom-36 left-1/2 -translate-x-1/2 z-50">
             <button 
-              className="bg-gradient-to-r from-orange-500 to-amber-500 text-white px-5 py-3 rounded-full shadow-lg flex items-center gap-3 hover:scale-105 transition-transform active:scale-95"
+              className="bg-gradient-to-r from-orange-500 to-amber-500 text-white px-6 py-4 rounded-2xl shadow-xl shadow-orange-500/30 flex items-center gap-4 hover:scale-105 transition-transform active:scale-95 border border-white/20"
               onClick={() => networkQuality.enableVideoIfPossible()}
             >
-              <span className="text-2xl animate-bounce">📞</span>
+              <div className="bg-white/20 rounded-full p-3">
+                <span className="text-2xl">📞</span>
+              </div>
               <div className="text-left">
-                <span className="block text-sm font-bold">Audio Call Mode</span>
-                <span className="block text-xs opacity-90">Tap to try video again!</span>
+                <span className="block text-base font-bold">Audio Call Mode</span>
+                <span className="block text-xs opacity-80">Connection is slow • Tap to try video</span>
               </div>
             </button>
           </div>

@@ -367,3 +367,4 @@ UPDATE public.parents
 SET referral_code = public.generate_referral_code()
 WHERE referral_code IS NULL;
 
+

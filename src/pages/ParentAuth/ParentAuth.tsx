@@ -95,6 +95,16 @@ const ParentAuth = () => {
         return;
       }
 
+      // Check password confirmation for signup
+      if (!authState.isLogin && authState.password !== authState.confirmPassword) {
+        toast({
+          title: "Passwords don't match",
+          description: "Please make sure both passwords match",
+          variant: "destructive",
+        });
+        return;
+      }
+
       const sanitizedEmail = validation.sanitized.email || authState.email;
       const sanitizedPassword =
         validation.sanitized.password || authState.password;
@@ -166,6 +176,7 @@ const ParentAuth = () => {
     } finally {
       authState.setLoading(false);
       authState.setPassword("");
+      authState.setConfirmPassword("");
       authState.setCaptchaToken(null);
     }
   };
@@ -217,8 +228,8 @@ const ParentAuth = () => {
             {authState.isLogin
               ? authState.parentName
                 ? `Welcome back, ${authState.parentName}!`
-                : "Welcome back, parent!"
-              : "Create your parent account"}
+                : "Welcome back!"
+              : "Create your account"}
           </p>
           {/* Referral code indicator */}
           {referralCode && !authState.isLogin && (
@@ -255,8 +266,12 @@ const ParentAuth = () => {
               onEmailChange={authState.setEmail}
               password={authState.password}
               onPasswordChange={authState.setPassword}
+              confirmPassword={authState.confirmPassword}
+              onConfirmPasswordChange={authState.setConfirmPassword}
               loading={authState.loading}
               disabled={false}
+              familyRole={authState.familyRole}
+              onFamilyRoleChange={authState.setFamilyRole}
             />
           )}
         </form>
@@ -278,7 +293,7 @@ const ParentAuth = () => {
         open={authState.needsFamilySetup && !!authState.userId}
         onOpenChange={() => {}}
       >
-        <DialogContent className="max-w-3xl">
+        <DialogContent className="w-[95vw] max-w-lg sm:max-w-xl p-4 sm:p-6">
           <FamilySetupSelection
             userId={authState.userId!}
             onComplete={async (householdType) => {
