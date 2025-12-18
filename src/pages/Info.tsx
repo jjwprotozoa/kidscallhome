@@ -18,11 +18,12 @@ import { infoSections } from "@/data/infoSections";
 import { supabase } from "@/integrations/supabase/client";
 import { safeLog, sanitizeError } from "@/utils/security";
 import { ArrowLeft, Home, Info as InfoIcon } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 
 const Info = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [showFloatingNav, setShowFloatingNav] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [userType, setUserType] = useState<
@@ -128,16 +129,36 @@ const Info = () => {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  const scrollToSection = (id: string) => {
+  // Scroll to section and update URL hash
+  const scrollToSection = useCallback((id: string) => {
     const element = document.getElementById(id);
     if (element) {
       element.scrollIntoView({ behavior: "smooth", block: "start" });
+      // Update URL hash without triggering navigation
+      window.history.replaceState(null, "", `/info#${id}`);
       setSheetOpen(false); // Close sheet after navigation
     }
-  };
+  }, []);
+
+  // Handle initial hash on page load and hash changes
+  useEffect(() => {
+    const hash = location.hash.replace("#", "");
+    if (hash) {
+      // Small delay to ensure DOM is ready
+      const timeoutId = setTimeout(() => {
+        const element = document.getElementById(hash);
+        if (element) {
+          element.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      }, 100);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [location.hash]);
 
   const scrollToTop = () => {
     window.scrollTo({ top: 0, behavior: "smooth" });
+    // Clear the hash from URL
+    window.history.replaceState(null, "", "/info");
   };
 
   return (

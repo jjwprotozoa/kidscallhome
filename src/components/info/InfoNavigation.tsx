@@ -50,9 +50,17 @@ export const InfoNavigation = ({
               key={section.id}
               variant="ghost"
               size="sm"
-              onClick={() => scrollToSection(section.id)}
+              asChild
             >
-              {section.label}
+              <a
+                href={`/info#${section.id}`}
+                onClick={(e) => {
+                  e.preventDefault();
+                  scrollToSection(section.id);
+                }}
+              >
+                {section.label}
+              </a>
             </Button>
           ))}
         </div>
@@ -100,9 +108,17 @@ export const InfoNavigation = ({
                     key={section.id}
                     variant="ghost"
                     className="w-full justify-start"
-                    onClick={() => scrollToSection(section.id)}
+                    asChild
                   >
-                    {section.label}
+                    <a
+                      href={`/info#${section.id}`}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        scrollToSection(section.id);
+                      }}
+                    >
+                      {section.label}
+                    </a>
                   </Button>
                 ))}
                 <div className="pt-4 border-t mt-4">
