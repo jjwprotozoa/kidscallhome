@@ -9,8 +9,8 @@
     <!-- Preconnect to Supabase for faster API calls -->
     <link rel="preconnect" href="https://*.supabase.co" crossorigin />
     
-    <!-- Preload critical assets for faster first paint -->
-    <link rel="preload" href="/icon-192x192.png" as="image" type="image/png" />
+    <!-- Preload LCP image for faster first paint -->
+    <link rel="preload" href="/icon-192x192.png" as="image" type="image/png" fetchpriority="high" />
     
     <!-- Lexend Font Family - Optimized loading for fast first paint -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -209,7 +209,12 @@
       - Shows app branding immediately for better perceived performance
     -->
     <style>
-      /* Critical CSS - inlined for instant first paint */
+      /* Critical CSS - inlined for instant first paint (above-the-fold content) */
+      /* Base reset for immediate render */
+      *,*::before,*::after{box-sizing:border-box}
+      body{margin:0;font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+      
+      /* Loading screen styles */
       #app-loading {
         position: fixed;
         inset: 0;
@@ -218,7 +223,6 @@
         justify-content: center;
         background: linear-gradient(135deg, #f0f9ff 0%, #ffffff 50%, #fdf2f8 100%);
         z-index: 9999;
-        font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       }
       #app-loading .loader-content {
         text-align: center;
@@ -245,27 +249,31 @@
         animation: spin 0.8s linear infinite;
         margin: 1rem auto 0;
       }
-      @keyframes spin {
-        to { transform: rotate(360deg); }
-      }
-      @keyframes fadeIn {
-        from { opacity: 0; transform: translateY(10px); }
-        to { opacity: 1; transform: translateY(0); }
-      }
-      @keyframes pulse {
-        0%, 100% { transform: scale(1); }
-        50% { transform: scale(1.05); }
-      }
+      @keyframes spin{to{transform:rotate(360deg)}}
+      @keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+      @keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}
+      
       /* Hide loading screen with smooth fade when React is ready */
       #app-loading.fade-out {
         opacity: 0;
         transition: opacity 0.2s ease-out;
         pointer-events: none;
       }
+      
+      /* Critical styles for Index page (above-the-fold) */
+      .min-h-\[100dvh\]{min-height:100dvh}
+      .bg-gradient-to-b{background-image:linear-gradient(to bottom,var(--tw-gradient-stops))}
+      .from-primary\/10{--tw-gradient-from:rgb(59 130 246 / 0.1);--tw-gradient-stops:var(--tw-gradient-from),var(--tw-gradient-to)}
+      .to-background{--tw-gradient-to:hsl(0 0% 100%)}
+      .container{width:100%;margin-left:auto;margin-right:auto;padding-left:1rem;padding-right:1rem}
+      .mx-auto{margin-left:auto;margin-right:auto}
+      .text-center{text-align:center}
+      .font-bold{font-weight:700}
+      .text-5xl{font-size:3rem;line-height:1}
     </style>
     <div id="app-loading">
       <div class="loader-content">
-        <img src="/icon-192x192.png" alt="" class="app-icon" width="80" height="80" />
+        <img src="/icon-192x192.png" alt="" class="app-icon" width="80" height="80" fetchpriority="high" decoding="async" />
         <div class="app-title">Kids Call Home</div>
         <div class="loader-spinner"></div>
       </div>

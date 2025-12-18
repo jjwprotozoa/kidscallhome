@@ -344,6 +344,9 @@ export default defineConfig(({ mode }) => {
       esbuild: {
         drop: mode === "production" ? ["console", "debugger"] : [],
       },
+      // CSS optimization for faster FCP
+      cssCodeSplit: true, // Split CSS per component (lazy-loaded routes get their CSS later)
+      cssMinify: true, // Minify CSS for smaller bundle
       // Vendor chunk splitting for weak network conditions (LTE/2G)
       // This separates rarely-changing vendor code from frequently-updated application code,
       // optimizing caching and reducing download size on slow networks.
