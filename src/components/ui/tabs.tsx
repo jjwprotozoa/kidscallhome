@@ -42,14 +42,16 @@ const TabsContent = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <TabsPrimitive.Content
     ref={ref}
+    // forceMount keeps all tabs in DOM - no mount/unmount = no layout shift
+    forceMount
     className={cn(
       "mt-2 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-      // Prevent layout shift when switching tabs
+      // Hide inactive tabs with CSS (not unmount) - instant switching
       "data-[state=inactive]:hidden",
       className,
     )}
-    // Disable default Radix animations that cause layout jank
-    forceMount={undefined}
+    // CSS containment prevents layout recalculation
+    style={{ contain: "layout" }}
     {...props}
   />
 ));

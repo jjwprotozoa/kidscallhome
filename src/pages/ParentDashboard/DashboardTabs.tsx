@@ -112,17 +112,10 @@ export const DashboardTabs = ({
         onRemove={onRemove}
       />
 
-      {activeTab === "connections" && (
-        <ChildConnectionsTab children={children} />
-      )}
-
-      {activeTab === "safety" && (
-        <SafetyReportsTab />
-      )}
-
-      {activeTab === "setup" && (
-        <FamilySetupTab />
-      )}
+      {/* All tabs always rendered - hidden via CSS for instant switching */}
+      <ChildConnectionsTab children={children} />
+      <SafetyReportsTab />
+      <FamilySetupTab />
     </Tabs>
   );
 };
