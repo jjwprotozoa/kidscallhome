@@ -159,6 +159,12 @@ const ParentDashboard = () => {
     }
   }, [childToEditCode, handleUpdateLoginCode]);
 
+  // Memoized callbacks for DashboardTabs to prevent re-renders
+  const handleOpenAddChild = useCallback(() => setShowAddChild(true), []);
+  const handleOpenAddFamilyMember = useCallback(() => setShowAddFamilyMember(true), []);
+  const handlePrintCode = useCallback((child: Child) => setPrintViewChild(child), []);
+  const handleViewQR = useCallback((child: Child) => setShowCodeDialog({ child }), []);
+
   useEffect(() => {
     loadChildren();
     loadFamilyMembers();
@@ -224,17 +230,17 @@ const ParentDashboard = () => {
             familyMembers={familyMembers}
             familyMembersLoading={familyMembersLoading}
             getFullLoginCode={getFullLoginCode}
-            onAddChild={() => setShowAddChild(true)}
+            onAddChild={handleOpenAddChild}
             onClearAllNotifications={handleClearAllNotifications}
             onEditCode={setChildToEditCode}
             onCopyCode={handleCopyCode}
             onCopyMagicLink={handleCopyMagicLink}
-            onPrintCode={(child) => setPrintViewChild(child)}
-            onViewQR={(child) => setShowCodeDialog({ child })}
+            onPrintCode={handlePrintCode}
+            onViewQR={handleViewQR}
             onCall={handleCall}
             onChat={handleChat}
             onDelete={setChildToDelete}
-            onAddFamilyMember={() => setShowAddFamilyMember(true)}
+            onAddFamilyMember={handleOpenAddFamilyMember}
             onSuspend={handleSuspendFamilyMember}
             onActivate={handleActivateFamilyMember}
             onResendInvitation={handleResendInvitation}

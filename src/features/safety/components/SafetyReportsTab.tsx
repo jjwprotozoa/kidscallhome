@@ -1,11 +1,12 @@
 // src/features/safety/components/SafetyReportsTab.tsx
-// Tab component for viewing blocked contacts and safety reports
+// Tab component for viewing blocked contacts and safety reports - memoized to prevent re-renders on tab switch
 
+import React from "react";
 import { BlockedContactsList } from "./BlockedContactsList";
 import { ReportsList } from "./ReportsList";
 import { SafetyModeSettings } from "./SafetyModeSettings";
 
-export const SafetyReportsTab: React.FC = () => {
+export const SafetyReportsTab: React.FC = React.memo(() => {
   return (
     <div className="space-y-6 min-h-[400px]">
       {/* Blocked Contacts Section */}
@@ -27,4 +28,6 @@ export const SafetyReportsTab: React.FC = () => {
       </section>
     </div>
   );
-};
+});
+
+SafetyReportsTab.displayName = "SafetyReportsTab";

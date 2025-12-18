@@ -1,5 +1,5 @@
 // src/pages/ParentDashboard/DashboardTabs.tsx
-// Purpose: Dashboard tabs container
+// Purpose: Dashboard tabs container - memoized to prevent re-renders on parent state changes
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ChildConnectionsTab } from "@/features/family/components/ChildConnectionsTab";
@@ -7,6 +7,7 @@ import { ChildrenTab } from "@/features/family/components/ChildrenTab";
 import { FamilySetupTab } from "@/features/family/components/FamilySetupTab";
 import { FamilyTab } from "@/features/family/components/FamilyTab";
 import { SafetyReportsTab } from "@/features/safety/components/SafetyReportsTab";
+import React from "react";
 import { Child, FamilyMember, ValidTab } from "./types";
 
 interface DashboardTabsProps {
@@ -40,36 +41,38 @@ interface DashboardTabsProps {
   onRemove: (idOrEmail: string) => void;
 }
 
-export const DashboardTabs = ({
-  activeTab,
-  onTabChange,
-  children,
-  loading,
-  canAddMoreChildren,
-  allowedChildren,
-  hasNotifications,
-  totalUnreadMessages,
-  totalMissedCalls,
-  isChildOnline,
-  familyMembers,
-  familyMembersLoading,
-  getFullLoginCode,
-  onAddChild,
-  onClearAllNotifications,
-  onEditCode,
-  onCopyCode,
-  onCopyMagicLink,
-  onPrintCode,
-  onViewQR,
-  onCall,
-  onChat,
-  onDelete,
-  onAddFamilyMember,
-  onSuspend,
-  onActivate,
-  onResendInvitation,
-  onRemove,
-}: DashboardTabsProps) => {
+export const DashboardTabs = React.memo((props: DashboardTabsProps) => {
+  const {
+    activeTab,
+    onTabChange,
+    children,
+    loading,
+    canAddMoreChildren,
+    allowedChildren,
+    hasNotifications,
+    totalUnreadMessages,
+    totalMissedCalls,
+    isChildOnline,
+    familyMembers,
+    familyMembersLoading,
+    getFullLoginCode,
+    onAddChild,
+    onClearAllNotifications,
+    onEditCode,
+    onCopyCode,
+    onCopyMagicLink,
+    onPrintCode,
+    onViewQR,
+    onCall,
+    onChat,
+    onDelete,
+    onAddFamilyMember,
+    onSuspend,
+    onActivate,
+    onResendInvitation,
+    onRemove,
+  } = props;
+
   return (
     <Tabs value={activeTab} onValueChange={onTabChange} className="w-full">
       <TabsList className="grid w-full grid-cols-5">
@@ -80,54 +83,58 @@ export const DashboardTabs = ({
         <TabsTrigger value="setup">Setup</TabsTrigger>
       </TabsList>
 
-      {/* All tabs wrapped in TabsContent - Radix handles visibility via forceMount + data-[state=inactive]:hidden */}
-      <TabsContent value="children" className="mt-6">
-        <ChildrenTab
-          children={children}
-          loading={loading}
-          canAddMoreChildren={canAddMoreChildren}
-          allowedChildren={allowedChildren}
-          hasNotifications={hasNotifications}
-          totalUnreadMessages={totalUnreadMessages}
-          totalMissedCalls={totalMissedCalls}
-          isChildOnline={isChildOnline}
-          getFullLoginCode={getFullLoginCode}
-          onAddChild={onAddChild}
-          onClearAllNotifications={onClearAllNotifications}
-          onEditCode={onEditCode}
-          onCopyCode={onCopyCode}
-          onCopyMagicLink={onCopyMagicLink}
-          onPrintCode={onPrintCode}
-          onViewQR={onViewQR}
-          onCall={onCall}
-          onChat={onChat}
-          onDelete={onDelete}
-        />
-      </TabsContent>
+      {/* Fixed-height container with absolutely positioned panels - prevents layout jump on tab switch */}
+      <div className="relative min-h-[400px] mt-2">
+        <TabsContent value="children" className="absolute inset-0">
+          <ChildrenTab
+            children={children}
+            loading={loading}
+            canAddMoreChildren={canAddMoreChildren}
+            allowedChildren={allowedChildren}
+            hasNotifications={hasNotifications}
+            totalUnreadMessages={totalUnreadMessages}
+            totalMissedCalls={totalMissedCalls}
+            isChildOnline={isChildOnline}
+            getFullLoginCode={getFullLoginCode}
+            onAddChild={onAddChild}
+            onClearAllNotifications={onClearAllNotifications}
+            onEditCode={onEditCode}
+            onCopyCode={onCopyCode}
+            onCopyMagicLink={onCopyMagicLink}
+            onPrintCode={onPrintCode}
+            onViewQR={onViewQR}
+            onCall={onCall}
+            onChat={onChat}
+            onDelete={onDelete}
+          />
+        </TabsContent>
 
-      <TabsContent value="family" className="mt-6">
-        <FamilyTab
-          familyMembers={familyMembers}
-          loading={familyMembersLoading}
-          onAddFamilyMember={onAddFamilyMember}
-          onSuspend={onSuspend}
-          onActivate={onActivate}
-          onResendInvitation={onResendInvitation}
-          onRemove={onRemove}
-        />
-      </TabsContent>
+        <TabsContent value="family" className="absolute inset-0">
+          <FamilyTab
+            familyMembers={familyMembers}
+            loading={familyMembersLoading}
+            onAddFamilyMember={onAddFamilyMember}
+            onSuspend={onSuspend}
+            onActivate={onActivate}
+            onResendInvitation={onResendInvitation}
+            onRemove={onRemove}
+          />
+        </TabsContent>
 
-      <TabsContent value="connections" className="mt-6">
-        <ChildConnectionsTab children={children} />
-      </TabsContent>
+        <TabsContent value="connections" className="absolute inset-0">
+          <ChildConnectionsTab children={children} />
+        </TabsContent>
 
-      <TabsContent value="safety" className="mt-6">
-        <SafetyReportsTab />
-      </TabsContent>
+        <TabsContent value="safety" className="absolute inset-0">
+          <SafetyReportsTab />
+        </TabsContent>
 
-      <TabsContent value="setup" className="mt-6">
-        <FamilySetupTab />
-      </TabsContent>
+        <TabsContent value="setup" className="absolute inset-0">
+          <FamilySetupTab />
+        </TabsContent>
+      </div>
     </Tabs>
   );
-};
+});
+
+DashboardTabs.displayName = "DashboardTabs";

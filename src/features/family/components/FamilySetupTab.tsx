@@ -1,12 +1,12 @@
 // src/features/family/components/FamilySetupTab.tsx
-// Tab component for viewing and managing family setup (household type, linked families)
+// Tab component for viewing and managing family setup (household type, linked families) - memoized to prevent re-renders on tab switch
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import type { HouseholdType } from "@/types/family-communication";
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { FamilyLinkDialog } from "./FamilyLinkDialog";
 
 interface LinkedFamily {
@@ -15,7 +15,7 @@ interface LinkedFamily {
   coParentName?: string;
 }
 
-export const FamilySetupTab: React.FC = () => {
+export const FamilySetupTab: React.FC = React.memo(() => {
   const [householdType, setHouseholdType] = useState<HouseholdType>("single");
   const [isLinked, setIsLinked] = useState(false);
   const [linkedFamily, setLinkedFamily] = useState<LinkedFamily | null>(null);
@@ -232,4 +232,6 @@ export const FamilySetupTab: React.FC = () => {
       )}
     </div>
   );
-};
+});
+
+FamilySetupTab.displayName = "FamilySetupTab";

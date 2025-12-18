@@ -1,10 +1,11 @@
 // src/features/family/components/FamilyTab.tsx
-// Family members tab component for ParentDashboard
+// Family members tab component for ParentDashboard - memoized to prevent re-renders on tab switch
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { FamilyMemberCard } from "@/components/FamilyMemberCard";
 import { UserPlus, Users } from "lucide-react";
+import React from "react";
 
 interface FamilyMember {
   id: string | null;
@@ -28,7 +29,7 @@ interface FamilyTabProps {
   onRemove: (familyMemberIdOrEmail: string) => void;
 }
 
-export const FamilyTab = ({
+export const FamilyTab = React.memo(({
   familyMembers,
   loading,
   onAddFamilyMember,
@@ -100,11 +101,9 @@ export const FamilyTab = ({
       )}
     </div>
   );
-};
+});
 
-
-
-
+FamilyTab.displayName = "FamilyTab";
 
 
 
