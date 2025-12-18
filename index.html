@@ -3,15 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <!-- Resource hints for performance optimization on weak networks (LTE/2G) -->
-    <!-- Preconnect to own domain to warm up connection for CSS/JS -->
-    <link rel="preconnect" href="https://www.kidscallhome.com" />
-    <!-- DNS prefetch for Supabase - note: actual subdomain injected by Vite at build time -->
+    <!-- Resource hints for performance optimization -->
+    <!-- DNS prefetch for Supabase - actual subdomain injected by Vite at build time -->
     <link rel="dns-prefetch" href="https://supabase.co" />
     
-    <!-- Preload LCP image for faster first paint - WebP with PNG fallback -->
+    <!-- Preload LCP image for faster first paint (WebP only - PNG fallback doesn't need preload) -->
     <link rel="preload" href="/icon-96x96.webp" as="image" type="image/webp" fetchpriority="high" />
-    <link rel="preload" href="/icon-96x96.png" as="image" type="image/png" fetchpriority="high" />
     
     <!-- Lexend Font Family - Optimized loading for fast first paint -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -165,33 +162,14 @@
     <meta name="keywords" content="safe video calling app for kids, kids call parents without phone or SIM, family-only calling, co-parenting communication for kids, safe kids messaging app, video calls for children without SIM card, tablet calling app for kids, iPad video calling without phone, kids communication app no strangers, privacy-first kids app" />
     
     <!-- Speculation Rules API for instant navigations (Chrome 109+) -->
-    <!-- Prerender likely navigation targets for near-instant page loads -->
+    <!-- Only prefetch specific high-value pages to avoid resource waste -->
     <script type="speculationrules">
     {
-      "prerender": [
-        {
-          "source": "document",
-          "where": {
-            "and": [
-              { "href_matches": "/*" },
-              { "not": { "href_matches": "/api/*" } },
-              { "not": { "href_matches": "/*\\?*" } },
-              { "not": { "selector_matches": "[rel~=nofollow]" } }
-            ]
-          },
-          "eagerness": "moderate"
-        }
-      ],
       "prefetch": [
         {
-          "source": "document",
-          "where": {
-            "and": [
-              { "href_matches": "/*" },
-              { "not": { "href_matches": "/api/*" } }
-            ]
-          },
-          "eagerness": "moderate"
+          "source": "list",
+          "urls": ["/parent/auth", "/child/login", "/info"],
+          "eagerness": "conservative"
         }
       ]
     }
