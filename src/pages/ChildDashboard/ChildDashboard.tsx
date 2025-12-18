@@ -5,6 +5,7 @@ import { useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { endCall as endCallUtil } from "@/features/calls/utils/callEnding";
+import { stopAllActiveStreams } from "@/features/calls/utils/mediaCleanup";
 import { useMissedBadgeForChild, useUnreadBadgeForChild } from "@/stores/badgeStore";
 import Navigation from "@/components/Navigation";
 import { OnboardingTour } from "@/features/onboarding/OnboardingTour";
@@ -103,6 +104,9 @@ const ChildDashboard = () => {
           variant: "destructive",
         });
       }
+      // CRITICAL: Safety measure - stop any active media streams
+      stopAllActiveStreams();
+      
       stopIncomingCall(incomingCall.id);
       setIncomingCall(null);
       isAnsweringRef.current = false; // Reset in case it was stuck

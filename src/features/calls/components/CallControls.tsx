@@ -1,7 +1,7 @@
 // src/features/calls/components/CallControls.tsx
 // Modern call control buttons - mobile-friendly design matching the call theme
 
-import { Mic, MicOff, PhoneOff, Video, VideoOff, Volume2, VolumeX } from "lucide-react";
+import { Mic, MicOff, PhoneOff, Video, VideoOff, Volume2 } from "lucide-react";
 
 interface CallControlsProps {
   isMuted: boolean;
@@ -26,35 +26,33 @@ export const CallControls = ({
   return (
     <div className="absolute bottom-0 left-0 right-0 pb-8 pt-20 bg-gradient-to-t from-black/80 via-black/40 to-transparent z-50">
       <div className="flex items-center justify-center gap-4 sm:gap-6">
-        {/* Volume/Speaker Button - Toggle volume boost */}
-        {onToggleVolume && (
-          <button
-            type="button"
-            onClick={onToggleVolume}
-            className={`
-              relative w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center
-              transition-all duration-200 active:scale-90
-              ${isVolumeBoosted 
-                ? "bg-gradient-to-br from-green-500 to-emerald-600 shadow-lg shadow-green-500/30" 
-                : "bg-white/20 backdrop-blur-sm hover:bg-white/30"
-              }
-            `}
-            style={{ touchAction: "manipulation" }}
-            aria-label={isVolumeBoosted ? "Normal volume" : "Boost volume"}
-          >
-            {isVolumeBoosted ? (
-              <Volume2 className="w-6 h-6 sm:w-7 sm:h-7 text-white" />
-            ) : (
-              <Volume2 className="w-6 h-6 sm:w-7 sm:h-7 text-white/70" />
-            )}
-            {/* Boost indicator */}
-            {isVolumeBoosted && (
-              <span className="absolute -top-1 -right-1 w-4 h-4 bg-green-400 rounded-full border-2 border-black flex items-center justify-center">
-                <span className="text-[8px] font-bold text-black">+</span>
-              </span>
-            )}
-          </button>
-        )}
+        {/* Volume/Speaker Button - Always show with prominent styling */}
+        <button
+          type="button"
+          onClick={onToggleVolume}
+          className={`
+            relative w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center
+            transition-all duration-200 active:scale-90
+            ${isVolumeBoosted 
+              ? "bg-gradient-to-br from-green-500 to-emerald-600 shadow-lg shadow-green-500/30 ring-2 ring-green-400/50" 
+              : "bg-gradient-to-br from-blue-500/80 to-indigo-600/80 shadow-lg shadow-blue-500/20 hover:from-blue-500 hover:to-indigo-600"
+            }
+          `}
+          style={{ touchAction: "manipulation" }}
+          aria-label={isVolumeBoosted ? "Normal volume" : "Boost volume"}
+        >
+          <Volume2 className={`w-6 h-6 sm:w-7 sm:h-7 ${isVolumeBoosted ? "text-white" : "text-white"}`} />
+          {/* Boost indicator */}
+          {isVolumeBoosted && (
+            <span className="absolute -top-1 -right-1 w-5 h-5 bg-green-400 rounded-full border-2 border-black flex items-center justify-center animate-pulse">
+              <span className="text-[10px] font-bold text-black">+</span>
+            </span>
+          )}
+          {/* Sound waves animation when boosted */}
+          {isVolumeBoosted && (
+            <span className="absolute inset-0 rounded-full border-2 border-green-400/50 animate-ping" style={{ animationDuration: "1.5s" }} />
+          )}
+        </button>
 
         {/* Mute Button */}
         <button
@@ -128,11 +126,9 @@ export const CallControls = ({
 
       {/* Button labels - helpful for accessibility */}
       <div className="flex items-center justify-center gap-4 sm:gap-6 mt-3">
-        {onToggleVolume && (
-          <span className={`w-14 sm:w-16 text-center text-xs ${isVolumeBoosted ? "text-green-300" : "text-white/60"}`}>
-            {isVolumeBoosted ? "Loud" : "Speaker"}
-          </span>
-        )}
+        <span className={`w-14 sm:w-16 text-center text-xs font-medium ${isVolumeBoosted ? "text-green-300" : "text-blue-300"}`}>
+          {isVolumeBoosted ? "🔊 Loud" : "🔈 Volume"}
+        </span>
         <span className={`w-14 sm:w-16 text-center text-xs ${isMuted ? "text-red-300" : "text-white/60"}`}>
           {isMuted ? "Muted" : "Mute"}
         </span>

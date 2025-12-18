@@ -6,6 +6,7 @@ import { useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { endCall as endCallUtil } from "@/features/calls/utils/callEnding";
+import { stopAllActiveStreams } from "@/features/calls/utils/mediaCleanup";
 import { AndroidIncomingCall } from "@/components/native/AndroidIncomingCall";
 import { isNativeAndroid } from "@/utils/nativeAndroid";
 import { useIncomingCallState } from "./useIncomingCallState";
@@ -124,6 +125,10 @@ export const GlobalIncomingCall = () => {
       } catch (error) {
         console.error("Error declining call:", error);
       }
+
+      // CRITICAL: Safety measure - stop any active media streams
+      // In case camera was started (e.g., from a previous call or pre-warm)
+      stopAllActiveStreams();
 
       stopIncomingCall(incomingCall.id);
       setIncomingCall(null);

@@ -5,6 +5,7 @@ import { useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { endCall as endCallUtil } from "@/features/calls/utils/callEnding";
+import { stopAllActiveStreams } from "@/features/calls/utils/mediaCleanup";
 import { useIncomingCallNotifications } from "@/features/calls/hooks/useIncomingCallNotifications";
 import { setUserStartedCall } from "@/utils/userInteraction";
 import { IncomingCall } from "./types";
@@ -50,6 +51,9 @@ export const useIncomingCallHandlers = () => {
         variant: "destructive",
       });
     }
+    // CRITICAL: Safety measure - stop any active media streams
+    stopAllActiveStreams();
+    
     stopIncomingCall(incomingCall.id);
     setIncomingCall(null);
     isAnsweringRef.current = false; // Reset in case it was stuck

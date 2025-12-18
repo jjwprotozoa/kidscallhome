@@ -7,6 +7,7 @@ import type { Json } from "@/integrations/supabase/types";
 import { safeLog } from "@/utils/security";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { endCall as endCallUtil } from "../utils/callEnding";
+import { registerActiveStream, unregisterActiveStream, stopAllActiveStreams } from "../utils/mediaCleanup";
 import {
   ConnectionType,
   NetworkQualityLevel,
@@ -221,6 +222,11 @@ export const useWebRTC = (
 
       setLocalStream(stream);
       localStreamRef.current = stream;
+      
+      // CRITICAL: Register the stream for global cleanup tracking
+      // This ensures the camera can be released even if component refs are lost
+      registerActiveStream(stream);
+      
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = stream;
         // Local video should play immediately (no autoplay restrictions for local video)
@@ -1905,9 +1911,12 @@ export const useWebRTC = (
       // Stop all tracks from local stream
       const streamToCleanup = localStreamRef.current;
       if (streamToCleanup) {
+        // CRITICAL: Unregister from global registry before stopping
+        unregisterActiveStream(streamToCleanup);
+        
         streamToCleanup.getTracks().forEach((track) => {
           track.stop();
-          safeLog.log("Stopped track:", track.kind);
+          safeLog.log("🛑 [CLEANUP] Stopped track:", track.kind);
         });
         localStreamRef.current = null;
         setLocalStream(null);
@@ -1918,7 +1927,7 @@ export const useWebRTC = (
         const stream = localVideoRef.current.srcObject as MediaStream;
         stream.getTracks().forEach((track) => {
           track.stop();
-          safeLog.log("Stopped track from video element:", track.kind);
+          safeLog.log("🛑 [CLEANUP] Stopped track from video element:", track.kind);
         });
         localVideoRef.current.srcObject = null;
       }
@@ -1929,7 +1938,7 @@ export const useWebRTC = (
           .srcObject as MediaStream;
         remoteVideoStream.getTracks().forEach((track) => {
           track.stop();
-          safeLog.log("Stopped remote video track:", track.kind);
+          safeLog.log("🛑 [CLEANUP] Stopped remote video track:", track.kind);
         });
         remoteVideoRef.current.srcObject = null;
       }
@@ -1939,7 +1948,7 @@ export const useWebRTC = (
       if (remoteToCleanup) {
         remoteToCleanup.getTracks().forEach((track) => {
           track.stop();
-          safeLog.log("Stopped remote stream track:", track.kind);
+          safeLog.log("🛑 [CLEANUP] Stopped remote stream track:", track.kind);
         });
       }
 
@@ -1962,6 +1971,12 @@ export const useWebRTC = (
       setRemoteStream(null);
       remoteStreamRef.current = null;
       processedTrackIds.current.clear();
+      
+      // CRITICAL: As a fallback, stop any remaining registered streams
+      // This ensures camera indicator goes off even if refs are somehow lost
+      if (force) {
+        stopAllActiveStreams();
+      }
     },
     // NOTE: networkQuality is intentionally excluded from deps to prevent recreation on stats updates
     // The stopMonitoring function is stable and handles cleanup internally

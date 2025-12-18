@@ -4,6 +4,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { endCall as endCallUtil } from "../../utils/callEnding";
+import { stopAllActiveStreams } from "../../utils/mediaCleanup";
 import { resetUserStartedCall } from "@/utils/userInteraction";
 import type { CallState } from "./useCallStateMachine";
 
@@ -48,6 +49,10 @@ export const useCallTermination = ({
     // CRITICAL: Force cleanup WebRTC immediately - this stops the camera
     // force=true ensures cleanup happens even if ICE is in "new" or "checking" state
     cleanupWebRTC(true);
+    
+    // CRITICAL: Safety fallback - stop any registered streams that might have been missed
+    // This ensures the camera indicator goes off even if refs are somehow lost
+    stopAllActiveStreams();
 
     // Cleanup polling interval
     if (answerPollingIntervalRef.current) {

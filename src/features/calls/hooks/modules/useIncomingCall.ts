@@ -7,6 +7,7 @@ import type { Json } from "@/integrations/supabase/types";
 import { useCallback } from "react";
 import { validateAdultIncomingCall } from "./handlers/adultIncomingCallHandler";
 import { validateChildIncomingCall } from "./handlers/childIncomingCallHandler";
+import { stopAllActiveStreams } from "../../utils/mediaCleanup";
 import { resetUserStartedCall } from "@/utils/userInteraction";
 import type { CallState } from "./useCallStateMachine";
 
@@ -193,14 +194,28 @@ export const useIncomingCall = ({
         const remoteCandidates =
           (call[remoteCandidateField] as RTCIceCandidateInit[]) || [];
 
+        // DIAGNOSTIC: Log ICE candidate state when accepting call
+        console.warn(
+          `🧊 [INCOMING CALL] ICE candidate state when accepting:`, {
+            role,
+            remoteCandidateField,
+            existingCandidatesCount: remoteCandidates.length,
+            callHasField: remoteCandidateField in call,
+            rawFieldValue: call[remoteCandidateField],
+            iceConnectionState: pc.iceConnectionState,
+          }
+        );
+
         if (remoteCandidates.length > 0) {
           console.warn(
             `📞 [INCOMING CALL] Processing ${remoteCandidates.length} existing remote ICE candidates`
           );
+          let addedCount = 0;
           for (const candidate of remoteCandidates) {
             try {
               if (!candidate.candidate) continue;
               await pc.addIceCandidate(new RTCIceCandidate(candidate));
+              addedCount++;
             } catch (err) {
               const error = err as Error;
               if (
@@ -214,6 +229,11 @@ export const useIncomingCall = ({
               }
             }
           }
+          console.warn(`✅ [INCOMING CALL] Added ${addedCount} ICE candidates`);
+        } else {
+          console.warn(
+            `⚠️ [INCOMING CALL] No existing ICE candidates from caller - they may arrive via UPDATE events`
+          );
         }
       } catch (error) {
         console.error("Error accepting call:", error);
@@ -221,6 +241,8 @@ export const useIncomingCall = ({
         if (cleanupWebRTC) {
           cleanupWebRTC(true);
         }
+        // CRITICAL: Safety fallback - ensure all streams are stopped
+        stopAllActiveStreams();
         // NOTE: Do NOT call resetUserStartedCall() here!
         // The user explicitly clicked Accept, so their intent is clear.
         // Resetting would cause audio to be muted if they retry or if the call
@@ -257,6 +279,8 @@ export const useIncomingCall = ({
         if (cleanupWebRTC) {
           cleanupWebRTC(true);
         }
+        // CRITICAL: Safety fallback - ensure all streams are stopped
+        stopAllActiveStreams();
         resetUserStartedCall();
         
         console.warn("📞 [INCOMING CALL] Call rejected:", incomingCallId);
@@ -266,6 +290,8 @@ export const useIncomingCall = ({
         if (cleanupWebRTC) {
           cleanupWebRTC(true);
         }
+        // CRITICAL: Safety fallback - ensure all streams are stopped even on error
+        stopAllActiveStreams();
         resetUserStartedCall();
         throw error;
       }
