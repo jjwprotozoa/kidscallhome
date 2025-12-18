@@ -4,13 +4,14 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <!-- Resource hints for performance optimization on weak networks (LTE/2G) -->
-    <!-- DNS prefetch for Supabase API - reduces connection time -->
-    <link rel="dns-prefetch" href="https://*.supabase.co" />
-    <!-- Preconnect to Supabase for faster API calls -->
-    <link rel="preconnect" href="https://*.supabase.co" crossorigin />
+    <!-- Preconnect to own domain to warm up connection for CSS/JS -->
+    <link rel="preconnect" href="https://www.kidscallhome.com" />
+    <!-- DNS prefetch for Supabase - note: actual subdomain injected by Vite at build time -->
+    <link rel="dns-prefetch" href="https://supabase.co" />
     
-    <!-- Preload LCP image for faster first paint -->
-    <link rel="preload" href="/icon-192x192.png" as="image" type="image/png" fetchpriority="high" />
+    <!-- Preload LCP image for faster first paint - WebP with PNG fallback -->
+    <link rel="preload" href="/icon-96x96.webp" as="image" type="image/webp" fetchpriority="high" />
+    <link rel="preload" href="/icon-96x96.png" as="image" type="image/png" fetchpriority="high" />
     
     <!-- Lexend Font Family - Optimized loading for fast first paint -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -162,6 +163,39 @@
     
     <!-- Voice Assistant Keywords - Problem-Solving Focus -->
     <meta name="keywords" content="safe video calling app for kids, kids call parents without phone or SIM, family-only calling, co-parenting communication for kids, safe kids messaging app, video calls for children without SIM card, tablet calling app for kids, iPad video calling without phone, kids communication app no strangers, privacy-first kids app" />
+    
+    <!-- Speculation Rules API for instant navigations (Chrome 109+) -->
+    <!-- Prerender likely navigation targets for near-instant page loads -->
+    <script type="speculationrules">
+    {
+      "prerender": [
+        {
+          "source": "document",
+          "where": {
+            "and": [
+              { "href_matches": "/*" },
+              { "not": { "href_matches": "/api/*" } },
+              { "not": { "href_matches": "/*\\?*" } },
+              { "not": { "selector_matches": "[rel~=nofollow]" } }
+            ]
+          },
+          "eagerness": "moderate"
+        }
+      ],
+      "prefetch": [
+        {
+          "source": "document",
+          "where": {
+            "and": [
+              { "href_matches": "/*" },
+              { "not": { "href_matches": "/api/*" } }
+            ]
+          },
+          "eagerness": "moderate"
+        }
+      ]
+    }
+    </script>
   </head>
 
   <body>
@@ -273,7 +307,11 @@
     </style>
     <div id="app-loading">
       <div class="loader-content">
-        <img src="/icon-192x192.png" alt="" class="app-icon" width="80" height="80" fetchpriority="high" decoding="async" />
+        <picture>
+          <source type="image/webp" srcset="/icon-96x96.webp 1x, /icon-192x192.webp 2x" />
+          <source type="image/png" srcset="/icon-96x96.png 1x, /icon-192x192.png 2x" />
+          <img src="/icon-96x96.png" alt="" class="app-icon" width="80" height="80" fetchpriority="high" decoding="async" />
+        </picture>
         <div class="app-title">Kids Call Home</div>
         <div class="loader-spinner"></div>
       </div>

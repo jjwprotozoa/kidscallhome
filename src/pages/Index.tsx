@@ -13,13 +13,30 @@ const Index = () => {
         <div className="text-center space-y-6 mb-16">
           {/* CLS: Reserve space with aspect-square wrapper to prevent layout shift */}
           <div className="aspect-square w-20 mx-auto">
-            <img 
-              src="/icon-192x192.png" 
-              alt="Kids Call Home" 
-              className="w-full h-full object-contain"
-              width="192"
-              height="192"
-            />
+            <picture>
+              {/* WebP for modern browsers - 93% smaller than PNG */}
+              <source 
+                type="image/webp"
+                srcSet="/icon-96x96.webp 96w, /icon-192x192.webp 192w"
+                sizes="80px"
+              />
+              {/* PNG fallback for older browsers */}
+              <source 
+                type="image/png"
+                srcSet="/icon-96x96.png 96w, /icon-192x192.png 192w"
+                sizes="80px"
+              />
+              <img 
+                src="/icon-96x96.png" 
+                alt="Kids Call Home" 
+                className="w-full h-full object-contain"
+                width="96"
+                height="96"
+                loading="eager"
+                fetchPriority="high"
+                decoding="async"
+              />
+            </picture>
           </div>
           <h1 className="text-5xl md:text-6xl font-bold text-primary">
             Kids Call Home

@@ -37,6 +37,21 @@ export default defineConfig(({ mode }) => {
           );
         }
 
+        // Inject Supabase preconnect hint using the actual URL from environment
+        // This reduces connection latency for API calls
+        const supabaseUrl = process.env.VITE_SUPABASE_URL;
+        if (supabaseUrl) {
+          try {
+            const supabaseOrigin = new URL(supabaseUrl).origin;
+            transformed = transformed.replace(
+              '<link rel="dns-prefetch" href="https://supabase.co" />',
+              `<link rel="dns-prefetch" href="${supabaseOrigin}" />\n    <link rel="preconnect" href="${supabaseOrigin}" crossorigin />`
+            );
+          } catch {
+            // If URL parsing fails, keep the generic dns-prefetch
+          }
+        }
+
         return transformed;
       },
     };
@@ -111,6 +126,9 @@ export default defineConfig(({ mode }) => {
       // This imports notification-handlers.js which handles incoming call notifications on Windows
       VitePWA({
         registerType: "autoUpdate",
+        // Defer SW registration until page is idle to reduce critical path
+        // This prevents registerSW.js from blocking initial render
+        injectRegister: "script-defer",
         workbox: {
           // Cache version for cache busting on deployment
           cacheId: "kidscallhome-v1",
