@@ -55,17 +55,18 @@ try {
   safeLog.log("✅ [APP INIT] App rendered successfully");
   
   // Hide loading spinner after React has rendered
-  // Use requestAnimationFrame to ensure DOM is ready
+  // Use requestAnimationFrame to ensure DOM is ready, then another frame to ensure paint
   requestAnimationFrame(() => {
-    const loadingElement = document.getElementById("app-loading");
-    if (loadingElement) {
-      // Fade out smoothly
-      loadingElement.style.transition = "opacity 0.3s ease-out";
-      loadingElement.style.opacity = "0";
-      setTimeout(() => {
-        loadingElement.remove();
-      }, 300);
-    }
+    requestAnimationFrame(() => {
+      const loadingElement = document.getElementById("app-loading");
+      if (loadingElement) {
+        // Use CSS class for smooth fade (hardware-accelerated)
+        loadingElement.classList.add("fade-out");
+        setTimeout(() => {
+          loadingElement.remove();
+        }, 200);
+      }
+    });
   });
 } catch (error) {
   safeLog.error("❌ [APP INIT] Failed to render app:", error);

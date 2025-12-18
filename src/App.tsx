@@ -1,13 +1,22 @@
-import { CookieConsent } from "@/components/CookieConsent";
+// Critical imports - needed for initial render
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { GlobalIncomingCall } from "@/components/GlobalIncomingCall";
-import { GlobalMessageNotifications } from "@/components/GlobalMessageNotifications";
-import { GlobalPresenceTracker } from "@/components/GlobalPresenceTracker";
 import { SafeAreaLayout } from "@/components/layout/SafeAreaLayout";
-import { PWAInstallPrompt } from "@/components/PWAInstallPrompt";
-import { Toaster as Sonner } from "@/components/ui/sonner";
-import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { lazy, Suspense, useEffect, useState } from "react";
+import { BrowserRouter, Navigate, Route, Routes, useNavigate } from "react-router-dom";
+
+// Deferred UI components - loaded after initial paint for faster FCP
+// These are non-critical for the initial page render but provide enhanced UX
+const CookieConsent = lazy(() => import("@/components/CookieConsent").then(m => ({ default: m.CookieConsent })));
+const GlobalIncomingCall = lazy(() => import("@/components/GlobalIncomingCall").then(m => ({ default: m.GlobalIncomingCall })));
+const GlobalMessageNotifications = lazy(() => import("@/components/GlobalMessageNotifications").then(m => ({ default: m.GlobalMessageNotifications })));
+const GlobalPresenceTracker = lazy(() => import("@/components/GlobalPresenceTracker").then(m => ({ default: m.GlobalPresenceTracker })));
+const PWAInstallPrompt = lazy(() => import("@/components/PWAInstallPrompt").then(m => ({ default: m.PWAInstallPrompt })));
+const Sonner = lazy(() => import("@/components/ui/sonner").then(m => ({ default: m.Toaster })));
+const Toaster = lazy(() => import("@/components/ui/toaster").then(m => ({ default: m.Toaster })));
+
+// Regular imports for hooks and utilities (small size, needed for functionality)
 import { useBadgeInitialization } from "@/hooks/useBadgeInitialization";
 import { useBadgeRealtime } from "@/hooks/useBadgeRealtime";
 import { useWidgetData } from "@/hooks/useWidgetData";
@@ -17,9 +26,6 @@ import {
   isNativeAndroid,
 } from "@/utils/nativeAndroid";
 import { loadWidgetData } from "@/utils/widgetData";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { lazy, Suspense, useEffect } from "react";
-import { BrowserRouter, Navigate, Route, Routes, useNavigate } from "react-router-dom";
 
 // Import functions for critical routes (used for both lazy loading and prefetching)
 const parentHomeImport = () => import("./pages/ParentHome");
@@ -107,15 +113,24 @@ const Chat = lazy(() => import("./pages/Chat"));
 const Info = lazy(() => import("./pages/Info"));
 const Beta = lazy(() => import("./pages/Beta"));
 
-// Loading fallback component
-const PageLoader = () => (
-  <div className="flex items-center justify-center min-h-[100dvh]">
-    <div className="text-center">
-      <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]" />
-      <p className="mt-4 text-sm text-muted-foreground">Loading...</p>
+// Loading fallback component - minimal to avoid double spinner effect
+// The initial HTML loading screen handles the first load, this is for route transitions
+const PageLoader = () => {
+  // If initial loading screen is still visible, don't show another spinner
+  const initialLoading = document.getElementById("app-loading");
+  if (initialLoading) {
+    return null; // Let the HTML loading screen handle it
+  }
+  
+  return (
+    <div className="flex items-center justify-center min-h-[100dvh]">
+      <div className="text-center">
+        <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]" />
+        <p className="mt-4 text-sm text-muted-foreground">Loading...</p>
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 // Configure QueryClient with error handling and caching
 const queryClient = new QueryClient({
@@ -259,6 +274,44 @@ const SessionManager = () => {
   return null;
 };
 
+// Component to render deferred global components after initial load
+// These are lazy-loaded to improve FCP but should mount quickly after
+const DeferredGlobalComponents = () => {
+  const [mounted, setMounted] = useState(false);
+  
+  useEffect(() => {
+    // Wait for initial paint then mount deferred components
+    // Use requestIdleCallback for best performance, fallback to setTimeout
+    const schedule = (callback: () => void) => {
+      if ('requestIdleCallback' in window) {
+        requestIdleCallback(callback, { timeout: 1000 });
+      } else {
+        setTimeout(callback, 100);
+      }
+    };
+    
+    schedule(() => setMounted(true));
+  }, []);
+  
+  if (!mounted) return null;
+  
+  return (
+    <Suspense fallback={null}>
+      <ErrorBoundary fallback={null}>
+        <GlobalIncomingCall />
+      </ErrorBoundary>
+      <ErrorBoundary fallback={null}>
+        <GlobalMessageNotifications />
+      </ErrorBoundary>
+      <ErrorBoundary fallback={null}>
+        <GlobalPresenceTracker />
+      </ErrorBoundary>
+      <CookieConsent />
+      <PWAInstallPrompt />
+    </Suspense>
+  );
+};
+
 const App = () => {
   // Wrap critical components in error boundaries to prevent app crashes
   return (
@@ -278,8 +331,11 @@ const App = () => {
           <ErrorBoundary fallback={null}>
             <RoutePrefetcher />
           </ErrorBoundary>
-          <Toaster />
-          <Sonner />
+          {/* Toasters are lazy-loaded but needed early for notifications */}
+          <Suspense fallback={null}>
+            <Toaster />
+            <Sonner />
+          </Suspense>
           <SafeAreaLayout className="w-full overflow-x-hidden">
             <BrowserRouter
               future={{
@@ -290,17 +346,8 @@ const App = () => {
               <ErrorBoundary fallback={null}>
                 <WidgetIntentHandler />
               </ErrorBoundary>
-              <ErrorBoundary fallback={null}>
-                <GlobalIncomingCall />
-              </ErrorBoundary>
-              <ErrorBoundary fallback={null}>
-                <GlobalMessageNotifications />
-              </ErrorBoundary>
-              <ErrorBoundary fallback={null}>
-                <GlobalPresenceTracker />
-              </ErrorBoundary>
-              <CookieConsent />
-              <PWAInstallPrompt />
+              {/* Deferred global components - loaded after initial paint */}
+              <DeferredGlobalComponents />
               <Suspense fallback={<PageLoader />}>
                 <Routes>
                   <Route path="/" element={<Index />} />
