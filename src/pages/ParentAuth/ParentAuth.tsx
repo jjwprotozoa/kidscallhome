@@ -13,8 +13,8 @@ import { detectBot, initBehaviorTracking } from "@/utils/botDetection";
 import { getCSRFToken } from "@/utils/csrf";
 import { getRateLimitKey, recordRateLimit } from "@/utils/rateLimiting";
 import { safeLog, sanitizeError } from "@/utils/security";
-import { useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useMemo } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { LoginForm } from "./LoginForm";
 import { SignupForm } from "./SignupForm";
 import {
@@ -31,6 +31,7 @@ import { useAuthState } from "./useAuthState";
 
 const ParentAuth = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { toast } = useToast();
   const authState = useAuthState();
   const { lockoutInfo, showCaptcha, setShowCaptcha, updateLockoutInfo } =
@@ -39,6 +40,18 @@ const ParentAuth = () => {
     authState.password,
     authState.isLogin
   );
+
+  // Extract referral code from URL (e.g., ?ref=ABC123)
+  const referralCode = useMemo(() => {
+    const ref = searchParams.get("ref");
+    if (ref) {
+      // Store in localStorage in case user navigates away and comes back
+      localStorage.setItem("kch_referral_code", ref.toUpperCase());
+      return ref.toUpperCase();
+    }
+    // Check if there's a stored referral code
+    return localStorage.getItem("kch_referral_code");
+  }, [searchParams]);
 
   // Initialize security features
   useEffect(() => {
@@ -178,10 +191,13 @@ const ParentAuth = () => {
       password,
       name: authState.name,
       validation,
+      referralCode,
     });
     if (result.needsFamilySetup && result.user) {
       authState.setUserId(result.user.id);
       authState.setNeedsFamilySetup(true);
+      // Clear stored referral code after successful signup
+      localStorage.removeItem("kch_referral_code");
     }
   };
 
@@ -204,6 +220,13 @@ const ParentAuth = () => {
                 : "Welcome back, parent!"
               : "Create your parent account"}
           </p>
+          {/* Referral code indicator */}
+          {referralCode && !authState.isLogin && (
+            <div className="bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-300 text-sm px-3 py-2 rounded-md border border-green-200 dark:border-green-800">
+              🎁 Referral code <strong>{referralCode}</strong> applied! You'll
+              both get 1 week free when you subscribe.
+            </div>
+          )}
         </div>
 
         <form onSubmit={handleAuth} className="space-y-4">

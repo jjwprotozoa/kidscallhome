@@ -2,6 +2,165 @@
 
 > **Note**: For detailed technical information, complete file lists, testing recommendations, and implementation specifics, see [CHANGES_DETAILED.md](./CHANGES_DETAILED.md).
 
+## Latest Changes (2025-12-18) - Referral System & Pricing Update
+
+### -1. Devices Page RLS Policy Fix
+
+- **Purpose**: Fix devices page at `/parent/devices` not displaying any device data despite devices existing in database
+- **Issue**: The devices page was rendering but showing no device cards. Console showed the query was returning empty results even though the database had 34+ devices for the parent
+- **Root Cause**: Row Level Security (RLS) policy for SELECT on `public.devices` table was missing the `TO authenticated` clause, causing the policy to not apply correctly to authenticated users
+- **Investigation**:
+  - Verified devices existed in database with correct `parent_id` matching the logged-in user's `auth.uid()`
+  - Checked component routing (App.tsx → DeviceManagement) was correct
+  - Found duplicate `DeviceManagement.tsx` file at root of pages folder conflicting with the one in `DeviceManagement/` subfolder
+  - Identified RLS policy was created without explicit `TO authenticated` role specification
+- **Solution**:
+  - **RLS Policy Fix** (applied via Supabase SQL Editor):
+    ```sql
+    DROP POLICY IF EXISTS "Parents can view own devices" ON public.devices;
+    CREATE POLICY "Parents can view own devices"
+      ON public.devices FOR SELECT
+      TO authenticated
+      USING (parent_id = (select auth.uid()));
+    GRANT SELECT, INSERT, UPDATE, DELETE ON public.devices TO authenticated;
+    ```
+  - **File Cleanup**: Deleted duplicate `src/pages/DeviceManagement.tsx` (kept `src/pages/DeviceManagement/DeviceManagement.tsx`)
+  - **Import Fix**: Updated `App.tsx` import from `./pages/DeviceManagement` to `./pages/DeviceManagement/index` for explicit resolution
+  - **Infinite Loop Fix**: Added `historyFetched` state flag in `DeviceManagement.tsx` to prevent repeated device history fetches when "history" tab is active
+- **Files Modified**:
+  - `src/App.tsx` - Fixed DeviceManagement import path
+  - `src/pages/DeviceManagement/DeviceManagement.tsx` - Added `historyFetched` state to fix infinite loop
+- **Files Deleted**:
+  - `src/pages/DeviceManagement.tsx` - Duplicate file removed
+- **Impact**:
+  - **Devices Now Visible**: Parents can see all their registered devices on the devices page
+  - **No Duplicate Files**: Clean file structure with single source of truth for DeviceManagement
+  - **No Infinite Loops**: Device history fetches only once per tab switch instead of continuously
+
+### 0. Child Login Code Update Fix - Optimistic State Update
+
+- **Purpose**: Fix issue where generating a new login code for a child showed the new code in the toast notification but didn't update the dashboard UI
+- **Issue**: When clicking "Generate New Login Code" for a child, the toast message showed the new code correctly, but the code displayed on `/parent/dashboard?tab=children` didn't update
+- **Root Cause**: The previous implementation called `loadChildren()` to refetch all children after updating the code, but React.memo on `DashboardTabs` and `ChildrenTab` was preventing re-renders due to prop comparison timing issues
+- **Solution**: Implemented optimistic state update that directly modifies the child's `login_code` in the local state instead of refetching
+- **Changes**:
+  - **`useCodeHandlers.ts`**:
+    - Changed callback parameter from `onChildrenUpdated: () => void | Promise<void>` to `updateChildLoginCode: (childId: string, newCode: string) => void`
+    - Now calls `updateChildLoginCode(child.id, newCode)` immediately after successful database update
+  - **`ParentDashboard.tsx`**:
+    - Added new `updateChildLoginCode` callback that directly updates the child in the `children` state:
+      ```typescript
+      const updateChildLoginCode = useCallback((childId: string, newCode: string) => {
+        setChildren(prevChildren => 
+          prevChildren.map(child => 
+            child.id === childId 
+              ? { ...child, login_code: newCode }
+              : child
+          )
+        );
+      }, []);
+      ```
+    - Passes this function to `useCodeHandlers` instead of `loadChildren`
+- **Files Modified**:
+  - `src/pages/ParentDashboard/useCodeHandlers.ts` - Changed to optimistic update pattern
+  - `src/pages/ParentDashboard/ParentDashboard.tsx` - Added `updateChildLoginCode` callback
+- **Impact**:
+  - **Guaranteed UI Update**: Creating a new array with a new child object guarantees React detects the state change
+  - **Instant Feedback**: UI updates immediately without waiting for network round-trip
+  - **No Race Conditions**: Avoids timing issues between refetch completion and React.memo comparison
+  - **Better Performance**: No unnecessary database query after update
+
+### 1. Pricing Section Rewrite
+
+- **Purpose**: Simplify pricing model to a free tier, single Family Plan, and "contact us" option for larger groups
+- **Changes**:
+  - **Free Plan**: 1 parent + 1 child, perfect for trying the app
+  - **Family Plan**: US$14.99/month or US$149/year
+    - Up to 5 kids
+    - Unlimited invited family members (grandparents, aunts, uncles, cousins)
+  - **Larger Families & Organizations**: Custom pricing section for 5+ children or organizational use (schools, clinics, NGOs)
+  - **Referral Rewards**: 1 week free for both referrer and referred when new user subscribes to Family Plan
+- **Files Modified**:
+  - `src/components/info/PricingSection.tsx` - Complete pricing section rewrite with new pricing model
+
+### 2. Referral System Implementation
+
+- **Purpose**: Enable parents to share the app with friends and family, tracking referrals and rewarding both parties
+- **Database Schema** (`supabase/migrations/20251218000000_add_referral_system.sql`):
+  - Added columns to `public.parents` table:
+    - `referral_code` - Unique 8-character alphanumeric code
+    - `referred_by` - UUID of the parent who referred them
+    - `referral_bonus_days` - Accumulated free subscription days from referrals
+  - Created `public.referrals` table:
+    - Tracks referral events with `referrer_id`, `referred_id`, `referral_code_used`
+    - Status tracking: `pending`, `completed`, `expired`
+    - `credited_at` timestamp for when rewards were applied
+  - Database functions:
+    - `generate_referral_code()` - Generates unique 8-char alphanumeric codes
+    - `ensure_referral_code()` - Trigger function for auto-assigning codes to new parents
+    - `track_referral_signup(p_referred_user_id, p_referral_code)` - Records referral on signup
+    - `credit_referral_reward(p_referred_user_id)` - Credits 7 bonus days to both parties
+    - `get_referral_stats(p_parent_id)` - Returns referral statistics
+    - `get_referral_list(p_parent_id)` - Returns list of referrals made by parent
+  - RLS policies for referrals table (parents can only see their own referrals)
+- **Referrals Tab** (`src/features/referrals/components/ReferralsTab.tsx`):
+  - Displays parent's unique referral code with copy button
+  - "How it works" section explaining the referral process
+  - Social sharing buttons for easy distribution
+  - Referral statistics: total referrals, pending, completed, weeks earned
+  - Referral history table with status badges
+- **Dashboard Integration**:
+  - Added "Referrals" tab to parent dashboard with Gift icon
+  - Updated `DashboardTabs.tsx`, `types.ts`, and `ParentDashboard.tsx`
+- **Signup Flow Updates**:
+  - `ParentAuth.tsx` - Extracts `ref` parameter from URL, stores in localStorage, shows referral indicator
+  - `authHandlers.ts` - Retrieves referral code from localStorage and calls `track_referral_signup` RPC after successful signup
+- **Files Created**:
+  - `src/features/referrals/components/ReferralsTab.tsx`
+  - `src/features/referrals/components/SocialShareButtons.tsx`
+  - `src/features/referrals/index.ts`
+  - `supabase/migrations/20251218000000_add_referral_system.sql`
+- **Files Modified**:
+  - `src/pages/ParentDashboard/DashboardTabs.tsx` - Added Referrals tab
+  - `src/pages/ParentDashboard/types.ts` - Added "referrals" to ValidTab type
+  - `src/pages/ParentDashboard/ParentDashboard.tsx` - Added "referrals" to validTabs
+  - `src/pages/ParentAuth/ParentAuth.tsx` - Referral code capture and display
+  - `src/pages/ParentAuth/authHandlers.ts` - Referral tracking on signup
+  - `src/components/info/PricingSection.tsx` - "Get your referral link" button
+
+### 3. Social Sharing Enhancement
+
+- **Purpose**: Make referral sharing more visual, branded, and compelling across all platforms
+- **Social Share Buttons** (`src/features/referrals/components/SocialShareButtons.tsx`):
+  - **WhatsApp**: Branded message with emojis, app description, and referral code
+  - **Facebook**: Quote with app tagline and call-to-action
+  - **Twitter/X**: Concise branded message with emojis and hashtags
+  - **Email**: Rich formatted email with visual separators, feature bullets, and detailed explanation
+  - **Native Share**: Uses Web Share API with fallback to clipboard copy
+  - **Copy Message**: Copies full formatted marketing message to clipboard
+- **Marketing Copy Features**:
+  - App branding: "Kids Call Home" with tagline "Safe Video Calls for Kids"
+  - Key benefits highlighted: family-only video calls, parent-approved contacts, no SIM required
+  - Referral offer prominently displayed: "Use my code and we BOTH get 1 week free!"
+  - Platform-specific formatting (emojis for mobile, plain text for email clients)
+- **Open Graph Integration**:
+  - Updated `index.html` to use `/og-image.png` for social media preview cards
+  - Ensures shared referral links display rich preview with app branding
+- **Files Modified**:
+  - `src/features/referrals/components/SocialShareButtons.tsx` - Enhanced all sharing messages
+  - `index.html` - Fixed OG image URL placeholders
+
+### Impact
+
+- **User Acquisition**: Parents can now easily share the app with friends and family through multiple channels
+- **Viral Growth**: Referral rewards incentivize word-of-mouth marketing
+- **Social Proof**: Branded sharing messages build trust and credibility
+- **Conversion Tracking**: Database tracks referral funnel from signup to subscription
+- **Clear Pricing**: Simplified pricing model reduces confusion and decision fatigue
+- **Revenue Growth**: Family Plan with annual option encourages longer commitments
+
+---
+
 ## SEO & Marketing Copy Implementation
 
 ### Overview

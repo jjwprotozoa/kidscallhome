@@ -27,6 +27,7 @@ interface SignupParams {
   password: string;
   name: string;
   validation: AuthValidationResult;
+  referralCode?: string | null;
 }
 
 export const handleLogin = async ({
@@ -179,6 +180,7 @@ export const handleSignup = async ({
   password,
   name,
   validation,
+  referralCode,
 }: SignupParams) => {
   logAuditEvent("signup", { email, severity: "low" });
   const { data, error } = await supabase.auth.signUp({
@@ -202,6 +204,35 @@ export const handleSignup = async ({
 
   if (validation.sanitized.name || name) {
     setCookie("parentName", validation.sanitized.name || name, 365);
+  }
+
+  // Track referral if a code was provided
+  if (referralCode && data.user) {
+    try {
+      const { data: referralResult, error: referralError } = await supabase.rpc(
+        "track_referral_signup",
+        {
+          p_referral_code: referralCode.toUpperCase(),
+          p_new_user_id: data.user.id,
+          p_new_user_email: email,
+        }
+      );
+
+      if (referralError) {
+        safeLog.warn("Referral tracking failed:", sanitizeError(referralError));
+      } else if (referralResult?.success) {
+        safeLog.log("Referral tracked successfully:", referralResult);
+        logAuditEvent("referral_signup", {
+          userId: data.user.id,
+          email,
+          metadata: { referral_code: referralCode, referrer_id: referralResult.referrer_id },
+          severity: "low",
+        });
+      }
+    } catch (refError) {
+      // Don't fail signup if referral tracking fails
+      safeLog.warn("Referral tracking error:", sanitizeError(refError));
+    }
   }
 
   return { user: data.user, needsFamilySetup: !error && !!data.user };

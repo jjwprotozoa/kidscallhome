@@ -8,7 +8,7 @@ import { Child } from "./types";
 
 export const useCodeHandlers = (
   familyCode: string | null,
-  onChildrenUpdated: () => void
+  updateChildLoginCode: (childId: string, newCode: string) => void
 ) => {
   const { toast } = useToast();
 
@@ -52,12 +52,13 @@ export const useCodeHandlers = (
 
       if (updateError) throw updateError;
 
+      // Optimistically update the local state immediately
+      updateChildLoginCode(child.id, newCode);
+
       toast({
         title: "Login code updated",
         description: `${child.name}'s new login code is: ${newCode}`,
       });
-
-      onChildrenUpdated();
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
       toast({
@@ -68,7 +69,7 @@ export const useCodeHandlers = (
     } finally {
       setIsUpdating(false);
     }
-  }, [toast, onChildrenUpdated]);
+  }, [toast, updateChildLoginCode]);
 
   return {
     getFullLoginCode,

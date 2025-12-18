@@ -6,7 +6,9 @@ import { ChildConnectionsTab } from "@/features/family/components/ChildConnectio
 import { ChildrenTab } from "@/features/family/components/ChildrenTab";
 import { FamilySetupTab } from "@/features/family/components/FamilySetupTab";
 import { FamilyTab } from "@/features/family/components/FamilyTab";
+import { ReferralsTab } from "@/features/referrals";
 import { SafetyReportsTab } from "@/features/safety/components/SafetyReportsTab";
+import { Gift } from "lucide-react";
 import React from "react";
 import { Child, FamilyMember, ValidTab } from "./types";
 
@@ -75,11 +77,18 @@ export const DashboardTabs = React.memo((props: DashboardTabsProps) => {
 
   return (
     <Tabs value={activeTab} onValueChange={onTabChange} className="w-full">
-      <TabsList className="grid w-full grid-cols-5">
+      <TabsList className="grid w-full grid-cols-3 sm:grid-cols-6">
         <TabsTrigger value="children">Children</TabsTrigger>
         <TabsTrigger value="family">Family</TabsTrigger>
-        <TabsTrigger value="connections">Connections</TabsTrigger>
+        <TabsTrigger value="connections" className="hidden sm:flex">
+          Connections
+        </TabsTrigger>
         <TabsTrigger value="safety">Safety</TabsTrigger>
+        <TabsTrigger value="referrals" className="flex items-center gap-1">
+          <Gift className="h-3 w-3" />
+          <span className="hidden sm:inline">Referrals</span>
+          <span className="sm:hidden">Refer</span>
+        </TabsTrigger>
         <TabsTrigger value="setup">Setup</TabsTrigger>
       </TabsList>
 
@@ -131,6 +140,10 @@ export const DashboardTabs = React.memo((props: DashboardTabsProps) => {
 
         <TabsContent value="setup" className="absolute inset-0">
           <FamilySetupTab />
+        </TabsContent>
+
+        <TabsContent value="referrals" className="absolute inset-0">
+          <ReferralsTab />
         </TabsContent>
       </div>
     </Tabs>
