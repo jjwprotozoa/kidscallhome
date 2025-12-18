@@ -1,13 +1,13 @@
 // src/features/family/components/ChildConnectionsTab.tsx
 // Tab component for managing child-to-child connection requests and approvals
 
-import { useState, useEffect } from "react";
-import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { supabase } from "@/integrations/supabase/client";
+import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { approveChildConnection, requestChildConnection } from "@/utils/family-communication";
+import { supabase } from "@/integrations/supabase/client";
 import type { ChildConnection } from "@/types/family-communication";
+import { approveChildConnection } from "@/utils/family-communication";
+import { useCallback, useEffect, useState } from "react";
 
 interface ConnectionRequest extends ChildConnection {
   requester_child_name?: string;
@@ -19,17 +19,21 @@ interface ChildConnectionsTabProps {
   children: Array<{ id: string; name: string }>;
 }
 
-export const ChildConnectionsTab: React.FC<ChildConnectionsTabProps> = ({ children }) => {
+export const ChildConnectionsTab: React.FC<ChildConnectionsTabProps> = ({
+  children,
+}) => {
   const [requests, setRequests] = useState<ConnectionRequest[]>([]);
   const [approved, setApproved] = useState<ConnectionRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
-  const fetchConnections = async () => {
+  const fetchConnections = useCallback(async () => {
     try {
       setLoading(true);
       // Get current user's family ID
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) return;
 
       const { data: adultProfile } = await supabase
@@ -45,7 +49,9 @@ export const ChildConnectionsTab: React.FC<ChildConnectionsTabProps> = ({ childr
       const { data: connections, error } = await supabase
         .from("child_connections")
         .select("*")
-        .or(`requester_family_id.eq.${adultProfile.family_id},target_family_id.eq.${adultProfile.family_id}`)
+        .or(
+          `requester_family_id.eq.${adultProfile.family_id},target_family_id.eq.${adultProfile.family_id}`
+        )
         .order("created_at", { ascending: false });
 
       if (error) throw error;
@@ -58,7 +64,7 @@ export const ChildConnectionsTab: React.FC<ChildConnectionsTabProps> = ({ childr
 
       // Build child ID set
       const childIds = new Set<string>();
-      connections.forEach(conn => {
+      connections.forEach((conn) => {
         childIds.add(conn.requester_child_id);
         childIds.add(conn.target_child_id);
       });
@@ -69,16 +75,22 @@ export const ChildConnectionsTab: React.FC<ChildConnectionsTabProps> = ({ childr
         .select("id, name")
         .in("id", Array.from(childIds));
 
-      const childNameMap = new Map(childProfiles?.map(cp => [cp.id, cp.name]) || []);
+      const childNameMap = new Map(
+        childProfiles?.map((cp) => [cp.id, cp.name]) || []
+      );
 
-      const enrichedConnections: ConnectionRequest[] = connections.map(conn => ({
-        ...conn,
-        requester_child_name: childNameMap.get(conn.requester_child_id) || "Unknown",
-        target_child_name: childNameMap.get(conn.target_child_id) || "Unknown",
-      }));
+      const enrichedConnections: ConnectionRequest[] = connections.map(
+        (conn) => ({
+          ...conn,
+          requester_child_name:
+            childNameMap.get(conn.requester_child_id) || "Unknown",
+          target_child_name:
+            childNameMap.get(conn.target_child_id) || "Unknown",
+        })
+      );
 
-      setRequests(enrichedConnections.filter(c => c.status === "pending"));
-      setApproved(enrichedConnections.filter(c => c.status === "approved"));
+      setRequests(enrichedConnections.filter((c) => c.status === "pending"));
+      setApproved(enrichedConnections.filter((c) => c.status === "approved"));
     } catch (error) {
       console.error("Error fetching connections:", error);
       toast({
@@ -89,15 +101,17 @@ export const ChildConnectionsTab: React.FC<ChildConnectionsTabProps> = ({ childr
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast]);
 
   useEffect(() => {
     fetchConnections();
-  }, []);
+  }, [fetchConnections]);
 
   const handleApprove = async (connectionId: string) => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) return;
 
       const { data: adultProfile } = await supabase
@@ -109,7 +123,10 @@ export const ChildConnectionsTab: React.FC<ChildConnectionsTabProps> = ({ childr
 
       if (!adultProfile) return;
 
-      const success = await approveChildConnection(connectionId, adultProfile.id);
+      const success = await approveChildConnection(
+        connectionId,
+        adultProfile.id
+      );
       if (success) {
         toast({
           title: "Connection approved",
@@ -156,9 +173,11 @@ export const ChildConnectionsTab: React.FC<ChildConnectionsTabProps> = ({ childr
       {loading ? (
         <div className="space-y-6">
           <section>
-            <h2 className="text-xl font-semibold mb-4">Pending Connection Requests</h2>
+            <h2 className="text-xl font-semibold mb-4">
+              Pending Connection Requests
+            </h2>
             <div className="space-y-2">
-              {[1, 2].map(i => (
+              {[1, 2].map((i) => (
                 <Card key={i} className="p-4 animate-pulse">
                   <div className="flex justify-between items-center">
                     <div className="flex-1">
@@ -177,7 +196,7 @@ export const ChildConnectionsTab: React.FC<ChildConnectionsTabProps> = ({ childr
           <section>
             <h2 className="text-xl font-semibold mb-4">Approved Connections</h2>
             <div className="space-y-2">
-              {[1, 2].map(i => (
+              {[1, 2].map((i) => (
                 <Card key={i} className="p-4 animate-pulse">
                   <div className="flex justify-between items-center">
                     <div className="flex-1">
@@ -193,73 +212,88 @@ export const ChildConnectionsTab: React.FC<ChildConnectionsTabProps> = ({ childr
         </div>
       ) : (
         <div className="space-y-6">
-      {/* Pending Requests */}
-      <section>
-        <h2 className="text-xl font-semibold mb-4">Pending Connection Requests</h2>
-        {requests.length === 0 ? (
-          <Card className="p-4 text-center text-muted-foreground">
-            No pending connection requests
-          </Card>
-        ) : (
-          <div className="space-y-2">
-            {requests.map(request => (
-              <Card key={request.id} className="p-4">
-                <div className="flex justify-between items-center">
-                  <div>
-                    <p className="font-medium">
-                      {request.requester_child_name} wants to connect with {request.target_child_name}
-                    </p>
-                    <p className="text-sm text-gray-600 mt-1">
-                      Requested {request.requested_by_child ? "by child" : "by parent"} - {new Date(request.created_at).toLocaleDateString()}
-                    </p>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button variant="outline" onClick={() => handleReject(request.id)}>
-                      Reject
-                    </Button>
-                    <Button onClick={() => handleApprove(request.id)}>
-                      Approve
-                    </Button>
-                  </div>
-                </div>
+          {/* Pending Requests */}
+          <section>
+            <h2 className="text-xl font-semibold mb-4">
+              Pending Connection Requests
+            </h2>
+            {requests.length === 0 ? (
+              <Card className="p-4 text-center text-muted-foreground">
+                No pending connection requests
               </Card>
-            ))}
-          </div>
-        )}
-      </section>
+            ) : (
+              <div className="space-y-2">
+                {requests.map((request) => (
+                  <Card key={request.id} className="p-4">
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <p className="font-medium">
+                          {request.requester_child_name} wants to connect with{" "}
+                          {request.target_child_name}
+                        </p>
+                        <p className="text-sm text-gray-600 mt-1">
+                          Requested{" "}
+                          {request.requested_by_child
+                            ? "by child"
+                            : "by parent"}{" "}
+                          - {new Date(request.created_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          onClick={() => handleReject(request.id)}
+                        >
+                          Reject
+                        </Button>
+                        <Button onClick={() => handleApprove(request.id)}>
+                          Approve
+                        </Button>
+                      </div>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </section>
 
-      {/* Approved Connections */}
-      <section>
-        <h2 className="text-xl font-semibold mb-4">Approved Connections</h2>
-        {approved.length === 0 ? (
-          <Card className="p-4 text-center text-muted-foreground">
-            No approved connections yet
-          </Card>
-        ) : (
-          <div className="space-y-2">
-            {approved.map(connection => (
-              <Card key={connection.id} className="p-4">
-                <div className="flex justify-between items-center">
-                  <div>
-                    <p className="font-medium">
-                      {connection.requester_child_name} ↔ {connection.target_child_name}
-                    </p>
-                    <p className="text-sm text-gray-600 mt-1">
-                      Approved {connection.approved_at ? new Date(connection.approved_at).toLocaleDateString() : ""}
-                    </p>
-                  </div>
-                  <Button variant="outline" size="sm">
-                    View Details
-                  </Button>
-                </div>
+          {/* Approved Connections */}
+          <section>
+            <h2 className="text-xl font-semibold mb-4">Approved Connections</h2>
+            {approved.length === 0 ? (
+              <Card className="p-4 text-center text-muted-foreground">
+                No approved connections yet
               </Card>
-            ))}
-          </div>
-        )}
-      </section>
+            ) : (
+              <div className="space-y-2">
+                {approved.map((connection) => (
+                  <Card key={connection.id} className="p-4">
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <p className="font-medium">
+                          {connection.requester_child_name} ↔{" "}
+                          {connection.target_child_name}
+                        </p>
+                        <p className="text-sm text-gray-600 mt-1">
+                          Approved{" "}
+                          {connection.approved_at
+                            ? new Date(
+                                connection.approved_at
+                              ).toLocaleDateString()
+                            : ""}
+                        </p>
+                      </div>
+                      <Button variant="outline" size="sm">
+                        View Details
+                      </Button>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </section>
         </div>
       )}
     </div>
   );
 };
-

@@ -28,4 +28,3 @@ export const SafetyReportsTab: React.FC = () => {
     </div>
   );
 };
-
