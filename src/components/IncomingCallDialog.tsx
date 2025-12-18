@@ -1,8 +1,13 @@
 // src/components/IncomingCallDialog.tsx
 // Purpose: Full-screen incoming call dialog for parents - mobile-friendly design
 
+import {
+  isMobile,
+  logMobileDiagnostics,
+  resumeAudioContext,
+} from "@/utils/mobileCompatibility";
 import { Phone, PhoneIncoming, PhoneOff } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 interface IncomingCall {
   id: string;
@@ -56,6 +61,13 @@ const IncomingCallScreen = ({
 }) => {
   // Pulse animation state for the avatar
   const [pulseScale, setPulseScale] = useState(1);
+  // Track if we've already triggered to prevent double-taps on mobile
+  const [isTriggered, setIsTriggered] = useState(false);
+
+  // Log mobile diagnostics on mount
+  useEffect(() => {
+    logMobileDiagnostics();
+  }, []);
 
   // Create pulsing animation for the avatar ring
   useEffect(() => {
@@ -65,18 +77,47 @@ const IncomingCallScreen = ({
     return () => clearInterval(interval);
   }, []);
 
-  const handleAnswer = () => {
-    // Don't check/set isAnsweringRef here - let the parent handler manage it
-    // to avoid race condition where we set it true before the parent checks it
-    onOpenChange(true); // Keep open during answer
-    onAnswer();
-  };
+  // Mobile-safe answer handler
+  const handleAnswer = useCallback(
+    (e?: React.MouseEvent | React.TouchEvent) => {
+      // Prevent double-triggering
+      if (isTriggered || isAnsweringRef.current) return;
+      setIsTriggered(true);
 
-  const handleDecline = () => {
-    // CRITICAL: Don't block decline if answer was attempted - user should always be able to decline
-    onDecline();
-    onOpenChange(false);
-  };
+      if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+
+      // Mobile-specific: Resume AudioContext immediately on user gesture
+      if (isMobile()) {
+        console.warn("📱 [Mobile] Answer button tapped, resuming audio...");
+        resumeAudioContext();
+      }
+
+      // Don't check/set isAnsweringRef here - let the parent handler manage it
+      onOpenChange(true); // Keep open during answer
+      onAnswer();
+
+      // Reset triggered state after delay
+      setTimeout(() => setIsTriggered(false), 2000);
+    },
+    [isTriggered, isAnsweringRef, onAnswer, onOpenChange]
+  );
+
+  // Mobile-safe decline handler
+  const handleDecline = useCallback(
+    (e?: React.MouseEvent | React.TouchEvent) => {
+      if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      // CRITICAL: Don't block decline if answer was attempted - user should always be able to decline
+      onDecline();
+      onOpenChange(false);
+    },
+    [onDecline, onOpenChange]
+  );
 
   // Get caller info
   const callerName = incomingCall.child_name || "Someone";
@@ -164,24 +205,38 @@ const IncomingCallScreen = ({
         {/* Bottom section - Action buttons - pointer-events-auto ensures clicks work */}
         <div className="w-full max-w-sm space-y-4 pointer-events-auto relative z-20">
           {/* Answer button - large and prominent, matching child UI for consistency */}
+          {/* Uses both onClick and onTouchEnd for iOS/Android compatibility */}
           <button
             type="button"
             onClick={handleAnswer}
-            className="w-full py-6 px-8 bg-gradient-to-r from-green-400 to-emerald-500 hover:from-green-300 hover:to-emerald-400 text-white rounded-3xl shadow-lg shadow-green-500/40 flex items-center justify-center gap-4 transition-all duration-200 active:scale-95 hover:scale-[1.02] border-2 border-white/20"
-            style={{ touchAction: "manipulation" }}
+            onTouchEnd={handleAnswer}
+            disabled={isTriggered}
+            className={`w-full py-6 px-8 bg-gradient-to-r from-green-400 to-emerald-500 hover:from-green-300 hover:to-emerald-400 text-white rounded-3xl shadow-lg shadow-green-500/40 flex items-center justify-center gap-4 transition-all duration-200 active:scale-95 hover:scale-[1.02] border-2 border-white/20 ${
+              isTriggered ? "opacity-70" : ""
+            }`}
+            style={{
+              touchAction: "manipulation",
+              WebkitTapHighlightColor: "transparent",
+            }}
           >
             <div className="bg-white/30 rounded-full p-3">
               <Phone className="w-8 h-8" />
             </div>
-            <span className="text-2xl font-bold">Answer</span>
+            <span className="text-2xl font-bold">
+              {isTriggered ? "Connecting..." : "Answer"}
+            </span>
           </button>
 
           {/* Decline button */}
           <button
             type="button"
             onClick={handleDecline}
+            onTouchEnd={handleDecline}
             className="w-full py-5 px-8 bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-400 hover:to-rose-500 text-white rounded-2xl shadow-lg shadow-red-500/30 flex items-center justify-center gap-4 transition-all duration-200 active:scale-95 hover:scale-[1.02] border-2 border-white/20"
-            style={{ touchAction: "manipulation" }}
+            style={{
+              touchAction: "manipulation",
+              WebkitTapHighlightColor: "transparent",
+            }}
           >
             <div className="bg-white/30 rounded-full p-3">
               <PhoneOff className="w-7 h-7" />

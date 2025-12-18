@@ -2,7 +2,119 @@
 
 > **Note**: For detailed technical information, complete file lists, testing recommendations, and implementation specifics, see [CHANGES_DETAILED.md](./CHANGES_DETAILED.md).
 
-## Latest Changes (2025-12-19) - Family Member Login & RLS Policy Fixes
+## Latest Changes (2025-12-19) - Mobile Compatibility & Call UI Fixes
+
+### -12. Mobile Browser Compatibility - iOS & Android Support
+
+- **Purpose**: Fix incoming call acceptance issues on iOS (Chrome and Safari) and ensure seamless call experience across all mobile browsers
+- **Issues Fixed**:
+  1. **iOS Chrome**: Answer button not responding to taps
+  2. **iOS Safari**: Calls not connecting after accepting
+  3. **Android**: Inconsistent touch event handling across browsers
+  4. **AudioContext**: Not resuming properly on user gesture (required for iOS/Android autoplay policies)
+  5. **Race Condition**: Ringtone continuing to play after call answered
+
+#### Root Cause Analysis
+
+- **iOS Chrome**: All iOS browsers use WebKit, but Chrome has different touch event handling than Safari
+- **iOS Safari**: WebRTC requires immediate user gesture context for permissions - AudioContext must be resumed synchronously
+- **Touch Events**: Both `onClick` and `onTouchEnd` needed for maximum compatibility
+- **AudioContext Suspension**: Browser autoplay policies suspend AudioContext until user interaction
+- **Race Condition**: `playRingtone()` was awaiting AudioContext (100ms retry delay), and `stopRingtone()` was called during the await, but the pending play continued after AudioContext resumed
+
+#### Fixes Applied
+
+- **Created iOS Compatibility Utilities** (`src/utils/iosCompatibility.ts`):
+  - `isIOS()`, `isIOSSafari()`, `isIOSChrome()` - Browser detection
+  - `preWarmIOSMedia()` - Pre-warm camera/mic on user gesture
+  - `resumeIOSAudioContext()` - Resume audio immediately on tap
+  - `createIOSSafeClickHandler()` - Safe button handler with touch support
+  - `checkIOSWebRTCSupport()` - WebRTC compatibility checking
+  - `logIOSDiagnostics()` - Debug logging for iOS issues
+
+- **Created Android Compatibility Utilities** (`src/utils/androidCompatibility.ts`):
+  - `isAndroid()`, `isAndroidChrome()`, `isSamsungInternet()`, `isAndroidFirefox()` - Browser detection
+  - `isAndroidWebView()` - Detect embedded browsers
+  - `getAndroidVersion()` - Get Android version number
+  - `preWarmAndroidMedia()` - Pre-warm camera/mic with optimal constraints
+  - `resumeAndroidAudioContext()` - Resume audio on user gesture
+  - `getAndroidVideoConstraints()` - Optimal video settings per Android version
+  - `applyAndroidWebRTCFixes()` - Android-specific WebRTC fixes
+  - `checkAndroidWebRTCSupport()` - WebRTC compatibility checking
+  - `logAndroidDiagnostics()` - Debug logging for Android issues
+
+- **Created Unified Mobile Compatibility** (`src/utils/mobileCompatibility.ts`):
+  - Combines iOS and Android utilities into unified API
+  - `isMobile()` - Detect any mobile device
+  - `getPlatformType()` - Get 'ios' | 'android' | 'desktop'
+  - `getBrowserInfo()` - Comprehensive browser detection
+  - `resumeAudioContext()` - Platform-agnostic audio resume
+  - `preWarmMedia()` - Platform-agnostic media pre-warming
+  - `checkWebRTCSupport()` - Cross-platform WebRTC check
+  - `getOptimalVideoConstraints()` - Best settings for platform
+  - `createMobileSafeClickHandler()` - Universal safe button handler
+  - `getWebRTCErrorMessage()` - User-friendly error messages
+
+- **Fixed Ringtone Race Condition** (`src/features/calls/hooks/useAudioNotifications.ts`):
+  - Added `ringtoneAbortedRef` flag to prevent race conditions
+  - `stopRingtone()` sets abort flag immediately
+  - `playRingtone()` checks abort flag after awaiting AudioContext
+  - Prevents ringtone from starting if stop was called during AudioContext await
+
+- **Updated Incoming Call UI Components**:
+  - **IncomingCallUI.tsx**: Added mobile-safe handlers with `onTouchEnd` support
+  - **ChildIncomingCallUI.tsx**: Added mobile-safe handlers with touch support
+  - **IncomingCallDialog.tsx**: Added mobile-safe handlers with touch support
+  - All buttons now:
+    - Use both `onClick` and `onTouchEnd` for iOS/Android compatibility
+    - Resume AudioContext immediately on tap
+    - Show "Connecting..." feedback when tapped
+    - Have `WebkitTapHighlightColor: "transparent"` for better iOS feel
+    - Prevent double-triggering with state guards
+
+- **Fixed Diagnostic Panel Button** (`src/features/calls/components/DiagnosticPanel.tsx`):
+  - Added `type="button"` to prevent form submission
+  - Added `e.stopPropagation()` and `e.preventDefault()` to prevent video container click handler interference
+  - Fixed z-index from `z-50` to `z-[60]` to be above CallControls overlay
+  - Moved button from `bottom-24` to `bottom-28` for better clearance
+
+#### Technical Implementation
+
+- **Touch Event Handling**: Both `onClick` and `onTouchEnd` handlers ensure maximum compatibility
+- **AudioContext Resume**: Must happen synchronously in direct response to user gesture (iOS requirement)
+- **Race Condition Prevention**: Abort flag pattern prevents pending async operations from executing after cancellation
+- **Z-Index Layering**: Proper stacking order ensures buttons are clickable above overlays
+- **Event Propagation**: `stopPropagation()` prevents parent click handlers from interfering
+
+#### Files Created
+
+- `src/utils/iosCompatibility.ts` - iOS browser compatibility utilities
+- `src/utils/androidCompatibility.ts` - Android browser compatibility utilities
+- `src/utils/mobileCompatibility.ts` - Unified mobile compatibility utilities
+
+#### Files Modified
+
+- `src/features/calls/hooks/useAudioNotifications.ts` - Fixed ringtone race condition
+- `src/components/GlobalIncomingCall/IncomingCallUI.tsx` - Added mobile-safe handlers
+- `src/components/GlobalIncomingCall/ChildIncomingCallUI.tsx` - Added mobile-safe handlers
+- `src/components/IncomingCallDialog.tsx` - Added mobile-safe handlers
+- `src/features/calls/components/DiagnosticPanel.tsx` - Fixed button click handling and z-index
+- `src/features/calls/components/VideoCallUI.tsx` - Fixed diagnostic button z-index
+
+#### Impact
+
+- **iOS Chrome Support**: Answer button now works reliably on iOS Chrome
+- **iOS Safari Support**: Calls connect properly after accepting on iOS Safari
+- **Android Support**: Consistent behavior across Chrome, Samsung Internet, Firefox
+- **Cross-Platform**: Unified API works seamlessly on iOS, Android, and desktop
+- **Better UX**: Immediate audio feedback, visual "Connecting..." state, no double-taps
+- **Ringtone Fixed**: Ringtone stops immediately when call is answered (no more race condition)
+- **Diagnostic Access**: Diagnostic panel button now clickable and functional
+- **Future-Proof**: Comprehensive browser detection and compatibility checking
+
+---
+
+## Previous Changes (2025-12-19) - Family Member Login & RLS Policy Fixes
 
 ### -11. Critical Fix: Family Member Login After Email Verification
 

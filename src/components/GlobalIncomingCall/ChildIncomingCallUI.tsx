@@ -2,8 +2,13 @@
 // Purpose: Kid-friendly full-screen incoming call notification
 // Fun purple gradient with sparkles and emojis - matches ChildDashboard theme
 
+import {
+  isMobile,
+  logMobileDiagnostics,
+  resumeAudioContext,
+} from "@/utils/mobileCompatibility";
 import { Phone, PhoneIncoming, PhoneOff } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { IncomingCall } from "./types";
 
 interface ChildIncomingCallUIProps {
@@ -21,6 +26,13 @@ export const ChildIncomingCallUI = ({
 }: ChildIncomingCallUIProps) => {
   // Fun bouncing animation for the phone icon
   const [bounce, setBounce] = useState(false);
+  // Track if we've already triggered to prevent double-taps on mobile
+  const [isTriggered, setIsTriggered] = useState(false);
+
+  // Log mobile diagnostics on mount
+  useEffect(() => {
+    logMobileDiagnostics();
+  }, []);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -29,23 +41,52 @@ export const ChildIncomingCallUI = ({
     return () => clearInterval(interval);
   }, []);
 
-  const handleAnswer = () => {
-    if (isAnsweringRef.current) return;
-    isAnsweringRef.current = true;
-    try {
-      onAnswer();
-    } catch (error) {
-      if (import.meta.env.DEV) {
-        console.error("[CHILD INCOMING CALL] Error in handleAnswer:", error);
-      }
-      isAnsweringRef.current = false;
-    }
-  };
+  // Mobile-safe answer handler
+  const handleAnswer = useCallback(
+    (e?: React.MouseEvent | React.TouchEvent) => {
+      // Prevent double-triggering
+      if (isTriggered || isAnsweringRef.current) return;
+      setIsTriggered(true);
 
-  const handleDecline = () => {
-    // CRITICAL: Don't block decline if answer was attempted - user should always be able to decline
-    onDecline();
-  };
+      if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+
+      // Mobile-specific: Resume AudioContext immediately on user gesture
+      if (isMobile()) {
+        console.warn("📱 [Mobile] Answer button tapped, resuming audio...");
+        resumeAudioContext();
+      }
+
+      isAnsweringRef.current = true;
+      try {
+        onAnswer();
+      } catch (error) {
+        if (import.meta.env.DEV) {
+          console.error("[CHILD INCOMING CALL] Error in handleAnswer:", error);
+        }
+        isAnsweringRef.current = false;
+      }
+
+      // Reset triggered state after delay
+      setTimeout(() => setIsTriggered(false), 2000);
+    },
+    [isTriggered, isAnsweringRef, onAnswer]
+  );
+
+  // Mobile-safe decline handler
+  const handleDecline = useCallback(
+    (e?: React.MouseEvent | React.TouchEvent) => {
+      if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      // CRITICAL: Don't block decline if answer was attempted - user should always be able to decline
+      onDecline();
+    },
+    [onDecline]
+  );
 
   // Get caller name and initial - for children, the caller is a parent or family member
   const callerName = incomingCall.parent_name || "Someone";
@@ -174,24 +215,38 @@ export const ChildIncomingCallUI = ({
         {/* Bottom section - Action buttons */}
         <div className="w-full max-w-sm space-y-4">
           {/* Answer button - big and green */}
+          {/* Uses both onClick and onTouchEnd for iOS/Android compatibility */}
           <button
             type="button"
             onClick={handleAnswer}
-            className="w-full py-6 px-8 bg-gradient-to-r from-green-400 to-emerald-500 hover:from-green-300 hover:to-emerald-400 text-white rounded-3xl shadow-lg shadow-green-500/40 flex items-center justify-center gap-4 transition-all duration-200 active:scale-95 hover:scale-[1.02] border-2 border-white/20"
-            style={{ touchAction: "manipulation" }}
+            onTouchEnd={handleAnswer}
+            disabled={isTriggered}
+            className={`w-full py-6 px-8 bg-gradient-to-r from-green-400 to-emerald-500 hover:from-green-300 hover:to-emerald-400 text-white rounded-3xl shadow-lg shadow-green-500/40 flex items-center justify-center gap-4 transition-all duration-200 active:scale-95 hover:scale-[1.02] border-2 border-white/20 ${
+              isTriggered ? "opacity-70" : ""
+            }`}
+            style={{
+              touchAction: "manipulation",
+              WebkitTapHighlightColor: "transparent",
+            }}
           >
             <div className="bg-white/30 rounded-full p-3">
               <Phone className="w-8 h-8" />
             </div>
-            <span className="text-2xl font-bold">Answer</span>
+            <span className="text-2xl font-bold">
+              {isTriggered ? "Connecting..." : "Answer"}
+            </span>
           </button>
 
           {/* Decline button */}
           <button
             type="button"
             onClick={handleDecline}
+            onTouchEnd={handleDecline}
             className="w-full py-5 px-8 bg-gradient-to-r from-red-400 to-rose-500 hover:from-red-300 hover:to-rose-400 text-white rounded-3xl shadow-lg shadow-red-500/40 flex items-center justify-center gap-4 transition-all duration-200 active:scale-95 hover:scale-[1.02] border-2 border-white/20"
-            style={{ touchAction: "manipulation" }}
+            style={{
+              touchAction: "manipulation",
+              WebkitTapHighlightColor: "transparent",
+            }}
           >
             <div className="bg-white/30 rounded-full p-3">
               <PhoneOff className="w-7 h-7" />

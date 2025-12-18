@@ -4,7 +4,8 @@
 
 import { Phone, PhoneOff, PhoneIncoming } from "lucide-react";
 import { IncomingCall } from "./types";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
+import { isMobile, resumeAudioContext, logMobileDiagnostics } from "@/utils/mobileCompatibility";
 
 interface IncomingCallUIProps {
   incomingCall: IncomingCall;
@@ -22,6 +23,14 @@ export const IncomingCallUI = ({
   // Pulse animation state for the avatar
   const [pulseScale, setPulseScale] = useState(1);
   
+  // Track if we've already triggered to prevent double-taps
+  const [isTriggered, setIsTriggered] = useState(false);
+
+  // Log mobile diagnostics on mount (iOS/Android)
+  useEffect(() => {
+    logMobileDiagnostics();
+  }, []);
+
   // Create pulsing animation for the avatar ring
   useEffect(() => {
     const interval = setInterval(() => {
@@ -35,17 +44,42 @@ export const IncomingCallUI = ({
   const callerInitial = callerName[0]?.toUpperCase() || "?";
   const avatarColor = incomingCall.child_avatar_color || "#3B82F6";
 
-  const handleAnswer = () => {
+  // iOS-safe answer handler - handles both click and touch events
+  const handleAnswer = useCallback((e?: React.MouseEvent | React.TouchEvent) => {
+    // Prevent double-triggering (important for iOS where both touch and click may fire)
+    if (isTriggered || isAnsweringRef.current) return;
+    setIsTriggered(true);
+    
+    // Prevent default behavior
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    
+    // Mobile-specific: Resume AudioContext immediately on user gesture (iOS/Android)
+    if (isMobile()) {
+      console.warn("📱 [Mobile] Answer button tapped, resuming audio...");
+      resumeAudioContext();
+    }
+    
     // Don't check/set isAnsweringRef here - let GlobalIncomingCall.handleAnswerCall handle it
     // to avoid race condition where we set it true before the parent checks it
     onAnswer();
-  };
+    
+    // Reset triggered state after a delay (in case call fails and user needs to retry)
+    setTimeout(() => setIsTriggered(false), 2000);
+  }, [isTriggered, isAnsweringRef, onAnswer]);
 
-  const handleDecline = () => {
+  // iOS-safe decline handler
+  const handleDecline = useCallback((e?: React.MouseEvent | React.TouchEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    
     // CRITICAL: Don't block decline if answer was attempted - user should always be able to decline
-    // Only block if we're actively processing a decline
     onDecline();
-  };
+  }, [onDecline]);
 
   return (
     <div 
@@ -128,24 +162,28 @@ export const IncomingCallUI = ({
         {/* Bottom section - Action buttons */}
         <div className="w-full max-w-sm space-y-4">
           {/* Answer button - big and green (matches working child UI) */}
+          {/* Uses both onClick and onTouchEnd for iOS compatibility */}
           <button
             type="button"
             onClick={handleAnswer}
-            className="w-full py-6 px-8 bg-gradient-to-r from-green-400 to-emerald-500 hover:from-green-300 hover:to-emerald-400 text-white rounded-3xl shadow-lg shadow-green-500/40 flex items-center justify-center gap-4 transition-all duration-200 active:scale-95 hover:scale-[1.02] border-2 border-white/20"
-            style={{ touchAction: "manipulation" }}
+            onTouchEnd={handleAnswer}
+            disabled={isTriggered}
+            className={`w-full py-6 px-8 bg-gradient-to-r from-green-400 to-emerald-500 hover:from-green-300 hover:to-emerald-400 text-white rounded-3xl shadow-lg shadow-green-500/40 flex items-center justify-center gap-4 transition-all duration-200 active:scale-95 hover:scale-[1.02] border-2 border-white/20 ${isTriggered ? 'opacity-70' : ''}`}
+            style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
           >
             <div className="bg-white/30 rounded-full p-3">
               <Phone className="w-8 h-8" />
             </div>
-            <span className="text-2xl font-bold">Answer</span>
+            <span className="text-2xl font-bold">{isTriggered ? "Connecting..." : "Answer"}</span>
           </button>
 
           {/* Decline button */}
           <button
             type="button"
             onClick={handleDecline}
+            onTouchEnd={handleDecline}
             className="w-full py-5 px-8 bg-gradient-to-r from-red-400 to-rose-500 hover:from-red-300 hover:to-rose-400 text-white rounded-3xl shadow-lg shadow-red-500/40 flex items-center justify-center gap-4 transition-all duration-200 active:scale-95 hover:scale-[1.02] border-2 border-white/20"
-            style={{ touchAction: "manipulation" }}
+            style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
           >
             <div className="bg-white/30 rounded-full p-3">
               <PhoneOff className="w-7 h-7" />
