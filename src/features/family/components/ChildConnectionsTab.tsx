@@ -4,7 +4,6 @@
 import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { TabsContent } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { approveChildConnection, requestChildConnection } from "@/utils/family-communication";
@@ -153,7 +152,7 @@ export const ChildConnectionsTab: React.FC<ChildConnectionsTabProps> = ({ childr
   };
 
   return (
-    <TabsContent value="connections" className="space-y-6 mt-6 min-h-[400px]">
+    <div className="space-y-6 min-h-[400px]">
       {loading ? (
         <div className="space-y-6">
           <section>
@@ -260,7 +259,7 @@ export const ChildConnectionsTab: React.FC<ChildConnectionsTabProps> = ({ childr
       </section>
         </div>
       )}
-    </TabsContent>
+    </div>
   );
 };
 

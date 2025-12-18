@@ -3,7 +3,6 @@
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { TabsContent } from "@/components/ui/tabs";
 import { FamilyMemberCard } from "@/components/FamilyMemberCard";
 import { UserPlus, Users } from "lucide-react";
 
@@ -39,7 +38,7 @@ export const FamilyTab = ({
   onRemove,
 }: FamilyTabProps) => {
   return (
-    <TabsContent value="family" className="space-y-6 mt-6 min-h-[400px]">
+    <div className="space-y-6 min-h-[400px]">
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h2 className="text-2xl font-bold flex items-center gap-2">
@@ -99,7 +98,7 @@ export const FamilyTab = ({
           ))}
         </div>
       )}
-    </TabsContent>
+    </div>
   );
 };
 

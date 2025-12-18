@@ -3,7 +3,6 @@
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { TabsContent } from "@/components/ui/tabs";
 import { ChildCard } from "@/components/ChildCard";
 import { BellOff, Plus } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -62,7 +61,7 @@ export const ChildrenTab = ({
   const navigate = useNavigate();
 
   return (
-    <TabsContent value="children" className="space-y-6 mt-6 min-h-[400px]">
+    <div className="space-y-6 min-h-[400px]">
       {!canAddMoreChildren && (
         <Card className="p-4 bg-yellow-50 dark:bg-yellow-950 border-yellow-200 dark:border-yellow-800">
           <div className="space-y-3">
@@ -158,7 +157,7 @@ export const ChildrenTab = ({
           ))}
         </div>
       )}
-    </TabsContent>
+    </div>
   );
 };
 
