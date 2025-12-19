@@ -168,11 +168,6 @@ export default defineConfig(({ mode }) => {
           importScripts: ["/notification-handlers.js"],
           // Handle precaching errors gracefully
           dontCacheBustURLsMatching: /\.\w{8}\./,
-          // Exclude files that fail to precache
-          exclude: [
-            /\.map$/,
-            /kids-video-calling-kindle\.html$/,
-          ],
           // Runtime caching rules for external resources
           runtimeCaching: [
             {
