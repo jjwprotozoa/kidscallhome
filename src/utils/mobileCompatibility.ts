@@ -228,6 +228,7 @@ export const getOptimalVideoConstraints = (): MediaTrackConstraints => {
 /**
  * Universal mobile-safe button handler
  * Handles touch events properly for iOS and Android
+ * Optimized for INP: splits immediate work (visual feedback) from deferred work (audio/media)
  */
 export const createMobileSafeClickHandler = (
   handler: () => void | Promise<void>,
@@ -240,40 +241,51 @@ export const createMobileSafeClickHandler = (
   let hasTriggered = false;
   const preventDoubleClick = options?.preventDoubleClick !== false;
   
-  const executeHandler = async (e: React.MouseEvent | React.TouchEvent) => {
-    // Prevent double-triggering
+  const executeHandler = (e: React.MouseEvent | React.TouchEvent) => {
+    // IMMEDIATE WORK: Prevent double-triggering, prevent default, visual feedback
     if (preventDoubleClick && hasTriggered) return;
     hasTriggered = true;
     
-    // Reset after delay
+    // Reset after delay (deferred)
     setTimeout(() => { hasTriggered = false; }, 500);
     
-    // Prevent default
+    // Prevent default immediately for responsive feel
     e.preventDefault();
     e.stopPropagation();
     
-    const platform = getPlatformType();
+    // Execute handler immediately for visual feedback
+    // Use Promise.resolve to handle both sync and async handlers
+    Promise.resolve(handler()).catch(() => {
+      // Errors handled silently to avoid blocking
+    });
     
-    // Platform-specific pre-warming
+    // DEFERRED WORK: Audio context, media pre-warming, logging (non-blocking)
     if (isMobile()) {
-      console.warn(`📱 [${platform.toUpperCase()}] Button tapped, preparing media/audio...`);
-      
-      // Resume audio context
-      if (options?.resumeAudio !== false) {
-        await resumeAudioContext();
-      }
-      
-      // Pre-warm media if requested
-      if (options?.preWarmMedia) {
-        preWarmMedia().catch(console.error);
-      }
-    }
-    
-    // Execute handler
-    try {
-      await handler();
-    } catch (error) {
-      console.error("Error in click handler:", error);
+      // Defer heavy operations to avoid blocking main thread
+      setTimeout(async () => {
+        const platform = getPlatformType();
+        
+        // Defer logging to avoid blocking
+        if (import.meta.env.DEV) {
+          console.warn(`📱 [${platform.toUpperCase()}] Button tapped, preparing media/audio...`);
+        }
+        
+        // Resume audio context (deferred - not critical for visual feedback)
+        if (options?.resumeAudio !== false) {
+          try {
+            await resumeAudioContext();
+          } catch (error) {
+            // Silently handle errors
+          }
+        }
+        
+        // Pre-warm media if requested (deferred)
+        if (options?.preWarmMedia) {
+          preWarmMedia().catch(() => {
+            // Silently handle errors
+          });
+        }
+      }, 0); // Use setTimeout(0) to defer to next event loop tick
     }
   };
   

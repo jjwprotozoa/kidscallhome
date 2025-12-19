@@ -8,8 +8,9 @@ import {
   resumeAudioContext,
 } from "@/utils/mobileCompatibility";
 import { Phone, PhoneIncoming, PhoneOff } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useTransition } from "react";
 import { IncomingCall } from "./types";
+import { deferTask, deferredLog, deferredError } from "@/utils/inpOptimization";
 
 interface ChildIncomingCallUIProps {
   incomingCall: IncomingCall;
@@ -28,10 +29,17 @@ export const ChildIncomingCallUI = ({
   const [bounce, setBounce] = useState(false);
   // Track if we've already triggered to prevent double-taps on mobile
   const [isTriggered, setIsTriggered] = useState(false);
+  
+  // Use transition for non-urgent state updates to improve INP
+  const [isPending, startTransition] = useTransition();
 
-  // Log mobile diagnostics on mount
+  // Log mobile diagnostics on mount (deferred to avoid blocking initial render)
   useEffect(() => {
-    logMobileDiagnostics();
+    deferTask(() => {
+      logMobileDiagnostics();
+    }, 'background').catch(() => {
+      // Silently handle errors
+    });
   }, []);
 
   useEffect(() => {
@@ -41,38 +49,63 @@ export const ChildIncomingCallUI = ({
     return () => clearInterval(interval);
   }, []);
 
-  // Mobile-safe answer handler
+  // Mobile-safe answer handler - optimized for INP
   const handleAnswer = useCallback(
     (e?: React.MouseEvent | React.TouchEvent) => {
-      // Prevent double-triggering
+      // IMMEDIATE WORK: Prevent double-triggering, prevent default, execute handler
       if (isTriggered || isAnsweringRef.current) return;
-      setIsTriggered(true);
 
       if (e) {
         e.preventDefault();
         e.stopPropagation();
       }
 
-      // Mobile-specific: Resume AudioContext immediately on user gesture
-      if (isMobile()) {
-        console.warn("📱 [Mobile] Answer button tapped, resuming audio...");
-        resumeAudioContext();
-      }
-
       isAnsweringRef.current = true;
+      
+      // Execute answer handler immediately for responsive feel
       try {
         onAnswer();
       } catch (error) {
-        if (import.meta.env.DEV) {
-          console.error("[CHILD INCOMING CALL] Error in handleAnswer:", error);
-        }
         isAnsweringRef.current = false;
+        // Defer error logging
+        deferTask(() => {
+          if (import.meta.env.DEV) {
+            deferredError("[CHILD INCOMING CALL] Error in handleAnswer:", error);
+          }
+        }, 'background').catch(() => {
+          // Silently handle errors
+        });
       }
 
-      // Reset triggered state after delay
-      setTimeout(() => setIsTriggered(false), 2000);
+      // Update state immediately for visual feedback
+      startTransition(() => {
+        setIsTriggered(true);
+      });
+
+      // DEFERRED WORK: Audio context, logging (non-blocking)
+      if (isMobile()) {
+        deferTask(async () => {
+          if (import.meta.env.DEV) {
+            deferredLog("📱 [Mobile] Answer button tapped, resuming audio...");
+          }
+          try {
+            await resumeAudioContext();
+          } catch (error) {
+            // Silently handle errors
+          }
+        }, 'background').catch(() => {
+          // Silently handle errors
+        });
+      }
+
+      // Reset triggered state after delay (deferred)
+      setTimeout(() => {
+        startTransition(() => {
+          setIsTriggered(false);
+        });
+      }, 2000);
     },
-    [isTriggered, isAnsweringRef, onAnswer]
+    [isTriggered, isAnsweringRef, onAnswer, startTransition]
   );
 
   // Mobile-safe decline handler

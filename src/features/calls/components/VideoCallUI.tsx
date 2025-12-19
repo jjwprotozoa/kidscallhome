@@ -3,9 +3,10 @@
 // Supports all network conditions from 2G to 5G/WiFi
 // AUDIO: Only enabled after user clicks Call/Accept, not on page load
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { CallControls } from "./CallControls";
 import { getUserHasStartedCall } from "@/utils/userInteraction";
+import { deferredLog, deferTask } from "@/utils/inpOptimization";
 import { 
   ConnectionQualityIndicator, 
   ConnectionQualityBadge 
@@ -69,6 +70,9 @@ export const VideoCallUI = ({
   const [volume, setVolume] = useState(5); // Default to 5 (middle volume)
   const gainNodeRef = useRef<GainNode | null>(null);
   const audioDestinationConnectedRef = useRef(false);
+  
+  // Use transition for non-urgent state updates to improve INP
+  const [isPending, startTransition] = useTransition();
 
   // Set volume via ref (volume is not a valid HTML prop)
   useEffect(() => {
@@ -807,46 +811,79 @@ export const VideoCallUI = ({
     if (!remoteVideoRef.current || !remoteVideoRef.current.srcObject) return;
 
     const video = remoteVideoRef.current;
-    console.warn("👆 [VIDEO UI] User clicked video area", {
-      paused: video.paused,
-      muted: video.muted,
-      readyState: video.readyState,
-      volume: video.volume,
-      isAudioMutedByBrowser,
-      audioEnabled: audioEnabledRef.current,
-      audioElPaused: audioElementRef.current?.paused,
-    });
-
-    // User clicking the video is explicit interaction - enable audio
+    
+    // IMMEDIATE WORK: Enable audio, force playback, unmute video
     audioEnabledRef.current = true;
-
-    // CRITICAL: Force audio playback on any click
     forceAudioPlayback();
 
-    // If video is paused, try to play with audio
+    // If video is paused, try to play with audio immediately (user gesture required)
     if (video.paused) {
       video.muted = false;
-      setIsVideoMuted(false);
+      
+      // Use transition for non-urgent state updates
+      startTransition(() => {
+        setIsVideoMuted(false);
+      });
+      
+      // Video.play() must happen synchronously on user gesture (browser requirement)
       video
         .play()
         .then(() => {
-          console.warn("✅ [VIDEO UI] Video started playing with audio after click");
-          setVideoState("playing");
-          setIsAudioMutedByBrowser(false);
+          // Defer logging and state updates
+          deferTask(() => {
+            if (import.meta.env.DEV) {
+              deferredLog("✅ [VIDEO UI] Video started playing with audio after click");
+            }
+            startTransition(() => {
+              setVideoState("playing");
+              setIsAudioMutedByBrowser(false);
+            });
+          }, 'background').catch(() => {
+            // Silently handle errors
+          });
         })
         .catch((error) => {
-          console.error("❌ [VIDEO UI] Click play failed:", error);
-          // User clicked but browser still blocked - this is rare
-          if (error.name === "NotAllowedError") {
-            video.muted = true;
-            setIsVideoMuted(true);
-            setIsAudioMutedByBrowser(true);
-            video
-              .play()
-              .catch((e) => console.error("Muted play also failed:", e));
-          }
+          // Defer error logging
+          deferTask(() => {
+            if (import.meta.env.DEV) {
+              deferredLog("❌ [VIDEO UI] Click play failed:", error);
+            }
+            
+            // User clicked but browser still blocked - this is rare
+            if (error.name === "NotAllowedError") {
+              video.muted = true;
+              startTransition(() => {
+                setIsVideoMuted(true);
+                setIsAudioMutedByBrowser(true);
+              });
+              video
+                .play()
+                .catch(() => {
+                  // Silently handle errors
+                });
+            }
+          }, 'background').catch(() => {
+            // Silently handle errors
+          });
         });
     }
+    
+    // DEFERRED WORK: Logging (non-blocking)
+    deferTask(() => {
+      if (import.meta.env.DEV) {
+        deferredLog("👆 [VIDEO UI] User clicked video area", {
+          paused: video.paused,
+          muted: video.muted,
+          readyState: video.readyState,
+          volume: video.volume,
+          isAudioMutedByBrowser,
+          audioEnabled: audioEnabledRef.current,
+          audioElPaused: audioElementRef.current?.paused,
+        });
+      }
+    }, 'background').catch(() => {
+      // Silently handle errors
+    });
   };
 
   // Determine what message to show

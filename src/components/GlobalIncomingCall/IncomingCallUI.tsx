@@ -4,8 +4,9 @@
 
 import { Phone, PhoneOff, PhoneIncoming } from "lucide-react";
 import { IncomingCall } from "./types";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useTransition } from "react";
 import { isMobile, resumeAudioContext, logMobileDiagnostics } from "@/utils/mobileCompatibility";
+import { deferTask, deferredLog } from "@/utils/inpOptimization";
 
 interface IncomingCallUIProps {
   incomingCall: IncomingCall;
@@ -25,10 +26,17 @@ export const IncomingCallUI = ({
   
   // Track if we've already triggered to prevent double-taps
   const [isTriggered, setIsTriggered] = useState(false);
+  
+  // Use transition for non-urgent state updates to improve INP
+  const [isPending, startTransition] = useTransition();
 
-  // Log mobile diagnostics on mount (iOS/Android)
+  // Log mobile diagnostics on mount (deferred to avoid blocking initial render)
   useEffect(() => {
-    logMobileDiagnostics();
+    deferTask(() => {
+      logMobileDiagnostics();
+    }, 'background').catch(() => {
+      // Silently handle errors
+    });
   }, []);
 
   // Create pulsing animation for the avatar ring
@@ -44,31 +52,51 @@ export const IncomingCallUI = ({
   const callerInitial = callerName[0]?.toUpperCase() || "?";
   const avatarColor = incomingCall.child_avatar_color || "#3B82F6";
 
-  // iOS-safe answer handler - handles both click and touch events
+  // iOS-safe answer handler - optimized for INP: immediate visual feedback, deferred heavy work
   const handleAnswer = useCallback((e?: React.MouseEvent | React.TouchEvent) => {
-    // Prevent double-triggering (important for iOS where both touch and click may fire)
+    // IMMEDIATE WORK: Prevent double-triggering, prevent default, visual feedback
     if (isTriggered || isAnsweringRef.current) return;
-    setIsTriggered(true);
     
-    // Prevent default behavior
+    // Prevent default behavior immediately
     if (e) {
       e.preventDefault();
       e.stopPropagation();
     }
     
-    // Mobile-specific: Resume AudioContext immediately on user gesture (iOS/Android)
-    if (isMobile()) {
-      console.warn("📱 [Mobile] Answer button tapped, resuming audio...");
-      resumeAudioContext();
-    }
+    // Update state immediately for visual feedback (use transition for non-urgent updates)
+    startTransition(() => {
+      setIsTriggered(true);
+    });
     
-    // Don't check/set isAnsweringRef here - let GlobalIncomingCall.handleAnswerCall handle it
-    // to avoid race condition where we set it true before the parent checks it
+    // Execute answer handler immediately for responsive feel
     onAnswer();
     
-    // Reset triggered state after a delay (in case call fails and user needs to retry)
-    setTimeout(() => setIsTriggered(false), 2000);
-  }, [isTriggered, isAnsweringRef, onAnswer]);
+    // DEFERRED WORK: Audio context, logging (non-blocking)
+    if (isMobile()) {
+      deferTask(async () => {
+        // Defer logging to avoid blocking main thread
+        if (import.meta.env.DEV) {
+          deferredLog("📱 [Mobile] Answer button tapped, resuming audio...");
+        }
+        
+        // Resume AudioContext (deferred - not critical for visual feedback)
+        try {
+          await resumeAudioContext();
+        } catch (error) {
+          // Silently handle errors
+        }
+      }, 'background').catch(() => {
+        // Silently handle errors
+      });
+    }
+    
+    // Reset triggered state after a delay (deferred)
+    setTimeout(() => {
+      startTransition(() => {
+        setIsTriggered(false);
+      });
+    }, 2000);
+  }, [isTriggered, isAnsweringRef, onAnswer, startTransition]);
 
   // iOS-safe decline handler
   const handleDecline = useCallback((e?: React.MouseEvent | React.TouchEvent) => {
