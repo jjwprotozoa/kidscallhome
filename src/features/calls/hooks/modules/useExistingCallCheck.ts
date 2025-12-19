@@ -36,10 +36,22 @@ export const useExistingCallCheck = ({
   const processedCallIdRef = useRef<string | null>(null);
   
   useEffect(() => {
-    // CRITICAL: Only check when idle and we have a localProfileId
-    // But also check when callId is null (not yet set) to detect incoming calls from URL
-    if (state !== "idle" || !localProfileId) {
-      console.log("📞 [EXISTING CALL CHECK] Skipping check:", {
+    // CRITICAL: Check when we have a URL callId OR when idle
+    // This handles iPhone where navigation happens but state might not be "idle" yet
+    if (!localProfileId) {
+      console.log("📞 [EXISTING CALL CHECK] Skipping check - no localProfileId:", {
+        state,
+        hasLocalProfileId: !!localProfileId,
+        hasCallId: !!callId,
+        urlCallId,
+      });
+      return;
+    }
+    
+    // If we have a URL callId, always check (even if state isn't idle)
+    // This is critical for iPhone where navigation timing might be different
+    if (!urlCallId && state !== "idle") {
+      console.log("📞 [EXISTING CALL CHECK] Skipping check - no URL callId and not idle:", {
         state,
         hasLocalProfileId: !!localProfileId,
         hasCallId: !!callId,

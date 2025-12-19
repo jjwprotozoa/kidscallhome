@@ -147,6 +147,24 @@ supabase.auth.onAuthStateChange(async (event, session) => {
   }
 });
 
+// Proactively check for invalid tokens on initialization
+if (typeof window !== 'undefined') {
+  // Check session on load and clear if invalid
+  supabase.auth.getSession().then(({ error }) => {
+    if (error && isRefreshTokenError(error)) {
+      if (import.meta.env.DEV) {
+        safeLog.debug('🔄 [AUTH] Found invalid token on initialization, clearing');
+      }
+      clearSupabaseAuthData();
+      supabase.auth.signOut({ scope: 'local' }).catch(() => {
+        // Ignore errors during cleanup
+      });
+    }
+  }).catch(() => {
+    // Ignore errors during initialization check
+  });
+}
+
 // Global error handler for auth refresh failures
 // This catches errors that occur during automatic token refresh
 if (typeof window !== 'undefined') {
@@ -156,6 +174,10 @@ if (typeof window !== 'undefined') {
     
     // Check if it's a Supabase auth error with invalid refresh token
     if (isRefreshTokenError(error)) {
+      // Prevent the error from showing in console
+      event.preventDefault();
+      event.stopPropagation();
+      
       // Clear invalid session data
       if (import.meta.env.DEV) {
         safeLog.debug('🔄 [AUTH] Detected invalid refresh token, clearing session');
@@ -163,9 +185,6 @@ if (typeof window !== 'undefined') {
       
       // Clear all Supabase auth data
       clearSupabaseAuthData();
-      
-      // Prevent the error from showing in console
-      event.preventDefault();
       
       // Sign out to clear all session data (silently)
       try {
@@ -181,4 +200,23 @@ if (typeof window !== 'undefined') {
       // This is handled by the app's routing logic, so we don't need to do it here
     }
   });
+
+  // Intercept console.error to suppress Supabase refresh token errors
+  const originalConsoleError = console.error;
+  console.error = (...args: unknown[]) => {
+    // Check if this is a Supabase refresh token error
+    const errorMessage = args.join(' ');
+    if (
+      isRefreshTokenError(args[0]) ||
+      (typeof errorMessage === 'string' && 
+       (errorMessage.includes('Invalid Refresh Token') ||
+        errorMessage.includes('Refresh Token Not Found') ||
+        errorMessage.includes('refresh_token_not_found')))
+    ) {
+      // Suppress the error - we've already handled it
+      return;
+    }
+    // Otherwise, log normally
+    originalConsoleError.apply(console, args);
+  };
 }

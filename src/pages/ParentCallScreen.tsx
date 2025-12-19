@@ -74,12 +74,30 @@ const ParentCallScreen = () => {
   // This handles both cases: state is "incoming" or state is "idle" (will transition to "incoming" first)
   useEffect(() => {
     const urlCallId = searchParams.get("callId");
-    if (!urlCallId || !parentId || !childId) return;
+    if (!urlCallId || !parentId || !childId) {
+      if (urlCallId) {
+        console.log("📞 [PARENT CALL SCREEN] Waiting for parentId/childId:", {
+          urlCallId,
+          hasParentId: !!parentId,
+          hasChildId: !!childId,
+        });
+      }
+      return;
+    }
 
     // Prevent duplicate acceptance attempts
     if (autoAcceptAttemptedRef.current === urlCallId) {
+      console.log("📞 [PARENT CALL SCREEN] Already attempted to accept:", urlCallId);
       return;
     }
+
+    // Log state transitions to help debug iPhone issues
+    console.log("📞 [PARENT CALL SCREEN] Monitoring for auto-accept:", {
+      urlCallId,
+      currentState: callEngine.state,
+      currentCallId: callEngine.callId,
+      waitingForIncoming: callEngine.state !== "incoming" || callEngine.callId !== urlCallId,
+    });
 
     // Only auto-accept when state becomes "incoming" - wait for useCallEngine to detect the call first
     // This prevents the "not a valid incoming call" error when localProfileId is empty

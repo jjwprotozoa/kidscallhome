@@ -261,3 +261,5 @@ self.addEventListener('message', (event: ExtendableMessageEvent) => {
 
 console.log('[SW] Custom service worker with notification handlers loaded');
 
+
+

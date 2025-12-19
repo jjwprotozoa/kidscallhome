@@ -33,7 +33,7 @@ const Index = () => {
                 width="96"
                 height="96"
                 loading="eager"
-                fetchPriority="high"
+                fetchpriority="high"
                 decoding="async"
               />
             </picture>

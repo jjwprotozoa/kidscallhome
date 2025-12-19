@@ -121,3 +121,5 @@ self.addEventListener('message', (event) => {
 
 console.log('[SW-HANDLERS] Custom notification handlers loaded');
 
+
+

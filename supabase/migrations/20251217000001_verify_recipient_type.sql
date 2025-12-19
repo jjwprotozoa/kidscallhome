@@ -44,3 +44,5 @@ FROM calls
 WHERE recipient_type IS NULL;
 
 
+
+
