@@ -82,7 +82,7 @@ export const LoginForm = ({
               onCaptchaError(error);
             }}
             theme="auto"
-            size="invisible"
+            size="flexible"
           />
         </div>
       )}
