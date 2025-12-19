@@ -15,18 +15,21 @@ interface CaptchaProps {
 declare global {
   interface Window {
     turnstile?: {
+      ready?: (callback: () => void) => void;
       render: (
-        element: HTMLElement,
+        element: HTMLElement | string,
         options: {
           sitekey: string;
-          callback: (token: string) => void;
+          callback?: (token: string) => void;
           'error-callback'?: (error: string) => void;
+          'expired-callback'?: () => void;
           theme?: 'light' | 'dark' | 'auto';
-          size?: 'normal' | 'compact';
+          size?: 'normal' | 'compact' | 'flexible';
         }
       ) => string;
       reset: (widgetId: string) => void;
       remove: (widgetId: string) => void;
+      getResponse?: (widgetId: string) => string | undefined;
     };
   }
 }
@@ -50,7 +53,17 @@ export const Captcha = ({
       script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
       script.async = true;
       script.defer = true;
-      script.onload = () => setIsLoaded(true);
+      script.onload = () => {
+        // Wait for turnstile to be fully ready
+        if (window.turnstile && typeof window.turnstile.ready === 'function') {
+          window.turnstile.ready(() => {
+            setIsLoaded(true);
+          });
+        } else {
+          // Fallback if ready() doesn't exist
+          setTimeout(() => setIsLoaded(true), 100);
+        }
+      };
       script.onerror = () => {
         if (onError) {
           onError('Failed to load CAPTCHA script');
@@ -61,7 +74,12 @@ export const Captcha = ({
       return () => {
         // Cleanup
         if (widgetIdRef.current && window.turnstile) {
-          window.turnstile.remove(widgetIdRef.current);
+          try {
+            window.turnstile.remove(widgetIdRef.current);
+          } catch (e) {
+            // Ignore cleanup errors
+          }
+          widgetIdRef.current = null;
         }
       };
     } else {
@@ -70,16 +88,47 @@ export const Captcha = ({
   }, [onError]);
 
   useEffect(() => {
-    if (isLoaded && containerRef.current && window.turnstile && !widgetIdRef.current) {
+    // Only render if everything is ready and widget hasn't been created yet
+    if (!isLoaded || !containerRef.current || !window.turnstile || widgetIdRef.current) {
+      return;
+    }
+
+    // Ensure container is in the DOM
+    if (!containerRef.current.isConnected) {
+      return;
+    }
+
+    // Ensure container is empty before rendering
+    if (containerRef.current.children.length > 0) {
+      return;
+    }
+
+    // Use turnstile.ready() if available to ensure Turnstile is fully initialized
+    const renderWidget = () => {
+      if (!containerRef.current || widgetIdRef.current) {
+        return;
+      }
+
       try {
-        const widgetId = window.turnstile.render(containerRef.current, {
+        const widgetId = window.turnstile!.render(containerRef.current, {
           sitekey: siteKey,
           callback: (token: string) => {
             onVerify(token);
           },
           'error-callback': (error: string) => {
+            console.error('Turnstile error:', error);
             if (onError) {
-              onError(error);
+              onError(`Turnstile error: ${error}`);
+            }
+          },
+          'expired-callback': () => {
+            // Token expired - reset widget
+            if (widgetIdRef.current && window.turnstile) {
+              try {
+                window.turnstile.reset(widgetIdRef.current);
+              } catch (e) {
+                console.warn('Turnstile reset error:', e);
+              }
             }
           },
           theme,
@@ -87,10 +136,18 @@ export const Captcha = ({
         });
         widgetIdRef.current = widgetId;
       } catch (error) {
+        console.error('Turnstile render error:', error);
         if (onError) {
           onError(`CAPTCHA render error: ${error}`);
         }
       }
+    };
+
+    if (window.turnstile.ready) {
+      window.turnstile.ready(renderWidget);
+    } else {
+      // Fallback: small delay to ensure Turnstile is ready
+      setTimeout(renderWidget, 100);
     }
   }, [isLoaded, siteKey, onVerify, onError, theme, size]);
 
