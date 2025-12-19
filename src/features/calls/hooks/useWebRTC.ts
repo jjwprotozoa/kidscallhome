@@ -58,6 +58,9 @@ export const useWebRTC = (
   // CRITICAL: Idempotency guard for cleanup
   const cleanupExecutedRef = useRef(false);
 
+  // IMPROVEMENT: Track ICE restart attempts to prevent infinite loops
+  const iceRestartAttemptedRef = useRef(false);
+
   // Network quality monitoring for adaptive bitrate
   const networkQuality = useNetworkQuality();
 
@@ -72,6 +75,8 @@ export const useWebRTC = (
       safeLog.log("📞 [CALL ID] CallId updated in useWebRTC:", callId);
       // CRITICAL: Reset cleanup flag when starting a new call
       cleanupExecutedRef.current = false;
+      // IMPROVEMENT: Reset ICE restart flag for new call
+      iceRestartAttemptedRef.current = false;
     }
   }, [callId]);
 
@@ -173,6 +178,15 @@ export const useWebRTC = (
           }
         });
       } catch (mediaError: unknown) {
+        // IMPROVEMENT: Enhanced error handling with RTCError interface
+        if (mediaError instanceof RTCError) {
+          safeLog.error("❌ [MEDIA] RTCError accessing media devices:", {
+            errorDetail: mediaError.errorDetail,
+            sdpLineNumber: mediaError.sdpLineNumber,
+            httpRequestStatusCode: mediaError.httpRequestStatusCode,
+            message: mediaError.message,
+          });
+        }
         const error = mediaError as DOMException & { code?: number };
         safeLog.error("❌ [MEDIA] Media device access error:", {
           name: error.name,
@@ -393,6 +407,10 @@ export const useWebRTC = (
         iceServers,
         // Enable ICE candidate trickling for faster connection
         iceCandidatePoolSize: 10,
+        // Optimize bundle policy for better performance (fewer transports)
+        // max-bundle: Gather ICE candidates for only one track, negotiate only one media track
+        // This reduces overhead and improves connection reliability
+        bundlePolicy: "max-bundle",
       });
 
       // Monitor connection state changes
@@ -957,6 +975,47 @@ export const useWebRTC = (
         }
       };
 
+      // IMPROVEMENT: ICE candidate error handling
+      // Handles errors during ICE candidate gathering (TURN/STUN failures)
+      // This provides better diagnostics and can trigger fallback strategies
+      pc.onicecandidateerror = (event) => {
+        const errorInfo = {
+          url: event.url,
+          errorCode: event.errorCode,
+          errorText: event.errorText,
+          address: event.address,
+          port: event.port,
+          timestamp: new Date().toISOString(),
+        };
+
+        safeLog.error("❌ [ICE CANDIDATE ERROR] ICE candidate gathering failed:", errorInfo);
+
+        // Log specific error types for better diagnostics
+        if (event.errorCode === 701) {
+          safeLog.error(
+            "⚠️ [ICE CANDIDATE ERROR] STUN/TURN server unreachable - check network connectivity"
+          );
+        } else if (event.errorCode === 702) {
+          safeLog.error(
+            "⚠️ [ICE CANDIDATE ERROR] STUN/TURN authentication failed - check credentials"
+          );
+        } else if (event.errorCode === 703) {
+          safeLog.error(
+            "⚠️ [ICE CANDIDATE ERROR] STUN/TURN server error - server may be overloaded"
+          );
+        }
+
+        // In development, log full error details
+        if (import.meta.env.DEV) {
+          console.error("🔍 [ICE CANDIDATE ERROR] Full error details:", {
+            ...errorInfo,
+            iceConnectionState: pc.iceConnectionState,
+            iceGatheringState: pc.iceGatheringState,
+            connectionState: pc.connectionState,
+          });
+        }
+      };
+
       // CRITICAL: Add connection state monitoring for auto-cleanup on failures
       // Monitor iceConnectionState to detect network failures and auto-cleanup stale connections
       pc.oniceconnectionstatechange = () => {
@@ -994,50 +1053,126 @@ export const useWebRTC = (
           }
         }
 
+        // IMPROVEMENT: ICE restart on failure recovery
+        // Attempt ICE restart before ending call to recover from transient failures
         // Auto-end call after timeout if connection fails
         // CRITICAL: "disconnected" is TRANSIENT and can recover - give it more time
-        // "failed" is terminal - end quickly
+        // "failed" is terminal - try ICE restart once before ending
         if (iceState === "failed") {
           safeLog.warn(
-            "⚠️ [CONNECTION STATE] ICE connection FAILED - ending call",
+            "⚠️ [CONNECTION STATE] ICE connection FAILED - attempting recovery",
             {
               iceState,
               connectionState,
+              restartAttempted: iceRestartAttemptedRef.current,
             }
           );
 
-          // For "failed" state, end quickly (2 seconds)
-          setTimeout(() => {
-            const currentPC = peerConnectionRef.current;
-            if (
-              currentPC &&
-              currentPC.iceConnectionState === "failed" &&
-              currentPC.signalingState !== "closed"
-            ) {
+          // IMPROVEMENT: Try ICE restart once before ending call
+          // This can recover from transient network issues, especially on mobile
+          if (!iceRestartAttemptedRef.current && pc.signalingState !== "closed") {
+            try {
+              safeLog.log(
+                "🔄 [ICE RESTART] Attempting ICE restart to recover from failure..."
+              );
+              pc.restartIce();
+              iceRestartAttemptedRef.current = true;
+
+              // Give restart 5 seconds to work before ending call
+              setTimeout(() => {
+                const currentPC = peerConnectionRef.current;
+                if (
+                  currentPC &&
+                  currentPC.iceConnectionState === "failed" &&
+                  currentPC.signalingState !== "closed"
+                ) {
+                  const activeCallId = currentCallIdRef.current;
+                  if (activeCallId) {
+                    safeLog.error(
+                      "❌ [CONNECTION STATE] ICE restart failed, ending call",
+                      {
+                        iceState: currentPC.iceConnectionState,
+                        connectionState: currentPC.connectionState,
+                        callId: activeCallId,
+                      }
+                    );
+
+                    const isChildUser = isChild;
+                    const by = isChildUser ? "child" : "parent";
+
+                    endCallUtil({
+                      callId: activeCallId,
+                      by,
+                      reason: "failed_after_restart",
+                    }).catch(() => {
+                      // Ignore errors - call might already be ended
+                    });
+                  }
+                } else if (
+                  currentPC &&
+                  (currentPC.iceConnectionState === "connected" ||
+                    currentPC.iceConnectionState === "completed")
+                ) {
+                  safeLog.log(
+                    "✅ [ICE RESTART] ICE restart succeeded - connection recovered!"
+                  );
+                  // Reset restart flag on success for potential future restarts
+                  iceRestartAttemptedRef.current = false;
+                }
+              }, 5000); // 5 seconds for restart to work
+            } catch (restartError) {
+              safeLog.error(
+                "❌ [ICE RESTART] Failed to restart ICE:",
+                restartError
+              );
+              // If restart fails, end call immediately
               const activeCallId = currentCallIdRef.current;
               if (activeCallId) {
-                safeLog.error(
-                  "❌ [CONNECTION STATE] ICE connection failed, ending call",
-                  {
-                    iceState: currentPC.iceConnectionState,
-                    connectionState: currentPC.connectionState,
-                    callId: activeCallId,
-                  }
-                );
-
                 const isChildUser = isChild;
                 const by = isChildUser ? "child" : "parent";
-
                 endCallUtil({
                   callId: activeCallId,
                   by,
-                  reason: "failed",
+                  reason: "failed_restart_error",
                 }).catch(() => {
-                  // Ignore errors - call might already be ended
+                  // Ignore errors
                 });
               }
             }
-          }, 2000);
+          } else {
+            // Restart already attempted or not possible - end call
+            setTimeout(() => {
+              const currentPC = peerConnectionRef.current;
+              if (
+                currentPC &&
+                currentPC.iceConnectionState === "failed" &&
+                currentPC.signalingState !== "closed"
+              ) {
+                const activeCallId = currentCallIdRef.current;
+                if (activeCallId) {
+                  safeLog.error(
+                    "❌ [CONNECTION STATE] ICE connection failed, ending call",
+                    {
+                      iceState: currentPC.iceConnectionState,
+                      connectionState: currentPC.connectionState,
+                      callId: activeCallId,
+                    }
+                  );
+
+                  const isChildUser = isChild;
+                  const by = isChildUser ? "child" : "parent";
+
+                  endCallUtil({
+                    callId: activeCallId,
+                    by,
+                    reason: "failed",
+                  }).catch(() => {
+                    // Ignore errors - call might already be ended
+                  });
+                }
+              }
+            }, 2000);
+          }
         } else if (iceState === "disconnected") {
           safeLog.warn(
             "⚠️ [CONNECTION STATE] ICE connection disconnected (can recover)",

@@ -3,6 +3,7 @@
 ## ✅ Step 1: Environment Variables
 
 ### Client-Side (Vercel) ✅ Already Done
+
 - `VITE_TURNSTILE_SITE_KEY` - Set in Vercel environment variables
 
 ### Server-Side (Supabase) ⚠️ Needs Setup
@@ -14,6 +15,7 @@ The `TURNSTILE_SECRET_KEY` must be set in **Supabase**, not Vercel, because Edge
 ### Option A: Via Supabase Dashboard (Easiest)
 
 1. **Go to Supabase Dashboard:**
+
    - Visit: https://supabase.com/dashboard/project/itmhojbjfacocrpmslmt/settings/functions
    - Or navigate: **Project Settings** → **Edge Functions** → **Secrets**
 
@@ -30,6 +32,7 @@ supabase secrets set TURNSTILE_SECRET_KEY=your_secret_key_here
 ```
 
 **Where to get your Secret Key:**
+
 - Go to [Cloudflare Dashboard](https://dash.cloudflare.com/)
 - Navigate to **Turnstile**
 - Select your widget
@@ -42,6 +45,7 @@ supabase secrets set TURNSTILE_SECRET_KEY=your_secret_key_here
 ### Option A: Via Supabase Dashboard (No CLI Required)
 
 1. **Go to Edge Functions:**
+
    - Visit: https://supabase.com/dashboard/project/itmhojbjfacocrpmslmt/edge-functions
 
 2. **Create New Function:**
@@ -81,6 +85,7 @@ Invoke-WebRequest `
 ```
 
 **Expected Response:**
+
 - If secret is set correctly: Returns validation result from Cloudflare
 - If secret is missing: Returns `500` error with "Turnstile secret key not configured"
 
@@ -100,6 +105,7 @@ Invoke-WebRequest `
 **Problem:** "Turnstile secret key not configured"
 
 **Solution:**
+
 1. Verify secret is set in Supabase (not Vercel)
 2. Go to: Project Settings → Edge Functions → Secrets
 3. Check `TURNSTILE_SECRET_KEY` exists
@@ -110,6 +116,7 @@ Invoke-WebRequest `
 **Problem:** Function not deployed
 
 **Solution:**
+
 1. Deploy the function via Dashboard or CLI
 2. Verify function shows as "Active" in Edge Functions list
 
@@ -118,6 +125,7 @@ Invoke-WebRequest `
 **Problem:** Invalid secret key or token
 
 **Solution:**
+
 1. Verify secret key matches your Cloudflare widget
 2. Check token is being passed correctly from client
 3. Check browser console for validation errors
@@ -138,10 +146,12 @@ Invoke-WebRequest `
 ## 🎯 Summary
 
 **What goes where:**
+
 - **Vercel:** `VITE_TURNSTILE_SITE_KEY` (public, client-side)
 - **Supabase:** `TURNSTILE_SECRET_KEY` (secret, server-side)
 
 **Why:**
+
 - Edge Functions run on Supabase infrastructure
 - Secrets must be accessible to the Edge Function runtime
 - Vercel env vars are not accessible to Supabase Edge Functions
@@ -149,4 +159,3 @@ Invoke-WebRequest `
 ---
 
 **Need help?** Check the function logs in Supabase Dashboard → Edge Functions → verify-turnstile → Logs
-

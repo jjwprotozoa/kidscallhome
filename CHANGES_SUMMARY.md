@@ -2,7 +2,233 @@
 
 > **Note**: For detailed technical information, complete file lists, testing recommendations, and implementation specifics, see [CHANGES_DETAILED.md](./CHANGES_DETAILED.md).
 
-## Latest Changes (2025-12-19) - Mobile Compatibility & Call UI Fixes
+## Latest Changes (2025-12-19) - Volume Control Slider Implementation
+
+### -14. Volume Control Slider - Variable Volume (0-10 Scale)
+
+- **Purpose**: Replace toggle-based volume control with a variable volume slider (0-10 scale) for better user control and finer volume adjustment
+- **Issues Fixed**:
+  1. **Binary Volume Control**: Previous implementation only had "normal" and "boosted" volume states (boolean toggle)
+  2. **Limited Control**: Users couldn't adjust volume to intermediate levels
+  3. **No Visual Feedback**: Volume level wasn't clearly displayed
+
+#### Changes Applied
+
+- **CallControls Component** (`src/features/calls/components/CallControls.tsx`):
+  - Replaced volume toggle button with Radix UI Slider component
+  - Volume range: 0-10 scale (0 = mute, 10 = maximum boost)
+  - Visual volume indicator badge showing current volume level (0-10)
+  - Dynamic styling based on volume level:
+    - Volume 0: Reduced opacity (50%), muted label
+    - Volume ≥8: Green badge with pulse animation, enhanced shadow/ring
+    - Volume ≥5: Green badge (solid)
+    - Volume <5: Blue badge
+  - Volume icon scales up (110%) when volume ≥8
+  - Label color changes: muted (volume 0), green (volume ≥8), blue (otherwise)
+  - Slider styled for dark call UI theme with proper contrast
+  - Accessibility: Enhanced ARIA labels with current volume value, proper value attributes
+
+- **VideoCallUI Component** (`src/features/calls/components/VideoCallUI.tsx`):
+  - Changed from `isVolumeBoosted` (boolean) to `volume` (number 0-10)
+  - Default volume set to 5 (middle volume)
+  - Volume mapping: 0-10 scale maps to Web Audio API gain 0.0-3.0
+    - 0 = mute (gain 0.0)
+    - 5 = normal (gain 1.5)
+    - 10 = maximum boost (gain 3.0)
+  - Updated `routeAudioViaWebAudioAPI` to accept volume value instead of boolean
+  - Replaced `toggleVolumeBoost` with `handleVolumeChange` function
+  - Real-time volume updates during slider drag
+  - `onValueCommit` callback for logging when user finishes adjusting
+
+#### Technical Implementation
+
+- **Volume to Gain Mapping**: Linear mapping from 0-10 to 0.0-3.0 gain values
+  - Formula: `gainValue = (volume / 10) * 3.0`
+  - Ensures smooth volume transitions across entire range
+- **Web Audio API Integration**: Uses GainNode for precise volume control
+  - Updates gain node in real-time during slider drag
+  - Maintains audio routing through Web Audio API for consistent control
+- **Radix UI Slider**: Uses `@radix-ui/react-slider` primitive
+  - Proper array format for `value` prop: `[volume]`
+  - Correctly handles `onValueChange` callback with array extraction
+  - Semantic selectors for dark theme styling
+  - Interactive states: hover, active, grab/grabbing cursors
+
+#### Visual Enhancements
+
+- **Volume Icon Badge**: Shows current volume number (0-10) in colored badge
+  - Green for high volume (≥5), blue for low volume (<5)
+  - Pulse animation when volume ≥8
+  - Hidden when volume is 0
+- **Slider Styling**: Dark theme optimized
+  - Track: Semi-transparent white background (`bg-white/20`)
+  - Range: Blue fill (`bg-blue-500`)
+  - Thumb: White with proper borders and focus states
+  - Hover/active states with scale animations
+- **Label Feedback**: Dynamic color based on volume level
+  - Muted text when volume is 0
+  - Green text for high volume (≥8)
+  - Blue text for normal volume
+
+#### Performance & Accessibility
+
+- **Performance Optimizations**:
+  - `onValueChange` for real-time updates during drag
+  - `onValueCommit` for logging when user finishes (reduces log spam)
+  - Smooth transitions with `transition-all duration-200`
+- **Accessibility Improvements**:
+  - Enhanced `aria-label`: Includes current volume value ("Volume control, currently at X out of 10")
+  - Proper ARIA value attributes: `aria-valuemin`, `aria-valuemax`, `aria-valuenow`
+  - `aria-hidden="true"` on decorative label numbers (0/10)
+  - Keyboard navigation support via Radix UI primitives
+
+#### Files Modified
+
+- `src/features/calls/components/CallControls.tsx` - Replaced toggle with slider, added visual feedback
+- `src/features/calls/components/VideoCallUI.tsx` - Updated volume handling from boolean to 0-10 scale
+
+#### Impact
+
+- **Better User Control**: Users can now adjust volume to any level from 0-10 instead of just two states
+- **Visual Feedback**: Clear indication of current volume level with badge and label
+- **Smooth Transitions**: Linear gain mapping ensures smooth volume changes
+- **Accessibility**: Enhanced screen reader support with proper ARIA attributes
+- **Dark Theme Optimized**: Slider styled specifically for dark call UI
+- **Performance**: Real-time updates without performance impact
+- **Standards Compliance**: Follows Radix UI best practices and W3C accessibility guidelines
+
+---
+
+## Previous Changes (2025-12-19) - WebRTC Improvements & Best Practices
+
+### -13. WebRTC Improvements Based on W3C Best Practices
+
+- **Purpose**: Enhance WebRTC call reliability and diagnostics by implementing W3C WebRTC best practices identified through Context7 documentation review
+- **Restore Point**: Commit `3c6ecab` - "chore: Create restore point before WebRTC improvements"
+- **Improvements Implemented**:
+
+#### 1. ICE Restart on Failure Recovery
+
+- **What Changed**: Added automatic ICE restart attempt when ICE connection fails
+- **Implementation**:
+  - Uses `pc.restartIce()` when `iceConnectionState === "failed"`
+  - Tracks restart attempts with `iceRestartAttemptedRef` to prevent infinite loops
+  - Gives restart 5 seconds to recover before ending call
+  - Resets restart flag on new calls
+- **Benefits**:
+  - Recovers from transient network failures automatically
+  - Especially helpful on mobile networks with unstable connections
+  - Reduces unnecessary call terminations
+  - Only attempts restart once per call to prevent loops
+
+#### 2. ICE Candidate Error Handling
+
+- **What Changed**: Added `onicecandidateerror` event handler for comprehensive error diagnostics
+- **Implementation**:
+  - Logs detailed error information (errorCode, errorText, URL, address, port)
+  - Provides specific diagnostics for common error codes:
+    - 701: STUN/TURN server unreachable
+    - 702: STUN/TURN authentication failed
+    - 703: STUN/TURN server error
+  - Enhanced logging in development mode with full connection state
+- **Benefits**:
+  - Better diagnostics for connection failures
+  - Identifies TURN/STUN server issues quickly
+  - Helps troubleshoot production connection problems
+  - Enables proactive error detection
+
+#### 3. Bundle Policy Optimization
+
+- **What Changed**: Set `bundlePolicy: "max-bundle"` in RTCPeerConnection configuration
+- **Implementation**:
+  - Reduces number of transports needed
+  - Optimizes ICE candidate gathering
+  - Bundles all media tracks onto single transport when possible
+- **Benefits**:
+  - Fewer transports = less overhead
+  - Faster connection establishment
+  - Better performance on resource-constrained devices
+  - Reduced bandwidth usage
+
+#### 4. End-of-Candidates Handling
+
+- **What Changed**: Explicitly handles null candidate (end-of-candidates marker) in all ICE candidate processing locations
+- **Implementation**:
+  - Calls `pc.addIceCandidate()` with no arguments when candidate is null
+  - Signals ICE gathering completion properly
+  - Implemented in `useCallEngine.ts`, `callHandlers.ts`, and `childCallHandler.ts`
+- **Benefits**:
+  - Properly signals when ICE candidate gathering is complete
+  - Follows WebRTC specification for end-of-candidates
+  - Prevents waiting indefinitely for more candidates
+  - Better connection state tracking
+
+#### 5. RTCError Interface Usage
+
+- **What Changed**: Enhanced error handling with WebRTC-specific error details throughout codebase
+- **Implementation**:
+  - Added `instanceof RTCError` checks in all error handlers
+  - Logs WebRTC-specific error details:
+    - `errorDetail`: Specific error type
+    - `sdpLineNumber`: SDP line where error occurred
+    - `httpRequestStatusCode`: HTTP status for TURN/STUN errors
+    - `message`: Error message
+  - Applied to media access errors, ICE candidate errors, and connection errors
+- **Benefits**:
+  - More detailed error diagnostics
+  - Better understanding of WebRTC-specific failures
+  - Easier troubleshooting in production
+  - Standardized error handling pattern
+
+#### 6. Track Unmute Event Handlers
+
+- **Status**: Already implemented, verified working correctly
+- **What Exists**:
+  - `track.onunmute` handlers for both audio and video tracks
+  - Aggressive video playback when tracks unmute
+  - Proper audio element unmuting
+- **Benefits**:
+  - Detects when media actually starts flowing
+  - Ensures video/audio plays immediately when available
+  - Better user experience
+
+#### Technical Implementation
+
+- **ICE Restart Logic**: Attempts restart once, monitors recovery success/failure, ends call if restart fails
+- **Error Handling**: Comprehensive error logging with platform-specific diagnostics
+- **Bundle Policy**: Set at RTCPeerConnection creation, affects all subsequent operations
+- **End-of-Candidates**: Handled in all candidate processing loops with proper null checks
+- **RTCError Detection**: Type checking before accessing WebRTC-specific error properties
+
+#### Files Modified
+
+- `src/features/calls/hooks/useWebRTC.ts` - ICE restart, error handling, bundle policy, RTCError handling
+- `src/features/calls/hooks/useCallEngine.ts` - End-of-candidates handling, RTCError handling
+- `src/features/calls/utils/callHandlers.ts` - End-of-candidates handling, RTCError handling
+- `src/features/calls/utils/childCallHandler.ts` - End-of-candidates handling, RTCError handling (2 locations)
+
+#### Files Created
+
+- `docs/WEBRTC_IMPROVEMENTS.md` - Comprehensive documentation of all improvements
+
+#### Impact
+
+- **Connection Reliability**: ICE restart recovers from transient failures automatically
+- **Better Diagnostics**: Enhanced error handling provides actionable troubleshooting information
+- **Performance**: Bundle policy optimization reduces overhead and improves connection speed
+- **Standards Compliance**: Follows W3C WebRTC best practices for production-ready applications
+- **Mobile Network Resilience**: Especially beneficial for unstable mobile network conditions
+- **Production Ready**: All improvements follow industry best practices and WebRTC specifications
+
+#### Future Improvements (Not Implemented)
+
+- **Perfect Negotiation Pattern**: Requires significant refactoring - consider for future if call initiation issues arise
+- **ICE Candidate Pool Pre-warming**: Current approach sufficient - monitor connection times
+- **SDP Codec Preference Manipulation**: Browser codec selection adequate - consider if bandwidth optimization becomes critical
+
+---
+
+## Previous Changes (2025-12-19) - Mobile Compatibility & Call UI Fixes
 
 ### -12. Mobile Browser Compatibility - iOS & Android Support
 

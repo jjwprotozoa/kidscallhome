@@ -1147,9 +1147,23 @@ export const useCallEngine = ({
                       );
                       break;
                     }
-                    // Validate candidate before adding
+                    
+                    // IMPROVEMENT: Handle end-of-candidates (null candidate)
+                    // A null candidate indicates ICE gathering is complete
                     if (!candidate.candidate) {
-                      continue; // Skip invalid candidates silently
+                      // End-of-candidates marker - signal completion
+                      try {
+                        await pc.addIceCandidate();
+                        safeLog.log(
+                          "✅ [CALL ENGINE] End-of-candidates marker processed"
+                        );
+                      } catch (endErr) {
+                        // End-of-candidates can fail if already processed - ignore
+                        safeLog.log(
+                          "ℹ️ [CALL ENGINE] End-of-candidates already processed or connection closed"
+                        );
+                      }
+                      continue;
                     }
 
                     if (pc.remoteDescription) {
@@ -1162,6 +1176,15 @@ export const useCallEngine = ({
                       iceCandidatesQueue.current.push(candidate);
                     }
                   } catch (err) {
+                    // IMPROVEMENT: Enhanced error handling with RTCError interface
+                    if (err instanceof RTCError) {
+                      safeLog.error("❌ [CALL ENGINE] RTCError adding ICE candidate:", {
+                        errorDetail: err.errorDetail,
+                        sdpLineNumber: err.sdpLineNumber,
+                        httpRequestStatusCode: err.httpRequestStatusCode,
+                        message: err.message,
+                      });
+                    }
                     const error = err as Error;
                     // Silently handle duplicate candidates and closed connection errors
                     if (
