@@ -334,21 +334,25 @@ export function getDeviceName(): string {
 }
 
 /**
- * Get client IP address (requires backend support)
- * Uses CORS-friendly services with proper error handling and timeouts
- * Returns null if IP cannot be determined (non-critical)
+ * Get client IP address with optional country code
+ * Uses CORS-friendly services with proper error handling and timeouts (2s per service)
+ * Returns both IP and country code if available from the same service call
+ * This avoids making a second geolocation lookup when ipapi.co is used
  */
-export async function getClientIP(): Promise<string | null> {
+export async function getClientIPWithCountry(): Promise<{
+  ip: string | null;
+  countryCode: string | null;
+}> {
   // Check if IP detection is disabled via environment variable
   if (import.meta.env.VITE_DISABLE_IP_DETECTION === 'true') {
-    return null;
+    return { ip: null, countryCode: null };
   }
 
-  // Helper to add timeout to fetch requests
+  // Helper to add timeout to fetch requests (2 second timeout per service)
   const fetchWithTimeout = async (url: string, options: RequestInit = {}): Promise<Response | null> => {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 second timeout
+      const timeoutId = setTimeout(() => controller.abort(), 2000); // 2 second timeout per service
 
       const response = await fetch(url, {
         ...options,
@@ -362,39 +366,63 @@ export async function getClientIP(): Promise<string | null> {
     }
   };
 
-  // 1) Primary: api.myip.com (CORS-friendly, JSON, includes country info)
+  // 1) Primary: ipapi.co/json/ (CORS-friendly, JSON, includes country info)
+  // This service returns both IP and country_code, so we can avoid a second lookup
   try {
-    const res = await fetchWithTimeout('https://api.myip.com', { method: 'GET' });
+    const res = await fetchWithTimeout('https://ipapi.co/json/', { method: 'GET' });
     if (res && res.ok) {
-      const data = await res.json();
-      if (data?.ip) {
-        return data.ip as string;
+      try {
+        const data = await res.json();
+        if (data?.ip) {
+          return {
+            ip: data.ip as string,
+            countryCode: data.country_code || null,
+          };
+        }
+      } catch {
+        // JSON parsing failed, try next
       }
     }
   } catch {
     // ignore, try next
   }
 
-  // 2) Fallback: ipapi.co/json/ (also gives country, supports CORS)
+  // 2) Fallback: api.ipify.org (CORS-friendly, plain text or JSON)
+  // This service only returns IP, so countryCode will be null
   try {
-    const res = await fetchWithTimeout('https://ipapi.co/json/', { method: 'GET' });
+    const res = await fetchWithTimeout('https://api.ipify.org?format=json', { method: 'GET' });
     if (res && res.ok) {
-      const data = await res.json();
-      if (data?.ip) {
-        return data.ip as string;
+      try {
+        const data = await res.json();
+        if (data?.ip) {
+          return {
+            ip: data.ip as string,
+            countryCode: null, // This service doesn't provide country info
+          };
+        }
+      } catch {
+        // JSON parsing failed, try next
       }
     }
   } catch {
     // ignore
   }
 
-  // 3) Last resort: ipv4.icanhazip.com (plain text, may lack CORS in some contexts)
+  // 3) Last resort: ipv4.icanhazip.com (plain text, CORS-friendly)
+  // This service only returns IP, so countryCode will be null
   try {
     const res = await fetchWithTimeout('https://ipv4.icanhazip.com/', { method: 'GET' });
     if (res && res.ok) {
-      const text = (await res.text()).trim();
-      if (text) {
-        return text;
+      try {
+        const text = (await res.text()).trim();
+        if (text && /^\d+\.\d+\.\d+\.\d+$/.test(text)) {
+          return {
+            ip: text,
+            countryCode: null, // This service doesn't provide country info
+          };
+        }
+      } catch {
+        // Text parsing failed
       }
     }
   } catch {
@@ -403,7 +431,18 @@ export async function getClientIP(): Promise<string | null> {
 
   // All services failed - return null gracefully
   // IP detection is non-critical and should not break the app
-  return null;
+  return { ip: null, countryCode: null };
+}
+
+/**
+ * Get client IP address (requires backend support)
+ * Uses CORS-friendly services with proper error handling and timeouts (2s per service)
+ * Returns null if IP cannot be determined (non-critical)
+ * For better performance, use getClientIPWithCountry() if you also need country code
+ */
+export async function getClientIP(): Promise<string | null> {
+  const result = await getClientIPWithCountry();
+  return result.ip;
 }
 
 /**
