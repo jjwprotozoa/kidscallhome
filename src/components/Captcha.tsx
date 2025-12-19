@@ -47,7 +47,7 @@ export const Captcha = ({
     // Load Turnstile script
     if (!window.turnstile) {
       const script = document.createElement('script');
-      script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js';
+      script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
       script.async = true;
       script.defer = true;
       script.onload = () => setIsLoaded(true);

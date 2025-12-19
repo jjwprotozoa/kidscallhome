@@ -40,14 +40,30 @@ if (!check.allowed) {
 - Invisible CAPTCHA that appears after 2 failed login attempts
 - Free, privacy-focused alternative to reCAPTCHA
 - Automatically verifies users are human
+- **Server-side validation** via Supabase Edge Function (`supabase/functions/verify-turnstile`)
 
 **Setup**:
-1. Get Turnstile site key from [Cloudflare Dashboard](https://dash.cloudflare.com/)
+1. Get Turnstile site key and secret key from [Cloudflare Dashboard](https://dash.cloudflare.com/)
 2. Add to environment variables:
    ```env
+   # Client-side (public)
    VITE_TURNSTILE_SITE_KEY=your_site_key_here
+   
+   # Server-side (secret - add to Supabase Edge Function secrets)
+   TURNSTILE_SECRET_KEY=your_secret_key_here
    ```
-3. CAPTCHA automatically appears after failed attempts
+3. Deploy the `verify-turnstile` Edge Function:
+   ```bash
+   supabase functions deploy verify-turnstile
+   ```
+4. Set the secret key in Supabase:
+   ```bash
+   supabase secrets set TURNSTILE_SECRET_KEY=your_secret_key_here
+   ```
+5. CAPTCHA automatically appears after failed attempts
+6. Tokens are validated server-side before allowing login
+
+**Security**: All Turnstile tokens are validated server-side using Cloudflare's Siteverify API. This is mandatory for security.
 
 **Fallback**: Includes reCAPTCHA fallback component if Turnstile unavailable
 

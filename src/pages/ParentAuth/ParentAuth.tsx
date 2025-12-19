@@ -156,7 +156,7 @@ const ParentAuth = () => {
       }
 
       if (authState.isLogin) {
-        await handleLogin(sanitizedEmail, sanitizedPassword);
+        await handleLogin(sanitizedEmail, sanitizedPassword, authState.captchaToken);
       } else {
         await handleSignup(sanitizedEmail, sanitizedPassword, validation);
       }
@@ -181,10 +181,11 @@ const ParentAuth = () => {
     }
   };
 
-  const handleLogin = async (email: string, password: string) => {
+  const handleLogin = async (email: string, password: string, captchaToken?: string | null) => {
     await loginHandler({
       email,
       password,
+      captchaToken,
       setShowCaptcha,
       updateLockoutInfo,
       toast,

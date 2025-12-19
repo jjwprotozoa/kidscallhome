@@ -8,6 +8,7 @@ import { logAuditEvent } from "@/utils/auditLog";
 import { setCookie } from "@/utils/cookies";
 import { clearFailedLogins, recordFailedLogin } from "@/utils/rateLimiting";
 import { safeLog, sanitizeError } from "@/utils/security";
+import { validateTurnstileToken } from "@/utils/turnstileValidation";
 import { getUserRole } from "@/utils/userRole";
 import { AuthValidationResult } from "./types";
 
@@ -16,6 +17,7 @@ type ToastOptions = Parameters<typeof toastFn>[0];
 interface LoginParams {
   email: string;
   password: string;
+  captchaToken?: string | null;
   setShowCaptcha: (show: boolean) => void;
   updateLockoutInfo: (info: LockoutInfo) => void;
   toast: (options: ToastOptions) => void;
@@ -33,12 +35,53 @@ interface SignupParams {
 export const handleLogin = async ({
   email,
   password,
+  captchaToken,
   setShowCaptcha,
   updateLockoutInfo,
   toast,
   navigate,
 }: LoginParams) => {
   logAuditEvent("login_attempt", { email, severity: "low" });
+
+  // Validate Turnstile token if CAPTCHA is required
+  const CAPTCHA_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || "";
+  if (CAPTCHA_SITE_KEY && captchaToken) {
+    try {
+      const validationResult = await validateTurnstileToken(captchaToken);
+      if (!validationResult.success) {
+        const errorMessage =
+          validationResult["error-codes"]?.join(", ") ||
+          validationResult.error ||
+          "Security check failed";
+        safeLog.error("Turnstile validation failed:", errorMessage);
+        logAuditEvent("turnstile_validation_failed", {
+          email,
+          metadata: { errorCodes: validationResult["error-codes"] },
+          severity: "high",
+        });
+        toast({
+          title: "Security Check Failed",
+          description: "Please complete the security check again.",
+          variant: "destructive",
+        });
+        setShowCaptcha(true);
+        throw new Error("Turnstile validation failed");
+      }
+      safeLog.log("Turnstile validation successful", { email });
+    } catch (error) {
+      if (error instanceof Error && error.message === "Turnstile validation failed") {
+        throw error;
+      }
+      safeLog.error("Turnstile validation error:", sanitizeError(error));
+      toast({
+        title: "Security Check Error",
+        description: "Unable to verify security check. Please try again.",
+        variant: "destructive",
+      });
+      throw error;
+    }
+  }
+
   const {
     data: { user },
     error,
