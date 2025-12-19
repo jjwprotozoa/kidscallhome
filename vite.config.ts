@@ -4,6 +4,7 @@ import { componentTagger } from "lovable-tagger";
 import path from "path";
 import { defineConfig } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
+import { deferCssPlugin } from "./vite-plugin-defer-css";
 
 // Read version from package.json for automatic injection
 const packageJson = JSON.parse(
@@ -55,6 +56,22 @@ export default defineConfig(({ mode }) => {
           } catch {
             // If URL parsing fails, keep the generic dns-prefetch and preconnect
           }
+        }
+
+        // Add preconnect for self-origin to reduce critical path latency
+        // This helps establish connection early for CSS/JS assets from same domain
+        const baseUrl = process.env.VITE_BASE_URL || "https://www.kidscallhome.com";
+        try {
+          const selfOrigin = new URL(baseUrl).origin;
+          // Only add if not already present
+          if (!transformed.includes(`rel="preconnect" href="${selfOrigin}"`)) {
+            transformed = transformed.replace(
+              /<head>/i,
+              `<head>\n    <link rel="preconnect" href="${selfOrigin}" crossorigin />`
+            );
+          }
+        } catch {
+          // If URL parsing fails, skip preconnect
         }
 
         return transformed;
@@ -123,6 +140,7 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       htmlPlugin(),
+      mode === "production" && deferCssPlugin(), // Defer CSS loading in production for faster FCP/LCP
       mode === "development" && componentTagger(),
       // Console removal plugin disabled - regex-based removal is too aggressive and breaks builds
       // TODO: Implement proper AST-based console removal if needed

@@ -4,6 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <!-- Resource hints for performance optimization -->
+    <!-- Preconnect to self-origin for faster CSS/JS asset loading (reduces critical path latency) -->
+    <link rel="preconnect" href="https://www.kidscallhome.com" crossorigin />
     <!-- DNS prefetch for Supabase - actual subdomain injected by Vite at build time -->
     <link rel="dns-prefetch" href="https://supabase.co" />
     <!-- Preconnect to Supabase for faster API calls (fallback if Vite plugin doesn't inject) -->
