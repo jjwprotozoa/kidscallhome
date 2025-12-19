@@ -6,9 +6,9 @@
     <!-- Resource hints for performance optimization -->
     <!-- DNS prefetch for Supabase - actual subdomain injected by Vite at build time -->
     <link rel="dns-prefetch" href="https://supabase.co" />
-    
-    <!-- Preload LCP image for faster first paint (WebP only - PNG fallback doesn't need preload) -->
-    <link rel="preload" href="/icon-96x96.webp" as="image" type="image/webp" fetchpriority="high" />
+    <!-- Preconnect to Supabase for faster API calls (fallback if Vite plugin doesn't inject) -->
+    <!-- Vite plugin will replace this with actual Supabase URL at build time -->
+    <link rel="preconnect" href="https://supabase.co" crossorigin />
     
     <!-- Lexend Font Family - Optimized loading for fast first paint -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -272,7 +272,7 @@
         pointer-events: none;
       }
       
-      /* Critical styles for Index page (above-the-fold) */
+      /* Critical styles for Index page (above-the-fold) - LCP element styles */
       .min-h-\[100dvh\]{min-height:100dvh}
       .bg-gradient-to-b{background-image:linear-gradient(to bottom,var(--tw-gradient-stops))}
       .from-primary\/10{--tw-gradient-from:rgb(59 130 246 / 0.1);--tw-gradient-stops:var(--tw-gradient-from),var(--tw-gradient-to)}
@@ -282,6 +282,14 @@
       .text-center{text-align:center}
       .font-bold{font-weight:700}
       .text-5xl{font-size:3rem;line-height:1}
+      /* LCP element: Index page paragraph - ensure immediate visibility */
+      .text-xl{font-size:1.25rem;line-height:1.75rem}
+      .text-muted-foreground{color:#6b7280}
+      .max-w-2xl{max-width:42rem}
+      /* Ensure text is visible immediately (before React hydration) */
+      #root p{display:block;margin:0;padding:0}
+      /* Show SSR fallback content immediately for Index page LCP */
+      #root main[data-ssr-fallback]{display:block!important}
     </style>
     <div id="app-loading">
       <div class="loader-content">
@@ -294,7 +302,28 @@
         <div class="loader-spinner"></div>
       </div>
     </div>
-    <div id="root"></div>
+    <!-- SSR-like content for Index page - ensures LCP element is visible immediately -->
+    <!-- This content is replaced by React on hydration, but provides instant LCP -->
+    <div id="root">
+      <main class="min-h-[100dvh] bg-gradient-to-b from-primary/10 to-background" data-ssr-fallback style="display:none">
+        <div class="container mx-auto px-4 py-16">
+          <div class="text-center space-y-6 mb-16">
+            <h1 class="text-5xl md:text-6xl font-bold text-primary">Kids Call Home</h1>
+            <p class="text-xl text-muted-foreground max-w-2xl mx-auto">Stay connected with your family through simple video calls and messaging between parents, family members, and children</p>
+          </div>
+        </div>
+      </main>
+    </div>
+    <script>
+      // Show SSR fallback content immediately for instant LCP (before React loads)
+      // React will replace this content on hydration, preventing hydration mismatch
+      (function() {
+        const ssrFallback = document.querySelector('#root main[data-ssr-fallback]');
+        if (ssrFallback && window.location.pathname === '/') {
+          ssrFallback.style.display = 'block';
+        }
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
     <noscript>
       <div style="padding: 2rem; font-family: system-ui; max-width: 800px; margin: 2rem auto;">

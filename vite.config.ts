@@ -43,12 +43,17 @@ export default defineConfig(({ mode }) => {
         if (supabaseUrl) {
           try {
             const supabaseOrigin = new URL(supabaseUrl).origin;
+            // Replace both dns-prefetch and preconnect fallback with actual Supabase URL
             transformed = transformed.replace(
               '<link rel="dns-prefetch" href="https://supabase.co" />',
-              `<link rel="dns-prefetch" href="${supabaseOrigin}" />\n    <link rel="preconnect" href="${supabaseOrigin}" crossorigin />`
+              `<link rel="dns-prefetch" href="${supabaseOrigin}" />`
+            );
+            transformed = transformed.replace(
+              '<link rel="preconnect" href="https://supabase.co" crossorigin />',
+              `<link rel="preconnect" href="${supabaseOrigin}" crossorigin />`
             );
           } catch {
-            // If URL parsing fails, keep the generic dns-prefetch
+            // If URL parsing fails, keep the generic dns-prefetch and preconnect
           }
         }
 
