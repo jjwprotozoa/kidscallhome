@@ -88,6 +88,8 @@ export const useCallEngine = ({
   const answerPollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const terminationChannelRef = useRef<RealtimeChannel | null>(null);
   const initializationRef = useRef(false);
+  // Track processed ICE candidates to avoid duplicates
+  const processedIceCandidatesRef = useRef<Set<string>>(new Set());
 
   const {
     localStream,
@@ -150,8 +152,15 @@ export const useCallEngine = ({
   useEffect(() => {
     if (!initializationRef.current && state === "idle") {
       initializationRef.current = true;
-      initializeConnection().catch((error) => {
+      initializeConnection().catch(async (error) => {
         console.error("Failed to initialize WebRTC:", error);
+        // Log diagnostics on initialization failure
+        if (import.meta.env.DEV) {
+          const { logConnectionDiagnostics } = await import(
+            "@/utils/callConnectionDiagnostics"
+          );
+          logConnectionDiagnostics(webRTCPeerConnectionRef.current);
+        }
         toast({
           title: "Connection Error",
           description: "Failed to initialize video connection",
@@ -159,7 +168,7 @@ export const useCallEngine = ({
         });
       });
     }
-  }, [state, initializeConnection, toast]);
+  }, [state, initializeConnection, toast, webRTCPeerConnectionRef]);
 
   // Pre-warm local media when incoming call is detected
   // This makes Accept feel instant - camera/mic are already active
@@ -194,6 +203,11 @@ export const useCallEngine = ({
     setStateWithLogging,
   });
 
+  // Clear processed ICE candidates when callId changes
+  useEffect(() => {
+    processedIceCandidatesRef.current.clear();
+  }, [callId]);
+
   // Monitor call status changes
   useEffect(() => {
     if (!callId) return;
@@ -218,32 +232,30 @@ export const useCallEngine = ({
             parent_ice_candidates?: Json | null;
             child_ice_candidates?: Json | null;
           };
-          const oldCall = payload.old as { status?: string } | null;
+          const oldCall = payload.old as {
+            status?: string;
+            ended_at?: string | null;
+          } | null;
           const pc = webRTCPeerConnectionRef.current;
 
-          // DIAGNOSTIC: Log UPDATE event to debug ICE candidate reception
-          // eslint-disable-next-line no-console
-          console.log("📡 [CALL ENGINE STATUS] UPDATE event received:", {
-            callId,
-            role,
-            currentState: state,
-            status: updatedCall.status,
-            hasAnswer: !!updatedCall.answer,
-            hasParentIceCandidates: !!updatedCall.parent_ice_candidates,
-            parentIceCandidatesCount: Array.isArray(
-              updatedCall.parent_ice_candidates
-            )
-              ? updatedCall.parent_ice_candidates.length
-              : 0,
-            hasChildIceCandidates: !!updatedCall.child_ice_candidates,
-            childIceCandidatesCount: Array.isArray(
-              updatedCall.child_ice_candidates
-            )
-              ? updatedCall.child_ice_candidates.length
-              : 0,
-            payloadKeys: Object.keys(payload.new || {}),
-            iceConnectionState: pc?.iceConnectionState,
-          });
+          // Only log UPDATE events for important state changes (not every ICE candidate update)
+          const isImportantUpdate =
+            updatedCall.status !== oldCall?.status ||
+            !!updatedCall.answer ||
+            updatedCall.ended_at !== oldCall?.ended_at;
+
+          if (isImportantUpdate) {
+            // eslint-disable-next-line no-console
+            console.log("📡 [CALL ENGINE STATUS] UPDATE event:", {
+              callId,
+              role,
+              status: updatedCall.status,
+              oldStatus: oldCall?.status,
+              hasAnswer: !!updatedCall.answer,
+              endedAt: updatedCall.ended_at,
+              iceConnectionState: pc?.iceConnectionState,
+            });
+          }
 
           // Handle answer received (for outgoing calls)
           // CRITICAL: Check for both "in_call" and "active" status for compatibility
@@ -435,16 +447,6 @@ export const useCallEngine = ({
             pc.iceConnectionState !== "connected" &&
             pc.iceConnectionState !== "completed"
           ) {
-            // eslint-disable-next-line no-console
-            console.log(
-              "🧊 [CALL ENGINE STATUS] Fetching latest ICE candidates from database...",
-              {
-                role,
-                remoteCandidateField,
-                iceConnectionState: pc.iceConnectionState,
-              }
-            );
-
             try {
               const { data: latestCall, error: fetchError } = await supabase
                 .from("calls")
@@ -453,6 +455,7 @@ export const useCallEngine = ({
                 .single();
 
               if (fetchError) {
+                // Only log errors, not every fetch
                 console.error(
                   "❌ [CALL ENGINE STATUS] Error fetching ICE candidates:",
                   fetchError.message
@@ -462,40 +465,29 @@ export const useCallEngine = ({
                   (latestCall[remoteCandidateField] as RTCIceCandidateInit[]) ||
                   [];
 
-                // eslint-disable-next-line no-console
-                console.log(
-                  "🧊 [CALL ENGINE STATUS] ICE candidates from database:",
-                  {
-                    role,
-                    remoteCandidateField,
-                    remoteCandidatesCount: remoteCandidates.length,
-                    hasPC: !!pc,
-                    hasRemoteDescription: !!pc?.remoteDescription,
-                    iceConnectionState: pc?.iceConnectionState,
-                  }
-                );
-
                 if (remoteCandidates.length > 0) {
-                  // eslint-disable-next-line no-console
-                  console.log(
-                    `🧊 [CALL ENGINE STATUS] Processing ${remoteCandidates.length} ICE candidates from ${remoteCandidateField}`
-                  );
-                  // Process new candidates (avoid reprocessing by checking if already added)
+                  // Process new candidates with deduplication
                   let addedCount = 0;
+                  let skippedCount = 0;
+
                   for (const candidate of remoteCandidates) {
                     try {
-                      // CRITICAL: Check if peer connection is still valid before processing each candidate
-                      // Note: We rely on error handling to catch closed connection errors
-                      // as TypeScript types don't include "closed" for signalingState/connectionState
-                      if (!pc) {
-                        // Peer connection is null - stop processing candidates
-                        console.warn(
-                          "⚠️ [CALL ENGINE STATUS] Peer connection is null, skipping remaining ICE candidates"
-                        );
-                        break;
-                      }
+                      if (!pc) break; // Connection closed
                       if (!candidate.candidate) continue;
+
+                      // Create unique key for candidate deduplication
+                      const candidateKey = `${candidate.candidate}-${
+                        candidate.sdpMLineIndex
+                      }-${candidate.sdpMid || ""}`;
+
+                      // Skip if already processed
+                      if (processedIceCandidatesRef.current.has(candidateKey)) {
+                        skippedCount++;
+                        continue;
+                      }
+
                       await pc.addIceCandidate(new RTCIceCandidate(candidate));
+                      processedIceCandidatesRef.current.add(candidateKey);
                       addedCount++;
                     } catch (err) {
                       const error = err as Error;
@@ -512,17 +504,18 @@ export const useCallEngine = ({
                       }
                     }
                   }
-                  // eslint-disable-next-line no-console
-                  console.log(
-                    `✅ [CALL ENGINE STATUS] Added ${addedCount} new ICE candidates (${
-                      remoteCandidates.length - addedCount
-                    } duplicates)`
-                  );
-                } else {
-                  // eslint-disable-next-line no-console
-                  console.log(
-                    `⚠️ [CALL ENGINE STATUS] No ICE candidates found in ${remoteCandidateField} from database`
-                  );
+
+                  // Only log when we actually add new candidates (not duplicates)
+                  if (addedCount > 0) {
+                    // eslint-disable-next-line no-console
+                    console.log(
+                      `✅ [CALL ENGINE STATUS] Added ${addedCount} new ICE candidates${
+                        skippedCount > 0
+                          ? ` (${skippedCount} duplicates skipped)`
+                          : ""
+                      }`
+                    );
+                  }
                 }
               }
             } catch (error) {
@@ -531,21 +524,6 @@ export const useCallEngine = ({
                 error
               );
             }
-          } else if (!pc) {
-            // eslint-disable-next-line no-console
-            console.log(
-              "⚠️ [CALL ENGINE STATUS] No peer connection - cannot add ICE candidates"
-            );
-          } else if (!pc.remoteDescription) {
-            // eslint-disable-next-line no-console
-            console.log(
-              "⚠️ [CALL ENGINE STATUS] No remote description - cannot add ICE candidates yet"
-            );
-          } else {
-            // eslint-disable-next-line no-console
-            console.log(
-              `✅ [CALL ENGINE STATUS] ICE already ${pc.iceConnectionState} - skipping ICE fetch`
-            );
           }
 
           // Transition to in_call when connection is established
@@ -1872,9 +1850,9 @@ export const useCallEngine = ({
     };
   }, [cleanupWebRTC]);
 
-  // CRITICAL FIX: Poll for ICE candidates while in "connecting" state
-  // Supabase Realtime UPDATE events may not include all columns, so we need
-  // to actively fetch ICE candidates from the database to ensure connection completes
+  // FALLBACK: Poll for ICE candidates while in "connecting" state as a backup
+  // Primary mechanism is realtime subscription, but polling ensures we don't miss candidates
+  // Reduced frequency to 2 seconds to minimize database queries and console noise
   const icePollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
@@ -1887,14 +1865,10 @@ export const useCallEngine = ({
         clearInterval(icePollingIntervalRef.current);
         icePollingIntervalRef.current = null;
       }
+      // Reset processed candidates when not connecting
+      processedIceCandidatesRef.current.clear();
       return;
     }
-
-    // eslint-disable-next-line no-console
-    console.log(
-      "🧊 [ICE POLLING] Starting ICE candidate polling for call:",
-      callId
-    );
 
     const remoteCandidateField =
       role === "parent" || role === "family_member"
@@ -1912,10 +1886,6 @@ export const useCallEngine = ({
         currentPc.iceConnectionState === "failed" ||
         currentPc.iceConnectionState === "closed"
       ) {
-        // eslint-disable-next-line no-console
-        console.log(
-          `🧊 [ICE POLLING] Stopping - iceConnectionState: ${currentPc?.iceConnectionState}`
-        );
         if (icePollingIntervalRef.current) {
           clearInterval(icePollingIntervalRef.current);
           icePollingIntervalRef.current = null;
@@ -1931,6 +1901,7 @@ export const useCallEngine = ({
           .single();
 
         if (fetchError) {
+          // Only log errors, not every poll attempt
           console.error(
             "❌ [ICE POLLING] Error fetching ICE candidates:",
             fetchError.message
@@ -1943,26 +1914,39 @@ export const useCallEngine = ({
             (latestCall[remoteCandidateField] as RTCIceCandidateInit[]) || [];
 
           if (remoteCandidates.length > 0 && currentPc.remoteDescription) {
-            // eslint-disable-next-line no-console
-            console.log(
-              `🧊 [ICE POLLING] Found ${remoteCandidates.length} ICE candidates, processing...`
-            );
-
             let addedCount = 0;
+            let skippedCount = 0;
+
             for (const candidate of remoteCandidates) {
               try {
                 if (!candidate.candidate) continue;
+
+                // Create unique key for candidate deduplication
+                const candidateKey = `${candidate.candidate}-${
+                  candidate.sdpMLineIndex
+                }-${candidate.sdpMid || ""}`;
+
+                // Skip if already processed
+                if (processedIceCandidatesRef.current.has(candidateKey)) {
+                  skippedCount++;
+                  continue;
+                }
+
                 await currentPc.addIceCandidate(new RTCIceCandidate(candidate));
+                processedIceCandidatesRef.current.add(candidateKey);
                 addedCount++;
               } catch (err) {
                 // Silently handle duplicates - this is expected
               }
             }
 
+            // Only log when we actually add new candidates
             if (addedCount > 0) {
               // eslint-disable-next-line no-console
               console.log(
-                `✅ [ICE POLLING] Added ${addedCount} new ICE candidates`
+                `✅ [ICE POLLING] Added ${addedCount} new ICE candidates${
+                  skippedCount > 0 ? ` (${skippedCount} duplicates)` : ""
+                }`
               );
             }
           }
@@ -1972,9 +1956,10 @@ export const useCallEngine = ({
       }
     };
 
-    // Poll immediately and then every 500ms
+    // Poll immediately and then every 2 seconds (reduced from 500ms)
+    // This is a fallback - realtime subscription is the primary mechanism
     pollForIceCandidates();
-    icePollingIntervalRef.current = setInterval(pollForIceCandidates, 500);
+    icePollingIntervalRef.current = setInterval(pollForIceCandidates, 2000);
 
     // Cleanup on unmount or state change
     return () => {

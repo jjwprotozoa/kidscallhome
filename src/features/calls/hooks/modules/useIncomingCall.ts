@@ -266,6 +266,20 @@ export const useIncomingCall = ({
 
         setCallId(incomingCallId);
         console.warn("📞 [INCOMING CALL] Call accepted:", incomingCallId);
+        
+        // Log connection diagnostics after accepting call (especially useful for iPhone debugging)
+        if (import.meta.env.DEV) {
+          try {
+            const { logConnectionDiagnostics } = await import(
+              "@/utils/callConnectionDiagnostics"
+            );
+            logConnectionDiagnostics(pc);
+          } catch (err) {
+            // Diagnostics module not critical - continue even if import fails
+            console.warn("Failed to load diagnostics:", err);
+          }
+        }
+        
         setIsConnecting(false);
 
         // Process existing remote ICE candidates immediately

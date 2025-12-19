@@ -969,6 +969,31 @@ export const useWebRTC = (
           timestamp: new Date().toISOString(),
         });
 
+        // Enhanced logging for iPhone debugging
+        if (import.meta.env.DEV) {
+          const isIOSDevice = /iPad|iPhone|iPod/.test(navigator.userAgent);
+          if (isIOSDevice && (iceState === "failed" || iceState === "disconnected")) {
+            console.group("📱 [iOS CONNECTION DIAGNOSTICS]");
+            console.log("ICE State:", iceState);
+            console.log("Connection State:", connectionState);
+            console.log("Signaling State:", pc.signalingState);
+            console.log("Has Local Description:", !!pc.localDescription);
+            console.log("Has Remote Description:", !!pc.remoteDescription);
+            console.log("Local Tracks:", pc.getSenders().filter(s => s.track).length);
+            console.log("Remote Tracks:", pc.getReceivers().filter(r => r.track).length);
+            
+            // Check ICE servers
+            const config = pc.getConfiguration();
+            console.log("ICE Servers:", config.iceServers?.length || 0);
+            const hasTurn = config.iceServers?.some(server => {
+              const urls = Array.isArray(server.urls) ? server.urls : [server.urls];
+              return urls.some(url => typeof url === 'string' && url.includes('turn:'));
+            });
+            console.log("Has TURN Servers:", hasTurn);
+            console.groupEnd();
+          }
+        }
+
         // Auto-end call after timeout if connection fails
         // CRITICAL: "disconnected" is TRANSIENT and can recover - give it more time
         // "failed" is terminal - end quickly
