@@ -149,14 +149,30 @@ export default defineConfig(({ mode }) => {
             "**/@vite/**/*",
             "**/@react-refresh/**/*",
             "**/*.map",
+            "**/kids-video-calling-kindle.html", // Exclude files that return 403
+            "**/*-kindle.html", // Exclude kindle-specific pages
           ],
           // Skip waiting and claim clients immediately for faster updates
           skipWaiting: true,
           clientsClaim: true,
           cleanupOutdatedCaches: true,
+          // Navigation fallback to root instead of index.html
+          navigateFallback: "/",
+          navigateFallbackDenylist: [
+            /^\/api\//,
+            /^\/_next-live\//,
+            /\.(?:json|xml|txt)$/,
+          ],
           // Import custom notification handlers into the generated service worker
           // This file contains push notification and notificationclick event handlers
           importScripts: ["/notification-handlers.js"],
+          // Handle precaching errors gracefully
+          dontCacheBustURLsMatching: /\.\w{8}\./,
+          // Exclude files that fail to precache
+          exclude: [
+            /\.map$/,
+            /kids-video-calling-kindle\.html$/,
+          ],
           // Runtime caching rules for external resources
           runtimeCaching: [
             {
