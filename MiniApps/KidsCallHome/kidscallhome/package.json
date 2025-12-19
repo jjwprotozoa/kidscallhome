@@ -1,7 +1,7 @@
 {
   "name": "kids-call-home-root",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0-beta",
   "scripts": {
     "dev": "cd kidscallhome && npm run dev",
     "dev:local": "cd kidscallhome && npm run dev:local",
