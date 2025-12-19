@@ -82,7 +82,16 @@ export const CallControls = ({
         {/* Mute Button */}
         <button
           type="button"
-          onClick={onToggleMute}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleMute();
+          }}
+          onTouchEnd={(e) => {
+            e.stopPropagation();
+            // Prevent click event from firing after touchEnd on mobile
+            e.preventDefault();
+            onToggleMute();
+          }}
           className={`
             relative w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center
             transition-all duration-200 active:scale-90
@@ -91,7 +100,7 @@ export const CallControls = ({
               : "bg-white/20 backdrop-blur-sm hover:bg-white/30"
             }
           `}
-          style={{ touchAction: "manipulation" }}
+          style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
           aria-label={isMuted ? "Unmute microphone" : "Mute microphone"}
         >
           {isMuted ? (
@@ -125,7 +134,16 @@ export const CallControls = ({
         {/* Video Toggle Button */}
         <button
           type="button"
-          onClick={onToggleVideo}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleVideo();
+          }}
+          onTouchEnd={(e) => {
+            e.stopPropagation();
+            // Prevent click event from firing after touchEnd on mobile
+            e.preventDefault();
+            onToggleVideo();
+          }}
           className={`
             relative w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center
             transition-all duration-200 active:scale-90
@@ -134,7 +152,7 @@ export const CallControls = ({
               : "bg-white/20 backdrop-blur-sm hover:bg-white/30"
             }
           `}
-          style={{ touchAction: "manipulation" }}
+          style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
           aria-label={isVideoOff ? "Turn on camera" : "Turn off camera"}
         >
           {isVideoOff ? (

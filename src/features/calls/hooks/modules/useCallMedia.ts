@@ -19,7 +19,6 @@ export const useCallMedia = (
   const toggleMute = useCallback(() => {
     console.log("🎤 [MEDIA CONTROLS] toggleMute called", {
       hasLocalStream: !!localStream,
-      currentIsMuted: isMuted,
       audioTracks: localStream?.getAudioTracks().length ?? 0,
     });
 
@@ -39,6 +38,7 @@ export const useCallMedia = (
             trackId: track.id,
             enabled: track.enabled,
             newMutedState,
+            wasMuted: prevMuted,
           });
         });
         return newMutedState;
@@ -46,12 +46,11 @@ export const useCallMedia = (
     } else {
       console.warn("⚠️ [MEDIA CONTROLS] Cannot toggle mute - no local stream!");
     }
-  }, [localStream, isMuted]);
+  }, [localStream]); // Removed isMuted from dependencies - using functional update instead
 
   const toggleVideo = useCallback(() => {
     console.log("📹 [MEDIA CONTROLS] toggleVideo called", {
       hasLocalStream: !!localStream,
-      currentIsVideoOff: isVideoOff,
       videoTracks: localStream?.getVideoTracks().length ?? 0,
     });
 
@@ -71,6 +70,7 @@ export const useCallMedia = (
             trackId: track.id,
             enabled: track.enabled,
             newVideoOffState,
+            wasVideoOff: prevVideoOff,
           });
         });
         return newVideoOffState;
@@ -80,7 +80,7 @@ export const useCallMedia = (
         "⚠️ [MEDIA CONTROLS] Cannot toggle video - no local stream!"
       );
     }
-  }, [localStream, isVideoOff]);
+  }, [localStream]); // Removed isVideoOff from dependencies - using functional update instead
 
   return {
     isMuted,
