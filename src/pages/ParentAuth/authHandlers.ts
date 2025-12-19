@@ -45,7 +45,9 @@ export const handleLogin = async ({
 
   // Validate Turnstile token if CAPTCHA is provided (non-blocking if service unavailable)
   const CAPTCHA_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || "";
-  if (CAPTCHA_SITE_KEY && captchaToken) {
+  const CAPTCHA_ENABLED = import.meta.env.VITE_ENABLE_CAPTCHA !== "false"; // Default to enabled unless explicitly disabled
+  
+  if (CAPTCHA_ENABLED && CAPTCHA_SITE_KEY && captchaToken) {
     try {
       const validationResult = await validateTurnstileToken(captchaToken);
       if (!validationResult.success) {
