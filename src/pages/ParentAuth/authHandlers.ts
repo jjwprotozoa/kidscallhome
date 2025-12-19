@@ -43,7 +43,7 @@ export const handleLogin = async ({
 }: LoginParams) => {
   logAuditEvent("login_attempt", { email, severity: "low" });
 
-  // Validate Turnstile token if CAPTCHA is required
+  // Validate Turnstile token if CAPTCHA is provided (non-blocking if service unavailable)
   const CAPTCHA_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || "";
   if (CAPTCHA_SITE_KEY && captchaToken) {
     try {
@@ -69,16 +69,14 @@ export const handleLogin = async ({
       }
       safeLog.log("Turnstile validation successful", { email });
     } catch (error) {
+      // If it's a validation failure, block login
       if (error instanceof Error && error.message === "Turnstile validation failed") {
         throw error;
       }
-      safeLog.error("Turnstile validation error:", sanitizeError(error));
-      toast({
-        title: "Security Check Error",
-        description: "Unable to verify security check. Please try again.",
-        variant: "destructive",
-      });
-      throw error;
+      // If it's a network/service error, log but allow login to proceed
+      // (Cloudflare might be blocking the validation endpoint)
+      safeLog.warn("Turnstile validation service unavailable, allowing login:", sanitizeError(error));
+      // Don't block login if Turnstile service is unavailable
     }
   }
 

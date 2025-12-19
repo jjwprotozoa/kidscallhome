@@ -52,7 +52,18 @@ export const performSecurityChecks = ({
     }
 
     const CAPTCHA_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || "";
+    // Only require CAPTCHA if it's shown and site key is configured
+    // Allow login if CAPTCHA widget failed to load (Cloudflare blocking, etc.)
     if (showCaptcha && CAPTCHA_SITE_KEY && !captchaToken) {
+      // Check if CAPTCHA widget is actually visible/working
+      // If widget failed to load, don't block login
+      const captchaElement = document.querySelector('.cf-turnstile');
+      if (!captchaElement) {
+        // CAPTCHA widget not rendered, might be blocked by Cloudflare
+        // Allow login to proceed but log the issue
+        logAuditEvent("captcha_widget_not_rendered", { email, severity: "medium" });
+        return { allowed: true }; // Allow login if widget didn't render
+      }
       toast({ title: "Security Check Required", description: "Please complete the security check below.", variant: "destructive" });
       return { allowed: false, error: "captcha_required" };
     }
