@@ -83,7 +83,13 @@ export const handleLogin = async ({
   const {
     data: { user },
     error,
-  } = await supabase.auth.signInWithPassword({ email, password });
+  } = await supabase.auth.signInWithPassword({ 
+    email, 
+    password,
+    options: captchaToken ? {
+      captchaToken: captchaToken
+    } : undefined
+  });
 
   if (error) {
     const failedLogin = recordFailedLogin(email);
