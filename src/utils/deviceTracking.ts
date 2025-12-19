@@ -335,17 +335,75 @@ export function getDeviceName(): string {
 
 /**
  * Get client IP address (requires backend support)
- * For now, returns null - can be enhanced with an API call
+ * Uses CORS-friendly services with proper error handling and timeouts
+ * Returns null if IP cannot be determined (non-critical)
  */
 export async function getClientIP(): Promise<string | null> {
-  try {
-    // You can use a service like ipify.org or get it from your backend
-    const response = await fetch('https://api.ipify.org?format=json');
-    const data = await response.json();
-    return data.ip || null;
-  } catch {
+  // Check if IP detection is disabled via environment variable
+  if (import.meta.env.VITE_DISABLE_IP_DETECTION === 'true') {
     return null;
   }
+
+  // Helper to add timeout to fetch requests
+  const fetchWithTimeout = async (url: string, options: RequestInit = {}): Promise<Response | null> => {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 second timeout
+
+      const response = await fetch(url, {
+        ...options,
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+      return response;
+    } catch {
+      return null;
+    }
+  };
+
+  // 1) Primary: api.myip.com (CORS-friendly, JSON, includes country info)
+  try {
+    const res = await fetchWithTimeout('https://api.myip.com', { method: 'GET' });
+    if (res && res.ok) {
+      const data = await res.json();
+      if (data?.ip) {
+        return data.ip as string;
+      }
+    }
+  } catch {
+    // ignore, try next
+  }
+
+  // 2) Fallback: ipapi.co/json/ (also gives country, supports CORS)
+  try {
+    const res = await fetchWithTimeout('https://ipapi.co/json/', { method: 'GET' });
+    if (res && res.ok) {
+      const data = await res.json();
+      if (data?.ip) {
+        return data.ip as string;
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  // 3) Last resort: ipv4.icanhazip.com (plain text, may lack CORS in some contexts)
+  try {
+    const res = await fetchWithTimeout('https://ipv4.icanhazip.com/', { method: 'GET' });
+    if (res && res.ok) {
+      const text = (await res.text()).trim();
+      if (text) {
+        return text;
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  // All services failed - return null gracefully
+  // IP detection is non-critical and should not break the app
+  return null;
 }
 
 /**

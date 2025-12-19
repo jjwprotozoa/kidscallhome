@@ -3,6 +3,7 @@
 
 import { ColorAnimalSelector } from "@/components/childLogin/ColorAnimalSelector";
 import { FamilyCodeKeypad } from "@/components/childLogin/FamilyCodeKeypad";
+import { MagicLinkPreloader } from "@/components/childLogin/MagicLinkPreloader";
 import { NumberEntryScreen } from "@/components/childLogin/NumberEntryScreen";
 import { SuccessScreen } from "@/components/childLogin/SuccessScreen";
 import { colors } from "@/data/childLoginConstants";
@@ -32,14 +33,24 @@ const ChildLogin = () => {
   const [selectedOption, setSelectedOption] = useState<string>("");
   const [number, setNumber] = useState<string>("");
   const [skipFamilyCode, setSkipFamilyCode] = useState(false);
+  const [isMagicLink, setIsMagicLink] = useState(false);
 
   const { loading, childData, handleLoginWithCode } = useChildAuth(skipFamilyCode);
+
+  // Reset magic link flag when loading completes without success
+  useEffect(() => {
+    if (isMagicLink && !loading && !childData) {
+      // Login failed or completed without success - reset to show normal login flow
+      setIsMagicLink(false);
+    }
+  }, [isMagicLink, loading, childData]);
 
   // Handle magic link with code parameter
   useEffect(() => {
     const codeParam = searchParams.get("code");
     if (codeParam && codeParam.trim() !== "" && !magicLinkProcessed.current) {
       magicLinkProcessed.current = true;
+      setIsMagicLink(true); // Set flag to show preloader
 
       const decodedCode = decodeURIComponent(codeParam.trim()).replace(/\s+/g, "-");
       const parts = decodedCode.split("-");
@@ -67,6 +78,7 @@ const ChildLogin = () => {
           const normalizedMagicCode = `${cleanedFamilyCode}-${option.toLowerCase()}-${num}`;
           handleLoginWithCode(normalizedMagicCode);
         } else {
+          setIsMagicLink(false); // Reset flag on error
           toast({
             title: "Invalid login code",
             description:
@@ -78,6 +90,7 @@ const ChildLogin = () => {
           magicLinkProcessed.current = false;
         }
       } else {
+        setIsMagicLink(false); // Reset flag on error
         toast({
           title: "Invalid login code",
           description:
@@ -272,8 +285,15 @@ const ChildLogin = () => {
     }
   };
 
+  // Show preloader for magic link authentication (hides family code)
+  // Keep showing until navigation completes (even after loading finishes)
+  if (isMagicLink && (loading || childData)) {
+    return <MagicLinkPreloader />;
+  }
+
   // Success screen
-  if (step === "success" && childData) {
+  // Don't show for magic links (preloader handles that flow)
+  if (step === "success" && childData && !isMagicLink) {
     return (
       <SuccessScreen
         childName={childData.name}
@@ -300,7 +320,8 @@ const ChildLogin = () => {
   }
 
   // Family code entry screen
-  if (step === "familyCode") {
+  // Don't show if we have childData from a magic link (preloader should be showing instead)
+  if (step === "familyCode" && !(isMagicLink && childData)) {
     return (
       <FamilyCodeKeypad
         familyCode={familyCode}
@@ -327,6 +348,7 @@ const ChildLogin = () => {
 };
 
 export default ChildLogin;
+
 
 
 
