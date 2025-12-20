@@ -2,27 +2,42 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
     <!-- Resource hints for performance optimization -->
-    <!-- Preconnect to self-origin for faster CSS/JS asset loading (reduces critical path latency) -->
     <link rel="preconnect" href="https://www.kidscallhome.com" crossorigin />
-    <!-- DNS prefetch for Supabase - actual subdomain injected by Vite at build time -->
     <link rel="dns-prefetch" href="https://supabase.co" />
-    <!-- Preconnect to Supabase for faster API calls (fallback if Vite plugin doesn't inject) -->
-    <!-- Vite plugin will replace this with actual Supabase URL at build time -->
     <link rel="preconnect" href="https://supabase.co" crossorigin />
-    
+
     <!-- Lexend Font Family - Optimized loading for fast first paint -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <!-- Load font asynchronously to prevent render blocking -->
-    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;600;700&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'" />
-    <noscript><link href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;600;700&display=swap" rel="stylesheet" /></noscript>
+    <link
+      rel="preload"
+      href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;600;700&display=swap"
+      as="style"
+      onload="this.onload=null;this.rel='stylesheet'"
+    />
+    <noscript
+      ><link
+        href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;600;700&display=swap"
+        rel="stylesheet"
+    /></noscript>
+
     <link rel="icon" type="image/png" sizes="192x192" href="/icon-192x192.png" />
     <link rel="icon" type="image/png" sizes="512x512" href="/icon-512x512.png" />
     <link rel="apple-touch-icon" href="/icon-192x192.png" />
-    <title>Kids Call Home – Safe Video Calls for Kids Without a Phone or SIM Card</title>
-    <meta name="description" content="Safe video calling app for kids. No phone or SIM card required. Family-only contacts controlled by parents. Works on tablets, iPads, and Kindle Fire over Wi‑Fi. Encrypted calls and messages with no ads, no strangers, no data tracking." />
+
+    <title>
+      Kids Call Home – Safe Video Calls for Kids Without a Phone Number or SIM
+      Card
+    </title>
+    <meta
+      name="description"
+      content="Safe video calling and messaging app for kids. Family-only contacts controlled by parents. Works on most phones and tablets over Wi‑Fi or mobile data, no phone number or SIM card required. No ads, no strangers, no filters, no data tracking."
+    />
     <meta name="author" content="Kids Call Home" />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://www.kidscallhome.com" />
@@ -30,212 +45,348 @@
     <!-- Open Graph / Facebook -->
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://www.kidscallhome.com" />
-    <meta property="og:title" content="Kids Call Home – Safe Video Calls for Kids Without a Phone or SIM Card" />
-    <meta property="og:description" content="Safe video calling app for kids. Family-only contacts controlled by parents. Works on tablets and iPads over Wi‑Fi. No ads, no strangers, no data tracking." />
-    <meta property="og:image" content="https://www.kidscallhome.com/og-image.png" />
-    <meta property="og:image:secure_url" content="https://www.kidscallhome.com/og-image.png" />
+    <meta
+      property="og:title"
+      content="Kids Call Home – Safe Video Calls for Kids Without a Phone Number or SIM Card"
+    />
+    <meta
+      property="og:description"
+      content="Kids Call Home is a safe kids messaging and video calling app for family-only communication. Kids call parents and family from tablets, phones and Wi‑Fi devices without a phone number or SIM card. No ads, no strangers, no filters."
+    />
+    <meta
+      property="og:image"
+      content="https://www.kidscallhome.com/og-image.png"
+    />
+    <meta
+      property="og:image:secure_url"
+      content="https://www.kidscallhome.com/og-image.png"
+    />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta property="og:image:type" content="image/png" />
-    <meta property="og:image:alt" content="Kids Call Home - Family communication app for video calls and messaging" />
+    <meta
+      property="og:image:alt"
+      content="Kids Call Home - Family communication app for video calls and messaging"
+    />
     <meta property="og:site_name" content="Kids Call Home" />
     <meta property="og:locale" content="en_US" />
-    
-    <!-- Facebook App ID (optional - add your Facebook App ID if you have one) -->
-    <!-- <meta property="fb:app_id" content="YOUR_FACEBOOK_APP_ID" /> -->
 
     <!-- Twitter -->
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:url" content="https://www.kidscallhome.com" />
-    <meta name="twitter:title" content="Kids Call Home – Safe Video Calls for Kids Without a Phone or SIM Card" />
-    <meta name="twitter:description" content="Safe video calling app for kids. Family-only contacts controlled by parents. Works on tablets and iPads over Wi‑Fi. No ads, no strangers, no data tracking." />
-    <meta name="twitter:image" content="https://www.kidscallhome.com/og-image.png" />
+    <meta
+      name="twitter:title"
+      content="Kids Call Home – Safe Video Calls for Kids Without a Phone Number or SIM Card"
+    />
+    <meta
+      name="twitter:description"
+      content="Kids Call Home is a safe kids messaging and video calling app for family-only communication. Kids call parents and family from tablets, phones and Wi‑Fi devices without a phone number or SIM card. No ads, no strangers, no filters."
+    />
+    <meta
+      name="twitter:image"
+      content="https://www.kidscallhome.com/og-image.png"
+    />
     <meta name="twitter:site" content="@KidsCallHome" />
     <meta name="twitter:creator" content="@KidsCallHome" />
-    
+
     <!-- PWA Manifest -->
     <link rel="manifest" href="/manifest.json" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: dark)" />
+    <meta
+      name="theme-color"
+      content="#ffffff"
+      media="(prefers-color-scheme: light)"
+    />
+    <meta
+      name="theme-color"
+      content="#ffffff"
+      media="(prefers-color-scheme: dark)"
+    />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta
+      name="apple-mobile-web-app-status-bar-style"
+      content="black-translucent"
+    />
     <meta name="apple-mobile-web-app-title" content="Kids Call Home" />
-    
+
     <!-- Structured Data for Search Engines & Voice Assistants -->
     <script type="application/ld+json">
-    {
-      "@context": "https://schema.org",
-      "@type": "SoftwareApplication",
-      "name": "Kids Call Home",
-      "description": "Safe video calling and messaging app for kids. Family-only contacts controlled by parents. Works on tablets, iPads, and Wi‑Fi devices without a SIM card or phone number. Encrypted calls and messages with no ads, no strangers, and no data tracking.",
-      "url": "https://www.kidscallhome.com",
-      "applicationCategory": "CommunicationApplication",
-      "operatingSystem": ["Web", "Android", "iOS"],
-      "offers": {
-        "@type": "Offer",
-        "price": "0",
-        "priceCurrency": "USD"
-      },
-      "typicalAgeRange": "5-17",
-      "audience": {
-        "@type": "Audience",
-        "audienceType": "Families with children"
-      },
-      "featureList": [
-        "Family-only video calls and messaging",
-        "Parent-controlled contacts",
-        "No public profiles or stranger contact",
-        "Encrypted communication",
-        "Works without SIM card or phone number",
-        "Tablet and iPad compatible",
-        "Co-parenting friendly",
-        "No ads or data tracking"
-      ],
-      "screenshot": "https://www.kidscallhome.com/og-image.png",
-      "softwareVersion": "1.0"
-    }
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "Kids Call Home",
+        "description": "Safe video calling and messaging app for kids. Family-only contacts controlled by parents. Works on most phones, tablets, iPads, and Wi‑Fi devices without a SIM card or phone number. Encrypted calls and messages with no ads, no strangers, no filters, and no data tracking.",
+        "url": "https://www.kidscallhome.com",
+        "applicationCategory": "CommunicationApplication",
+        "operatingSystem": ["Web", "Android", "iOS", "Tablet"],
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "USD"
+        },
+        "typicalAgeRange": "5-17",
+        "audience": {
+          "@type": "Audience",
+          "audienceType": "Families with children"
+        },
+        "featureList": [
+          "Family-only video calls and messaging",
+          "Parent-controlled contacts",
+          "No public profiles or stranger contact",
+          "Encrypted communication",
+          "Works without SIM card or phone number",
+          "Works on most phones and tablets, including many kids tablets and e-readers",
+          "Co-parenting friendly and long-distance family friendly",
+          "No ads, no filters, no data tracking",
+          "Magic link login for kids (no passwords to remember)"
+        ],
+        "screenshot": "https://www.kidscallhome.com/og-image.png",
+        "softwareVersion": "1.0"
+      }
     </script>
-    
+
     <!-- FAQ Schema for Problem-Solving Queries -->
     <script type="application/ld+json">
-    {
-      "@context": "https://schema.org",
-      "@type": "FAQPage",
-      "mainEntity": [
-        {
-          "@type": "Question",
-          "name": "How can my child call me from a tablet without a SIM card?",
-          "acceptedAnswer": {
-            "@type": "Answer",
-            "text": "Kids Call Home works perfectly on tablets, iPads, Kindle Fire, and Chromebooks over Wi‑Fi without needing a SIM card or phone number. Your child simply opens the app, enters their login code, and can call approved family members. Parents control all contacts, so only family members you approve can connect with your child."
+      {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "How can my child call me from a tablet without a SIM card?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Kids Call Home works perfectly on tablets, iPads, Kindle Fire, and Chromebooks over Wi‑Fi without needing a SIM card or phone number. Your child simply opens the app, enters their login code, and can call approved family members. Parents control all contacts, so only family members you approve can connect with your child."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Is this app safer than typical kids messaging apps?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Yes. Kids Call Home is designed specifically for family-only communication. Unlike many kids messaging apps, there are no public profiles, no search features, no friend requests from strangers, and no \"friends of friends\" connections. Only parent-approved family members can contact your child. The app uses encrypted communication, collects minimal data, does not show ads, and does not sell family data to advertisers or partners."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "How does Kids Call Home protect my child's privacy?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Kids Call Home uses encrypted calls and messages to protect your family's communication. The app collects minimal data necessary for the service to function, does not use tracking for advertising purposes, and does not sell family data. There are no manipulative design patterns like infinite feeds, aggressive notifications, or surprise in‑app purchases. Parents have full control over who can contact their child."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Can my child use this to call both parents in different homes?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Yes. Kids Call Home is built for co‑parents and long‑distance family. Your child can easily call both parents, grandparents, and other approved family members across different homes and even different countries. Parents control which family members are approved, making it ideal for shared custody situations and international families."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Does Kids Call Home work on iPads and tablets?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Yes. Kids Call Home works great on iPads, Android tablets, Kindle Fire, and Chromebooks. It works over Wi‑Fi without needing a SIM card or phone number, making it perfect for kids who don't have their own phone. The app is also available as a Progressive Web App (PWA), so it can be added to the home screen like a native app."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Are there ads or in‑app purchases in Kids Call Home?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "No. Kids Call Home has no ads, no in‑app purchases, and no manipulative design features. The app is designed to be a simple, safe communication tool for families, not a platform for engagement or monetization. Your child's attention stays on connecting with family, not on games, feeds, or notifications designed to keep them online longer."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Does my child need a password to use Kids Call Home?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Kids Call Home supports simple magic links so children can tap once to log in from trusted devices instead of remembering complex usernames or passwords. Parents control where and how these links are used."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Does Kids Call Home include filters or games?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "No. Kids Call Home is focused on real connection between kids and family, so there are no face filters, social feeds or games. When your child calls, you see their real face and hear their real voice."
+            }
           }
-        },
-        {
-          "@type": "Question",
-          "name": "Is this app safer than typical kids messaging apps?",
-          "acceptedAnswer": {
-            "@type": "Answer",
-            "text": "Yes. Kids Call Home is designed specifically for family-only communication. Unlike many kids messaging apps, there are no public profiles, no search features, no friend requests from strangers, and no \"friends of friends\" connections. Only parent-approved family members can contact your child. The app uses encrypted communication, collects minimal data, does not show ads, and does not sell family data to advertisers or partners."
-          }
-        },
-        {
-          "@type": "Question",
-          "name": "How does Kids Call Home protect my child's privacy?",
-          "acceptedAnswer": {
-            "@type": "Answer",
-            "text": "Kids Call Home uses encrypted calls and messages to protect your family's communication. The app collects minimal data necessary for the service to function, does not use tracking for advertising purposes, and does not sell family data. There are no manipulative design patterns like infinite feeds, aggressive notifications, or surprise in‑app purchases. Parents have full control over who can contact their child."
-          }
-        },
-        {
-          "@type": "Question",
-          "name": "Can my child use this to call both parents in different homes?",
-          "acceptedAnswer": {
-            "@type": "Answer",
-            "text": "Yes. Kids Call Home is built for co‑parents and long‑distance family. Your child can easily call both parents, grandparents, and other approved family members across different homes and even different countries. Parents control which family members are approved, making it ideal for shared custody situations and international families."
-          }
-        },
-        {
-          "@type": "Question",
-          "name": "Does Kids Call Home work on iPads and tablets?",
-          "acceptedAnswer": {
-            "@type": "Answer",
-            "text": "Yes. Kids Call Home works great on iPads, Android tablets, Kindle Fire, and Chromebooks. It works over Wi‑Fi without needing a SIM card or phone number, making it perfect for kids who don't have their own phone. The app is also available as a Progressive Web App (PWA), so it can be added to the home screen like a native app."
-          }
-        },
-        {
-          "@type": "Question",
-          "name": "Are there ads or in‑app purchases in Kids Call Home?",
-          "acceptedAnswer": {
-            "@type": "Answer",
-            "text": "No. Kids Call Home has no ads, no in‑app purchases, and no manipulative design features. The app is designed to be a simple, safe communication tool for families, not a platform for engagement or monetization. Your child's attention stays on connecting with family, not on games, feeds, or notifications designed to keep them online longer."
-          }
-        }
-      ]
-    }
+        ]
+      }
     </script>
-    
+
     <!-- Additional meta tags for voice assistants -->
     <meta name="application-name" content="Kids Call Home" />
     <meta name="apple-itunes-app" content="app-id=YOUR_APP_ID" />
     <meta name="google-play-app" content="app-id=YOUR_APP_ID" />
-    
+
     <!-- Voice Assistant Keywords - Problem-Solving Focus -->
-    <meta name="keywords" content="safe video calling app for kids, kids call parents without phone or SIM, family-only calling, co-parenting communication for kids, safe kids messaging app, video calls for children without SIM card, tablet calling app for kids, iPad video calling without phone, kids communication app no strangers, privacy-first kids app" />
-    
+    <meta
+      name="keywords"
+      content="safe video calling app for kids, kids call parents without phone or SIM, family-only calling, co-parenting communication for kids, safe kids messaging app, video calls for children without SIM card, tablet calling app for kids, iPad video calling without phone, kids communication app no strangers, privacy-first kids app, kids call parents app, safe kids messenger, family communication app for kids"
+    />
+
     <!-- Speculation Rules API for instant navigations (Chrome 109+) -->
-    <!-- Only prefetch specific high-value pages to avoid resource waste -->
     <script type="speculationrules">
-    {
-      "prefetch": [
-        {
-          "source": "list",
-          "urls": ["/parent/auth", "/child/login", "/info"],
-          "eagerness": "conservative"
-        }
-      ]
-    }
+      {
+        "prefetch": [
+          {
+            "source": "list",
+            "urls": ["/parent/auth", "/child/login", "/info"],
+            "eagerness": "conservative"
+          }
+        ]
+      }
     </script>
   </head>
 
   <body>
     <!-- SEO-visible content - shown before React hydration, hidden when app loads -->
-    <div id="seo-content" style="position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden;">
+    <div
+      id="seo-content"
+      style="
+        position: absolute;
+        left: -9999px;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+      "
+    >
       <h1>Safe video calls for kids — no phone or SIM required</h1>
-      <p>Kids Call Home is a family-only video calling and messaging app that lets children call parents and family without needing a SIM card or phone number. Works perfectly on tablets, iPads, Kindle Fire, and Chromebooks over Wi‑Fi. Parents control all contacts—no strangers, no public profiles, no random friend requests.</p>
-      
+      <p>
+        Kids Call Home is a family-only video calling and safe kids messaging
+        app that lets children call parents and family without needing a SIM
+        card or phone number. Works perfectly on tablets, iPads, Kindle Fire,
+        Chromebooks and many other Wi‑Fi devices. Parents control all
+        contacts—no strangers, no public profiles, no random friend requests.
+      </p>
+
       <h2>Family-only calls, no strangers</h2>
-      <p>Only parent-approved family members can connect with your child. There is no public profile, no search feature, and no random friend requests. Your child can only communicate with people you've explicitly approved, making it safer than typical kids messaging apps that allow "friends of friends" or public discovery.</p>
-      
+      <p>
+        Only parent-approved family members can connect with your child. There
+        is no public profile, no search feature, and no random friend requests.
+        Your child can only communicate with people you've explicitly approved,
+        making it safer than typical kids messaging apps that allow "friends of
+        friends" or public discovery.
+      </p>
+
       <h2>Works on tablets, iPads, and Wi‑Fi devices</h2>
-      <p>Kids Call Home works great on tablets, iPads, Kindle Fire, and Chromebooks over Wi‑Fi when kids don't have their own phones or SIM cards. No phone plan or phone number required. Perfect for families who want their children to stay connected without giving them a full smartphone.</p>
-      
+      <p>
+        Kids Call Home works great on tablets, iPads, Kindle Fire, Chromebooks
+        and many other Wi‑Fi devices when kids don't have their own phones or
+        SIM cards. No phone plan or phone number required. Perfect for families
+        who want their children to stay connected without giving them a full
+        smartphone.
+      </p>
+
       <h2>Built for co‑parents and long‑distance family</h2>
-      <p>Kids can easily call both parents in different homes and extended family across countries. Ideal for shared custody situations and international families. Parents control which family members are approved, ensuring safe communication across all family structures.</p>
-      
+      <p>
+        Kids can easily call both parents in different homes and extended family
+        across countries. Ideal for shared custody situations, co‑parenting
+        communication and international families. Parents control which family
+        members are approved, ensuring safe communication across all family
+        structures.
+      </p>
+
       <h2>Privacy-first design for kids</h2>
-      <p>Calls and messages are encrypted to protect your family's communication. The app uses minimal data, doesn't use tracking for ads, and does not sell family data to advertisers or partners. There are no manipulative "dark pattern" features like infinite feeds, aggressive notifications, time pressure, or surprise in‑app purchases. Kids Call Home is designed to be a simple, safe communication tool, not a platform for engagement or monetization.</p>
-      
+      <p>
+        Calls and messages are encrypted to protect your family's communication.
+        The app uses minimal data, doesn't use tracking for ads, and does not
+        sell family data to advertisers or partners. There are no manipulative
+        "dark pattern" features like infinite feeds, aggressive notifications,
+        time pressure, or surprise in‑app purchases. Kids Call Home is designed
+        to be a simple, safe communication tool, not a platform for engagement
+        or monetization.
+      </p>
+
       <h2>Frequently Asked Questions</h2>
       <h3>How can my child call me from a tablet without a SIM card?</h3>
-      <p>Kids Call Home works perfectly on tablets, iPads, Kindle Fire, and Chromebooks over Wi‑Fi without needing a SIM card or phone number. Your child simply opens the app, enters their login code, and can call approved family members. Parents control all contacts, so only family members you approve can connect with your child.</p>
-      
+      <p>
+        Kids Call Home works perfectly on tablets, iPads, Kindle Fire, and
+        Chromebooks over Wi‑Fi without needing a SIM card or phone number. Your
+        child simply opens the app, enters their login code, and can call
+        approved family members. Parents control all contacts, so only family
+        members you approve can connect with your child.
+      </p>
+
       <h3>Is this app safer than typical kids messaging apps?</h3>
-      <p>Yes. Kids Call Home is designed specifically for family-only communication. Unlike many kids messaging apps, there are no public profiles, no search features, no friend requests from strangers, and no "friends of friends" connections. Only parent-approved family members can contact your child. The app uses encrypted communication, collects minimal data, does not show ads, and does not sell family data to advertisers or partners.</p>
-      
+      <p>
+        Yes. Kids Call Home is designed specifically for family-only
+        communication. Unlike many kids messaging apps, there are no public
+        profiles, no search features, no friend requests from strangers, and no
+        "friends of friends" connections. Only parent-approved family members
+        can contact your child. The app uses encrypted communication, collects
+        minimal data, does not show ads, and does not sell family data to
+        advertisers or partners.
+      </p>
+
       <h3>How does Kids Call Home protect my child's privacy?</h3>
-      <p>Kids Call Home uses encrypted calls and messages to protect your family's communication. The app collects minimal data necessary for the service to function, does not use tracking for advertising purposes, and does not sell family data. There are no manipulative design patterns like infinite feeds, aggressive notifications, or surprise in‑app purchases. Parents have full control over who can contact their child.</p>
-      
+      <p>
+        Kids Call Home uses encrypted calls and messages to protect your
+        family's communication. The app collects minimal data necessary for the
+        service to function, does not use tracking for advertising purposes, and
+        does not sell family data. There are no manipulative design patterns
+        like infinite feeds, aggressive notifications, or surprise in‑app
+        purchases. Parents have full control over who can contact their child.
+      </p>
+
       <h3>Can my child use this to call both parents in different homes?</h3>
-      <p>Yes. Kids Call Home is built for co‑parents and long‑distance family. Your child can easily call both parents, grandparents, and other approved family members across different homes and even different countries. Parents control which family members are approved, making it ideal for shared custody situations and international families.</p>
-      
+      <p>
+        Yes. Kids Call Home is built for co‑parents and long‑distance family.
+        Your child can easily call both parents, grandparents, and other
+        approved family members across different homes and even different
+        countries. Parents control which family members are approved, making it
+        ideal for shared custody situations and international families.
+      </p>
+
       <h3>Does Kids Call Home work on iPads and tablets?</h3>
-      <p>Yes. Kids Call Home works great on iPads, Android tablets, Kindle Fire, and Chromebooks. It works over Wi‑Fi without needing a SIM card or phone number, making it perfect for kids who don't have their own phone. The app is also available as a Progressive Web App (PWA), so it can be added to the home screen like a native app.</p>
-      
+      <p>
+        Yes. Kids Call Home works great on iPads, Android tablets, Kindle Fire,
+        and Chromebooks. It works over Wi‑Fi without needing a SIM card or phone
+        number, making it perfect for kids who don't have their own phone. The
+        app is also available as a Progressive Web App (PWA), so it can be added
+        to the home screen like a native app.
+      </p>
+
       <h3>Are there ads or in‑app purchases in Kids Call Home?</h3>
-      <p>No. Kids Call Home has no ads, no in‑app purchases, and no manipulative design features. The app is designed to be a simple, safe communication tool for families, not a platform for engagement or monetization. Your child's attention stays on connecting with family, not on games, feeds, or notifications designed to keep them online longer.</p>
+      <p>
+        No. Kids Call Home has no ads, no in‑app purchases, and no manipulative
+        design features. The app is designed to be a simple, safe communication
+        tool for families, not a platform for engagement or monetization. Your
+        child's attention stays on connecting with family, not on games, feeds,
+        or notifications designed to keep them online longer.
+      </p>
     </div>
-    
-    <!-- 
-      INSTANT FIRST PAINT LOADING SCREEN
-      - Uses CSS-only animation (no JS blocking)
-      - Inlined critical styles for immediate render
-      - Shows app branding immediately for better perceived performance
-    -->
+
+    <!-- Instant first paint loading screen -->
     <style>
-      /* Critical CSS - inlined for instant first paint (above-the-fold content) */
-      /* Base reset for immediate render */
-      *,*::before,*::after{box-sizing:border-box}
-      body{margin:0;font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-      
-      /* Loading screen styles */
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          Roboto, sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
       #app-loading {
         position: fixed;
         inset: 0;
         display: flex;
         align-items: center;
         justify-content: center;
-        background: linear-gradient(135deg, #f0f9ff 0%, #ffffff 50%, #fdf2f8 100%);
+        background: linear-gradient(
+          135deg,
+          #f0f9ff 0%,
+          #ffffff 50%,
+          #fdf2f8 100%
+        );
         z-index: 9999;
       }
       #app-loading .loader-content {
@@ -263,107 +414,275 @@
         animation: spin 0.8s linear infinite;
         margin: 1rem auto 0;
       }
-      @keyframes spin{to{transform:rotate(360deg)}}
-      @keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
-      @keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}
-      
-      /* Hide loading screen with smooth fade when React is ready */
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      @keyframes pulse {
+        0%,
+        100% {
+          transform: scale(1);
+        }
+        50% {
+          transform: scale(1.05);
+        }
+      }
       #app-loading.fade-out {
         opacity: 0;
         transition: opacity 0.2s ease-out;
         pointer-events: none;
       }
-      
-      /* Critical styles for Index page (above-the-fold) - LCP element styles */
-      .min-h-\[100dvh\]{min-height:100dvh}
-      .bg-gradient-to-b{background-image:linear-gradient(to bottom,var(--tw-gradient-stops))}
-      .from-primary\/10{--tw-gradient-from:rgb(59 130 246 / 0.1);--tw-gradient-stops:var(--tw-gradient-from),var(--tw-gradient-to)}
-      .to-background{--tw-gradient-to:hsl(0 0% 100%)}
-      .container{width:100%;margin-left:auto;margin-right:auto;padding-left:1rem;padding-right:1rem}
-      .mx-auto{margin-left:auto;margin-right:auto}
-      .text-center{text-align:center}
-      .font-bold{font-weight:700}
-      .text-5xl{font-size:3rem;line-height:1}
-      /* LCP element: Index page paragraph - ensure immediate visibility */
-      .text-xl{font-size:1.25rem;line-height:1.75rem}
-      .text-muted-foreground{color:#6b7280}
-      .max-w-2xl{max-width:42rem}
-      /* Ensure text is visible immediately (before React hydration) */
-      #root p{display:block;margin:0;padding:0}
-      /* Show SSR fallback content immediately for Index page LCP */
-      #root main[data-ssr-fallback]{display:block!important}
+      .min-h-\[100dvh\] {
+        min-height: 100dvh;
+      }
+      .bg-gradient-to-b {
+        background-image: linear-gradient(to bottom, var(--tw-gradient-stops));
+      }
+      .from-primary\/10 {
+        --tw-gradient-from: rgb(59 130 246 / 0.1);
+        --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to);
+      }
+      .to-background {
+        --tw-gradient-to: hsl(0 0% 100%);
+      }
+      .container {
+        width: 100%;
+        margin-left: auto;
+        margin-right: auto;
+        padding-left: 1rem;
+        padding-right: 1rem;
+      }
+      .mx-auto {
+        margin-left: auto;
+        margin-right: auto;
+      }
+      .text-center {
+        text-align: center;
+      }
+      .font-bold {
+        font-weight: 700;
+      }
+      .text-5xl {
+        font-size: 3rem;
+        line-height: 1;
+      }
+      .text-xl {
+        font-size: 1.25rem;
+        line-height: 1.75rem;
+      }
+      .text-muted-foreground {
+        color: #6b7280;
+      }
+      .max-w-2xl {
+        max-width: 42rem;
+      }
+      #root p {
+        display: block;
+        margin: 0;
+        padding: 0;
+      }
+      #root main[data-ssr-fallback] {
+        display: block !important;
+      }
     </style>
+
     <div id="app-loading">
       <div class="loader-content">
         <picture>
-          <source type="image/webp" srcset="/icon-96x96.webp 1x, /icon-192x192.webp 2x" />
-          <source type="image/png" srcset="/icon-96x96.png 1x, /icon-192x192.png 2x" />
-          <img src="/icon-96x96.png" alt="" class="app-icon" width="80" height="80" fetchpriority="high" decoding="async" />
+          <source
+            type="image/webp"
+            srcset="/icon-96x96.webp 1x, /icon-192x192.webp 2x"
+          />
+          <source
+            type="image/png"
+            srcset="/icon-96x96.png 1x, /icon-192x192.png 2x"
+          />
+          <img
+            src="/icon-96x96.png"
+            alt=""
+            class="app-icon"
+            width="80"
+            height="80"
+            fetchpriority="high"
+            decoding="async"
+          />
         </picture>
         <div class="app-title">Kids Call Home</div>
         <div class="loader-spinner"></div>
       </div>
     </div>
-    <!-- SSR-like content for Index page - ensures LCP element is visible immediately -->
-    <!-- This content is replaced by React on hydration, but provides instant LCP -->
+
     <div id="root">
-      <main class="min-h-[100dvh] bg-gradient-to-b from-primary/10 to-background" data-ssr-fallback style="display:none">
+      <main
+        class="min-h-[100dvh] bg-gradient-to-b from-primary/10 to-background"
+        data-ssr-fallback
+        style="display:none"
+      >
         <div class="container mx-auto px-4 py-16">
           <div class="text-center space-y-6 mb-16">
-            <h1 class="text-5xl md:text-6xl font-bold text-primary">Kids Call Home</h1>
-            <p class="text-xl text-muted-foreground max-w-2xl mx-auto">Stay connected with your family through simple video calls and messaging between parents, family members, and children</p>
+            <h1 class="text-5xl md:text-6xl font-bold text-primary">
+              Kids Call Home
+            </h1>
+            <p class="text-xl text-muted-foreground max-w-2xl mx-auto">
+              Learn how Kids Call Home helps kids safely call and message
+              parents and family on most phones and tablets, without a phone
+              number, social media account, or passwords to remember.
+            </p>
           </div>
         </div>
       </main>
     </div>
+
     <script>
-      // Show SSR fallback content immediately for instant LCP (before React loads)
-      // React will replace this content on hydration, preventing hydration mismatch
-      (function() {
-        const ssrFallback = document.querySelector('#root main[data-ssr-fallback]');
-        if (ssrFallback && window.location.pathname === '/') {
-          ssrFallback.style.display = 'block';
+      (function () {
+        const ssrFallback = document.querySelector(
+          "#root main[data-ssr-fallback]"
+        );
+        if (ssrFallback && window.location.pathname === "/") {
+          ssrFallback.style.display = "block";
         }
       })();
     </script>
     <script type="module" src="/src/main.tsx"></script>
+
     <noscript>
-      <div style="padding: 2rem; font-family: system-ui; max-width: 800px; margin: 2rem auto;">
+      <div
+        style="
+          padding: 2rem;
+          font-family: system-ui;
+          max-width: 800px;
+          margin: 2rem auto;
+        "
+      >
         <h1>Safe video calls for kids — no phone or SIM required</h1>
-        <p>Kids Call Home is a family-only video calling and messaging app that lets children call parents and family without needing a SIM card or phone number. Works perfectly on tablets, iPads, Kindle Fire, and Chromebooks over Wi‑Fi. Parents control all contacts—no strangers, no public profiles, no random friend requests.</p>
-        
+        <p>
+          Kids Call Home is a family-only video calling and safe kids messaging
+          app that lets children call parents and family without needing a SIM
+          card or phone number. Works perfectly on tablets, iPads, Kindle Fire,
+          and Chromebooks over Wi‑Fi. Parents control all contacts—no strangers,
+          no public profiles, no random friend requests.
+        </p>
+
         <h2>Family-only calls, no strangers</h2>
-        <p>Only parent-approved family members can connect with your child. There is no public profile, no search feature, and no random friend requests. Your child can only communicate with people you've explicitly approved, making it safer than typical kids messaging apps that allow "friends of friends" or public discovery.</p>
-        
+        <p>
+          Only parent-approved family members can connect with your child. There
+          is no public profile, no search feature, and no random friend
+          requests. Your child can only communicate with people you've
+          explicitly approved, making it safer than typical kids messaging apps
+          that allow "friends of friends" or public discovery.
+        </p>
+
         <h2>Works on tablets, iPads, and Wi‑Fi devices</h2>
-        <p>Kids Call Home works great on tablets, iPads, Kindle Fire, and Chromebooks over Wi‑Fi when kids don't have their own phones or SIM cards. No phone plan or phone number required. Perfect for families who want their children to stay connected without giving them a full smartphone.</p>
-        
+        <p>
+          Kids Call Home works great on tablets, iPads, Kindle Fire, and
+          Chromebooks over Wi‑Fi when kids don't have their own phones or SIM
+          cards. No phone plan or phone number required. Perfect for families
+          who want their children to stay connected without giving them a full
+          smartphone.
+        </p>
+
         <h2>Built for co‑parents and long‑distance family</h2>
-        <p>Kids can easily call both parents in different homes and extended family across countries. Ideal for shared custody situations and international families. Parents control which family members are approved, ensuring safe communication across all family structures.</p>
-        
+        <p>
+          Kids can easily call both parents in different homes and extended
+          family across countries. Ideal for shared custody situations and
+          international families. Parents control which family members are
+          approved, ensuring safe communication across all family structures.
+        </p>
+
         <h2>Privacy-first design for kids</h2>
-        <p>Calls and messages are encrypted to protect your family's communication. The app uses minimal data, doesn't use tracking for ads, and does not sell family data to advertisers or partners. There are no manipulative "dark pattern" features like infinite feeds, aggressive notifications, time pressure, or surprise in‑app purchases. Kids Call Home is designed to be a simple, safe communication tool, not a platform for engagement or monetization.</p>
-        
+        <p>
+          Calls and messages are encrypted to protect your family's
+          communication. The app uses minimal data, doesn't use tracking for
+          ads, and does not sell family data to advertisers or partners. There
+          are no manipulative "dark pattern" features like infinite feeds,
+          aggressive notifications, time pressure, or surprise in‑app
+          purchases. Kids Call Home is designed to be a simple, safe
+          communication tool, not a platform for engagement or monetization.
+        </p>
+
         <h2>Frequently Asked Questions</h2>
         <h3>How can my child call me from a tablet without a SIM card?</h3>
-        <p>Kids Call Home works perfectly on tablets, iPads, Kindle Fire, and Chromebooks over Wi‑Fi without needing a SIM card or phone number. Your child simply opens the app, enters their login code, and can call approved family members. Parents control all contacts, so only family members you approve can connect with your child.</p>
-        
+        <p>
+          Kids Call Home works perfectly on tablets, iPads, Kindle Fire, and
+          Chromebooks over Wi‑Fi without needing a SIM card or phone number.
+          Your child simply opens the app, enters their login code, and can call
+          approved family members. Parents control all contacts, so only family
+          members you approve can connect with your child.
+        </p>
+
         <h3>Is this app safer than typical kids messaging apps?</h3>
-        <p>Yes. Kids Call Home is designed specifically for family-only communication. Unlike many kids messaging apps, there are no public profiles, no search features, no friend requests from strangers, and no "friends of friends" connections. Only parent-approved family members can contact your child. The app uses encrypted communication, collects minimal data, does not show ads, and does not sell family data to advertisers or partners.</p>
-        
+        <p>
+          Yes. Kids Call Home is designed specifically for family-only
+          communication. Unlike many kids messaging apps, there are no public
+          profiles, no search features, no friend requests from strangers, and
+          no "friends of friends" connections. Only parent-approved family
+          members can contact your child. The app uses encrypted communication,
+          collects minimal data, does not show ads, and does not sell family
+          data to advertisers or partners.
+        </p>
+
         <h3>How does Kids Call Home protect my child's privacy?</h3>
-        <p>Kids Call Home uses encrypted calls and messages to protect your family's communication. The app collects minimal data necessary for the service to function, does not use tracking for advertising purposes, and does not sell family data. There are no manipulative design patterns like infinite feeds, aggressive notifications, or surprise in‑app purchases. Parents have full control over who can contact their child.</p>
-        
+        <p>
+          Kids Call Home uses encrypted calls and messages to protect your
+          family's communication. The app collects minimal data necessary for
+          the service to function, does not use tracking for advertising
+          purposes, and does not sell family data. There are no manipulative
+          design patterns like infinite feeds, aggressive notifications, or
+          surprise in‑app purchases. Parents have full control over who can
+          contact their child.
+        </p>
+
         <h3>Can my child use this to call both parents in different homes?</h3>
-        <p>Yes. Kids Call Home is built for co‑parents and long‑distance family. Your child can easily call both parents, grandparents, and other approved family members across different homes and even different countries. Parents control which family members are approved, making it ideal for shared custody situations and international families.</p>
-        
+        <p>
+          Yes. Kids Call Home is built for co‑parents and long‑distance family.
+          Your child can easily call both parents, grandparents, and other
+          approved family members across different homes and even different
+          countries. Parents control which family members are approved, making
+          it ideal for shared custody situations and international families.
+        </p>
+
         <h3>Does Kids Call Home work on iPads and tablets?</h3>
-        <p>Yes. Kids Call Home works great on iPads, Android tablets, Kindle Fire, and Chromebooks. It works over Wi‑Fi without needing a SIM card or phone number, making it perfect for kids who don't have their own phone. The app is also available as a Progressive Web App (PWA), so it can be added to the home screen like a native app.</p>
-        
+        <p>
+          Yes. Kids Call Home works great on iPads, Android tablets, Kindle
+          Fire, and Chromebooks. It works over Wi‑Fi without needing a SIM card
+          or phone number, making it perfect for kids who don't have their own
+          phone. The app is also available as a Progressive Web App (PWA), so it
+          can be added to the home screen like a native app.
+        </p>
+
         <h3>Are there ads or in‑app purchases in Kids Call Home?</h3>
-        <p>No. Kids Call Home has no ads, no in‑app purchases, and no manipulative design features. The app is designed to be a simple, safe communication tool for families, not a platform for engagement or monetization. Your child's attention stays on connecting with family, not on games, feeds, or notifications designed to keep them online longer.</p>
-        
-        <p style="margin-top: 2rem; padding-top: 2rem; border-top: 1px solid #e5e7eb; color: #6b7280; font-size: 0.875rem;">This application requires JavaScript to run. Please enable JavaScript in your browser settings to use Kids Call Home.</p>
+        <p>
+          No. Kids Call Home has no ads, no in‑app purchases, and no
+          manipulative design features. The app is designed to be a simple, safe
+          communication tool for families, not a platform for engagement or
+          monetization. Your child's attention stays on connecting with family,
+          not on games, feeds, or notifications designed to keep them online
+          longer.
+        </p>
+
+        <p
+          style="
+            margin-top: 2rem;
+            padding-top: 2rem;
+            border-top: 1px solid #e5e7eb;
+            color: #6b7280;
+            font-size: 0.875rem;
+          "
+        >
+          This application requires JavaScript to run. Please enable JavaScript
+          in your browser settings to use Kids Call Home.
+        </p>
       </div>
     </noscript>
   </body>

@@ -256,7 +256,7 @@ export default defineConfig(({ mode }) => {
           name: "Kids Call Home",
           short_name: "KidsCallHome",
           description:
-            "Stay connected with your family through simple video calls and messaging",
+            "Safe video calling and messaging app for kids. Family-only contacts controlled by parents. Works on most phones and tablets over Wi‑Fi or mobile data, no phone number or SIM card required. No ads, no strangers, no filters, no data tracking.",
           theme_color: "#ffffff",
           background_color: "#ffffff",
           display: "standalone",

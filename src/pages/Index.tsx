@@ -42,7 +42,9 @@ const Index = () => {
             Kids Call Home
           </h1>
           <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-            Stay connected with your family through simple video calls and messaging between parents, family members, and children
+            Learn how Kids Call Home helps kids safely call and message
+            parents and family on most phones and tablets, without a phone
+            number, social media account, or passwords to remember.
           </p>
         </div>
 

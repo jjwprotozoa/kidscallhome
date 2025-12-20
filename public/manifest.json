@@ -1,7 +1,7 @@
 {
   "name": "Kids Call Home",
   "short_name": "KidsCallHome",
-  "description": "Stay connected with your family through simple video calls and messaging. Parents can create accounts and manage their children's access, while family members can be invited to connect with children. Kids can easily call and message their parents and family members using a special code.",
+  "description": "Safe video calling and messaging app for kids. Family-only contacts controlled by parents. Works on most phones and tablets over Wi‑Fi or mobile data, no phone number or SIM card required. No ads, no strangers, no filters, no data tracking.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
@@ -55,9 +55,5 @@
       "url": "url"
     }
   },
-  "permissions": [
-    "notifications",
-    "vibrate"
-  ]
+  "permissions": ["notifications", "vibrate"]
 }
-

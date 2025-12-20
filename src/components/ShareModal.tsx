@@ -34,13 +34,14 @@ const APP_URL = typeof window !== "undefined" ? window.location.origin : "https:
 const getWhatsAppMessage = () => `
 📱💚 *${APP_NAME}* – ${APP_TAGLINE}
 
-Hey! I found an amazing app that lets kids video call family safely – no phone number needed! 
+Hey! I found an amazing safe kids messaging app that lets kids video call family safely – no phone number or SIM card needed! 
 
 ✨ *What makes it special:*
 • Kids can call grandparents, aunts & uncles anytime
-• Parents approve every contact – 100% safe
-• Works on any tablet or old phone
-• No social media, no strangers
+• Parents approve every contact – 100% safe, no strangers
+• Works on most phones and tablets over Wi‑Fi
+• No social media, no filters, no addictive feeds
+• Built by a long‑distance parent for real family connection
 
 👉 Check it out: ${APP_URL}
 
@@ -48,19 +49,20 @@ Perfect for keeping the whole family connected! 👨‍👩‍👧‍👦💕
 `.trim();
 
 const getTwitterMessage = () =>
-  `📱 Discovered ${APP_NAME} – lets my kids video call grandparents safely! No phone needed, parents control everything.
+  `📱 Discovered ${APP_NAME} – safe kids messaging app that lets my kids video call grandparents safely! No phone number or SIM card needed, parents control everything. No strangers, no filters, no social feeds.
 
 Check it out! #KidsCallHome #FamilyTech #ParentingTips`;
 
 const getFacebookQuote = () =>
   `My kids can now video call their grandparents anytime – safely! 📱💚
 
-${APP_NAME} is a game-changer for family connection. Parents approve every contact, so there's zero worry about strangers.
+${APP_NAME} is a safe kids messaging and family communication app built by a long‑distance parent. Parents approve every contact, so there's zero worry about strangers. No social network features, no filters, no addictive feeds – just real family connection.
 
 Perfect for:
-✅ Kids without their own phone
-✅ Staying connected with grandparents
+✅ Kids without their own phone or SIM card
+✅ Staying connected with grandparents and family
 ✅ Safe messaging with approved family only
+✅ Co‑parents and long‑distance families
 
 Highly recommend for any family! 👨‍👩‍👧‍👦`;
 
@@ -76,21 +78,21 @@ I wanted to share something that's been wonderful for our family – an app call
 
 📱 WHAT IS ${APP_NAME.toUpperCase()}?
 
-It's a safe video calling and messaging app designed specifically for kids. Children can:
+It's a safe kids messaging and video calling app built by a long‑distance parent who needed a simple, reliable way for his children to call him from any home, country, or device. The app is designed as a safe kids messenger and family communication tool, not a social network. Children can:
 
    ✅ Video call grandparents, aunts, uncles & cousins
    ✅ Send messages to approved family members
-   ✅ Stay connected – even without their own phone!
+   ✅ Stay connected – even without their own phone or SIM card!
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 🛡️ WHY IT'S SAFE
 
 Parents control everything:
-   • Approve every single contact
-   • No strangers, no social media exposure
+   • Approve every single contact – no strangers, no public profiles
+   • No social media exposure, no filters, no addictive feeds
    • See all messages and calls
-   • Works on any tablet or spare phone
+   • Works on most phones and tablets over Wi‑Fi or mobile data
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -109,7 +111,7 @@ Take care 🙂
 const getNativeShareMessage = () =>
   `📱 ${APP_NAME} – Safe Video Calls for Kids
 
-Kids can video call grandparents & family safely! Parents control everything.
+Safe kids messaging app for family-only communication. Kids can video call grandparents & family safely without a phone number or SIM card! Parents control everything. No strangers, no filters, no social feeds.
 
 Check it out!`;
 
@@ -192,11 +194,12 @@ export const ShareModal = ({ open, onOpenChange }: ShareModalProps) => {
   const copyFullMessage = () => {
     const message = `📱 ${APP_NAME} – ${APP_TAGLINE}
 
-Safe video calls between kids and approved family members – no phone needed!
+Safe kids messaging and video calling app for family-only communication – no phone number or SIM card needed!
 
 ✨ Parents approve every contact
-🛡️ No strangers, no social media
+🛡️ No strangers, no filters, no social feeds
 📞 Video calls & messaging
+🌍 Works on most phones and tablets over Wi‑Fi
 
 👉 Check it out: ${APP_URL}`;
 

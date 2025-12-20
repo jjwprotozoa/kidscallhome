@@ -1,6 +1,6 @@
 // src/pages/Info.tsx
 // App Store / Play Store compliance information page
-// Mobile-first design with responsive navigation
+// Mobile-first design with responsive navigation and SEO-friendly copy
 
 import { AppDescription } from "@/components/info/AppDescription";
 import { BetaTestingSection } from "@/components/info/BetaTestingSection";
@@ -36,9 +36,9 @@ const Info = () => {
   // Share page functionality
   const handleShare = async () => {
     const shareUrl = window.location.origin + "/info";
-    const shareTitle = "Kids Call Home - App Information";
+    const shareTitle = "Kids Call Home – App Information & Safety Details";
     const shareText =
-      "Check out Kids Call Home - Safe video calls for kids! Here's information about the app:";
+      "Learn how Kids Call Home helps kids safely call and message parents and family on almost any device, without phone numbers or social media.";
 
     if (navigator.share) {
       try {
@@ -48,7 +48,6 @@ const Info = () => {
           url: shareUrl,
         });
       } catch (error) {
-        // User cancelled or share failed - don't show error for cancellation
         if ((error as Error).name !== "AbortError") {
           toast({
             title: "Share failed",
@@ -58,7 +57,6 @@ const Info = () => {
         }
       }
     } else {
-      // Fallback: copy link to clipboard
       try {
         await navigator.clipboard.writeText(shareUrl);
         toast({
@@ -85,13 +83,11 @@ const Info = () => {
         const childSession = localStorage.getItem("childSession");
 
         if (session) {
-          // Has auth session - check if parent or family member
           const {
             data: { user },
           } = await supabase.auth.getUser();
 
           if (user) {
-            // Check if user is a family member first
             const { data: familyMember } = await supabase
               .from("family_members")
               .select("id")
@@ -102,7 +98,6 @@ const Info = () => {
             if (familyMember) {
               setUserType("family_member");
             } else {
-              // Fallback: Check adult_profiles
               const { data: adultProfile } = await supabase
                 .from("adult_profiles" as never)
                 .select("role")
@@ -113,12 +108,11 @@ const Info = () => {
               if (adultProfile) {
                 setUserType("family_member");
               } else {
-                // Not a family member, must be a parent
                 setUserType("parent");
               }
             }
           } else {
-            setUserType("parent"); // Default to parent if session exists but no user
+            setUserType("parent");
           }
         } else if (childSession) {
           try {
@@ -141,7 +135,7 @@ const Info = () => {
     determineUserType();
   }, []);
 
-  // Check if user is likely a parent (synchronous, non-blocking)
+  // Check if user is likely a parent
   const isParent = useMemo(() => {
     return userType === "parent";
   }, [userType]);
@@ -158,7 +152,7 @@ const Info = () => {
   useEffect(() => {
     const handleScroll = () => {
       const scrollY = window.scrollY;
-      setShowFloatingNav(scrollY > 200); // Show after scrolling 200px
+      setShowFloatingNav(scrollY > 200);
     };
 
     window.addEventListener("scroll", handleScroll);
@@ -169,8 +163,7 @@ const Info = () => {
   const scrollToSection = useCallback((id: string) => {
     const element = document.getElementById(id);
     if (element) {
-      // Account for fixed header height
-      const headerOffset = 140; // Navigation + sticky section nav
+      const headerOffset = 140;
       const elementPosition = element.getBoundingClientRect().top;
       const offsetPosition =
         elementPosition + window.pageYOffset - headerOffset;
@@ -179,9 +172,8 @@ const Info = () => {
         top: offsetPosition,
         behavior: "smooth",
       });
-      // Update URL hash without triggering navigation
       window.history.replaceState(null, "", `/info#${id}`);
-      setSheetOpen(false); // Close sheet after navigation
+      setSheetOpen(false);
     }
   }, []);
 
@@ -189,7 +181,6 @@ const Info = () => {
   useEffect(() => {
     const hash = location.hash.replace("#", "");
     if (hash) {
-      // Small delay to ensure DOM is ready
       const timeoutId = setTimeout(() => {
         scrollToSection(hash);
       }, 100);
@@ -199,7 +190,6 @@ const Info = () => {
 
   const scrollToTop = () => {
     window.scrollTo({ top: 0, behavior: "smooth" });
-    // Clear the hash from URL
     window.history.replaceState(null, "", "/info");
     setSheetOpen(false);
   };
@@ -214,14 +204,14 @@ const Info = () => {
         }}
       >
         <div className="max-w-4xl mx-auto">
-          {/* Header - Compact on mobile */}
+          {/* Header */}
           <header className="py-4 md:py-6">
             <div className="flex items-center gap-3 md:gap-4">
               {/* App Icon */}
               <div className="flex-shrink-0">
                 <img
                   src="/icon-192x192.png"
-                  alt="Kids Call Home"
+                  alt="Kids Call Home – Safe calls and messaging for kids and family"
                   className="w-14 h-14 md:w-16 md:h-16 rounded-xl shadow-md"
                   width="64"
                   height="64"
@@ -231,11 +221,13 @@ const Info = () => {
                 <div className="flex items-center gap-2 mb-1">
                   <InfoIcon className="h-5 w-5 md:h-6 md:w-6 text-primary flex-shrink-0" />
                   <h1 className="text-xl md:text-3xl font-bold truncate">
-                    App Information
+                    App Information & Safety
                   </h1>
                 </div>
-                <p className="text-sm md:text-base text-muted-foreground line-clamp-2">
-                  Important information about Kids Call Home
+                <p className="text-sm md:text-base text-muted-foreground line-clamp-3">
+                  Learn how Kids Call Home helps kids safely call and message
+                  parents and family on most phones and tablets, without a phone
+                  number, social media account, or passwords to remember.
                 </p>
               </div>
               {/* Share Button */}
@@ -248,6 +240,21 @@ const Info = () => {
               >
                 <Share2 className="h-5 w-5" />
               </Button>
+            </div>
+
+            {/* Short founder story / SEO subheader */}
+            <div className="mt-4 md:mt-5 text-sm md:text-base text-muted-foreground space-y-1.5">
+              <p>
+                Kids Call Home is a kids call parents app built by a
+                long‑distance parent who needed a simple, reliable way for his
+                children to call him from any home, country, or device.
+              </p>
+              <p>
+                The app is designed as a safe kids messenger and family
+                communication tool, not a social network: there are no public
+                profiles, no strangers, no filters hiding faces, and no
+                addictive feeds.
+              </p>
             </div>
           </header>
 
@@ -264,16 +271,112 @@ const Info = () => {
 
           {/* Content Sections */}
           <div className="space-y-6 md:space-y-8">
-            <AppDescription />
-            <BetaTestingSection />
-            <PricingSection isParent={isParent} />
-            <TermsSection />
-            {userType !== "child" && <PrivacySection />}
-            <SecuritySection />
-            <CancellationSection isParent={isParent} />
-            <DataRemovalSection />
-            <ContactSection />
-            <DemoSection />
+            {/* Overview / App description */}
+            <section id="overview">
+              <AppDescription />
+            </section>
+
+            {/* How it works – optional anchor for SEO, handled inside AppDescription or here */}
+            {/* You can implement this as its own component later if desired */}
+
+            <section id="beta">
+              <BetaTestingSection />
+            </section>
+
+            <section id="pricing">
+              <PricingSection isParent={isParent} />
+            </section>
+
+            <section id="terms">
+              <TermsSection />
+            </section>
+
+            {userType !== "child" && (
+              <section id="privacy">
+                <PrivacySection />
+              </section>
+            )}
+
+            <section id="security">
+              <SecuritySection />
+            </section>
+
+            <section id="cancellation">
+              <CancellationSection isParent={isParent} />
+            </section>
+
+            <section id="data-removal">
+              <DataRemovalSection />
+            </section>
+
+            <section id="contact">
+              <ContactSection />
+            </section>
+
+            <section id="demo">
+              <DemoSection />
+            </section>
+
+            {/* SEO-friendly FAQ block (optional: could be moved into its own component) */}
+            <section id="faq" className="space-y-4 md:space-y-5">
+              <h2 className="text-lg md:text-xl font-semibold">
+                Frequently asked questions
+              </h2>
+              <div className="space-y-3 text-sm md:text-base text-muted-foreground">
+                <div>
+                  <h3 className="font-medium">
+                    Does my child need a phone number or SIM card?
+                  </h3>
+                  <p>
+                    No. Kids Call Home works over Wi‑Fi or mobile data and does
+                    not require a phone number, SIM card, or separate telephone
+                    account for your child.
+                  </p>
+                </div>
+                <div>
+                  <h3 className="font-medium">
+                    Which devices can my child use?
+                  </h3>
+                  <p>
+                    Kids can call and message from most modern phones and
+                    tablets, including many Android, iOS and compatible e‑reader
+                    devices, as long as they have an internet connection.
+                  </p>
+                </div>
+                <div>
+                  <h3 className="font-medium">
+                    Can both parents and family members use the app?
+                  </h3>
+                  <p>
+                    Yes. Parents can invite family members and approved adults
+                    so kids can safely stay in touch with parents, grandparents
+                    and other close family without strangers or public search.
+                  </p>
+                </div>
+                <div>
+                  <h3 className="font-medium">
+                    Why are there no filters or games?
+                  </h3>
+                  <p>
+                    Kids Call Home is focused on real connection, not
+                    entertainment. There are no face filters, feeds or games, so
+                    when your child calls you, you see their real face and hear
+                    their real voice.
+                  </p>
+                </div>
+                <div>
+                  <h3 className="font-medium">
+                    Is Kids Call Home a parental control app?
+                  </h3>
+                  <p>
+                    Kids Call Home is a safe kids messaging and calling app with
+                    strong parent controls around who kids can contact, but it
+                    does not try to monitor or control other apps on your
+                    child&apos;s device.
+                  </p>
+                </div>
+              </div>
+            </section>
           </div>
 
           {/* Back to Top - Footer */}
