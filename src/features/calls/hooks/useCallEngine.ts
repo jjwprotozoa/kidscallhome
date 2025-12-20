@@ -5,6 +5,7 @@
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
+import { safeLog } from "@/utils/security";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -105,8 +106,16 @@ export const useCallEngine = ({
   } = useWebRTC(callId, localVideoRef, remoteVideoRef, role === "child");
 
   // Audio notifications for outgoing calls
-  const { playOutgoingRingtone, stopOutgoingRingtone, playCallAnswered } =
-    useAudioNotifications({ enabled: true, volume: 0.7 });
+  const audioNotifications = useAudioNotifications({
+    enabled: true,
+    volume: 0.7,
+  }) as ReturnType<typeof useAudioNotifications> & {
+    playOutgoingRingtone: () => Promise<void>;
+    stopOutgoingRingtone: () => void;
+  };
+  const playOutgoingRingtone = audioNotifications.playOutgoingRingtone;
+  const stopOutgoingRingtone = audioNotifications.stopOutgoingRingtone;
+  const playCallAnswered = audioNotifications.playCallAnswered;
 
   // Play outgoing ringtone when in "calling" state (waiting for answer)
   useEffect(() => {
@@ -1147,7 +1156,7 @@ export const useCallEngine = ({
                       );
                       break;
                     }
-                    
+
                     // IMPROVEMENT: Handle end-of-candidates (null candidate)
                     // A null candidate indicates ICE gathering is complete
                     if (!candidate.candidate) {
@@ -1178,12 +1187,16 @@ export const useCallEngine = ({
                   } catch (err) {
                     // IMPROVEMENT: Enhanced error handling with RTCError interface
                     if (err instanceof RTCError) {
-                      safeLog.error("❌ [CALL ENGINE] RTCError adding ICE candidate:", {
-                        errorDetail: err.errorDetail,
-                        sdpLineNumber: err.sdpLineNumber,
-                        httpRequestStatusCode: err.httpRequestStatusCode,
-                        message: err.message,
-                      });
+                      safeLog.error(
+                        "❌ [CALL ENGINE] RTCError adding ICE candidate:",
+                        {
+                          errorDetail: err.errorDetail,
+                          sdpLineNumber: err.sdpLineNumber,
+                          httpRequestStatusCode: (err as any)
+                            .httpRequestStatusCode,
+                          message: err.message,
+                        }
+                      );
                     }
                     const error = err as Error;
                     // Silently handle duplicate candidates and closed connection errors

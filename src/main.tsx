@@ -65,9 +65,8 @@ try {
   root.render(<App />);
   safeLog.log("✅ [APP INIT] App rendered successfully");
 
-  // Hide loading spinner immediately after React render (reduced delay for faster LCP)
-  // Single requestAnimationFrame is sufficient - double RAF was causing unnecessary delay
-  requestAnimationFrame(() => {
+  // Function to hide loading screen
+  const hideLoadingScreen = () => {
     const loadingElement = document.getElementById("app-loading");
     if (loadingElement) {
       // Use CSS class for smooth fade (hardware-accelerated)
@@ -77,7 +76,23 @@ try {
         loadingElement.remove();
       }, 200);
     }
+  };
+
+  // Hide loading spinner immediately after React render (reduced delay for faster LCP)
+  // Single requestAnimationFrame is sufficient - double RAF was causing unnecessary delay
+  requestAnimationFrame(() => {
+    hideLoadingScreen();
   });
+
+  // Fallback timeout: If React doesn't render within 5 seconds, hide loading screen anyway
+  // This prevents the app from being stuck on loading if there's an initialization issue
+  setTimeout(() => {
+    const loadingElement = document.getElementById("app-loading");
+    if (loadingElement && !loadingElement.classList.contains("fade-out")) {
+      safeLog.warn("⚠️ [APP INIT] Loading screen timeout - forcing removal");
+      hideLoadingScreen();
+    }
+  }, 5000);
 } catch (error) {
   safeLog.error("❌ [APP INIT] Failed to render app:", error);
   // Hide loading spinner on error

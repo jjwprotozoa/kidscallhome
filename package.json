@@ -29,8 +29,8 @@
     "@capacitor/app": "^6.0.0",
     "@capacitor/core": "^6.0.0",
     "@capacitor/device": "^6.0.0",
-    "@capacitor/ios": "^6.0.0",
     "@capacitor/haptics": "^6.0.0",
+    "@capacitor/ios": "^6.0.0",
     "@capacitor/keyboard": "^6.0.0",
     "@capacitor/local-notifications": "^6.0.0",
     "@capacitor/push-notifications": "^6.0.0",
@@ -72,10 +72,10 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
-    "date-fns": "^3.6.0",
+    "date-fns": "2.30.0",
     "embla-carousel-react": "^8.6.0",
     "input-otp": "^1.4.2",
-    "lucide-react": "^0.462.0",
+    "lucide-react": "^0.562.0",
     "next-themes": "^0.3.0",
     "react": "^18.3.1",
     "react-day-picker": "^8.10.1",
@@ -102,7 +102,7 @@
     "@types/node": "^22.16.5",
     "@types/react": "^18.3.23",
     "@types/react-dom": "^18.3.7",
-    "@vercel/node": "^5.5.15",
+    "@vercel/node": "^2.3.0",
     "@vitejs/plugin-react-swc": "^3.11.0",
     "@vitest/ui": "^4.0.15",
     "autoprefixer": "^10.4.21",
@@ -122,6 +122,8 @@
     "vitest": "^4.0.15"
   },
   "overrides": {
-    "glob": "^12.0.0"
+    "glob": "^12.0.0",
+    "esbuild": "^0.25.0",
+    "path-to-regexp": "^6.3.0"
   }
 }

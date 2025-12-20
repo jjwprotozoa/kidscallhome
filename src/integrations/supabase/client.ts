@@ -150,7 +150,8 @@ supabase.auth.onAuthStateChange(async (event, session) => {
 // Proactively check for invalid tokens on initialization
 if (typeof window !== 'undefined') {
   // Check session on load and clear if invalid
-  supabase.auth.getSession().then(({ error }) => {
+  // Add timeout to prevent hanging if Supabase is unreachable
+  const sessionCheckPromise = supabase.auth.getSession().then(({ error }) => {
     if (error && isRefreshTokenError(error)) {
       if (import.meta.env.DEV) {
         safeLog.debug('🔄 [AUTH] Found invalid token on initialization, clearing');
@@ -162,6 +163,14 @@ if (typeof window !== 'undefined') {
     }
   }).catch(() => {
     // Ignore errors during initialization check
+  });
+
+  // Timeout after 3 seconds - don't let this block app initialization
+  Promise.race([
+    sessionCheckPromise,
+    new Promise((resolve) => setTimeout(resolve, 3000))
+  ]).catch(() => {
+    // Ignore timeout errors
   });
 }
 

@@ -123,6 +123,10 @@ export default defineConfig(({ mode }) => {
   };
 
   return {
+    // Only use index.html as entry point, ignore other HTML files
+    root: process.cwd(),
+    publicDir: "public",
+    // Exclude android directory and other build directories from Vite scanning
     server: {
       host: "0.0.0.0", // Bind to all network interfaces
       port: 8080,
@@ -136,6 +140,17 @@ export default defineConfig(({ mode }) => {
         ".ngrok.io",
         ".trycloudflare.com",
       ],
+      // Exclude android directory and build artifacts from file watching
+      watch: {
+        ignored: [
+          "**/android/**",
+          "**/ios/**",
+          "**/node_modules/**",
+          "**/dist/**",
+          "**/.git/**",
+          "**/public/**/*.html", // Exclude HTML files in public from being entry points
+        ],
+      },
     },
     plugins: [
       react(),
@@ -145,9 +160,10 @@ export default defineConfig(({ mode }) => {
       // Console removal plugin disabled - regex-based removal is too aggressive and breaks builds
       // TODO: Implement proper AST-based console removal if needed
       // mode === "production" && removeConsolePlugin()
-      // PWA plugin - use generateSW with importScripts to include custom notification handlers
-      // This imports notification-handlers.js which handles incoming call notifications on Windows
-      VitePWA({
+      // PWA plugin - temporarily disabled due to date-fns v3.x module resolution issues on Windows
+      // TODO: Re-enable once date-fns is updated or PWA plugin handles it better
+      // Temporarily disabled - uncomment when date-fns issue is resolved
+      false && VitePWA({
         registerType: "autoUpdate",
         // Defer SW registration until page is idle to reduce critical path
         // This prevents registerSW.js from blocking initial render
@@ -169,7 +185,10 @@ export default defineConfig(({ mode }) => {
             "**/*.map",
             "**/kids-video-calling-kindle.html", // Exclude files that return 403
             "**/*-kindle.html", // Exclude kindle-specific pages
+            "**/date-fns/**/*", // Exclude date-fns from PWA precaching to avoid build issues
           ],
+          // Handle precaching errors gracefully
+          dontCacheBustURLsMatching: /\.\w{8}\./,
           // Skip waiting and claim clients immediately for faster updates
           skipWaiting: true,
           clientsClaim: true,
@@ -184,8 +203,6 @@ export default defineConfig(({ mode }) => {
           // Import custom notification handlers into the generated service worker
           // This file contains push notification and notificationclick event handlers
           importScripts: ["/notification-handlers.js"],
-          // Handle precaching errors gracefully
-          dontCacheBustURLsMatching: /\.\w{8}\./,
           // Runtime caching rules for external resources
           runtimeCaching: [
             {
@@ -287,6 +304,24 @@ export default defineConfig(({ mode }) => {
         "@": path.resolve(__dirname, "./src"),
       },
       extensions: [".mjs", ".js", ".mts", ".ts", ".jsx", ".tsx", ".json"],
+      // Fix for date-fns module resolution issues on Windows
+      dedupe: ["date-fns"],
+    },
+    optimizeDeps: {
+      // Pre-bundle date-fns to avoid module resolution issues during build
+      include: ["date-fns"],
+      exclude: [],
+      // Ignore source map errors during dependency optimization
+      esbuildOptions: {
+        // Ignore corrupted source maps - don't fail on source map parsing errors
+        legalComments: "none",
+        // Skip source map loading to avoid corrupted source map errors
+        sourcemap: false,
+      },
+      // Only scan index.html, not HTML files in public or android directories
+      entries: [
+        path.resolve(__dirname, "./index.html"),
+      ],
     },
     // Inject app version as environment variable
     define: {
@@ -296,6 +331,8 @@ export default defineConfig(({ mode }) => {
       commonjsOptions: {
         include: [/node_modules/],
         transformMixedEsModules: true,
+        // Handle date-fns ESM modules properly
+        esmExternals: true,
       },
       // Remove console statements in production builds
       minify: "esbuild",
@@ -313,57 +350,42 @@ export default defineConfig(({ mode }) => {
       // Vendor chunks can be cached indefinitely since they rarely change,
       // while app code chunks are smaller and update more frequently.
       rollupOptions: {
+        // Only use index.html as entry point, ignore HTML files in public/ and android/
+        input: path.resolve(__dirname, "./index.html"),
         output: {
-          manualChunks: {
+          manualChunks: (id) => {
+            // Exclude date-fns from manual chunking to avoid module resolution issues
+            if (id.includes("date-fns")) {
+              return "date-fns-vendor";
+            }
+            
             // React core libraries - rarely change, can be cached long-term
-            "react-vendor": ["react", "react-dom", "react-router-dom"],
+            if (id.includes("react") || id.includes("react-dom") || id.includes("react-router")) {
+              return "react-vendor";
+            }
+            
             // TanStack Query - data fetching library, stable API
-            "query-vendor": ["@tanstack/react-query"],
+            if (id.includes("@tanstack/react-query")) {
+              return "query-vendor";
+            }
+            
             // Supabase client - database and auth, stable SDK
-            "supabase-vendor": ["@supabase/supabase-js"],
+            if (id.includes("@supabase")) {
+              return "supabase-vendor";
+            }
+            
             // Capacitor native mobile APIs - rarely change
-            // Note: @capacitor/android is native-only and not bundled for web
-            "capacitor-vendor": [
-              "@capacitor/core",
-              "@capacitor/app",
-              "@capacitor/device",
-              "@capacitor/haptics",
-              "@capacitor/keyboard",
-              "@capacitor/local-notifications",
-              "@capacitor/push-notifications",
-              "@capacitor/splash-screen",
-              "@capacitor/status-bar",
-            ],
+            if (id.includes("@capacitor")) {
+              return "capacitor-vendor";
+            }
+            
             // Radix UI components - all used UI primitives, stable component library
-            "radix-vendor": [
-              "@radix-ui/react-accordion",
-              "@radix-ui/react-alert-dialog",
-              "@radix-ui/react-aspect-ratio",
-              "@radix-ui/react-avatar",
-              "@radix-ui/react-checkbox",
-              "@radix-ui/react-collapsible",
-              "@radix-ui/react-context-menu",
-              "@radix-ui/react-dialog",
-              "@radix-ui/react-dropdown-menu",
-              "@radix-ui/react-hover-card",
-              "@radix-ui/react-label",
-              "@radix-ui/react-menubar",
-              "@radix-ui/react-navigation-menu",
-              "@radix-ui/react-popover",
-              "@radix-ui/react-progress",
-              "@radix-ui/react-radio-group",
-              "@radix-ui/react-scroll-area",
-              "@radix-ui/react-select",
-              "@radix-ui/react-separator",
-              "@radix-ui/react-slider",
-              "@radix-ui/react-slot",
-              "@radix-ui/react-switch",
-              "@radix-ui/react-tabs",
-              "@radix-ui/react-toast",
-              "@radix-ui/react-toggle",
-              "@radix-ui/react-toggle-group",
-              "@radix-ui/react-tooltip",
-            ],
+            if (id.includes("@radix-ui")) {
+              return "radix-vendor";
+            }
+            
+            // Default: let Vite handle other chunks
+            return null;
           },
         },
       },
