@@ -1,0 +1,167 @@
+# codemagic.yaml
+# Codemagic CI/CD configuration for KidsCallHome iOS Capacitor app
+# Located in project root (same folder as package.json)
+#
+# Configuration Summary:
+# - Team ID (App ID Prefix): 786BYGA3LW
+# - Bundle ID: com.kidscallhome.app
+# - App Name: Kids Call Home
+# - Company Name: Fluid Investment Group LLC
+# - SKU: kidscallhome-ios-001
+# - Issuer ID: 597b3fa4-d3f8-43c0-9622-146e18528195 (for API auth, already in Codemagic)
+# - Apple ID: 6756827237 (confirmed from App Store Connect)
+#
+# See APP_STORE_CONNECT_SETUP.md and APP_CONFIGURATION_SUMMARY.md for all configuration values
+
+workflows:
+  ios-capacitor:
+    name: iOS Capacitor Build
+    max_build_duration: 120
+    instance_type: mac_mini_m2
+
+    integrations:
+      # Integration name must match the App Store Connect API key name in Codemagic Team Settings
+      # Team Settings → Developer Portal → Manage keys
+      app_store_connect: codemagic
+
+    environment:
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.kidscallhome.app # Must match Bundle ID registered in Apple Developer
+      vars:
+        # ✅ Apple ID from App Store Connect → My Apps → Kids Call Home → App Information
+        APP_STORE_APPLE_ID: "6756827237" # Numeric Apple ID (confirmed from App Store Connect)
+        BUNDLE_ID: "com.kidscallhome.app" # Team ID: 786BYGA3LW
+        APP_NAME: "Kids Call Home"
+        COMPANY_NAME: "Fluid Investment Group LLC" # App Store seller name
+        SKU: "kidscallhome-ios-001" # Stock Keeping Unit for App Store Connect
+        XCODE_WORKSPACE: "App.xcworkspace" # Capacitor iOS default workspace
+        XCODE_SCHEME: "App" # Capacitor iOS default scheme
+      node: latest
+      xcode: latest
+      cocoapods: default
+
+    scripts:
+      - name: Install dependencies
+        script: |
+          # Codemagic checks out repo into $CM_BUILD_DIR (repo root)
+          npm ci
+
+      - name: Build web assets
+        script: |
+          npm run build
+
+      - name: Sync Capacitor iOS (generates iOS project if needed)
+        script: |
+          # We are already in repo root ($CM_BUILD_DIR)
+          # Sync will create iOS project if it doesn't exist
+          npx cap sync ios
+
+          # Verify iOS project was created
+          if [ ! -d "ios/App" ]; then
+            echo "❌ iOS project not found after sync. Trying to add iOS platform..."
+            npx cap add ios
+            npx cap sync ios
+          fi
+
+          echo "✅ iOS project ready"
+
+      - name: Configure iOS permissions in Info.plist
+        script: |
+          INFO_PLIST="ios/App/App/Info.plist"
+
+          if [ ! -f "$INFO_PLIST" ]; then
+            echo "⚠️ Info.plist not found yet, will configure after CocoaPods install"
+          else
+            echo "📝 Configuring iOS permissions in $INFO_PLIST..."
+            
+            # Use PlistBuddy to add/update permissions (macOS tool)
+            /usr/libexec/PlistBuddy -c "Add :NSCameraUsageDescription string 'Kids Call Home needs camera access for video calls with family.'" "$INFO_PLIST" 2>/dev/null || \
+            /usr/libexec/PlistBuddy -c "Set :NSCameraUsageDescription 'Kids Call Home needs camera access for video calls with family.'" "$INFO_PLIST" 2>/dev/null || true
+            
+            /usr/libexec/PlistBuddy -c "Add :NSMicrophoneUsageDescription string 'Kids Call Home needs microphone access for video calls with family.'" "$INFO_PLIST" 2>/dev/null || \
+            /usr/libexec/PlistBuddy -c "Set :NSMicrophoneUsageDescription 'Kids Call Home needs microphone access for video calls with family.'" "$INFO_PLIST" 2>/dev/null || true
+            
+            /usr/libexec/PlistBuddy -c "Add :NSPhotoLibraryUsageDescription string 'Kids Call Home needs photo library access to share photos with family.'" "$INFO_PLIST" 2>/dev/null || \
+            /usr/libexec/PlistBuddy -c "Set :NSPhotoLibraryUsageDescription 'Kids Call Home needs photo library access to share photos with family.'" "$INFO_PLIST" 2>/dev/null || true
+            
+            /usr/libexec/PlistBuddy -c "Add :NSPhotoLibraryAddUsageDescription string 'Kids Call Home needs permission to save photos from messages.'" "$INFO_PLIST" 2>/dev/null || \
+            /usr/libexec/PlistBuddy -c "Set :NSPhotoLibraryAddUsageDescription 'Kids Call Home needs permission to save photos from messages.'" "$INFO_PLIST" 2>/dev/null || true
+            
+            /usr/libexec/PlistBuddy -c "Add :NSUserNotificationsUsageDescription string 'Kids Call Home needs notification permission to alert you about calls and messages.'" "$INFO_PLIST" 2>/dev/null || \
+            /usr/libexec/PlistBuddy -c "Set :NSUserNotificationsUsageDescription 'Kids Call Home needs notification permission to alert you about calls and messages.'" "$INFO_PLIST" 2>/dev/null || true
+            
+            echo "✅ iOS permissions configured"
+          fi
+
+      - name: Install CocoaPods dependencies
+        script: |
+          cd ios/App
+          pod install
+
+      - name: Configure iOS permissions after CocoaPods (if needed)
+        script: |
+          INFO_PLIST="ios/App/App/Info.plist"
+          if [ -f "$INFO_PLIST" ]; then
+            echo "📝 Configuring iOS permissions (post-CocoaPods)..."
+            /usr/libexec/PlistBuddy -c "Add :NSCameraUsageDescription string 'Kids Call Home needs camera access for video calls with family.'" "$INFO_PLIST" 2>/dev/null || \
+            /usr/libexec/PlistBuddy -c "Set :NSCameraUsageDescription 'Kids Call Home needs camera access for video calls with family.'" "$INFO_PLIST" 2>/dev/null || true
+            /usr/libexec/PlistBuddy -c "Add :NSMicrophoneUsageDescription string 'Kids Call Home needs microphone access for video calls with family.'" "$INFO_PLIST" 2>/dev/null || \
+            /usr/libexec/PlistBuddy -c "Set :NSMicrophoneUsageDescription 'Kids Call Home needs microphone access for video calls with family.'" "$INFO_PLIST" 2>/dev/null || true
+            /usr/libexec/PlistBuddy -c "Add :NSPhotoLibraryUsageDescription string 'Kids Call Home needs photo library access to share photos with family.'" "$INFO_PLIST" 2>/dev/null || \
+            /usr/libexec/PlistBuddy -c "Set :NSPhotoLibraryUsageDescription 'Kids Call Home needs photo library access to share photos with family.'" "$INFO_PLIST" 2>/dev/null || true
+            /usr/libexec/PlistBuddy -c "Add :NSPhotoLibraryAddUsageDescription string 'Kids Call Home needs permission to save photos from messages.'" "$INFO_PLIST" 2>/dev/null || \
+            /usr/libexec/PlistBuddy -c "Set :NSPhotoLibraryAddUsageDescription 'Kids Call Home needs permission to save photos from messages.'" "$INFO_PLIST" 2>/dev/null || true
+            /usr/libexec/PlistBuddy -c "Add :NSUserNotificationsUsageDescription string 'Kids Call Home needs notification permission to alert you about calls and messages.'" "$INFO_PLIST" 2>/dev/null || \
+            /usr/libexec/PlistBuddy -c "Set :NSUserNotificationsUsageDescription 'Kids Call Home needs notification permission to alert you about calls and messages.'" "$INFO_PLIST" 2>/dev/null || true
+            echo "✅ iOS permissions configured"
+          fi
+
+      - name: Set up provisioning profiles settings on Xcode project
+        script: |
+          xcode-project use-profiles
+
+      - name: Increment build number (if App Store Connect configured)
+        script: |
+          # APP_STORE_APPLE_ID must be numeric (not Team ID or Issuer ID)
+          if [ ! -z "$APP_STORE_APPLE_ID" ]; then
+            if [[ "$APP_STORE_APPLE_ID" =~ ^[0-9]+$ ]]; then
+              cd ios/App
+              echo "📱 Fetching latest build number from App Store Connect..."
+              LATEST_BUILD_NUMBER=$(app-store-connect get-latest-app-store-build-number "$APP_STORE_APPLE_ID" || echo "0")
+              NEW_BUILD_NUMBER=$(($LATEST_BUILD_NUMBER + 1))
+              echo "📈 Incrementing build number: $LATEST_BUILD_NUMBER → $NEW_BUILD_NUMBER"
+              agvtool new-version -all $NEW_BUILD_NUMBER
+            else
+              echo "⚠️ APP_STORE_APPLE_ID appears to be invalid (should be numeric)"
+              echo "⚠️ Current value: $APP_STORE_APPLE_ID"
+              echo "⚠️ Expected format: numeric ID like '1234567890'"
+              echo "⚠️ See HOW_TO_FIND_APPLE_ID.md for instructions"
+            fi
+          else
+            echo "⚠️ Skipping build number increment - APP_STORE_APPLE_ID not configured"
+          fi
+
+      - name: Build iOS IPA
+        script: |
+          xcode-project build-ipa \
+            --workspace "ios/App/$XCODE_WORKSPACE" \
+            --scheme "$XCODE_SCHEME"
+
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.app
+      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
+
+    publishing:
+      email:
+        recipients:
+          - justin@fluidinvestmentgroup.com
+        notify:
+          success: true
+          failure: true
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+        submit_to_app_store: false
