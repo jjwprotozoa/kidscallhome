@@ -839,9 +839,22 @@ export const handleParentCall = async (
                   return; // Stop processing if connection closed
                 }
 
-                // Validate candidate before adding
+                // IMPROVEMENT: Handle end-of-candidates (null candidate)
+                // A null candidate indicates ICE gathering is complete
                 if (!candidate.candidate) {
-                  continue; // Skip invalid candidates silently
+                  // End-of-candidates marker - signal completion
+                  try {
+                    await pc.addIceCandidate();
+                    safeLog.log(
+                      "✅ [PARENT HANDLER] End-of-candidates marker processed"
+                    );
+                  } catch (endErr) {
+                    // End-of-candidates can fail if already processed - ignore
+                    safeLog.log(
+                      "ℹ️ [PARENT HANDLER] End-of-candidates already processed or connection closed"
+                    );
+                  }
+                  continue;
                 }
 
                 if (pc.remoteDescription) {
@@ -865,6 +878,15 @@ export const handleParentCall = async (
                   }
                 }
               } catch (err) {
+                // IMPROVEMENT: Enhanced error handling with RTCError interface
+                if (err instanceof RTCError) {
+                  safeLog.error("❌ [PARENT HANDLER] RTCError adding ICE candidate:", {
+                    errorDetail: err.errorDetail,
+                    sdpLineNumber: err.sdpLineNumber,
+                    httpRequestStatusCode: err.httpRequestStatusCode,
+                    message: err.message,
+                  });
+                }
                 // Silently handle duplicate candidates and closed connection errors
                 const error = err as Error;
                 if (
@@ -895,6 +917,7 @@ export const handleParentCall = async (
         child_id: childId,
         parent_id: userId,
         caller_type: "parent",
+        recipient_type: "child", // Required: parent calling child
         status: "ringing",
       })
       .select()

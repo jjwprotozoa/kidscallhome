@@ -33,23 +33,25 @@ export const useCallStateMachine = (
     stateRef.current = state;
   }, [state]);
 
-  // DIAGNOSTIC: Log all state transitions
+  // DIAGNOSTIC: Log all state transitions (dev mode only)
   const logStateTransition = useCallback(
     (
       newState: CallState,
       reason: string,
       context?: Record<string, unknown>
     ) => {
-      // eslint-disable-next-line no-console
-      console.log("🔄 [CALL STATE] State transition:", {
-        from: state,
-        to: newState,
-        callId: callId || "none",
-        role,
-        reason,
-        timestamp: new Date().toISOString(),
-        ...context,
-      });
+      if (import.meta.env.DEV) {
+        // eslint-disable-next-line no-console
+        console.log("[CALL STATE] State transition:", {
+          from: state,
+          to: newState,
+          callId: callId || "none",
+          role,
+          reason,
+          timestamp: new Date().toISOString(),
+          ...context,
+        });
+      }
     },
     [state, callId, role]
   );

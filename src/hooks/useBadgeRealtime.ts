@@ -11,6 +11,8 @@ import type { RealtimeChannel } from "@supabase/supabase-js";
 export function useBadgeRealtime() {
   const messagesChannelRef = useRef<RealtimeChannel | null>(null);
   const callsChannelRef = useRef<RealtimeChannel | null>(null);
+  // Track recently processed status changes to prevent duplicate processing
+  const recentlyProcessedRef = useRef<Map<string, number>>(new Map());
 
   useEffect(() => {
     // Check if localStorage is available
@@ -187,6 +189,7 @@ export function useBadgeRealtime() {
         },
         (payload) => {
           const oldCall = payload.old as {
+            id?: string;
             child_id: string;
             caller_type: string;
             missed_call: boolean;
@@ -194,6 +197,7 @@ export function useBadgeRealtime() {
             status?: string;
           };
           const newCall = payload.new as {
+            id?: string;
             child_id: string;
             caller_type: string;
             missed_call: boolean;
@@ -225,22 +229,41 @@ export function useBadgeRealtime() {
             oldCall.status !== "active";
 
           if (statusChangedToActive) {
-            console.log("✅ [BADGE REALTIME] Call became active - clearing missed call badge", {
-              childId: newCall.child_id,
-              callerType: newCall.caller_type,
-            });
+            // Deduplicate: prevent processing the same status change multiple times
+            // Use call ID as the key (if available), otherwise use child_id + caller_type as fallback
+            const callId = newCall.id || 
+              `${newCall.child_id}-${newCall.caller_type}-active`;
+            const now = Date.now();
+            const lastProcessed = recentlyProcessedRef.current.get(callId);
             
-            // Clear missed call badge for this child when ANY call connects
-            // This makes sense because if you're calling them now, you've "seen" previous missed calls
-            if (isChild) {
-              // Child: clear badge for missed calls from parent
-              if (newCall.caller_type === "parent") {
-                useBadgeStore.getState().clearMissedForChild(newCall.child_id);
+            // Only process if we haven't seen this status change in the last 2 seconds
+            if (!lastProcessed || now - lastProcessed > 2000) {
+              recentlyProcessedRef.current.set(callId, now);
+              
+              // Clean up old entries (older than 10 seconds) to prevent memory leak
+              for (const [key, timestamp] of recentlyProcessedRef.current.entries()) {
+                if (now - timestamp > 10000) {
+                  recentlyProcessedRef.current.delete(key);
+                }
               }
-            } else {
-              // Parent: clear badge for missed calls from child
-              if (newCall.caller_type === "child") {
-                useBadgeStore.getState().clearMissedForChild(newCall.child_id);
+              
+              console.log("✅ [BADGE REALTIME] Call became active - clearing missed call badge", {
+                childId: newCall.child_id,
+                callerType: newCall.caller_type,
+              });
+              
+              // Clear missed call badge for this child when ANY call connects
+              // This makes sense because if you're calling them now, you've "seen" previous missed calls
+              if (isChild) {
+                // Child: clear badge for missed calls from parent
+                if (newCall.caller_type === "parent") {
+                  useBadgeStore.getState().clearMissedForChild(newCall.child_id);
+                }
+              } else {
+                // Parent: clear badge for missed calls from child
+                if (newCall.caller_type === "child") {
+                  useBadgeStore.getState().clearMissedForChild(newCall.child_id);
+                }
               }
             }
           }

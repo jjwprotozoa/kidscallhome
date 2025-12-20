@@ -47,7 +47,7 @@ const ParentDashboard = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const { toast } = useToast();
 
-  const validTabs = useMemo(() => ["children", "family", "connections", "safety", "setup"] as const, []);
+  const validTabs = useMemo(() => ["children", "family", "connections", "safety", "setup", "referrals"] as const, []);
   const tabFromUrl = searchParams.get("tab");
   const [activeTab, setActiveTab] = useState<ValidTab>(() => {
     return tabFromUrl && validTabs.includes(tabFromUrl as ValidTab) ? tabFromUrl as ValidTab : "children";
@@ -110,12 +110,23 @@ const ParentDashboard = () => {
 
   const { handleDelete: handleDeleteChild, handleCall, handleChat } = useChildHandlers(loadChildren);
 
+  // Optimistic update function for child login code
+  const updateChildLoginCode = useCallback((childId: string, newCode: string) => {
+    setChildren(prevChildren => 
+      prevChildren.map(child => 
+        child.id === childId 
+          ? { ...child, login_code: newCode }
+          : child
+      )
+    );
+  }, []);
+
   const {
     getFullLoginCode,
     handleCopyCode,
     handleCopyMagicLink,
     handleUpdateLoginCode,
-  } = useCodeHandlers(familyCode, loadChildren);
+  } = useCodeHandlers(familyCode, updateChildLoginCode);
 
   const { isAnsweringRef, handleAnswer, handleDecline } = useIncomingCallHandlers();
 
@@ -158,6 +169,12 @@ const ParentDashboard = () => {
       setChildToEditCode(null);
     }
   }, [childToEditCode, handleUpdateLoginCode]);
+
+  // Memoized callbacks for DashboardTabs to prevent re-renders
+  const handleOpenAddChild = useCallback(() => setShowAddChild(true), []);
+  const handleOpenAddFamilyMember = useCallback(() => setShowAddFamilyMember(true), []);
+  const handlePrintCode = useCallback((child: Child) => setPrintViewChild(child), []);
+  const handleViewQR = useCallback((child: Child) => setShowCodeDialog({ child }), []);
 
   useEffect(() => {
     loadChildren();
@@ -224,17 +241,17 @@ const ParentDashboard = () => {
             familyMembers={familyMembers}
             familyMembersLoading={familyMembersLoading}
             getFullLoginCode={getFullLoginCode}
-            onAddChild={() => setShowAddChild(true)}
+            onAddChild={handleOpenAddChild}
             onClearAllNotifications={handleClearAllNotifications}
             onEditCode={setChildToEditCode}
             onCopyCode={handleCopyCode}
             onCopyMagicLink={handleCopyMagicLink}
-            onPrintCode={(child) => setPrintViewChild(child)}
-            onViewQR={(child) => setShowCodeDialog({ child })}
+            onPrintCode={handlePrintCode}
+            onViewQR={handleViewQR}
             onCall={handleCall}
             onChat={handleChat}
             onDelete={setChildToDelete}
-            onAddFamilyMember={() => setShowAddFamilyMember(true)}
+            onAddFamilyMember={handleOpenAddFamilyMember}
             onSuspend={handleSuspendFamilyMember}
             onActivate={handleActivateFamilyMember}
             onResendInvitation={handleResendInvitation}

@@ -994,9 +994,22 @@ const handleIncomingCallFromParent = async (
 
           for (const candidate of candidatesToProcess) {
             try {
-              // Validate candidate before adding
+              // IMPROVEMENT: Handle end-of-candidates (null candidate)
+              // A null candidate indicates ICE gathering is complete
               if (!candidate.candidate) {
-                continue; // Skip invalid candidates silently
+                // End-of-candidates marker - signal completion
+                try {
+                  await pc.addIceCandidate();
+                  safeLog.log(
+                    "✅ [CHILD HANDLER] End-of-candidates marker processed"
+                  );
+                } catch (endErr) {
+                  // End-of-candidates can fail if already processed - ignore
+                  safeLog.log(
+                    "ℹ️ [CHILD HANDLER] End-of-candidates already processed or connection closed"
+                  );
+                }
+                continue;
               }
 
               // Create unique key for candidate
@@ -1019,6 +1032,15 @@ const handleIncomingCallFromParent = async (
                 iceCandidatesQueue.current.push(candidate);
               }
             } catch (err) {
+              // IMPROVEMENT: Enhanced error handling with RTCError interface
+              if (err instanceof RTCError) {
+                safeLog.error("❌ [CHILD HANDLER] RTCError adding ICE candidate:", {
+                  errorDetail: err.errorDetail,
+                  sdpLineNumber: err.sdpLineNumber,
+                  httpRequestStatusCode: err.httpRequestStatusCode,
+                  message: err.message,
+                });
+              }
               const error = err as Error;
               // Silently handle duplicate candidates
               if (
@@ -1147,19 +1169,23 @@ const handleChildInitiatedCall = async (
     callData.family_member_id = parentId;
     // Also need parent_id for RLS compatibility
     callData.parent_id = childData.parent_id;
+    callData.recipient_type = "family_member"; // Required: child calling family_member
     safeLog.log("📞 [CHILD CALL] Creating call to FAMILY MEMBER:", {
       child_id: callData.child_id,
       family_member_id: callData.family_member_id,
       parent_id: callData.parent_id,
       caller_type: callData.caller_type,
+      recipient_type: callData.recipient_type,
     });
   } else {
     // Child calling parent (normal case)
     callData.parent_id = parentId;
+    callData.recipient_type = "parent"; // Required: child calling parent
     safeLog.log("📞 [CHILD CALL] Creating call to PARENT:", {
       child_id: callData.child_id,
       parent_id: callData.parent_id,
       caller_type: callData.caller_type,
+      recipient_type: callData.recipient_type,
     });
   }
 
@@ -1571,9 +1597,22 @@ const handleChildInitiatedCall = async (
 
           for (const candidate of candidatesToProcess) {
             try {
-              // Validate candidate before adding
+              // IMPROVEMENT: Handle end-of-candidates (null candidate)
+              // A null candidate indicates ICE gathering is complete
               if (!candidate.candidate) {
-                continue; // Skip invalid candidates silently
+                // End-of-candidates marker - signal completion
+                try {
+                  await pc.addIceCandidate();
+                  safeLog.log(
+                    "✅ [CHILD HANDLER] End-of-candidates marker processed"
+                  );
+                } catch (endErr) {
+                  // End-of-candidates can fail if already processed - ignore
+                  safeLog.log(
+                    "ℹ️ [CHILD HANDLER] End-of-candidates already processed or connection closed"
+                  );
+                }
+                continue;
               }
 
               if (pc.remoteDescription) {
@@ -1585,6 +1624,15 @@ const handleChildInitiatedCall = async (
                 iceCandidatesQueue.current.push(candidate);
               }
             } catch (err) {
+              // IMPROVEMENT: Enhanced error handling with RTCError interface
+              if (err instanceof RTCError) {
+                safeLog.error("❌ [CHILD HANDLER] RTCError adding ICE candidate:", {
+                  errorDetail: err.errorDetail,
+                  sdpLineNumber: err.sdpLineNumber,
+                  httpRequestStatusCode: err.httpRequestStatusCode,
+                  message: err.message,
+                });
+              }
               const error = err as Error;
               // Silently handle duplicate candidates
               if (

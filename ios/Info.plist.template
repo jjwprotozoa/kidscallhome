@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Camera Permission -->
+	<key>NSCameraUsageDescription</key>
+	<string>Kids Call Home needs camera access for video calls with family.</string>
+	
+	<!-- Microphone Permission -->
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Kids Call Home needs microphone access for video calls with family.</string>
+	
+	<!-- Photo Library Permission -->
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Kids Call Home needs photo library access to share photos with family.</string>
+	
+	<!-- Photo Library Add Permission -->
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Kids Call Home needs permission to save photos from messages.</string>
+	
+	<!-- Notifications Permission -->
+	<key>NSUserNotificationsUsageDescription</key>
+	<string>Kids Call Home needs notification permission to alert you about calls and messages.</string>
+</dict>
+</plist>
+

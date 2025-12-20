@@ -4,6 +4,7 @@
 
 import { NavLink } from "@/components/NavLink";
 import { NetworkQualityBadge } from "@/components/NetworkQualityBadge";
+import { ShareModal } from "@/components/ShareModal";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -45,6 +46,7 @@ import {
   Menu,
   MoreVertical,
   Settings,
+  Share2,
   Shield,
   Smartphone,
   Star,
@@ -109,6 +111,7 @@ const Navigation = () => {
   >(getInitialUserType);
   const [loading, setLoading] = useState(false);
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [pendingConnectionsCount, setPendingConnectionsCount] = useState(0);
   const [newReportsCount, setNewReportsCount] = useState(0);
@@ -384,6 +387,11 @@ const Navigation = () => {
     }
   };
 
+  // Share app functionality - opens share modal
+  const handleShare = () => {
+    setShowShareModal(true);
+  };
+
   // Don't show navigation on auth/login pages or call screens
   if (
     loading ||
@@ -542,47 +550,60 @@ const Navigation = () => {
                 KidsCallHome
               </span>
 
-              {/* Right side: Network quality + Logout */}
-              <div className="flex items-center gap-2 flex-shrink-0">
-                <NetworkQualityBadge />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowLogoutDialog(true)}
-                >
-                  <LogOut className="h-4 w-4 md:mr-2" />
-                  <span className="hidden md:inline">Logout</span>
-                </Button>
+{/* Right side: Share + Network quality + Logout */}
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={handleShare}
+                    className="h-9 w-9 text-primary hover:text-primary hover:bg-primary/10 animate-pulse-subtle"
+                    aria-label="Share app"
+                    title="Share Kids Call Home"
+                  >
+                    <Share2 className="h-5 w-5" />
+                  </Button>
+                  <NetworkQualityBadge />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowLogoutDialog(true)}
+                  >
+                    <LogOut className="h-4 w-4 md:mr-2" />
+                    <span className="hidden md:inline">Logout</span>
+                  </Button>
+                </div>
               </div>
             </div>
-          </div>
-        </nav>
-        {/* Logout Confirmation Dialog */}
-        <AlertDialog open={showLogoutDialog} onOpenChange={setShowLogoutDialog}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Confirm Logout</AlertDialogTitle>
-              <AlertDialogDescription>
-                Are you sure you want to log out? You'll need to sign in again
-                to access your account.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
+          </nav>
+          {/* Logout Confirmation Dialog */}
+          <AlertDialog open={showLogoutDialog} onOpenChange={setShowLogoutDialog}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Confirm Logout</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Are you sure you want to log out? You'll need to sign in again
+                  to access your account.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={handleLogout}
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              >
-                Logout
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      </>
-    );
-  }
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={handleLogout}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  Logout
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
 
-  if (userType === "parent") {
+          {/* Share Modal */}
+          <ShareModal open={showShareModal} onOpenChange={setShowShareModal} />
+        </>
+      );
+    }
+
+    if (userType === "parent") {
     // Mobile navigation item component for the drawer
     const MobileNavItem = ({
       to,
@@ -818,8 +839,18 @@ const Navigation = () => {
                 KidsCallHome
               </span>
 
-              {/* Right side: Network quality + Logout */}
+              {/* Right side: Share + Network quality + Logout */}
               <div className="flex items-center gap-2 flex-shrink-0">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={handleShare}
+                  className="h-9 w-9 text-primary hover:text-primary hover:bg-primary/10 animate-pulse-subtle"
+                  aria-label="Share app"
+                  title="Share Kids Call Home"
+                >
+                  <Share2 className="h-5 w-5" />
+                </Button>
                 <NetworkQualityBadge />
                 <Button
                   variant="outline"
@@ -854,6 +885,9 @@ const Navigation = () => {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        {/* Share Modal */}
+        <ShareModal open={showShareModal} onOpenChange={setShowShareModal} />
       </>
     );
   }
@@ -1004,13 +1038,26 @@ const Navigation = () => {
                 KidsCallHome
               </span>
 
-              {/* Right side: Network quality (children don't have logout) */}
-              <div className="flex items-center flex-shrink-0">
+              {/* Right side: Share + Network quality (children don't have logout) */}
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={handleShare}
+                  className="h-9 w-9 text-primary hover:text-primary hover:bg-primary/10 animate-pulse-subtle"
+                  aria-label="Share app"
+                  title="Share Kids Call Home"
+                >
+                  <Share2 className="h-5 w-5" />
+                </Button>
                 <NetworkQualityBadge />
               </div>
             </div>
           </div>
         </nav>
+
+        {/* Share Modal */}
+        <ShareModal open={showShareModal} onOpenChange={setShowShareModal} />
       </>
     );
   }

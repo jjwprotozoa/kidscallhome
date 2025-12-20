@@ -8,6 +8,7 @@ import { logAuditEvent } from "@/utils/auditLog";
 import { setCookie } from "@/utils/cookies";
 import { clearFailedLogins, recordFailedLogin } from "@/utils/rateLimiting";
 import { safeLog, sanitizeError } from "@/utils/security";
+import { validateTurnstileToken } from "@/utils/turnstileValidation";
 import { getUserRole } from "@/utils/userRole";
 import { AuthValidationResult } from "./types";
 
@@ -16,6 +17,7 @@ type ToastOptions = Parameters<typeof toastFn>[0];
 interface LoginParams {
   email: string;
   password: string;
+  captchaToken?: string | null;
   setShowCaptcha: (show: boolean) => void;
   updateLockoutInfo: (info: LockoutInfo) => void;
   toast: (options: ToastOptions) => void;
@@ -27,23 +29,92 @@ interface SignupParams {
   password: string;
   name: string;
   validation: AuthValidationResult;
+  referralCode?: string | null;
 }
 
 export const handleLogin = async ({
   email,
   password,
+  captchaToken,
   setShowCaptcha,
   updateLockoutInfo,
   toast,
   navigate,
 }: LoginParams) => {
   logAuditEvent("login_attempt", { email, severity: "low" });
+
+  // Validate Turnstile token if CAPTCHA is provided (non-blocking if service unavailable)
+  const CAPTCHA_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || "";
+  const CAPTCHA_ENABLED = import.meta.env.VITE_ENABLE_CAPTCHA !== "false"; // Default to enabled unless explicitly disabled
+  
+  if (CAPTCHA_ENABLED && CAPTCHA_SITE_KEY && captchaToken) {
+    try {
+      const validationResult = await validateTurnstileToken(captchaToken);
+      if (!validationResult.success) {
+        const errorMessage =
+          validationResult["error-codes"]?.join(", ") ||
+          validationResult.error ||
+          "Security check failed";
+        safeLog.error("Turnstile validation failed:", errorMessage);
+        logAuditEvent("turnstile_validation_failed", {
+          email,
+          metadata: { errorCodes: validationResult["error-codes"] },
+          severity: "high",
+        });
+        toast({
+          title: "Security Check Failed",
+          description: "Please complete the security check again.",
+          variant: "destructive",
+        });
+        setShowCaptcha(true);
+        throw new Error("Turnstile validation failed");
+      }
+      safeLog.log("Turnstile validation successful", { email });
+    } catch (error) {
+      // If it's a validation failure, block login
+      if (error instanceof Error && error.message === "Turnstile validation failed") {
+        throw error;
+      }
+      // If it's a network/service error, log but allow login to proceed
+      // (Cloudflare might be blocking the validation endpoint)
+      safeLog.warn("Turnstile validation service unavailable, allowing login:", sanitizeError(error));
+      // Don't block login if Turnstile service is unavailable
+    }
+  }
+
+  // Note: We don't pass captchaToken to Supabase because:
+  // 1. We're using Cloudflare Turnstile, not Supabase's captcha system
+  // 2. We've already validated the Turnstile token client-side above
+  // 3. Supabase's captchaToken option expects Supabase's own captcha tokens
   const {
     data: { user },
     error,
-  } = await supabase.auth.signInWithPassword({ email, password });
+  } = await supabase.auth.signInWithPassword({ 
+    email, 
+    password
+  });
 
   if (error) {
+    // Check if this is the Supabase CAPTCHA conflict error
+    const isCaptchaConflictError = 
+      error.message?.toLowerCase().includes("captcha verification process failed") ||
+      (error.code === "unexpected_failure" && error.message?.toLowerCase().includes("captcha"));
+    
+    if (isCaptchaConflictError) {
+      safeLog.error("❌ [AUTH] Supabase CAPTCHA conflict detected:", sanitizeError(error));
+      logAuditEvent("supabase_captcha_conflict", {
+        email,
+        severity: "high",
+      });
+      toast({
+        title: "Configuration Error",
+        description: "Supabase CAPTCHA protection is enabled but conflicts with Turnstile. Please disable Supabase CAPTCHA in project settings.",
+        variant: "destructive",
+      });
+      // Don't increment failed login attempts for this configuration error
+      throw new Error("SUPABASE_CAPTCHA_CONFLICT: Please disable Supabase CAPTCHA protection in project settings (Authentication > Bot and Abuse Protection)");
+    }
+
     const failedLogin = recordFailedLogin(email);
     safeLog.error("Auth error:", sanitizeError(error));
     logAuditEvent("login_failed", {
@@ -143,7 +214,7 @@ export const handleLogin = async ({
         generateDeviceIdentifierAsync,
         detectDeviceType,
         getDeviceName,
-        getClientIP,
+        getClientIPWithCountry,
         getDeviceMacAddress,
         getCountryFromIP,
       } = await import("@/utils/deviceTracking");
@@ -151,9 +222,18 @@ export const handleLogin = async ({
       const deviceType = detectDeviceType();
       const deviceName = getDeviceName();
       const userAgent = navigator.userAgent;
-      const ipAddress = await getClientIP();
+      
+      // Get IP and country code together (ipapi.co returns both, avoiding second lookup)
+      const { ip: ipAddress, countryCode: countryCodeFromIP } = await getClientIPWithCountry();
+      
+      // Only make a second geolocation lookup if we got IP but not country code
+      // (e.g., if we used ipify.org or icanhazip.com instead of ipapi.co)
+      let countryCode = countryCodeFromIP;
+      if (ipAddress && !countryCode) {
+        countryCode = await getCountryFromIP(ipAddress);
+      }
+      
       const macAddress = await getDeviceMacAddress();
-      const countryCode = await getCountryFromIP(ipAddress);
       await supabase.rpc("update_device_login", {
         p_parent_id: user.id,
         p_device_identifier: deviceIdentifier,
@@ -179,6 +259,7 @@ export const handleSignup = async ({
   password,
   name,
   validation,
+  referralCode,
 }: SignupParams) => {
   logAuditEvent("signup", { email, severity: "low" });
   const { data, error } = await supabase.auth.signUp({
@@ -202,6 +283,35 @@ export const handleSignup = async ({
 
   if (validation.sanitized.name || name) {
     setCookie("parentName", validation.sanitized.name || name, 365);
+  }
+
+  // Track referral if a code was provided
+  if (referralCode && data.user) {
+    try {
+      const { data: referralResult, error: referralError } = await supabase.rpc(
+        "track_referral_signup",
+        {
+          p_referral_code: referralCode.toUpperCase(),
+          p_new_user_id: data.user.id,
+          p_new_user_email: email,
+        }
+      );
+
+      if (referralError) {
+        safeLog.warn("Referral tracking failed:", sanitizeError(referralError));
+      } else if (referralResult?.success) {
+        safeLog.log("Referral tracked successfully:", referralResult);
+        logAuditEvent("referral_signup", {
+          userId: data.user.id,
+          email,
+          metadata: { referral_code: referralCode, referrer_id: referralResult.referrer_id },
+          severity: "low",
+        });
+      }
+    } catch (refError) {
+      // Don't fail signup if referral tracking fails
+      safeLog.warn("Referral tracking error:", sanitizeError(refError));
+    }
   }
 
   return { user: data.user, needsFamilySetup: !error && !!data.user };

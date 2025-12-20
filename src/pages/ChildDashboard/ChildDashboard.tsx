@@ -5,6 +5,7 @@ import { useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { endCall as endCallUtil } from "@/features/calls/utils/callEnding";
+import { stopAllActiveStreams } from "@/features/calls/utils/mediaCleanup";
 import { useMissedBadgeForChild, useUnreadBadgeForChild } from "@/stores/badgeStore";
 import Navigation from "@/components/Navigation";
 import { OnboardingTour } from "@/features/onboarding/OnboardingTour";
@@ -52,7 +53,9 @@ const ChildDashboard = () => {
           const { acknowledgeMissedCalls } = await import("@/utils/acknowledgeMissedCalls");
           await acknowledgeMissedCalls(child.id, "parent");
         } catch (error) {
-          console.error("Error acknowledging missed calls:", error);
+          if (import.meta.env.DEV) {
+            console.error("[CHILD DASHBOARD] Error acknowledging missed calls:", error);
+          }
         }
       })();
     } else if (!selectedParentId) {
@@ -86,11 +89,8 @@ const ChildDashboard = () => {
   };
 
   const handleDeclineCall = async () => {
+    // CRITICAL: Don't block decline if answer was attempted - user should always be able to decline
     if (incomingCall) {
-      if (isAnsweringRef.current) {
-        return;
-      }
-
       try {
         await endCallUtil({
           callId: incomingCall.id,
@@ -98,7 +98,9 @@ const ChildDashboard = () => {
           reason: "declined",
         });
       } catch (error: unknown) {
-        console.error("❌ [USER ACTION] Error declining call:", error);
+        if (import.meta.env.DEV) {
+          console.error("[CHILD DASHBOARD] Error declining call:", error);
+        }
         const errorMessage = error instanceof Error ? error.message : "Unknown error";
         toast({
           title: "Error",
@@ -106,8 +108,12 @@ const ChildDashboard = () => {
           variant: "destructive",
         });
       }
+      // CRITICAL: Safety measure - stop any active media streams
+      stopAllActiveStreams();
+      
       stopIncomingCall(incomingCall.id);
       setIncomingCall(null);
+      isAnsweringRef.current = false; // Reset in case it was stuck
     }
   };
 

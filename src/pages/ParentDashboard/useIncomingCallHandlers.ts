@@ -5,6 +5,7 @@ import { useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { endCall as endCallUtil } from "@/features/calls/utils/callEnding";
+import { stopAllActiveStreams } from "@/features/calls/utils/mediaCleanup";
 import { useIncomingCallNotifications } from "@/features/calls/hooks/useIncomingCallNotifications";
 import { setUserStartedCall } from "@/utils/userInteraction";
 import { IncomingCall } from "./types";
@@ -27,17 +28,16 @@ export const useIncomingCallHandlers = () => {
     const childId = incomingCall.child_id;
     const callId = incomingCall.id;
     setIncomingCall(null);
-    navigate(`/call/${childId}?callId=${callId}`);
+    // CRITICAL: Use /parent/call/ route which uses useCallEngine with role="parent"
+    // Using /call/ route would use the old VideoCall component with useVideoCall hook
+    navigate(`/parent/call/${childId}?callId=${callId}`);
     setTimeout(() => {
       isAnsweringRef.current = false;
     }, 2000);
   }, [navigate, stopIncomingCall]);
 
   const handleDecline = useCallback(async (incomingCall: IncomingCall, setIncomingCall: (call: IncomingCall | null) => void) => {
-    if (isAnsweringRef.current) {
-      return;
-    }
-
+    // CRITICAL: Don't block decline if answer was attempted - user should always be able to decline
     try {
       await endCallUtil({
         callId: incomingCall.id,
@@ -53,8 +53,12 @@ export const useIncomingCallHandlers = () => {
         variant: "destructive",
       });
     }
+    // CRITICAL: Safety measure - stop any active media streams
+    stopAllActiveStreams();
+    
     stopIncomingCall(incomingCall.id);
     setIncomingCall(null);
+    isAnsweringRef.current = false; // Reset in case it was stuck
   }, [toast, stopIncomingCall]);
 
   return {

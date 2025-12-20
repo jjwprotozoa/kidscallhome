@@ -43,3 +43,6 @@ SELECT COUNT(*) as null_recipient_type_count
 FROM calls
 WHERE recipient_type IS NULL;
 
+
+
+

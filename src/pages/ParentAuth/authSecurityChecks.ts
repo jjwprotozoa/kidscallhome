@@ -51,10 +51,28 @@ export const performSecurityChecks = ({
       return { allowed: false, error: "account_locked" };
     }
 
+    // Temporarily disable CAPTCHA requirement if Cloudflare is blocking the site
+    // This allows login to work while Cloudflare security issues are resolved
     const CAPTCHA_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || "";
-    if (showCaptcha && CAPTCHA_SITE_KEY && !captchaToken) {
+    const CAPTCHA_ENABLED = import.meta.env.VITE_ENABLE_CAPTCHA !== "false"; // Default to enabled unless explicitly disabled
+    
+    if (CAPTCHA_ENABLED && showCaptcha && CAPTCHA_SITE_KEY && !captchaToken) {
+      // Check if CAPTCHA widget is actually visible/working
+      // If widget failed to load, don't block login
+      const captchaElement = document.querySelector('.cf-turnstile');
+      if (!captchaElement) {
+        // CAPTCHA widget not rendered, might be blocked by Cloudflare
+        // Allow login to proceed but log the issue
+        logAuditEvent("captcha_widget_not_rendered", { email, severity: "medium" });
+        return { allowed: true }; // Allow login if widget didn't render
+      }
       toast({ title: "Security Check Required", description: "Please complete the security check below.", variant: "destructive" });
       return { allowed: false, error: "captcha_required" };
+    }
+    
+    // If CAPTCHA is disabled or not configured, allow login
+    if (!CAPTCHA_ENABLED || !CAPTCHA_SITE_KEY) {
+      return { allowed: true };
     }
   }
 

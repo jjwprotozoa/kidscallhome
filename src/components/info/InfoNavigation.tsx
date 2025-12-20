@@ -1,8 +1,17 @@
 // src/components/info/InfoNavigation.tsx
 // Purpose: Navigation component for Info page sections
+// Mobile: Compact dropdown selector
+// Desktop: Horizontal button strip
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Sheet,
   SheetContent,
@@ -10,7 +19,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { ArrowUp, Home, Menu } from "lucide-react";
+import { ArrowUp, ChevronUp, List } from "lucide-react";
 
 interface Section {
   id: string;
@@ -36,91 +45,135 @@ export const InfoNavigation = ({
   sheetOpen,
   setSheetOpen,
   showFloatingNav,
-  onBackToApp,
-  backButtonTitle,
-  loading = false,
 }: InfoNavigationProps) => {
   return (
     <>
-      {/* Quick Navigation */}
-      <Card className="p-4 mb-6 sticky top-4 z-10 bg-background/95 backdrop-blur-sm">
+      {/* Mobile Navigation - Compact Dropdown */}
+      <div className="md:hidden sticky top-[64px] z-40 -mx-4 px-4 py-3 bg-background/95 backdrop-blur-sm border-b">
+        <Select
+          onValueChange={(value) => {
+            if (value === "top") {
+              scrollToTop();
+            } else {
+              scrollToSection(value);
+            }
+          }}
+        >
+          <SelectTrigger className="w-full">
+            <div className="flex items-center gap-2">
+              <List className="h-4 w-4" />
+              <SelectValue placeholder="Jump to section..." />
+            </div>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="top" className="font-medium">
+              <div className="flex items-center gap-2">
+                <ArrowUp className="h-4 w-4" />
+                Back to Top
+              </div>
+            </SelectItem>
+            <div className="h-px bg-border my-1" />
+            {sections.map((section) => (
+              <SelectItem key={section.id} value={section.id}>
+                {section.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Desktop Navigation - Horizontal Card */}
+      <Card className="hidden md:block p-4 mb-6 sticky top-[80px] z-40 bg-background/95 backdrop-blur-sm">
         <div className="flex flex-wrap gap-2 text-sm">
           {sections.map((section) => (
             <Button
               key={section.id}
               variant="ghost"
               size="sm"
-              onClick={() => scrollToSection(section.id)}
+              asChild
             >
-              {section.label}
+              <a
+                href={`/info#${section.id}`}
+                onClick={(e) => {
+                  e.preventDefault();
+                  scrollToSection(section.id);
+                }}
+              >
+                {section.label}
+              </a>
             </Button>
           ))}
         </div>
       </Card>
 
-      {/* Floating Navigation Buttons */}
-      {showFloatingNav && !loading && (
+      {/* Floating Navigation - Minimal FAB */}
+      {showFloatingNav && (
         <div
-          className="fixed right-6 z-50 flex flex-col gap-2"
+          className="fixed z-50 flex flex-col gap-2"
           style={{
+            right: "1rem",
             bottom: `calc(1.5rem + var(--safe-area-inset-bottom))`,
           }}
         >
-          {/* Back to App Button */}
-          {onBackToApp && (
-            <Button
-              onClick={onBackToApp}
-              size="lg"
-              className="h-14 w-14 rounded-full shadow-lg"
-              aria-label="Back to App"
-              title={backButtonTitle}
-            >
-              <Home className="h-6 w-6" />
-            </Button>
-          )}
-          
-          {/* Navigation Menu Button */}
+          {/* Mobile: Sheet menu for sections */}
           <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
             <SheetTrigger asChild>
               <Button
-                size="lg"
-                className="h-14 w-14 rounded-full shadow-lg"
+                size="icon"
+                variant="secondary"
+                className="h-12 w-12 rounded-full shadow-lg md:hidden"
                 aria-label="Open navigation menu"
               >
-                <Menu className="h-6 w-6" />
+                <List className="h-5 w-5" />
               </Button>
             </SheetTrigger>
-            <SheetContent side="right" className="w-80">
-              <SheetHeader>
-                <SheetTitle>Navigate to Section</SheetTitle>
+            <SheetContent side="bottom" className="rounded-t-2xl max-h-[70vh]">
+              <SheetHeader className="pb-2">
+                <SheetTitle>Jump to Section</SheetTitle>
               </SheetHeader>
-              <div className="mt-6 space-y-2">
+              <div className="space-y-1 overflow-y-auto">
+                <Button
+                  variant="ghost"
+                  className="w-full justify-start h-12 text-base"
+                  onClick={scrollToTop}
+                >
+                  <ArrowUp className="mr-3 h-5 w-5" />
+                  Back to Top
+                </Button>
+                <div className="h-px bg-border my-2" />
                 {sections.map((section) => (
                   <Button
                     key={section.id}
                     variant="ghost"
-                    className="w-full justify-start"
-                    onClick={() => scrollToSection(section.id)}
+                    className="w-full justify-start h-12 text-base"
+                    asChild
                   >
-                    {section.label}
+                    <a
+                      href={`/info#${section.id}`}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        scrollToSection(section.id);
+                      }}
+                    >
+                      {section.label}
+                    </a>
                   </Button>
                 ))}
-                <div className="pt-4 border-t mt-4">
-                  <Button
-                    variant="outline"
-                    className="w-full"
-                    onClick={scrollToTop}
-                  >
-                    <ArrowUp className="mr-2 h-4 w-4" />
-                    Back to Top
-                  </Button>
-                </div>
               </div>
             </SheetContent>
           </Sheet>
+
+          {/* Back to Top Button */}
+          <Button
+            onClick={scrollToTop}
+            size="icon"
+            className="h-12 w-12 rounded-full shadow-lg"
+            aria-label="Back to top"
+          >
+            <ChevronUp className="h-5 w-5" />
+          </Button>
         </div>
       )}
     </>
   );
 };
-

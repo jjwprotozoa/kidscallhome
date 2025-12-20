@@ -37,7 +37,12 @@ self.addEventListener('push', (event) => {
     tag: 'incoming-call',
     requireInteraction: true,
     vibrate: [200, 100, 200],
-    data: {}
+    data: {},
+    // Add action buttons for incoming calls
+    actions: [
+      { action: 'answer', title: '✓ Answer', icon: '/icons/answer-call.png' },
+      { action: 'decline', title: '✕ Decline', icon: '/icons/decline-call.png' }
+    ]
   };
 
   // Parse push data if available
@@ -47,7 +52,9 @@ self.addEventListener('push', (event) => {
       notificationData = {
         ...notificationData,
         ...data,
-        data: data
+        data: data,
+        // Preserve actions if this is a call notification
+        actions: data.actions || notificationData.actions
       };
     } catch (e) {
       console.error('[SW] Error parsing push data:', e);
@@ -59,46 +66,68 @@ self.addEventListener('push', (event) => {
   );
 });
 
-// Handle notification clicks
+// Handle notification clicks (including action button clicks)
 self.addEventListener('notificationclick', (event) => {
   console.log('[SW] Notification clicked:', event);
+  console.log('[SW] Action:', event.action);
   
   event.notification.close();
 
   const notificationData = event.notification.data || {};
   const callId = notificationData.callId;
   const urlToOpen = notificationData.url || '/';
+  const action = event.action; // 'answer', 'decline', or '' (clicked notification body)
+
+  // Determine the message type based on action
+  let messageType = 'NOTIFICATION_CLICKED';
+  if (action === 'answer') {
+    messageType = 'NOTIFICATION_ACTION_ANSWER';
+  } else if (action === 'decline') {
+    messageType = 'NOTIFICATION_ACTION_DECLINE';
+  }
 
   event.waitUntil(
     clients.matchAll({
       type: 'window',
       includeUncontrolled: true
     }).then((clientList) => {
-      // Check if there's already a window/tab open with the target URL
+      // Find any existing window from our app
       for (let i = 0; i < clientList.length; i++) {
         const client = clientList[i];
-        if (client.url === urlToOpen && 'focus' in client) {
-          // Focus existing window and send message to start ringing
+        // Check if this is a window from our app (same origin)
+        if ('focus' in client) {
+          // Focus existing window and send message
           client.focus();
           client.postMessage({
-            type: 'NOTIFICATION_CLICKED',
+            type: messageType,
             callId: callId,
-            url: urlToOpen
+            url: urlToOpen,
+            action: action
           });
+          
+          // For answer action, also navigate to call URL
+          if (action === 'answer' && urlToOpen !== '/') {
+            client.navigate(urlToOpen);
+          }
           return;
         }
       }
       
       // If no window is open, open a new one
       if (clients.openWindow) {
-        return clients.openWindow(urlToOpen).then((client) => {
+        // For decline action, we don't need to open a window, just send message
+        // But we need a window to handle the decline...
+        const targetUrl = action === 'decline' ? '/' : urlToOpen;
+        
+        return clients.openWindow(targetUrl).then((client) => {
           if (client) {
-            // Send message to start ringing after window opens
+            // Send message after window opens
             setTimeout(() => {
               client.postMessage({
-                type: 'NOTIFICATION_CLICKED',
+                type: messageType,
                 callId: callId,
-                url: urlToOpen
+                url: urlToOpen,
+                action: action
               });
             }, 500);
           }
@@ -141,20 +170,40 @@ self.addEventListener('fetch', (event) => {
     return; // Don't intercept - let browser handle CORS errors normally
   }
 
-  // Skip Vite HMR and dev server requests during development
-  if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
-    // For development, let browser handle requests normally to avoid caching issues
-    // Only intercept if it's a static asset that should be cached
-    if (!url.pathname.match(/\.(js|css|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot)$/)) {
+  // In development, completely bypass service worker for most requests
+  // This prevents interference with Vite HMR and dev server
+  const isDevelopment = url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.port === '5173';
+  
+  if (isDevelopment) {
+    // Only intercept static assets that are explicitly cached
+    // Skip all other requests including API calls, HMR, and navigation
+    if (!url.pathname.match(/\.(png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot)$/)) {
       return; // Don't intercept - let browser handle normally
     }
+    
+    // For static assets in dev, try cache first but don't fail if network fails
+    event.respondWith(
+      caches.match(event.request).then((cachedResponse) => {
+        if (cachedResponse) {
+          return cachedResponse;
+        }
+        // Fetch from network, but if it fails, return a basic response instead of throwing
+        return fetch(event.request).catch(() => {
+          // Return a basic response instead of throwing to prevent unhandled rejections
+          return new Response('', { status: 408 });
+        });
+      }).catch(() => {
+        // If cache match fails, try network
+        return fetch(event.request).catch(() => {
+          // Return a basic response instead of throwing
+          return new Response('', { status: 408 });
+        });
+      })
+    );
+    return;
   }
 
-  // For navigation requests in development, let browser handle them
-  if (event.request.mode === 'navigate' && (url.hostname === 'localhost' || url.hostname === '127.0.0.1')) {
-    return; // Don't intercept navigation requests in development
-  }
-
+  // Production: use cache-first strategy with network fallback
   event.respondWith(
     caches.match(event.request).then((response) => {
       // Return cached version if available
@@ -167,11 +216,6 @@ self.addEventListener('fetch', (event) => {
         const url = new URL(event.request.url);
         
         // Skip logging for known external APIs that don't support CORS (expected to fail)
-        const knownExternalAPIs = [
-          'haveibeenpwned.com',
-          'ip-api.com',
-          'ipapi.co'
-        ];
         const isKnownExternalAPI = knownExternalAPIs.some(api => url.hostname.includes(api));
         
         // Only log errors for internal requests or unexpected failures
@@ -187,10 +231,10 @@ self.addEventListener('fetch', (event) => {
           });
         }
         
-        // For external API requests that fail (CORS, etc.), let the browser handle it
-        // Re-throw to let the browser handle CORS errors normally
+        // For external API requests that fail (CORS, etc.), return empty response
+        // Don't throw to prevent unhandled promise rejections
         if (isKnownExternalAPI) {
-          throw error;
+          return new Response('', { status: 0 });
         }
         
         // For other requests, return a basic error response
@@ -202,7 +246,7 @@ self.addEventListener('fetch', (event) => {
     }).catch((error) => {
       // Only log unexpected errors
       const url = new URL(event.request.url);
-      const isKnownExternalAPI = ['haveibeenpwned.com', 'ip-api.com', 'ipapi.co'].some(api => 
+      const isKnownExternalAPI = knownExternalAPIs.some(api => 
         url.hostname.includes(api)
       );
       
@@ -217,9 +261,9 @@ self.addEventListener('fetch', (event) => {
           console.error('[SW] Network fetch also failed:', fetchError);
         }
         
-        // For external APIs, let the error propagate (browser will handle CORS)
+        // For external APIs, return empty response instead of throwing
         if (isKnownExternalAPI) {
-          throw fetchError;
+          return new Response('', { status: 0 });
         }
         
         // Return a basic error response for internal requests
@@ -231,4 +275,3 @@ self.addEventListener('fetch', (event) => {
     })
   );
 });
-

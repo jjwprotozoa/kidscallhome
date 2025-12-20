@@ -8,24 +8,43 @@ const Index = () => {
   const navigate = useNavigate();
 
   return (
-    <div className="min-h-[100dvh] bg-gradient-to-b from-primary/10 to-background">
+    <main className="min-h-[100dvh] bg-gradient-to-b from-primary/10 to-background">
       <div className="container mx-auto px-4 py-16">
         <div className="text-center space-y-6 mb-16">
           {/* CLS: Reserve space with aspect-square wrapper to prevent layout shift */}
           <div className="aspect-square w-20 mx-auto">
-            <img 
-              src="/icon-192x192.png" 
-              alt="Kids Call Home" 
-              className="w-full h-full object-contain"
-              width="192"
-              height="192"
-            />
+            <picture>
+              {/* WebP for modern browsers - 93% smaller than PNG */}
+              <source 
+                type="image/webp"
+                srcSet="/icon-96x96.webp 96w, /icon-192x192.webp 192w"
+                sizes="80px"
+              />
+              {/* PNG fallback for older browsers */}
+              <source 
+                type="image/png"
+                srcSet="/icon-96x96.png 96w, /icon-192x192.png 192w"
+                sizes="80px"
+              />
+              <img 
+                src="/icon-96x96.png" 
+                alt="Kids Call Home" 
+                className="w-full h-full object-contain"
+                width="96"
+                height="96"
+                loading="eager"
+                fetchpriority="high"
+                decoding="async"
+              />
+            </picture>
           </div>
           <h1 className="text-5xl md:text-6xl font-bold text-primary">
             Kids Call Home
           </h1>
           <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-            Stay connected with your family through simple video calls and messaging between parents, family members, and children
+            Learn how Kids Call Home helps kids safely call and message
+            parents and family on most phones and tablets, without a phone
+            number, social media account, or passwords to remember.
           </p>
         </div>
 
@@ -84,7 +103,7 @@ const Index = () => {
         </div>
 
         {/* Footer Links */}
-        <div className="mt-16 pt-8 border-t text-center">
+        <footer className="mt-16 pt-8 border-t text-center">
           <Button
             variant="ghost"
             onClick={() => navigate("/info")}
@@ -92,9 +111,9 @@ const Index = () => {
           >
             App Information & Legal
           </Button>
-        </div>
+        </footer>
       </div>
-    </div>
+    </main>
   );
 };
 

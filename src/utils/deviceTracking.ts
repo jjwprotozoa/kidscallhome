@@ -334,18 +334,115 @@ export function getDeviceName(): string {
 }
 
 /**
+ * Get client IP address with optional country code
+ * Uses CORS-friendly services with proper error handling and timeouts (2s per service)
+ * Returns both IP and country code if available from the same service call
+ * This avoids making a second geolocation lookup when ipapi.co is used
+ */
+export async function getClientIPWithCountry(): Promise<{
+  ip: string | null;
+  countryCode: string | null;
+}> {
+  // Check if IP detection is disabled via environment variable
+  if (import.meta.env.VITE_DISABLE_IP_DETECTION === 'true') {
+    return { ip: null, countryCode: null };
+  }
+
+  // Helper to add timeout to fetch requests (2 second timeout per service)
+  const fetchWithTimeout = async (url: string, options: RequestInit = {}): Promise<Response | null> => {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2000); // 2 second timeout per service
+
+      const response = await fetch(url, {
+        ...options,
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+      return response;
+    } catch {
+      return null;
+    }
+  };
+
+  // 1) Primary: ipapi.co/json/ (CORS-friendly, JSON, includes country info)
+  // This service returns both IP and country_code, so we can avoid a second lookup
+  try {
+    const res = await fetchWithTimeout('https://ipapi.co/json/', { method: 'GET' });
+    if (res && res.ok) {
+      try {
+        const data = await res.json();
+        if (data?.ip) {
+          return {
+            ip: data.ip as string,
+            countryCode: data.country_code || null,
+          };
+        }
+      } catch {
+        // JSON parsing failed, try next
+      }
+    }
+  } catch {
+    // ignore, try next
+  }
+
+  // 2) Fallback: api.ipify.org (CORS-friendly, plain text or JSON)
+  // This service only returns IP, so countryCode will be null
+  try {
+    const res = await fetchWithTimeout('https://api.ipify.org?format=json', { method: 'GET' });
+    if (res && res.ok) {
+      try {
+        const data = await res.json();
+        if (data?.ip) {
+          return {
+            ip: data.ip as string,
+            countryCode: null, // This service doesn't provide country info
+          };
+        }
+      } catch {
+        // JSON parsing failed, try next
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  // 3) Last resort: ipv4.icanhazip.com (plain text, CORS-friendly)
+  // This service only returns IP, so countryCode will be null
+  try {
+    const res = await fetchWithTimeout('https://ipv4.icanhazip.com/', { method: 'GET' });
+    if (res && res.ok) {
+      try {
+        const text = (await res.text()).trim();
+        if (text && /^\d+\.\d+\.\d+\.\d+$/.test(text)) {
+          return {
+            ip: text,
+            countryCode: null, // This service doesn't provide country info
+          };
+        }
+      } catch {
+        // Text parsing failed
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  // All services failed - return null gracefully
+  // IP detection is non-critical and should not break the app
+  return { ip: null, countryCode: null };
+}
+
+/**
  * Get client IP address (requires backend support)
- * For now, returns null - can be enhanced with an API call
+ * Uses CORS-friendly services with proper error handling and timeouts (2s per service)
+ * Returns null if IP cannot be determined (non-critical)
+ * For better performance, use getClientIPWithCountry() if you also need country code
  */
 export async function getClientIP(): Promise<string | null> {
-  try {
-    // You can use a service like ipify.org or get it from your backend
-    const response = await fetch('https://api.ipify.org?format=json');
-    const data = await response.json();
-    return data.ip || null;
-  } catch {
-    return null;
-  }
+  const result = await getClientIPWithCountry();
+  return result.ip;
 }
 
 /**

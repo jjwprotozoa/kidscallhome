@@ -9,21 +9,37 @@ import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { Cookie, Mail, Shield } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-
-const CONSENT_STORAGE_KEY = "kch_cookie_consent";
-const CONSENT_VERSION = "1.0"; // Increment when policy changes
+import { useLocation, useNavigate } from "react-router-dom";
 
 // Dev mode: Set to true to force show banner for testing
 const FORCE_SHOW_BANNER = import.meta.env.DEV && false; // Set to true to test
+
+// Routes where privacy consent should NOT be shown
+// - Child routes: children don't need to consent (parents consent for them)
+// - Auth routes: user isn't logged in yet, show after login
+// - Info/Beta pages: publicly accessible without login
+const EXCLUDED_ROUTES = ["/", "/child", "/parent/auth", "/family-member/auth", "/family-member/invite", "/info", "/beta"];
 
 export const CookieConsent = () => {
   const [showBanner, setShowBanner] = useState(FORCE_SHOW_BANNER);
   const [isChecking, setIsChecking] = useState(true);
   const [emailUpdatesOptIn, setEmailUpdatesOptIn] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Don't show cookie consent on excluded routes (landing, auth, child, info pages)
+  const isExcludedRoute = 
+    location.pathname === "/" || 
+    EXCLUDED_ROUTES.some((route) => route !== "/" && location.pathname.startsWith(route));
 
   useEffect(() => {
+    // Skip consent check entirely for excluded routes (landing, auth, child, info pages)
+    if (isExcludedRoute) {
+      setShowBanner(false);
+      setIsChecking(false);
+      return;
+    }
     // Dev mode: Skip check if forcing banner to show
     if (FORCE_SHOW_BANNER) {
       setIsChecking(false);
@@ -40,7 +56,10 @@ export const CookieConsent = () => {
         } = await supabase.auth.getSession();
 
         if (session?.user) {
-          // User is authenticated - check database flags
+          // User is authenticated - this is the only case where we show the banner
+          setIsAuthenticated(true);
+          
+          // Check database for consent status (source of truth for authenticated users)
           const { data: parentData, error } = await supabase
             .from("parents")
             .select("privacy_cookie_accepted, email_updates_opt_in")
@@ -48,151 +67,93 @@ export const CookieConsent = () => {
             .maybeSingle();
 
           if (error) {
-            // If error (e.g., column doesn't exist yet), fall back to localStorage
+            // If error (e.g., column doesn't exist yet), show banner
             console.warn(
               "Error checking privacy consent from database:",
               error
             );
-            // Still show banner with email checkbox even if DB error
             const timer = setTimeout(() => {
               setShowBanner(true);
               setIsChecking(false);
-            }, 1000);
+            }, 500);
             return () => clearTimeout(timer);
           } else if (parentData) {
             // Database is source of truth
             if (parentData.privacy_cookie_accepted === true) {
-              // User has accepted privacy/cookie consent, don't show banner
+              // User has already accepted privacy/cookie consent, don't show banner
               setShowBanner(false);
               setIsChecking(false);
               return;
             } else {
-              // Database doesn't have consent yet - check localStorage as fallback
-              // This handles the case where user accepted before sign-in (sync may be in progress)
-              const consentDataStr = localStorage.getItem(CONSENT_STORAGE_KEY);
-              if (consentDataStr) {
-                try {
-                  const consentData = JSON.parse(consentDataStr);
-                  // If user already accepted in localStorage, don't show banner
-                  // (it will sync to database on login, or already syncing)
-                  if (
-                    consentData.accepted === true &&
-                    consentData.version === CONSENT_VERSION
-                  ) {
-                    setShowBanner(false);
-                    setIsChecking(false);
-                    return;
-                  }
-                } catch (error) {
-                  // Invalid localStorage data, continue to show banner
-                }
-              }
-
-              // User hasn't accepted privacy/cookie consent, show banner
+              // User hasn't accepted yet - show banner
               // Pre-populate email opt-in checkbox if they already opted in
               const emailOptIn = parentData.email_updates_opt_in === true;
               setEmailUpdatesOptIn(emailOptIn);
-              console.log(
-                "Showing consent banner with email checkbox. Email opt-in:",
-                emailOptIn
-              );
               const timer = setTimeout(() => {
                 setShowBanner(true);
                 setIsChecking(false);
-              }, 1000);
+              }, 500);
               return () => clearTimeout(timer);
             }
           } else {
-            // No parent record found, check localStorage as fallback
-            checkLocalStorage();
+            // No parent record found (shouldn't happen normally)
+            // Show banner anyway so they can accept
+            const timer = setTimeout(() => {
+              setShowBanner(true);
+              setIsChecking(false);
+            }, 500);
+            return () => clearTimeout(timer);
           }
         } else {
-          // User not authenticated, check localStorage
-          checkLocalStorage();
-        }
-      } catch (error) {
-        // Error checking database, fall back to localStorage
-        console.warn("Error checking consent:", error);
-        checkLocalStorage();
-      }
-    };
-
-    const checkLocalStorage = () => {
-      // Check if user has already given consent in localStorage (fallback for unauthenticated users)
-      const consentDataStr = localStorage.getItem(CONSENT_STORAGE_KEY);
-      if (!consentDataStr) {
-        // Show banner after a short delay to avoid blocking initial page load
-        console.log(
-          "No localStorage consent found, showing banner with email checkbox"
-        );
-        const timer = setTimeout(() => {
-          setShowBanner(true);
-          setIsChecking(false);
-        }, 1000);
-        return () => clearTimeout(timer);
-      }
-
-      // Parse and validate consent data
-      try {
-        const consentData = JSON.parse(consentDataStr);
-        // Check if consent was given (accepted or declined) and version matches
-        if (consentData.version === CONSENT_VERSION && consentData.timestamp) {
-          // User has already responded, don't show banner
+          // User NOT authenticated - don't show banner
+          // They'll see it after login when consent is tied to their account
+          setIsAuthenticated(false);
           setShowBanner(false);
           setIsChecking(false);
-          return;
         }
-        // Policy version changed, show banner again
-        const timer = setTimeout(() => {
-          setShowBanner(true);
-          setIsChecking(false);
-        }, 1000);
-        return () => clearTimeout(timer);
       } catch (error) {
-        // Invalid data, show banner
-        const timer = setTimeout(() => {
-          setShowBanner(true);
-          setIsChecking(false);
-        }, 1000);
-        return () => clearTimeout(timer);
+        // Error checking, don't show banner for unauthenticated users
+        console.warn("Error checking consent:", error);
+        setShowBanner(false);
+        setIsChecking(false);
       }
     };
 
     checkConsent();
 
     // Listen for auth state changes (e.g., user signs in)
-    // This ensures consent is re-checked when authentication state changes
+    // This ensures consent is checked immediately after login
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
-      // Re-check consent when user signs in or session changes
-      // Add small delay to allow localStorage sync to complete in ParentAuth
-      if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
+      if (event === "SIGNED_IN") {
+        // User just signed in - check consent and show banner if needed
+        setIsAuthenticated(true);
         setTimeout(() => {
           checkConsent();
-        }, 500); // 500ms delay to allow sync to complete
+        }, 300); // Short delay to allow profile to be created
+      } else if (event === "SIGNED_OUT") {
+        setIsAuthenticated(false);
+        setShowBanner(false);
       }
     });
 
     return () => {
       subscription.unsubscribe();
     };
-  }, []);
+  }, [isExcludedRoute]);
 
   const handleAccept = async () => {
-    // Immediately hide the toast for snappy UX
+    // Immediately hide the banner for snappy UX
     setShowBanner(false);
 
     try {
-      // Check if user is authenticated
       const {
         data: { session },
       } = await supabase.auth.getSession();
 
       if (session?.user) {
-        // Update both database flags for authenticated users
-        // privacy_cookie_accepted is required (always true when accepting)
-        // email_updates_opt_in is optional (based on checkbox state)
+        // Save consent to Supabase (linked to user's account)
         const { error } = await supabase
           .from("parents")
           .update({
@@ -202,60 +163,42 @@ export const CookieConsent = () => {
           .eq("id", session.user.id);
 
         if (error) {
-          console.error("Error updating privacy consent:", error);
-          // Fall back to localStorage if database update fails
-          localStorage.setItem(
-            CONSENT_STORAGE_KEY,
-            JSON.stringify({
-              accepted: true,
-              emailOptIn: emailUpdatesOptIn,
-              version: CONSENT_VERSION,
-              timestamp: new Date().toISOString(),
-            })
-          );
+          console.error("Error saving privacy consent to database:", error);
         }
-      } else {
-        // User not authenticated, store in localStorage
-        localStorage.setItem(
-          CONSENT_STORAGE_KEY,
-          JSON.stringify({
-            accepted: true,
-            emailOptIn: emailUpdatesOptIn,
-            version: CONSENT_VERSION,
-            timestamp: new Date().toISOString(),
-          })
-        );
       }
     } catch (error) {
       console.error("Error handling consent acceptance:", error);
-      // Fall back to localStorage on error
-      localStorage.setItem(
-        CONSENT_STORAGE_KEY,
-        JSON.stringify({
-          accepted: true,
-          emailOptIn: emailUpdatesOptIn,
-          version: CONSENT_VERSION,
-          timestamp: new Date().toISOString(),
-        })
-      );
     }
   };
 
   const handleDecline = async () => {
-    // Immediately hide the toast for snappy UX
+    // Immediately hide the banner for snappy UX
     setShowBanner(false);
 
-    // Store that user declined (still allow basic functionality)
-    // Note: We don't update the database for decline - only for accept
-    // This allows users to accept later if they change their mind
-    localStorage.setItem(
-      CONSENT_STORAGE_KEY,
-      JSON.stringify({
-        accepted: false,
-        version: CONSENT_VERSION,
-        timestamp: new Date().toISOString(),
-      })
-    );
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (session?.user) {
+        // Save decline to Supabase - set privacy_cookie_accepted to false
+        // This records the decision but still allows basic app functionality
+        // User can accept later from settings if they change their mind
+        const { error } = await supabase
+          .from("parents")
+          .update({
+            privacy_cookie_accepted: false,
+            email_updates_opt_in: false,
+          })
+          .eq("id", session.user.id);
+
+        if (error) {
+          console.error("Error saving privacy decline to database:", error);
+        }
+      }
+    } catch (error) {
+      console.error("Error handling consent decline:", error);
+    }
   };
 
   const handleManagePreferences = () => {
@@ -263,16 +206,11 @@ export const CookieConsent = () => {
     setShowBanner(false);
   };
 
-  // Don't show banner while checking or if it shouldn't be shown
-  if (isChecking || !showBanner) {
+  // Don't show banner while checking, if it shouldn't be shown, 
+  // on excluded routes, or if user isn't authenticated
+  if (isChecking || !showBanner || isExcludedRoute || !isAuthenticated) {
     return null;
   }
-
-  // Debug: Log when banner is rendered
-  console.log(
-    "Rendering consent banner. Email opt-in state:",
-    emailUpdatesOptIn
-  );
 
   return (
     <div

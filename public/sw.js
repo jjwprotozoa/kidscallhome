@@ -37,7 +37,12 @@ self.addEventListener('push', (event) => {
     tag: 'incoming-call',
     requireInteraction: true,
     vibrate: [200, 100, 200],
-    data: {}
+    data: {},
+    // Add action buttons for incoming calls
+    actions: [
+      { action: 'answer', title: '✓ Answer', icon: '/icons/answer-call.png' },
+      { action: 'decline', title: '✕ Decline', icon: '/icons/decline-call.png' }
+    ]
   };
 
   // Parse push data if available
@@ -47,7 +52,9 @@ self.addEventListener('push', (event) => {
       notificationData = {
         ...notificationData,
         ...data,
-        data: data
+        data: data,
+        // Preserve actions if this is a call notification
+        actions: data.actions || notificationData.actions
       };
     } catch (e) {
       console.error('[SW] Error parsing push data:', e);
@@ -59,46 +66,68 @@ self.addEventListener('push', (event) => {
   );
 });
 
-// Handle notification clicks
+// Handle notification clicks (including action button clicks)
 self.addEventListener('notificationclick', (event) => {
   console.log('[SW] Notification clicked:', event);
+  console.log('[SW] Action:', event.action);
   
   event.notification.close();
 
   const notificationData = event.notification.data || {};
   const callId = notificationData.callId;
   const urlToOpen = notificationData.url || '/';
+  const action = event.action; // 'answer', 'decline', or '' (clicked notification body)
+
+  // Determine the message type based on action
+  let messageType = 'NOTIFICATION_CLICKED';
+  if (action === 'answer') {
+    messageType = 'NOTIFICATION_ACTION_ANSWER';
+  } else if (action === 'decline') {
+    messageType = 'NOTIFICATION_ACTION_DECLINE';
+  }
 
   event.waitUntil(
     clients.matchAll({
       type: 'window',
       includeUncontrolled: true
     }).then((clientList) => {
-      // Check if there's already a window/tab open with the target URL
+      // Find any existing window from our app
       for (let i = 0; i < clientList.length; i++) {
         const client = clientList[i];
-        if (client.url === urlToOpen && 'focus' in client) {
-          // Focus existing window and send message to start ringing
+        // Check if this is a window from our app (same origin)
+        if ('focus' in client) {
+          // Focus existing window and send message
           client.focus();
           client.postMessage({
-            type: 'NOTIFICATION_CLICKED',
+            type: messageType,
             callId: callId,
-            url: urlToOpen
+            url: urlToOpen,
+            action: action
           });
+          
+          // For answer action, also navigate to call URL
+          if (action === 'answer' && urlToOpen !== '/') {
+            client.navigate(urlToOpen);
+          }
           return;
         }
       }
       
       // If no window is open, open a new one
       if (clients.openWindow) {
-        return clients.openWindow(urlToOpen).then((client) => {
+        // For decline action, we don't need to open a window, just send message
+        // But we need a window to handle the decline...
+        const targetUrl = action === 'decline' ? '/' : urlToOpen;
+        
+        return clients.openWindow(targetUrl).then((client) => {
           if (client) {
-            // Send message to start ringing after window opens
+            // Send message after window opens
             setTimeout(() => {
               client.postMessage({
-                type: 'NOTIFICATION_CLICKED',
+                type: messageType,
                 callId: callId,
-                url: urlToOpen
+                url: urlToOpen,
+                action: action
               });
             }, 500);
           }

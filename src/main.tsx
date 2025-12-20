@@ -7,8 +7,11 @@ import { safeLog } from "./utils/security";
 if (import.meta.env.PROD) {
   // Override console methods to prevent any logging in production
   const noop = () => {};
+  // eslint-disable-next-line no-console
   console.log = noop;
+  // eslint-disable-next-line no-console
   console.debug = noop;
+  // eslint-disable-next-line no-console
   console.info = noop;
   // Keep console.error and console.warn for critical issues, but they'll be removed by esbuild
   // console.error = noop;
@@ -25,7 +28,9 @@ safeLog.log("🚀 [APP INIT] Starting application...", {
 // Validate root element exists
 const rootElement = document.getElementById("root");
 if (!rootElement) {
-  const error = new Error("Root element not found. Make sure index.html has a <div id='root'></div> element.");
+  const error = new Error(
+    "Root element not found. Make sure index.html has a <div id='root'></div> element."
+  );
   console.error("❌ [APP INIT]", error);
   document.body.innerHTML = `
     <div style="padding: 2rem; font-family: system-ui; max-width: 600px; margin: 2rem auto;">
@@ -48,23 +53,29 @@ safeLog.log("🔍 [ENV] Environment variables check:", {
 });
 
 try {
+  // Remove SSR fallback content before React hydration to prevent mismatch
+  const ssrFallback = rootElement.querySelector("main[data-ssr-fallback]");
+  if (ssrFallback) {
+    ssrFallback.remove();
+  }
+
   safeLog.log("⚛️ [APP INIT] Creating React root...");
   const root = createRoot(rootElement);
   safeLog.log("⚛️ [APP INIT] Rendering App component...");
   root.render(<App />);
   safeLog.log("✅ [APP INIT] App rendered successfully");
-  
-  // Hide loading spinner after React has rendered
-  // Use requestAnimationFrame to ensure DOM is ready
+
+  // Hide loading spinner immediately after React render (reduced delay for faster LCP)
+  // Single requestAnimationFrame is sufficient - double RAF was causing unnecessary delay
   requestAnimationFrame(() => {
     const loadingElement = document.getElementById("app-loading");
     if (loadingElement) {
-      // Fade out smoothly
-      loadingElement.style.transition = "opacity 0.3s ease-out";
-      loadingElement.style.opacity = "0";
+      // Use CSS class for smooth fade (hardware-accelerated)
+      loadingElement.classList.add("fade-out");
+      // Remove from DOM after fade completes to free memory
       setTimeout(() => {
         loadingElement.remove();
-      }, 300);
+      }, 200);
     }
   });
 } catch (error) {
@@ -80,7 +91,7 @@ try {
       <h1 style="color: #dc2626;">Application Error</h1>
       <p style="color: #6b7280;">Failed to initialize the application.</p>
       <pre style="background: #f3f4f6; padding: 1rem; border-radius: 0.5rem; overflow: auto; margin-top: 1rem; white-space: pre-wrap;">
-${error instanceof Error ? error.message + '\n\n' + error.stack : String(error)}
+${error instanceof Error ? error.message + "\n\n" + error.stack : String(error)}
       </pre>
       <button 
         onclick="window.location.reload()" 

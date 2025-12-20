@@ -8,6 +8,7 @@ const VideoCall = () => {
   const {
     localVideoRef,
     remoteVideoRef,
+    localStream,
     remoteStream,
     isConnecting,
     isMuted,
@@ -15,7 +16,7 @@ const VideoCall = () => {
     toggleMute,
     toggleVideo,
     endCall,
-    callStartTime,
+    networkQuality,
   } = useVideoCall();
 
   return (
@@ -23,13 +24,14 @@ const VideoCall = () => {
       localVideoRef={localVideoRef}
       remoteVideoRef={remoteVideoRef}
       remoteStream={remoteStream}
+      localStream={localStream}
       isConnecting={isConnecting}
       isMuted={isMuted}
       isVideoOff={isVideoOff}
       onToggleMute={toggleMute}
       onToggleVideo={toggleVideo}
       onEndCall={endCall}
-      callStartTime={callStartTime}
+      networkQuality={networkQuality}
     />
   );
 };

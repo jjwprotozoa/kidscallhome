@@ -49,7 +49,9 @@ export const useChildHandlers = (
     } catch (error) {
       console.error("Error acknowledging missed calls:", error);
     }
-    navigate(`/call/${childId}`);
+    // CRITICAL: Use /parent/call/ route which uses useCallEngine with role="parent"
+    // Using /call/ route would use the old VideoCall component with useVideoCall hook
+    navigate(`/parent/call/${childId}`);
   }, [navigate]);
 
   const handleChat = useCallback((childId: string) => {

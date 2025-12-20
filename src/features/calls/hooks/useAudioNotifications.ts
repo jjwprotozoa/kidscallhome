@@ -4,7 +4,7 @@
 import { useRef, useEffect, useCallback } from "react";
 import { safeLog } from "@/utils/security";
 
-export type SoundType = "ringtone" | "call-ended" | "call-answered";
+export type SoundType = "ringtone" | "outgoing-ringtone" | "call-ended" | "call-answered";
 
 interface UseAudioNotificationsOptions {
   enabled?: boolean;
@@ -16,6 +16,7 @@ export const useAudioNotifications = (options: UseAudioNotificationsOptions = {}
   
   const audioContextRef = useRef<AudioContext | null>(null);
   const ringtoneIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const outgoingRingtoneIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const vibrationIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const isPlayingRef = useRef<{ [key in SoundType]?: boolean }>({});
   const resumeListenersRef = useRef<Array<{ event: string; handler: () => void }>>([]);
@@ -26,9 +27,16 @@ export const useAudioNotifications = (options: UseAudioNotificationsOptions = {}
       if (isPlayingRef.current.ringtone) {
         isPlayingRef.current.ringtone = false;
       }
+      if (isPlayingRef.current["outgoing-ringtone"]) {
+        isPlayingRef.current["outgoing-ringtone"] = false;
+      }
       if (ringtoneIntervalRef.current) {
         clearInterval(ringtoneIntervalRef.current);
         ringtoneIntervalRef.current = null;
+      }
+      if (outgoingRingtoneIntervalRef.current) {
+        clearInterval(outgoingRingtoneIntervalRef.current);
+        outgoingRingtoneIntervalRef.current = null;
       }
       // Only try to stop vibration if it was actually started
       const hadVibration = vibrationIntervalRef.current !== null;
@@ -133,17 +141,31 @@ export const useAudioNotifications = (options: UseAudioNotificationsOptions = {}
   }, [enabled]);
 
   // Start vibration pattern (for mobile devices)
+  // Matches the melodic rhythm of the ringtone: 6 notes over ~1.2s
   const startVibration = useCallback(() => {
     if (!enabled || !("vibrate" in navigator)) {
       return;
     }
 
     try {
-      // Vibration pattern: vibrate, pause, vibrate (like phone ringing)
+      // Vibration pattern matching the melody rhythm:
+      // C-E-G-A-G-E (6 notes) with short pulses on each note
+      // Pattern: [vibrate, pause, vibrate, pause, vibrate, pause, vibrate, pause, vibrate, pause, vibrate]
+      // Each note gets ~120-180ms, with ~30ms gaps = ~1.2s total
       const vibratePattern = () => {
         if (isPlayingRef.current.ringtone && "vibrate" in navigator) {
           try {
-            navigator.vibrate([200, 100, 200]);
+            // Pulse pattern matching the 6-note melody:
+            // Short pulses (80-100ms) with brief pauses (20-30ms) between notes
+            // Creates a rhythmic "tap-tap-tap-tap-tap-tap" that matches the xylophone melody
+            navigator.vibrate([
+              90, 25,  // C4
+              90, 25,  // E4
+              90, 25,  // G4
+              120, 30, // A4 (slightly longer - held note)
+              90, 25,  // G4
+              150      // E4 (ending note, longer pulse)
+            ]);
           } catch (error) {
             // Vibration requires user interaction - silently ignore
             // It will work once user has interacted with the page
@@ -154,21 +176,27 @@ export const useAudioNotifications = (options: UseAudioNotificationsOptions = {}
       // Start vibration immediately (may fail if no user interaction yet)
       vibratePattern();
 
-      // Repeat vibration pattern every 2 seconds (matching ringtone pattern)
+      // Repeat vibration pattern every 2.2 seconds (matching ringtone repeat interval)
+      // This gives ~1s rest between melodic phrases, matching the audio
       vibrationIntervalRef.current = setInterval(() => {
         if (isPlayingRef.current.ringtone) {
           vibratePattern();
         }
-      }, 2000);
+      }, 2200);
 
-      safeLog.log("📳 [AUDIO] Vibration started");
+      safeLog.log("📳 [AUDIO] Vibration started (melodic rhythm pattern)");
     } catch (error) {
       // Vibration may fail if no user interaction yet - this is expected
       safeLog.debug("📳 [AUDIO] Vibration not available yet (requires user interaction)");
     }
   }, [enabled]);
 
-  // Play ringtone (looping)
+  // Play ringtone (looping) - Kid-friendly xylophone melody!
+  // CRITICAL: ringtoneAbortedRef is used to prevent race conditions
+  // If stopRingtone is called while playRingtone is awaiting AudioContext,
+  // the aborted flag prevents the ringtone from starting after the await
+  const ringtoneAbortedRef = useRef(false);
+  
   const playRingtone = useCallback(async () => {
     if (!enabled) {
       safeLog.log("🔔 [AUDIO] Audio notifications disabled");
@@ -180,7 +208,19 @@ export const useAudioNotifications = (options: UseAudioNotificationsOptions = {}
       return;
     }
 
+    // Clear the aborted flag when starting a new ringtone attempt
+    ringtoneAbortedRef.current = false;
+
     const audioContext = await ensureAudioContextReady();
+    
+    // CRITICAL: Check if ringtone was cancelled during the await
+    // This prevents the race condition where stopRingtone is called
+    // while we were waiting for AudioContext to be ready
+    if (ringtoneAbortedRef.current) {
+      safeLog.log("🔔 [AUDIO] Ringtone was cancelled while waiting for AudioContext");
+      return;
+    }
+    
     if (!audioContext) {
       safeLog.error("❌ [AUDIO] Cannot play ringtone - AudioContext not available");
       return;
@@ -188,52 +228,85 @@ export const useAudioNotifications = (options: UseAudioNotificationsOptions = {}
 
     try {
       isPlayingRef.current.ringtone = true;
-      safeLog.log("🔔 [AUDIO] Ringtone started, AudioContext state:", audioContext.state);
+      safeLog.log("🔔 [AUDIO] Ringtone started (kid-friendly melody), AudioContext state:", audioContext.state);
 
-      const playTone = () => {
+      // Kid-friendly xylophone melody - LOWER REGISTER (C4-A4) for less shrillness
+      // Shorter phrase (~1.2s) with clear rest before repeat
+      // C major pentatonic scale - universally pleasant for young kids
+      const melodyNotes = [
+        { freq: 261.63, duration: 0.12 },  // C4 (one octave lower - warmer)
+        { freq: 329.63, duration: 0.12 },  // E4
+        { freq: 392.00, duration: 0.12 },  // G4
+        { freq: 440.00, duration: 0.18 },  // A4 (held slightly longer)
+        { freq: 392.00, duration: 0.12 },  // G4
+        { freq: 329.63, duration: 0.25 },  // E4 (ending note, gentle resolution)
+      ];
+
+      const playMelody = () => {
         if (!isPlayingRef.current.ringtone || !audioContextRef.current) return;
         
-        try {
-          const oscillator = audioContextRef.current.createOscillator();
-          const gainNode = audioContextRef.current.createGain();
+        let noteStartTime = audioContextRef.current.currentTime;
+        
+        melodyNotes.forEach((note) => {
+          if (!audioContextRef.current) return;
           
-          oscillator.connect(gainNode);
-          gainNode.connect(audioContextRef.current.destination);
-          
-          oscillator.frequency.value = 800;
-          oscillator.type = "sine";
-          
-          const now = audioContextRef.current.currentTime;
-          gainNode.gain.setValueAtTime(0, now);
-          gainNode.gain.linearRampToValueAtTime(volume * 0.4, now + 0.05);
-          gainNode.gain.linearRampToValueAtTime(volume * 0.4, now + 0.2);
-          gainNode.gain.linearRampToValueAtTime(0, now + 0.25);
-          
-          oscillator.start(now);
-          oscillator.stop(now + 0.25);
-        } catch (error) {
-          safeLog.error("❌ [AUDIO] Error playing tone:", error);
-        }
+          try {
+            // Create xylophone-like sound with harmonics
+            const oscillator = audioContextRef.current.createOscillator();
+            const harmonic = audioContextRef.current.createOscillator();
+            const gainNode = audioContextRef.current.createGain();
+            const harmonicGain = audioContextRef.current.createGain();
+            
+            oscillator.connect(gainNode);
+            harmonic.connect(harmonicGain);
+            gainNode.connect(audioContextRef.current.destination);
+            harmonicGain.connect(audioContextRef.current.destination);
+            
+            // Main tone - triangle wave for softer, bell-like sound
+            oscillator.frequency.value = note.freq;
+            oscillator.type = "triangle";
+            
+            // Add subtle odd harmonic (3x) for brightness without harshness
+            harmonic.frequency.value = note.freq * 3;
+            harmonic.type = "sine";
+            
+            // GENTLE envelope: slower attack (0.04s) to avoid transients
+            // Smooth exponential decay for natural bell-like sound
+            gainNode.gain.setValueAtTime(0, noteStartTime);
+            gainNode.gain.linearRampToValueAtTime(volume * 0.4, noteStartTime + 0.04);
+            gainNode.gain.exponentialRampToValueAtTime(volume * 0.12, noteStartTime + note.duration * 0.5);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, noteStartTime + note.duration);
+            
+            // Harmonic envelope (quieter, faster decay for shimmer only)
+            harmonicGain.gain.setValueAtTime(0, noteStartTime);
+            harmonicGain.gain.linearRampToValueAtTime(volume * 0.08, noteStartTime + 0.04);
+            harmonicGain.gain.exponentialRampToValueAtTime(0.001, noteStartTime + note.duration * 0.35);
+            
+            oscillator.start(noteStartTime);
+            oscillator.stop(noteStartTime + note.duration + 0.1);
+            harmonic.start(noteStartTime);
+            harmonic.stop(noteStartTime + note.duration * 0.35);
+            
+            noteStartTime += note.duration + 0.03; // Small gap between notes
+          } catch (error) {
+            safeLog.error("❌ [AUDIO] Error playing note:", error);
+          }
+        });
       };
 
       // Play immediately
-      playTone();
+      playMelody();
       
       // Start vibration
       startVibration();
       
-      // Then repeat every 500ms (ring-ring pattern)
+      // Repeat melody every 2.2 seconds (1.2s phrase + 1s rest)
+      // This gives a clear "breath" before repeating - less continuous feel
       ringtoneIntervalRef.current = setInterval(() => {
         if (isPlayingRef.current.ringtone) {
-          playTone();
-          // Small delay before second ring
-          setTimeout(() => {
-            if (isPlayingRef.current.ringtone) {
-              playTone();
-            }
-          }, 250);
+          playMelody();
         }
-      }, 2000); // Repeat pattern every 2 seconds
+      }, 2200);
       
     } catch (error) {
       safeLog.error("❌ [AUDIO] Error playing ringtone:", error);
@@ -257,20 +330,141 @@ export const useAudioNotifications = (options: UseAudioNotificationsOptions = {}
     safeLog.log("📳 [AUDIO] Vibration stopped");
   }, []);
 
-  // Stop ringtone
+  // Stop ringtone - ALWAYS attempt to stop regardless of tracking state
+  // This ensures ringtone stops even if there's a state mismatch
   const stopRingtone = useCallback(() => {
-    if (isPlayingRef.current.ringtone) {
-      isPlayingRef.current.ringtone = false;
-      if (ringtoneIntervalRef.current) {
-        clearInterval(ringtoneIntervalRef.current);
-        ringtoneIntervalRef.current = null;
-      }
-      stopVibration();
-      safeLog.log("🔇 [AUDIO] Ringtone stopped");
+    const wasPlaying = isPlayingRef.current.ringtone;
+    isPlayingRef.current.ringtone = false;
+    
+    // CRITICAL: Set abort flag to prevent any pending playRingtone calls
+    // This handles the race condition where playRingtone was called but is
+    // still awaiting AudioContext (due to the 100ms retry delay)
+    ringtoneAbortedRef.current = true;
+    
+    // Always clear interval if it exists
+    if (ringtoneIntervalRef.current) {
+      clearInterval(ringtoneIntervalRef.current);
+      ringtoneIntervalRef.current = null;
     }
+    
+    // Always stop vibration
+    stopVibration();
+    
+    safeLog.log("🔇 [AUDIO] Ringtone stopped", { wasPlaying, abortedPending: true });
   }, [stopVibration]);
 
-  // Play call ended sound
+  // Play outgoing ringtone (for caller waiting for answer) - Soft "ding-dong" waiting tone
+  const playOutgoingRingtone = useCallback(async () => {
+    if (!enabled) {
+      safeLog.log("🔔 [AUDIO] Audio notifications disabled");
+      return;
+    }
+    
+    if (isPlayingRef.current["outgoing-ringtone"]) {
+      safeLog.log("🔔 [AUDIO] Outgoing ringtone already playing");
+      return;
+    }
+
+    const audioContext = await ensureAudioContextReady();
+    if (!audioContext) {
+      safeLog.error("❌ [AUDIO] Cannot play outgoing ringtone - AudioContext not available");
+      return;
+    }
+
+    try {
+      isPlayingRef.current["outgoing-ringtone"] = true;
+      safeLog.log("🔔 [AUDIO] Outgoing ringtone started (waiting tone), AudioContext state:", audioContext.state);
+
+      // Soft "ding-dong" pattern - LOWER REGISTER (G4 -> E4) for warmth
+      // Classic doorbell interval (minor third down) - universally recognized
+      const waitingTone = [
+        { freq: 392.00, duration: 0.3 },   // G4 (ding - warmer)
+        { freq: 329.63, duration: 0.45 },  // E4 (dong - held longer)
+      ];
+
+      const playWaitingChime = () => {
+        if (!isPlayingRef.current["outgoing-ringtone"] || !audioContextRef.current) return;
+        
+        let noteStartTime = audioContextRef.current.currentTime;
+        
+        waitingTone.forEach((note, index) => {
+          if (!audioContextRef.current) return;
+          
+          try {
+            // Create soft bell-like tone using triangle (consistent timbre with ringtone)
+            const oscillator = audioContextRef.current.createOscillator();
+            const harmonic = audioContextRef.current.createOscillator();
+            const gainNode = audioContextRef.current.createGain();
+            const harmonicGain = audioContextRef.current.createGain();
+            
+            oscillator.connect(gainNode);
+            harmonic.connect(harmonicGain);
+            gainNode.connect(audioContextRef.current.destination);
+            harmonicGain.connect(audioContextRef.current.destination);
+            
+            // Triangle wave for consistency with other sounds
+            oscillator.frequency.value = note.freq;
+            oscillator.type = "triangle";
+            
+            // Subtle third harmonic for bell shimmer
+            harmonic.frequency.value = note.freq * 3;
+            harmonic.type = "sine";
+            
+            // VERY gentle envelope - slow attack (0.05s) for non-startling
+            gainNode.gain.setValueAtTime(0, noteStartTime);
+            gainNode.gain.linearRampToValueAtTime(volume * 0.3, noteStartTime + 0.05);
+            gainNode.gain.exponentialRampToValueAtTime(volume * 0.08, noteStartTime + note.duration * 0.4);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, noteStartTime + note.duration);
+            
+            // Harmonic envelope (very subtle shimmer)
+            harmonicGain.gain.setValueAtTime(0, noteStartTime);
+            harmonicGain.gain.linearRampToValueAtTime(volume * 0.05, noteStartTime + 0.05);
+            harmonicGain.gain.exponentialRampToValueAtTime(0.001, noteStartTime + note.duration * 0.3);
+            
+            oscillator.start(noteStartTime);
+            oscillator.stop(noteStartTime + note.duration + 0.1);
+            harmonic.start(noteStartTime);
+            harmonic.stop(noteStartTime + note.duration * 0.3);
+            
+            noteStartTime += note.duration + (index === 0 ? 0.1 : 0); // Clear gap after first note
+          } catch (error) {
+            safeLog.error("❌ [AUDIO] Error playing waiting tone:", error);
+          }
+        });
+      };
+
+      // Play immediately
+      playWaitingChime();
+      
+      // Repeat every 2.8 seconds (~0.85s chime + 2s rest)
+      // Longer rest between chimes for relaxed "waiting" feel
+      outgoingRingtoneIntervalRef.current = setInterval(() => {
+        if (isPlayingRef.current["outgoing-ringtone"]) {
+          playWaitingChime();
+        }
+      }, 2800);
+      
+    } catch (error) {
+      safeLog.error("❌ [AUDIO] Error playing outgoing ringtone:", error);
+      isPlayingRef.current["outgoing-ringtone"] = false;
+    }
+  }, [enabled, volume, ensureAudioContextReady]);
+
+  // Stop outgoing ringtone
+  const stopOutgoingRingtone = useCallback(() => {
+    if (isPlayingRef.current["outgoing-ringtone"]) {
+      isPlayingRef.current["outgoing-ringtone"] = false;
+      if (outgoingRingtoneIntervalRef.current) {
+        clearInterval(outgoingRingtoneIntervalRef.current);
+        outgoingRingtoneIntervalRef.current = null;
+      }
+      safeLog.log("🔇 [AUDIO] Outgoing ringtone stopped");
+    }
+  }, []);
+
+  // Play call ended sound - Soft descending contour (G4 -> E4 -> C4)
+  // Same C major scale and register for consistent sound-world
+  // Three notes for gentle "winding down" closure
   const playCallEnded = useCallback(async () => {
     if (!enabled) return;
     
@@ -278,30 +472,54 @@ export const useAudioNotifications = (options: UseAudioNotificationsOptions = {}
     if (!audioContext) return;
     
     try {
-      const oscillator = audioContext.createOscillator();
-      const gainNode = audioContext.createGain();
+      // Gentle descending: G4 -> E4 -> C4 (inverse of "answered" - closure contour)
+      const endNotes = [392.00, 329.63, 261.63]; // G4, E4, C4
       
-      oscillator.connect(gainNode);
-      gainNode.connect(audioContext.destination);
+      endNotes.forEach((freq, index) => {
+        const osc = audioContext.createOscillator();
+        const harmonic = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        const harmonicGain = audioContext.createGain();
+        
+        osc.connect(gain);
+        harmonic.connect(harmonicGain);
+        gain.connect(audioContext.destination);
+        harmonicGain.connect(audioContext.destination);
+        
+        // Triangle wave - consistent timbre
+        osc.frequency.value = freq;
+        osc.type = "triangle";
+        
+        // Subtle harmonic for warmth
+        harmonic.frequency.value = freq * 3;
+        harmonic.type = "sine";
+        
+        const startTime = audioContext.currentTime + index * 0.18;
+        const duration = index === 2 ? 0.4 : 0.2; // Last note slightly longer for resolution
+        
+        // Very gentle envelope - softer than other sounds (it's a goodbye)
+        gain.gain.setValueAtTime(0, startTime);
+        gain.gain.linearRampToValueAtTime(volume * 0.28, startTime + 0.05);
+        gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+        
+        harmonicGain.gain.setValueAtTime(0, startTime);
+        harmonicGain.gain.linearRampToValueAtTime(volume * 0.05, startTime + 0.05);
+        harmonicGain.gain.exponentialRampToValueAtTime(0.001, startTime + duration * 0.35);
+        
+        osc.start(startTime);
+        osc.stop(startTime + duration + 0.1);
+        harmonic.start(startTime);
+        harmonic.stop(startTime + duration * 0.35);
+      });
       
-      oscillator.frequency.value = 400;
-      oscillator.type = "sine";
-      
-      const now = audioContext.currentTime;
-      gainNode.gain.setValueAtTime(0, now);
-      gainNode.gain.linearRampToValueAtTime(volume * 0.3, now + 0.05);
-      gainNode.gain.linearRampToValueAtTime(0, now + 0.2);
-      
-      oscillator.start(now);
-      oscillator.stop(now + 0.2);
-      
-      safeLog.log("🔔 [AUDIO] Call ended sound played");
+      safeLog.log("🔔 [AUDIO] Call ended sound played (gentle goodbye)");
     } catch (error) {
       safeLog.error("❌ [AUDIO] Error playing call ended sound:", error);
     }
   }, [enabled, volume, ensureAudioContextReady]);
 
-  // Play call answered sound
+  // Play call answered sound - Cheerful ascending major triad (C4-E4-G4)
+  // Same register as ringtone for consistent "sound world"
   const playCallAnswered = useCallback(async () => {
     if (!enabled) return;
     
@@ -309,27 +527,48 @@ export const useAudioNotifications = (options: UseAudioNotificationsOptions = {}
     if (!audioContext) return;
     
     try {
-      // Two-tone chime
-      [600, 800].forEach((freq, index) => {
+      // Happy ascending chime: C4 -> E4 -> G4 (major triad = universally happy!)
+      // Lower register matches ringtone - kids will associate this sound-world with the app
+      const chimeNotes = [261.63, 329.63, 392.00]; // C4, E4, G4
+      
+      chimeNotes.forEach((freq, index) => {
         const osc = audioContext.createOscillator();
+        const harmonic = audioContext.createOscillator();
         const gain = audioContext.createGain();
+        const harmonicGain = audioContext.createGain();
         
         osc.connect(gain);
+        harmonic.connect(harmonicGain);
         gain.connect(audioContext.destination);
+        harmonicGain.connect(audioContext.destination);
         
+        // Triangle wave - consistent with other sounds
         osc.frequency.value = freq;
-        osc.type = "sine";
+        osc.type = "triangle";
         
-        const startTime = audioContext.currentTime + index * 0.1;
+        // Third harmonic for bell-like brightness
+        harmonic.frequency.value = freq * 3;
+        harmonic.type = "sine";
+        
+        const startTime = audioContext.currentTime + index * 0.14;
+        const duration = index === 2 ? 0.5 : 0.18; // Last note rings longer (celebratory)
+        
+        // Gentle attack (0.04s) - non-startling positive cue
         gain.gain.setValueAtTime(0, startTime);
-        gain.gain.linearRampToValueAtTime(volume * 0.4, startTime + 0.05);
-        gain.gain.linearRampToValueAtTime(0, startTime + 0.15);
+        gain.gain.linearRampToValueAtTime(volume * 0.4, startTime + 0.04);
+        gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+        
+        harmonicGain.gain.setValueAtTime(0, startTime);
+        harmonicGain.gain.linearRampToValueAtTime(volume * 0.08, startTime + 0.04);
+        harmonicGain.gain.exponentialRampToValueAtTime(0.001, startTime + duration * 0.4);
         
         osc.start(startTime);
-        osc.stop(startTime + 0.15);
+        osc.stop(startTime + duration + 0.1);
+        harmonic.start(startTime);
+        harmonic.stop(startTime + duration * 0.4);
       });
       
-      safeLog.log("🔔 [AUDIO] Call answered sound played");
+      safeLog.log("🔔 [AUDIO] Call answered sound played (happy chime)");
     } catch (error) {
       safeLog.error("❌ [AUDIO] Error playing call answered sound:", error);
     }
@@ -339,13 +578,17 @@ export const useAudioNotifications = (options: UseAudioNotificationsOptions = {}
   const stopSound = useCallback((soundType: SoundType) => {
     if (soundType === "ringtone") {
       stopRingtone();
+    } else if (soundType === "outgoing-ringtone") {
+      stopOutgoingRingtone();
     }
     // Other sounds are one-shot, so no need to stop them
-  }, [stopRingtone]);
+  }, [stopRingtone, stopOutgoingRingtone]);
 
   return {
     playRingtone,
     stopRingtone,
+    playOutgoingRingtone,
+    stopOutgoingRingtone,
     startVibration,
     stopVibration,
     playCallEnded,

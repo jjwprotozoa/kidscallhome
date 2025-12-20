@@ -1,8 +1,7 @@
 // src/pages/ChildCallScreen.tsx
 // Child Call Screen (parentId)
 
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { ChildOutgoingCallUI } from "@/features/calls/components/ChildOutgoingCallUI";
 import { VideoCallUI } from "@/features/calls/components/VideoCallUI";
 import { useCallEngine } from "@/features/calls/hooks/useCallEngine";
 import { useIncomingCallNotifications } from "@/features/calls/hooks/useIncomingCallNotifications";
@@ -22,6 +21,8 @@ const ChildCallScreen = () => {
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const autoAcceptAttemptedRef = useRef<string | null>(null);
+  // Track if call failed to prevent infinite retry loop and show error UI
+  const [callFailed, setCallFailed] = useState(false);
 
   useEffect(() => {
     const initialize = async () => {
@@ -31,20 +32,14 @@ const ChildCallScreen = () => {
         const childData = getChildSessionLegacy();
 
         if (!childData || !childData.id) {
-          console.error("❌ [CHILD CALL SCREEN] No valid child session found");
           navigate("/child/login");
           return;
         }
 
-        console.warn("✅ [CHILD CALL SCREEN] Child session loaded:", {
-          childId: childData.id,
-        });
         setChildId(childData.id);
 
         // Get parent/family member name
         if (parentId) {
-          console.warn("🔍 [CHILD CALL SCREEN] Fetching name for:", parentId);
-
           // Check if it's a family member or parent
           const participantType = localStorage.getItem(
             "selectedParticipantType"
@@ -67,10 +62,6 @@ const ChildCallScreen = () => {
 
             if (!profileError && adultProfile?.name) {
               setParentName(adultProfile.name);
-              console.warn(
-                "✅ [CHILD CALL SCREEN] Family member name loaded:",
-                adultProfile.name
-              );
             } else {
               // Fallback: try family_members table
               const { data: familyMember, error: fmError } = await supabase
@@ -81,15 +72,8 @@ const ChildCallScreen = () => {
 
               if (!fmError && familyMember?.name) {
                 setParentName(familyMember.name);
-                console.warn(
-                  "✅ [CHILD CALL SCREEN] Family member name loaded:",
-                  familyMember.name
-                );
               } else {
                 setParentName("Family Member");
-                console.warn(
-                  "⚠️ [CHILD CALL SCREEN] Could not fetch family member name, using fallback"
-                );
               }
             }
           } else {
@@ -102,10 +86,6 @@ const ChildCallScreen = () => {
 
             if (!parentError && parent?.name) {
               setParentName(parent.name);
-              console.warn(
-                "✅ [CHILD CALL SCREEN] Parent name loaded:",
-                parent.name
-              );
             } else {
               // Fallback: try adult_profiles
               // adult_profiles table exists but is not in generated Supabase types
@@ -123,23 +103,16 @@ const ChildCallScreen = () => {
 
               if (!profileError && adultProfile?.name) {
                 setParentName(adultProfile.name);
-                console.warn(
-                  "✅ [CHILD CALL SCREEN] Parent name loaded from adult_profiles:",
-                  adultProfile.name
-                );
               } else {
                 setParentName("Parent");
-                console.warn(
-                  "⚠️ [CHILD CALL SCREEN] Could not fetch parent name, using fallback"
-                );
               }
             }
           }
-        } else {
-          console.warn("⚠️ [CHILD CALL SCREEN] No parentId in URL params");
         }
       } catch (error) {
-        console.error("❌ [CHILD CALL SCREEN] Error initializing:", error);
+        if (import.meta.env.DEV) {
+          console.error("[CHILD CALL SCREEN] Error initializing:", error);
+        }
         navigate("/child/login");
       }
     };
@@ -159,27 +132,9 @@ const ChildCallScreen = () => {
   // If they don't match, use the URL param (it's the source of truth)
   const storedParticipantId = localStorage.getItem("selectedParentId");
   if (storedParticipantId && storedParticipantId !== parentId) {
-    console.warn(
-      "⚠️ [CHILD CALL SCREEN] Mismatch between stored and URL participantId:",
-      {
-        storedParticipantId,
-        urlParentId: parentId,
-        usingUrlParam: true,
-      }
-    );
     // Update localStorage to match URL (URL is source of truth)
     localStorage.setItem("selectedParentId", parentId || "");
   }
-
-  console.warn("🔍 [CHILD CALL SCREEN] Call initialization:", {
-    childId,
-    parentId: actualRecipientId,
-    participantType,
-    routeParam: parentId,
-    storedParticipantId: localStorage.getItem("selectedParentId"),
-    storedType: localStorage.getItem("selectedParticipantType"),
-    usingRecipientId: actualRecipientId,
-  });
 
   const callEngine = useCallEngine({
     role: "child",
@@ -203,15 +158,6 @@ const ChildCallScreen = () => {
     // Only auto-accept when state becomes "incoming" - wait for useCallEngine to detect the call first
     // This prevents the "not a valid incoming call" error when localProfileId is empty
     if (callEngine.state === "incoming" && callEngine.callId === urlCallId) {
-      console.warn(
-        "📞 [CHILD CALL SCREEN] Auto-accepting incoming call from URL:",
-        {
-          urlCallId,
-          state: callEngine.state,
-          callId: callEngine.callId,
-        }
-      );
-
       // CRITICAL: Mark user as having started the call (enables audio)
       // This is called when accepting via URL navigation from GlobalIncomingCall
       setUserStartedCall();
@@ -221,7 +167,9 @@ const ChildCallScreen = () => {
 
       // Accept the call - state is already "incoming" so this should work
       callEngine.acceptIncomingCall(urlCallId).catch((error) => {
-        console.error("Failed to accept call:", error);
+        if (import.meta.env.DEV) {
+          console.error("[CHILD CALL SCREEN] Failed to accept call:", error);
+        }
         // Reset ref on error so we can retry
         autoAcceptAttemptedRef.current = null;
         toast({
@@ -245,7 +193,11 @@ const ChildCallScreen = () => {
   const lastCalledParentIdRef = useRef<string | null>(null);
 
   // Only auto-start outgoing call if there's no callId query param (not answering incoming call)
+
   useEffect(() => {
+    // Don't try to start call if previous attempt failed
+    if (callFailed) return;
+
     const urlCallId = searchParams.get("callId");
     const isAnsweringIncomingCall = !!urlCallId;
 
@@ -256,16 +208,13 @@ const ChildCallScreen = () => {
       callEngine.state !== "idle" &&
       callEngine.state !== "ended"
     ) {
-      console.warn(
-        "📞 [CHILD CALL SCREEN] ParentId changed, ending previous call:",
-        {
-          previousParentId: lastCalledParentIdRef.current,
-          newParentId: parentId,
-          currentState: callEngine.state,
-        }
-      );
       callEngine.endCall().catch((error) => {
-        console.error("Failed to end previous call:", error);
+        if (import.meta.env.DEV) {
+          console.error(
+            "[CHILD CALL SCREEN] Failed to end previous call:",
+            error
+          );
+        }
       });
       // Reset the ref and wait for state to become idle
       lastCalledParentIdRef.current = null;
@@ -280,13 +229,6 @@ const ChildCallScreen = () => {
       parentId &&
       lastCalledParentIdRef.current !== parentId // Only start if this is a new call
     ) {
-      console.warn("📞 [CHILD CALL SCREEN] Starting outgoing call:", {
-        recipientId: parentId,
-        recipientType: participantType,
-        childId,
-        timestamp: new Date().toISOString(),
-      });
-
       // CRITICAL: User navigated to call screen (from dashboard call button) - enable audio
       // Note: setUserStartedCall is also called in ChildDashboard.handleCall, but we call it again
       // here to ensure it's set even if the user refreshes or navigates directly
@@ -296,24 +238,39 @@ const ChildCallScreen = () => {
       lastCalledParentIdRef.current = parentId;
 
       callEngine.startOutgoingCall(parentId).catch((error) => {
-        console.error("❌ [CHILD CALL SCREEN] Failed to start call:", error);
+        if (import.meta.env.DEV) {
+          console.error("[CHILD CALL SCREEN] Failed to start call:", error);
+        }
         // Reset ref on error so we can retry
         lastCalledParentIdRef.current = null;
+        // Set callFailed to show error UI and prevent infinite retry
+        setCallFailed(true);
         toast({
           title: "Call Failed",
-          description: "Failed to start call",
+          description:
+            error instanceof Error
+              ? error.message
+              : "Failed to start call. Please check camera/microphone permissions.",
           variant: "destructive",
         });
       });
     }
+    // CRITICAL: Don't include `callEngine` object - it's not referentially stable
+    // and causes this effect to run on every render, leading to premature call termination.
+    // We use callEngine.startOutgoingCall and callEngine.endCall inside, but including
+    // the entire callEngine object causes the effect to re-run whenever the state changes,
+    // which triggers the parentId change detection logic and ends the call prematurely.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     callEngine.state,
     childId,
     parentId,
-    callEngine,
+    callEngine.startOutgoingCall,
+    callEngine.endCall,
     searchParams,
     participantType,
     toast,
+    callFailed,
   ]);
 
   // Reset the ref when call ends
@@ -339,6 +296,40 @@ const ChildCallScreen = () => {
     );
   }
 
+  // Show kid-friendly error state with back button when call failed
+  if (callFailed) {
+    return (
+      <div className="fixed inset-0 z-[100] bg-gradient-to-b from-violet-900 via-purple-800 to-indigo-900 flex flex-col items-center justify-center p-6">
+        <div className="text-center space-y-6">
+          <div className="text-7xl animate-bounce">😢</div>
+          <h1 className="text-3xl font-bold text-white">Oops!</h1>
+          <p className="text-white/80 text-lg max-w-sm">
+            We couldn't start the call. Please make sure the camera and
+            microphone are allowed!
+          </p>
+          <button
+            type="button"
+            onClick={() => navigate("/child/dashboard")}
+            className="w-full max-w-sm py-5 px-8 bg-gradient-to-r from-pink-400 to-purple-500 hover:from-pink-300 hover:to-purple-400 text-white rounded-3xl shadow-lg shadow-purple-500/40 flex items-center justify-center gap-3 transition-all duration-200 active:scale-95 hover:scale-[1.02] border-2 border-white/20"
+          >
+            <span className="text-xl">🏠</span>
+            <span className="text-xl font-bold">Go Home</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setCallFailed(false);
+              lastCalledParentIdRef.current = null;
+            }}
+            className="text-white/60 hover:text-white text-sm underline"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // Don't render calling screen if state is ended (redirect will happen)
   if (callEngine.state === "ended") {
     return null; // Redirect is happening
@@ -346,29 +337,22 @@ const ChildCallScreen = () => {
 
   if (callEngine.state === "calling") {
     return (
-      <div className="min-h-[100dvh] bg-background flex items-center justify-center">
-        <Card className="p-8">
-          <div className="text-center space-y-4">
-            <h2 className="text-2xl font-semibold">Calling {parentName}...</h2>
-            <p className="text-muted-foreground">Waiting for answer</p>
-            <Button
-              variant="destructive"
-              onClick={() => {
-                callEngine.endCall().catch((error) => {
-                  console.error("Failed to end call:", error);
-                  toast({
-                    title: "Error",
-                    description: "Failed to end call",
-                    variant: "destructive",
-                  });
-                });
-              }}
-            >
-              End Call
-            </Button>
-          </div>
-        </Card>
-      </div>
+      <ChildOutgoingCallUI
+        calleeName={parentName || "Parent"}
+        calleeAvatarColor="#8B5CF6" // Purple for parents/family members (kid-friendly)
+        onEndCall={() => {
+          callEngine.endCall().catch((error) => {
+            if (import.meta.env.DEV) {
+              console.error("[CHILD CALL SCREEN] Failed to end call:", error);
+            }
+            toast({
+              title: "Error",
+              description: "Failed to end call",
+              variant: "destructive",
+            });
+          });
+        }}
+      />
     );
   }
 
@@ -384,6 +368,7 @@ const ChildCallScreen = () => {
       localVideoRef={localVideoRef}
       remoteVideoRef={remoteVideoRef}
       remoteStream={callEngine.remoteStream}
+      localStream={callEngine.localStream}
       isConnecting={
         callEngine.state === "connecting" || callEngine.state === "incoming"
       }

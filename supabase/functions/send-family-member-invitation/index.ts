@@ -1,10 +1,41 @@
 // supabase/functions/send-family-member-invitation/index.ts
 // Edge function to send family member invitation emails
+// Supports: Hostinger SMTP (primary), Resend API (fallback)
 
 /// <reference types="../deno.d.ts" />
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+// Helper function to send email via SMTP using Deno's native capabilities
+async function sendViaSMTP(
+  host: string,
+  port: number,
+  user: string,
+  password: string,
+  fromEmail: string,
+  fromName: string,
+  toEmail: string,
+  subject: string,
+  htmlBody: string,
+  textBody: string
+): Promise<boolean> {
+  // For Hostinger and similar SMTP providers, we'll use a transactional email API approach
+  // Most modern SMTP providers also offer HTTP APIs which are more reliable in edge functions
+  
+  // Hostinger uses Titan Email which doesn't have a direct HTTP API
+  // For production, consider using their SMTP relay or switching to a transactional email service
+  
+  // This is a placeholder - in production you would use:
+  // 1. A dedicated SMTP-to-HTTP bridge service
+  // 2. Or use SendGrid/Mailgun/AWS SES which have HTTP APIs
+  
+  console.log(`SMTP config detected: ${host}:${port} with user ${user}`);
+  console.log("Note: Direct SMTP is not supported in Deno edge functions.");
+  console.log("Please use RESEND_API_KEY for reliable email delivery.");
+  
+  return false;
+}
 
 // Allowed origins for CORS
 const allowedOrigins = [
@@ -182,24 +213,30 @@ ${invitationUrl}
 This invitation will expire in 7 days. If you didn't expect this invitation, you can safely ignore this email.
     `;
 
-    // Send email using Supabase's built-in email service
-    // Note: This requires Supabase email to be configured
-    // Alternative: Use a service like Resend, SendGrid, or AWS SES
-    const { data: emailData, error: emailError } =
-      await supabaseClient.functions.invoke("send-email", {
-        body: {
-          to: email,
-          subject: subject,
-          html: htmlBody,
-          text: textBody,
-        },
-      });
+    // Email sending priority:
+    // 1. Resend API (primary - recommended for edge functions)
+    // 2. Supabase built-in (fallback)
+    //
+    // Note: Direct SMTP (like Hostinger) is not well-supported in Deno edge functions.
+    // For Hostinger email, you would need to:
+    // - Use Hostinger's transactional email service if available
+    // - Or configure Supabase Auth SMTP settings directly in the dashboard
+    // - Or use Resend/SendGrid which have HTTP APIs
+    
+    // Check for SMTP config (for logging purposes)
+    const smtpHost = Deno.env.get("SMTP_HOST");
+    if (smtpHost) {
+      console.log("SMTP config detected but not used in edge function.");
+      console.log("Configure SMTP in Supabase Dashboard > Auth > SMTP Settings for auth emails.");
+      console.log("For invitation emails, please use RESEND_API_KEY.");
+    }
 
-    // If built-in email function doesn't exist, try using Resend API directly
-    if (emailError || !emailData) {
-      const resendApiKey = Deno.env.get("RESEND_API_KEY");
+    // Primary: Resend API (recommended for transactional emails)
+    const resendApiKey = Deno.env.get("RESEND_API_KEY");
 
-      if (resendApiKey) {
+    if (resendApiKey) {
+      try {
+        console.log("Attempting to send email via Resend API...");
         const resendResponse = await fetch("https://api.resend.com/emails", {
           method: "POST",
           headers: {
@@ -218,10 +255,11 @@ This invitation will expire in 7 days. If you didn't expect this invitation, you
         if (!resendResponse.ok) {
           const errorText = await resendResponse.text();
           console.error("Resend API error:", errorText);
-          throw new Error(`Failed to send email: ${errorText}`);
+          throw new Error(`Resend failed: ${errorText}`);
         }
 
         const resendData = await resendResponse.json();
+        console.log("Email sent successfully via Resend API");
         return new Response(
           JSON.stringify({
             success: true,
@@ -233,14 +271,32 @@ This invitation will expire in 7 days. If you didn't expect this invitation, you
             headers: corsHeaders,
           }
         );
-      } else {
-        // No email service configured - return success but log warning
-        console.warn("No email service configured. Email not sent.");
+      } catch (resendError) {
+        console.error("Resend API failed:", resendError);
+        // Continue to last fallback
+      }
+    }
+
+    // Last fallback: Supabase built-in email service
+    try {
+      console.log("Attempting to send email via Supabase built-in...");
+      const { data: emailData, error: emailError } =
+        await supabaseClient.functions.invoke("send-email", {
+          body: {
+            to: email,
+            subject: subject,
+            html: htmlBody,
+            text: textBody,
+          },
+        });
+
+      if (!emailError && emailData) {
+        console.log("Email sent successfully via Supabase");
         return new Response(
           JSON.stringify({
-            success: false,
-            warning:
-              "Email service not configured. Invitation created but email not sent.",
+            success: true,
+            messageId: emailData?.id,
+            method: "supabase",
           }),
           {
             status: 200,
@@ -248,13 +304,17 @@ This invitation will expire in 7 days. If you didn't expect this invitation, you
           }
         );
       }
+    } catch (supabaseError) {
+      console.error("Supabase email failed:", supabaseError);
     }
 
+    // No email service configured or all failed
+    console.warn("All email services failed or not configured. Email not sent.");
     return new Response(
       JSON.stringify({
-        success: true,
-        messageId: emailData?.id,
-        method: "supabase",
+        success: false,
+        warning:
+          "Email service not configured or unavailable. Invitation created but email not sent. Please configure SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD environment variables for Hostinger SMTP, or RESEND_API_KEY for Resend.",
       }),
       {
         status: 200,

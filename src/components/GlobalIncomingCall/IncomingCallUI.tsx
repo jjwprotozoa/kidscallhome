@@ -1,18 +1,12 @@
 // src/components/GlobalIncomingCall/IncomingCallUI.tsx
-// Purpose: UI component for incoming call notification dialog
+// Purpose: Full-screen incoming call notification - mobile-friendly design
+// Matches the video call theme for a seamless experience
 
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { Phone } from "lucide-react";
+import { Phone, PhoneOff, PhoneIncoming } from "lucide-react";
 import { IncomingCall } from "./types";
+import { useEffect, useState, useCallback, useTransition } from "react";
+import { isMobile, resumeAudioContext, logMobileDiagnostics } from "@/utils/mobileCompatibility";
+import { deferTask, deferredLog } from "@/utils/inpOptimization";
 
 interface IncomingCallUIProps {
   incomingCall: IncomingCall;
@@ -27,66 +21,210 @@ export const IncomingCallUI = ({
   onAnswer,
   onDecline,
 }: IncomingCallUIProps) => {
-  return (
-    <AlertDialog
-      open={!!incomingCall}
-      onOpenChange={(open) => {
-        if (!open && incomingCall && !isAnsweringRef.current) {
-          onDecline();
+  // Pulse animation state for the avatar
+  const [pulseScale, setPulseScale] = useState(1);
+  
+  // Track if we've already triggered to prevent double-taps
+  const [isTriggered, setIsTriggered] = useState(false);
+  
+  // Use transition for non-urgent state updates to improve INP
+  const [isPending, startTransition] = useTransition();
+
+  // Log mobile diagnostics on mount (deferred to avoid blocking initial render)
+  useEffect(() => {
+    deferTask(() => {
+      logMobileDiagnostics();
+    }, 'background').catch(() => {
+      // Silently handle errors
+    });
+  }, []);
+
+  // Create pulsing animation for the avatar ring
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setPulseScale((prev) => (prev === 1 ? 1.15 : 1));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Get caller name and initial
+  const callerName = incomingCall.child_name || incomingCall.parent_name || "Someone";
+  const callerInitial = callerName[0]?.toUpperCase() || "?";
+  const avatarColor = incomingCall.child_avatar_color || "#3B82F6";
+
+  // iOS-safe answer handler - optimized for INP: immediate visual feedback, deferred heavy work
+  const handleAnswer = useCallback((e?: React.MouseEvent | React.TouchEvent) => {
+    // IMMEDIATE WORK: Prevent double-triggering, prevent default, visual feedback
+    if (isTriggered || isAnsweringRef.current) return;
+    
+    // Prevent default behavior immediately
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    
+    // Update state immediately for visual feedback (use transition for non-urgent updates)
+    startTransition(() => {
+      setIsTriggered(true);
+    });
+    
+    // Execute answer handler immediately for responsive feel
+    onAnswer();
+    
+    // DEFERRED WORK: Audio context, logging (non-blocking)
+    if (isMobile()) {
+      deferTask(async () => {
+        // Defer logging to avoid blocking main thread
+        if (import.meta.env.DEV) {
+          deferredLog("📱 [Mobile] Answer button tapped, resuming audio...");
         }
-      }}
+        
+        // Resume AudioContext (deferred - not critical for visual feedback)
+        try {
+          await resumeAudioContext();
+        } catch (error) {
+          // Silently handle errors
+        }
+      }, 'background').catch(() => {
+        // Silently handle errors
+      });
+    }
+    
+    // Reset triggered state after a delay (deferred)
+    setTimeout(() => {
+      startTransition(() => {
+        setIsTriggered(false);
+      });
+    }, 2000);
+  }, [isTriggered, isAnsweringRef, onAnswer, startTransition]);
+
+  // iOS-safe decline handler
+  const handleDecline = useCallback((e?: React.MouseEvent | React.TouchEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    
+    // CRITICAL: Don't block decline if answer was attempted - user should always be able to decline
+    onDecline();
+  }, [onDecline]);
+
+  return (
+    <div 
+      className="fixed inset-0 z-[100] bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900"
+      role="alertdialog"
+      aria-labelledby="incoming-call-title"
+      aria-describedby="incoming-call-desc"
     >
-      <AlertDialogContent className="sm:max-w-md">
-        <AlertDialogHeader>
-          <div className="flex items-center gap-3 mb-2">
-            <div
-              className="w-12 h-12 rounded-full flex items-center justify-center text-2xl font-bold text-white"
+      {/* Animated background rings */}
+      <div className="absolute inset-0 flex items-center justify-center overflow-hidden pointer-events-none">
+        <div 
+          className="absolute w-[400px] h-[400px] rounded-full border border-white/5 animate-ping"
+          style={{ animationDuration: "3s" }}
+        />
+        <div 
+          className="absolute w-[300px] h-[300px] rounded-full border border-white/10 animate-ping"
+          style={{ animationDuration: "2.5s", animationDelay: "0.5s" }}
+        />
+        <div 
+          className="absolute w-[200px] h-[200px] rounded-full border border-white/15 animate-ping"
+          style={{ animationDuration: "2s", animationDelay: "1s" }}
+        />
+      </div>
+
+      {/* Main content - centered */}
+      <div className="relative z-10 h-full flex flex-col items-center justify-between py-8 sm:py-16 px-6 safe-area-layout">
+        {/* Top section - Caller info */}
+        <div className="flex-1 flex flex-col items-center justify-center space-y-8">
+          {/* Animated avatar with pulsing ring */}
+          <div className="relative">
+            {/* Outer pulsing ring - pointer-events-none to prevent blocking button clicks */}
+            <div 
+              className="absolute inset-0 rounded-full transition-transform duration-1000 ease-in-out pointer-events-none"
               style={{
-                backgroundColor: incomingCall.child_avatar_color || "#3B82F6",
+                backgroundColor: avatarColor,
+                opacity: 0.2,
+                transform: `scale(${pulseScale * 1.3})`,
               }}
+            />
+            {/* Inner pulsing ring - pointer-events-none to prevent blocking button clicks */}
+            <div 
+              className="absolute inset-0 rounded-full transition-transform duration-1000 ease-in-out pointer-events-none"
+              style={{
+                backgroundColor: avatarColor,
+                opacity: 0.3,
+                transform: `scale(${pulseScale * 1.15})`,
+              }}
+            />
+            {/* Avatar */}
+            <div
+              className="relative w-32 h-32 rounded-full flex items-center justify-center text-5xl font-bold text-white shadow-2xl border-4 border-white/20"
+              style={{ backgroundColor: avatarColor }}
             >
-              {(incomingCall.child_name || incomingCall.parent_name)?.[0] || "📞"}
+              {callerInitial}
             </div>
-            <div>
-              <AlertDialogTitle className="text-xl">Incoming Call</AlertDialogTitle>
-              <p className="text-base font-normal text-muted-foreground">
-                {incomingCall.child_name || incomingCall.parent_name} is calling...
-              </p>
+            {/* Phone icon badge */}
+            <div className="absolute -bottom-2 -right-2 bg-green-500 rounded-full p-2 shadow-lg animate-bounce">
+              <PhoneIncoming className="w-5 h-5 text-white" />
             </div>
           </div>
-          <div className="pt-4">
-            <AlertDialogDescription className="sr-only">
-              Incoming call from {incomingCall.child_name || incomingCall.parent_name}
-            </AlertDialogDescription>
-            <div className="flex items-center justify-center gap-2 text-4xl animate-pulse">
-              <Phone className="h-12 w-12" />
-            </div>
+
+          {/* Caller name and status */}
+          <div className="text-center space-y-2">
+            <h1 
+              id="incoming-call-title"
+              className="text-3xl font-bold text-white tracking-tight"
+            >
+              {callerName}
+            </h1>
+            <p 
+              id="incoming-call-desc"
+              className="text-lg text-white/70 flex items-center justify-center gap-2"
+            >
+              <span className="inline-block w-2 h-2 bg-green-400 rounded-full animate-pulse" />
+              Incoming video call...
+            </p>
           </div>
-        </AlertDialogHeader>
-        <AlertDialogFooter className="sm:justify-center gap-2">
-          <AlertDialogCancel
-            onClick={onDecline}
-            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+        </div>
+
+        {/* Bottom section - Action buttons */}
+        <div className="w-full max-w-sm space-y-4">
+          {/* Answer button - big and green (matches working child UI) */}
+          {/* Uses both onClick and onTouchEnd for iOS compatibility */}
+          <button
+            type="button"
+            onClick={handleAnswer}
+            onTouchEnd={handleAnswer}
+            disabled={isTriggered}
+            className={`w-full py-6 px-8 bg-gradient-to-r from-green-400 to-emerald-500 hover:from-green-300 hover:to-emerald-400 text-white rounded-3xl shadow-lg shadow-green-500/40 flex items-center justify-center gap-4 transition-all duration-200 active:scale-95 hover:scale-[1.02] border-2 border-white/20 ${isTriggered ? 'opacity-70' : ''}`}
+            style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
           >
-            Decline
-          </AlertDialogCancel>
-          <AlertDialogAction
-            onClick={onAnswer}
-            className="bg-green-600 hover:bg-green-700"
+            <div className="bg-white/30 rounded-full p-3">
+              <Phone className="w-8 h-8" />
+            </div>
+            <span className="text-2xl font-bold">{isTriggered ? "Connecting..." : "Answer"}</span>
+          </button>
+
+          {/* Decline button */}
+          <button
+            type="button"
+            onClick={handleDecline}
+            onTouchEnd={handleDecline}
+            className="w-full py-5 px-8 bg-gradient-to-r from-red-400 to-rose-500 hover:from-red-300 hover:to-rose-400 text-white rounded-3xl shadow-lg shadow-red-500/40 flex items-center justify-center gap-4 transition-all duration-200 active:scale-95 hover:scale-[1.02] border-2 border-white/20"
+            style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
           >
-            Answer
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+            <div className="bg-white/30 rounded-full p-3">
+              <PhoneOff className="w-7 h-7" />
+            </div>
+            <span className="text-xl font-bold">Decline</span>
+          </button>
+
+          {/* Hint text */}
+          <p className="text-center text-white/40 text-sm pt-2">
+            Tap to answer or decline
+          </p>
+        </div>
+      </div>
+    </div>
   );
 };
-
-
-
-
-
-
-
-
-

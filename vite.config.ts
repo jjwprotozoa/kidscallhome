@@ -4,6 +4,7 @@ import { componentTagger } from "lovable-tagger";
 import path from "path";
 import { defineConfig } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
+import { deferCssPlugin } from "./vite-plugin-defer-css";
 
 // Read version from package.json for automatic injection
 const packageJson = JSON.parse(
@@ -35,6 +36,42 @@ export default defineConfig(({ mode }) => {
             "<head>",
             `<head>\n    <script>window.__APP_VERSION__ = "${appVersion}";</script>`
           );
+        }
+
+        // Inject Supabase preconnect hint using the actual URL from environment
+        // This reduces connection latency for API calls
+        const supabaseUrl = process.env.VITE_SUPABASE_URL;
+        if (supabaseUrl) {
+          try {
+            const supabaseOrigin = new URL(supabaseUrl).origin;
+            // Replace both dns-prefetch and preconnect fallback with actual Supabase URL
+            transformed = transformed.replace(
+              '<link rel="dns-prefetch" href="https://supabase.co" />',
+              `<link rel="dns-prefetch" href="${supabaseOrigin}" />`
+            );
+            transformed = transformed.replace(
+              '<link rel="preconnect" href="https://supabase.co" crossorigin />',
+              `<link rel="preconnect" href="${supabaseOrigin}" crossorigin />`
+            );
+          } catch {
+            // If URL parsing fails, keep the generic dns-prefetch and preconnect
+          }
+        }
+
+        // Add preconnect for self-origin to reduce critical path latency
+        // This helps establish connection early for CSS/JS assets from same domain
+        const baseUrl = process.env.VITE_BASE_URL || "https://www.kidscallhome.com";
+        try {
+          const selfOrigin = new URL(baseUrl).origin;
+          // Only add if not already present
+          if (!transformed.includes(`rel="preconnect" href="${selfOrigin}"`)) {
+            transformed = transformed.replace(
+              /<head>/i,
+              `<head>\n    <link rel="preconnect" href="${selfOrigin}" crossorigin />`
+            );
+          }
+        } catch {
+          // If URL parsing fails, skip preconnect
         }
 
         return transformed;
@@ -103,61 +140,87 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       htmlPlugin(),
+      mode === "production" && deferCssPlugin(), // Defer CSS loading in production for faster FCP/LCP
       mode === "development" && componentTagger(),
       // Console removal plugin disabled - regex-based removal is too aggressive and breaks builds
       // TODO: Implement proper AST-based console removal if needed
       // mode === "production" && removeConsolePlugin()
-      // PWA plugin with aggressive vendor caching for weak network conditions (LTE/2G)
-      // Caching strategy:
-      // - CacheFirst for vendor chunks (rarely change, can be cached 30 days)
-      // - NetworkFirst for main app bundle (frequently updated)
-      // - StaleWhileRevalidate for other chunks (balance freshness and speed)
+      // PWA plugin - use generateSW with importScripts to include custom notification handlers
+      // This imports notification-handlers.js which handles incoming call notifications on Windows
       VitePWA({
         registerType: "autoUpdate",
+        // Defer SW registration until page is idle to reduce critical path
+        // This prevents registerSW.js from blocking initial render
+        injectRegister: "script-defer",
         workbox: {
           // Cache version for cache busting on deployment
           cacheId: "kidscallhome-v1",
-          // Maximum cache age: 30 days for vendors, 7 days for app code
           maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5MB
-          // Exclude source files and API endpoints from precaching
+          // In development, disable precaching to reduce console noise
+          globPatterns:
+            mode === "development"
+              ? [] // Don't precache anything in development
+              : ["**/*.{js,css,html,ico,png,svg,woff,woff2}"],
           globIgnores: [
             "**/node_modules/**/*",
             "**/src/**/*",
             "**/@vite/**/*",
             "**/@react-refresh/**/*",
             "**/*.map",
-            "**/*.html", // Exclude HTML files from precaching - they're served directly and cached at runtime
+            "**/kids-video-calling-kindle.html", // Exclude files that return 403
+            "**/*-kindle.html", // Exclude kindle-specific pages
           ],
-          // Exclude source files and API endpoints from navigation fallback
+          // Skip waiting and claim clients immediately for faster updates
+          skipWaiting: true,
+          clientsClaim: true,
+          cleanupOutdatedCaches: true,
+          // Navigation fallback to root instead of index.html
+          navigateFallback: "/",
           navigateFallbackDenylist: [
-            // Exclude source files
-            /^\/src\//,
-            // Exclude Vite dev server files
-            /^\/@vite\//,
-            /^\/@react-refresh\//,
-            /^\/node_modules\//,
-            // Exclude API endpoints
-            /^https:\/\/.*\.supabase\.co\//,
-            /^https:\/\/api\./,
-            /^https:\/\/fonts\./,
-            /^https:\/\/fonts\.gstatic\.com\//,
+            /^\/api\//,
+            /^\/_next-live\//,
+            /\.(?:json|xml|txt)$/,
           ],
-          // Suppress workbox console logs in development by filtering out noisy messages
-          // The navigateFallbackDenylist above prevents workbox from trying to handle
-          // source files and API endpoints, which reduces the number of log messages
-          // In development, disable precaching to reduce console noise
-          // In production, precache critical app shell assets
-          // In development, disable precaching to reduce console noise
-          globPatterns:
-            mode === "development"
-              ? [] // Don't precache anything in development
-              : [
-                  "**/*.{js,css,html,ico,png,svg,woff,woff2}", // Precache all static assets
-                ],
-          // Runtime caching strategies
+          // Import custom notification handlers into the generated service worker
+          // This file contains push notification and notificationclick event handlers
+          importScripts: ["/notification-handlers.js"],
+          // Handle precaching errors gracefully
+          dontCacheBustURLsMatching: /\.\w{8}\./,
+          // Runtime caching rules for external resources
           runtimeCaching: [
-            // Cache Google Fonts stylesheets (font metadata)
             {
+              // Supabase REST API calls - always go to network, never cache
+              // This prevents "No route found" console spam from polling calls
+              urlPattern: /^https:\/\/.*\.supabase\.co\/rest\/v1\/.*/i,
+              handler: "NetworkOnly",
+            },
+            {
+              // Supabase Auth API calls - always go to network
+              urlPattern: /^https:\/\/.*\.supabase\.co\/auth\/v1\/.*/i,
+              handler: "NetworkOnly",
+            },
+            {
+              // Supabase Realtime WebSocket - always go to network
+              urlPattern: /^https:\/\/.*\.supabase\.co\/realtime\/.*/i,
+              handler: "NetworkOnly",
+            },
+            {
+              // Supabase Storage images - cache for 7 days
+              urlPattern: /^https:\/\/.*\.supabase\.co\/storage\/v1\/object\/.*/i,
+              handler: "CacheFirst",
+              options: {
+                cacheName: "supabase-storage",
+                expiration: {
+                  maxEntries: 100,
+                  maxAgeSeconds: 60 * 60 * 24 * 7, // 7 days
+                },
+                cacheableResponse: {
+                  statuses: [0, 200],
+                },
+              },
+            },
+            {
+              // Google Fonts stylesheets
               urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
               handler: "CacheFirst",
               options: {
@@ -171,8 +234,8 @@ export default defineConfig(({ mode }) => {
                 },
               },
             },
-            // Cache Google Fonts webfont files (actual font binaries)
             {
+              // Google Fonts webfonts
               urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/i,
               handler: "CacheFirst",
               options: {
@@ -186,115 +249,14 @@ export default defineConfig(({ mode }) => {
                 },
               },
             },
-            // CacheFirst strategy for vendor chunks - these rarely change
-            // Cache for 30 days to maximize repeat visit performance
-            {
-              urlPattern:
-                /\/assets\/(react-vendor|supabase-vendor|radix-vendor|query-vendor|capacitor-vendor)-.*\.js/,
-              handler: "CacheFirst",
-              options: {
-                cacheName: "vendor-cache",
-                expiration: {
-                  maxEntries: 10,
-                  maxAgeSeconds: 30 * 24 * 60 * 60, // 30 days
-                },
-                cacheableResponse: {
-                  statuses: [0, 200],
-                },
-              },
-            },
-            // NetworkFirst strategy for main app bundle - prioritize freshness
-            // Falls back to cache if network fails (offline support)
-            {
-              urlPattern: /\/assets\/index-.*\.js/,
-              handler: "NetworkFirst",
-              options: {
-                cacheName: "app-cache",
-                expiration: {
-                  maxEntries: 20,
-                  maxAgeSeconds: 7 * 24 * 60 * 60, // 7 days
-                },
-                cacheableResponse: {
-                  statuses: [0, 200],
-                },
-                networkTimeoutSeconds: 3, // Fallback to cache after 3s on slow networks
-              },
-            },
-            // StaleWhileRevalidate for other chunks - balance freshness and speed
-            // Serves from cache immediately, updates in background
-            {
-              urlPattern: /\/assets\/.*\.js/,
-              handler: "StaleWhileRevalidate",
-              options: {
-                cacheName: "chunks-cache",
-                expiration: {
-                  maxEntries: 50,
-                  maxAgeSeconds: 7 * 24 * 60 * 60, // 7 days
-                },
-                cacheableResponse: {
-                  statuses: [0, 200],
-                },
-              },
-            },
-            // Cache CSS and other static assets
-            {
-              urlPattern:
-                /\/assets\/.*\.(css|woff2?|ttf|eot|png|jpg|jpeg|gif|svg|ico)/,
-              handler: "CacheFirst",
-              options: {
-                cacheName: "static-assets",
-                expiration: {
-                  maxEntries: 100,
-                  maxAgeSeconds: 30 * 24 * 60 * 60, // 30 days
-                },
-              },
-            },
-            // Cache Supabase Storage images (avatars, uploads)
-            {
-              urlPattern:
-                /^https:\/\/.*\.supabase\.co\/storage\/v1\/object\/.*/i,
-              handler: "CacheFirst",
-              options: {
-                cacheName: "supabase-storage",
-                expiration: {
-                  maxEntries: 100,
-                  maxAgeSeconds: 7 * 24 * 60 * 60, // 7 days
-                },
-                cacheableResponse: {
-                  statuses: [0, 200],
-                },
-              },
-            },
-            // Cache HTML files at runtime (excluded from precaching to avoid 403 errors)
-            // Use NetworkFirst to ensure fresh content, but cache for offline support
-            {
-              urlPattern: /\/.*\.html$/,
-              handler: "NetworkFirst",
-              options: {
-                cacheName: "html-cache",
-                expiration: {
-                  maxEntries: 20,
-                  maxAgeSeconds: 7 * 24 * 60 * 60, // 7 days
-                },
-                cacheableResponse: {
-                  statuses: [0, 200],
-                },
-                networkTimeoutSeconds: 3, // Fallback to cache after 3s
-              },
-            },
           ],
-          // Skip waiting and claim clients immediately for faster updates
-          skipWaiting: true,
-          clientsClaim: true,
-          // Clean up old caches on activation
-          cleanupOutdatedCaches: true,
         },
         // PWA manifest configuration
         manifest: {
           name: "Kids Call Home",
           short_name: "KidsCallHome",
           description:
-            "Stay connected with your family through simple video calls and messaging",
+            "Safe video calling and messaging app for kids. Family-only contacts controlled by parents. Works on most phones and tablets over Wi‑Fi or mobile data, no phone number or SIM card required. No ads, no strangers, no filters, no data tracking.",
           theme_color: "#ffffff",
           background_color: "#ffffff",
           display: "standalone",
@@ -312,13 +274,11 @@ export default defineConfig(({ mode }) => {
             },
           ],
         },
-        // Disable dev options in production
+        // Disable PWA in development to avoid Workbox console spam
+        // In dev mode, Vite serves files from /src/, /@vite/, /node_modules/.vite/deps/
+        // which would all trigger "No route found" warnings from the service worker
         devOptions: {
-          enabled: mode === "development",
-          type: "module",
-          // Suppress workbox logs in development by disabling precaching
-          // This prevents workbox from trying to precache source files
-          navigateFallback: undefined, // Don't use navigation fallback in dev
+          enabled: false,
         },
       }),
     ].filter(Boolean),
@@ -344,6 +304,9 @@ export default defineConfig(({ mode }) => {
       esbuild: {
         drop: mode === "production" ? ["console", "debugger"] : [],
       },
+      // CSS optimization for faster FCP
+      cssCodeSplit: true, // Split CSS per component (lazy-loaded routes get their CSS later)
+      cssMinify: true, // Minify CSS for smaller bundle
       // Vendor chunk splitting for weak network conditions (LTE/2G)
       // This separates rarely-changing vendor code from frequently-updated application code,
       // optimizing caching and reducing download size on slow networks.

@@ -19,7 +19,7 @@ export const useVideoCall = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { playRingtone, stopRingtone, playCallAnswered } =
+  const { playOutgoingRingtone, stopOutgoingRingtone, playCallAnswered } =
     useAudioNotifications({ enabled: true, volume: 0.7 });
   const initializationRef = useRef(false);
 
@@ -91,6 +91,7 @@ export const useVideoCall = () => {
     peerConnectionRef,
     playRemoteVideo,
     isConnected, // Add connection state from useWebRTC
+    networkQuality, // Network quality info for adaptive streaming
   } = useWebRTC(callId, localVideoRef, remoteVideoRef, isChild);
 
   // Track if we've already attempted to play to avoid multiple calls
@@ -101,23 +102,24 @@ export const useVideoCall = () => {
     playAttemptedRef.current = false;
   }, [callId]);
 
-  // Play ringtone for outgoing calls (when connecting and no remote stream yet)
+  // Play outgoing ringtone for caller (when connecting and no remote stream yet)
+  // Uses a different "waiting" tone than the incoming ringtone
   // DIAGNOSTIC: Comprehensive ringtone control logging
   useEffect(() => {
     if (isConnecting && !remoteStream && callId) {
-      // Outgoing call - play ringtone while waiting for answer
+      // Outgoing call - play waiting tone while waiting for answer
       // eslint-disable-next-line no-console
-      console.log("🔔 [RINGTONE] START - Outgoing call", {
+      console.log("🔔 [RINGTONE] START - Outgoing call (waiting tone)", {
         callId,
         isConnecting,
         hasRemoteStream: !!remoteStream,
         timestamp: new Date().toISOString(),
         reason: "Outgoing call - waiting for answer",
       });
-      safeLog.debug("🔔 [AUDIO] Outgoing call - starting ringtone");
-      playRingtone();
+      safeLog.debug("🔔 [AUDIO] Outgoing call - starting waiting tone");
+      playOutgoingRingtone();
     } else if (remoteStream || !isConnecting) {
-      // Call answered or connection established - stop ringtone
+      // Call answered or connection established - stop waiting tone
       // eslint-disable-next-line no-console
       console.log(
         "🔇 [RINGTONE] STOP - Call answered or connection established",
@@ -129,8 +131,8 @@ export const useVideoCall = () => {
           reason: remoteStream ? "Remote stream available" : "Not connecting",
         }
       );
-      safeLog.log("🔇 [AUDIO] Call answered or connected - stopping ringtone");
-      stopRingtone();
+      safeLog.log("🔇 [AUDIO] Call answered or connected - stopping waiting tone");
+      stopOutgoingRingtone();
       if (remoteStream && !playAttemptedRef.current) {
         // Play answered sound when remote stream first appears
         playCallAnswered();
@@ -145,14 +147,14 @@ export const useVideoCall = () => {
         timestamp: new Date().toISOString(),
         reason: "Component cleanup",
       });
-      stopRingtone();
+      stopOutgoingRingtone();
     };
   }, [
     isConnecting,
     remoteStream,
     callId,
-    playRingtone,
-    stopRingtone,
+    playOutgoingRingtone,
+    stopOutgoingRingtone,
     playCallAnswered,
   ]);
 
@@ -1475,5 +1477,6 @@ export const useVideoCall = () => {
     toggleMute,
     toggleVideo,
     endCall,
+    networkQuality, // Network quality info for adaptive streaming UI
   };
 };

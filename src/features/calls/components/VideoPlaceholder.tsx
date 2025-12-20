@@ -181,10 +181,18 @@ export const VideoPlaceholder = ({
       case "disabled":
         return (
           <div className="flex flex-col items-center gap-3 text-center">
-            <div className="w-16 h-16 rounded-full bg-gray-600 flex items-center justify-center">
-              <Phone className="w-8 h-8 text-gray-400" />
+            <div className="relative">
+              {/* Subtle glow */}
+              <div className="absolute inset-0 bg-slate-500/20 rounded-full blur-xl" />
+              <div className="relative w-16 h-16 rounded-full bg-gradient-to-br from-slate-700 to-slate-800 flex items-center justify-center border border-white/10 shadow-lg">
+                <span className="text-3xl">📷</span>
+              </div>
+              {/* Off indicator */}
+              <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-red-500/80 flex items-center justify-center border-2 border-slate-800">
+                <span className="text-white text-xs">✕</span>
+              </div>
             </div>
-            <p className="text-white/60 text-sm">
+            <p className="text-white/50 text-xs font-medium">
               {type === "local" ? "Camera off" : "Video off"}
             </p>
           </div>
@@ -215,8 +223,8 @@ export const VideoPlaceholder = ({
   return (
     <div
       className={cn(
-        "flex items-center justify-center bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900",
-        type === "remote" ? "w-full h-full" : "w-full h-full rounded-2xl",
+        "flex items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900",
+        type === "remote" ? "w-full h-full" : "w-full h-full rounded-xl",
         className
       )}
     >
@@ -253,4 +261,5 @@ export const VideoPlaceholder = ({
 };
 
 export default VideoPlaceholder;
+
 

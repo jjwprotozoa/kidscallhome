@@ -1,6 +1,6 @@
 # codemagic.yaml
-# Codemagic CI/CD configuration for KidsCallHome Android native app
-# Simplified version - requires Android project to be properly committed
+# Codemagic CI/CD configuration for KidsCallHome native apps (Android & iOS)
+# Capacitor-based PWA wrapped in native containers
 
 workflows:
   android-build:
@@ -485,3 +485,151 @@ workflows:
         notify:
           success: true
           failure: true
+
+  ios-build:
+    name: iOS Build
+    max_build_duration: 120
+    instance_type: mac_mini_m2
+    environment:
+      groups:
+        - ios_certificates
+        - app_store_connect
+      node: 20
+      vars:
+        BUNDLE_ID: "com.kidscallhome.app"
+        APP_NAME: "Kids Call Home"
+        XCODE_WORKSPACE: "App.xcworkspace"  # Capacitor iOS uses workspace
+        XCODE_SCHEME: "App"  # Default Capacitor scheme
+        APP_STORE_APPLE_ID: ""  # Set this after creating app in App Store Connect
+      xcode: latest
+      cocoapods: default
+      ios_signing:
+        distribution_type: app_store  # or 'development' for testing
+        bundle_identifier: "com.kidscallhome.app"
+    scripts:
+      - name: Install dependencies
+        script: |
+          npm ci
+
+      - name: Build web app
+        script: |
+          npm run build
+
+      - name: Add iOS platform (if not exists)
+        script: |
+          if [ ! -d "ios" ]; then
+            echo "📱 iOS project not found, generating it now..."
+            npx cap add ios
+            echo "✅ iOS project generated"
+          else
+            echo "✅ iOS project already exists"
+          fi
+
+      - name: Sync Capacitor iOS (generates iOS project if needed)
+        script: |
+          # Sync will create iOS project if it doesn't exist
+          npx cap sync ios
+          
+          # Verify iOS project was created
+          if [ ! -d "ios/App" ]; then
+            echo "❌ iOS project not found after sync. Trying to add iOS platform..."
+            npx cap add ios
+            npx cap sync ios
+          fi
+
+      - name: Configure iOS permissions in Info.plist
+        script: |
+          # Ensure Info.plist exists and has required permissions
+          INFO_PLIST="ios/App/App/Info.plist"
+          
+          if [ ! -f "$INFO_PLIST" ]; then
+            echo "⚠️ Info.plist not found at $INFO_PLIST"
+            echo "Searching for Info.plist..."
+            find ios -name "Info.plist" -type f 2>/dev/null | head -5 || echo "No Info.plist found"
+            echo "Will try to configure after CocoaPods install"
+          else
+            echo "📝 Configuring iOS permissions in $INFO_PLIST..."
+            
+            # Use PlistBuddy to add/update permissions (macOS tool)
+            /usr/libexec/PlistBuddy -c "Add :NSCameraUsageDescription string 'Kids Call Home needs camera access for video calls with family.'" "$INFO_PLIST" 2>/dev/null || \
+            /usr/libexec/PlistBuddy -c "Set :NSCameraUsageDescription 'Kids Call Home needs camera access for video calls with family.'" "$INFO_PLIST" 2>/dev/null || true
+            
+            /usr/libexec/PlistBuddy -c "Add :NSMicrophoneUsageDescription string 'Kids Call Home needs microphone access for video calls with family.'" "$INFO_PLIST" 2>/dev/null || \
+            /usr/libexec/PlistBuddy -c "Set :NSMicrophoneUsageDescription 'Kids Call Home needs microphone access for video calls with family.'" "$INFO_PLIST" 2>/dev/null || true
+            
+            /usr/libexec/PlistBuddy -c "Add :NSPhotoLibraryUsageDescription string 'Kids Call Home needs photo library access to share photos with family.'" "$INFO_PLIST" 2>/dev/null || \
+            /usr/libexec/PlistBuddy -c "Set :NSPhotoLibraryUsageDescription 'Kids Call Home needs photo library access to share photos with family.'" "$INFO_PLIST" 2>/dev/null || true
+            
+            /usr/libexec/PlistBuddy -c "Add :NSPhotoLibraryAddUsageDescription string 'Kids Call Home needs permission to save photos from messages.'" "$INFO_PLIST" 2>/dev/null || \
+            /usr/libexec/PlistBuddy -c "Set :NSPhotoLibraryAddUsageDescription 'Kids Call Home needs permission to save photos from messages.'" "$INFO_PLIST" 2>/dev/null || true
+            
+            /usr/libexec/PlistBuddy -c "Add :NSUserNotificationsUsageDescription string 'Kids Call Home needs notification permission to alert you about calls and messages.'" "$INFO_PLIST" 2>/dev/null || \
+            /usr/libexec/PlistBuddy -c "Set :NSUserNotificationsUsageDescription 'Kids Call Home needs notification permission to alert you about calls and messages.'" "$INFO_PLIST" 2>/dev/null || true
+            
+            echo "✅ iOS permissions configured"
+          fi
+
+      - name: Install CocoaPods dependencies
+        script: |
+          cd ios/App
+          pod install
+
+      - name: Configure iOS permissions after CocoaPods (if needed)
+        script: |
+          # Try again after CocoaPods install in case Info.plist was generated
+          INFO_PLIST="ios/App/App/Info.plist"
+          if [ -f "$INFO_PLIST" ]; then
+            echo "📝 Configuring iOS permissions (post-CocoaPods)..."
+            /usr/libexec/PlistBuddy -c "Add :NSCameraUsageDescription string 'Kids Call Home needs camera access for video calls with family.'" "$INFO_PLIST" 2>/dev/null || \
+            /usr/libexec/PlistBuddy -c "Set :NSCameraUsageDescription 'Kids Call Home needs camera access for video calls with family.'" "$INFO_PLIST" 2>/dev/null || true
+            /usr/libexec/PlistBuddy -c "Add :NSMicrophoneUsageDescription string 'Kids Call Home needs microphone access for video calls with family.'" "$INFO_PLIST" 2>/dev/null || \
+            /usr/libexec/PlistBuddy -c "Set :NSMicrophoneUsageDescription 'Kids Call Home needs microphone access for video calls with family.'" "$INFO_PLIST" 2>/dev/null || true
+            /usr/libexec/PlistBuddy -c "Add :NSPhotoLibraryUsageDescription string 'Kids Call Home needs photo library access to share photos with family.'" "$INFO_PLIST" 2>/dev/null || \
+            /usr/libexec/PlistBuddy -c "Set :NSPhotoLibraryUsageDescription 'Kids Call Home needs photo library access to share photos with family.'" "$INFO_PLIST" 2>/dev/null || true
+            /usr/libexec/PlistBuddy -c "Add :NSPhotoLibraryAddUsageDescription string 'Kids Call Home needs permission to save photos from messages.'" "$INFO_PLIST" 2>/dev/null || \
+            /usr/libexec/PlistBuddy -c "Set :NSPhotoLibraryAddUsageDescription 'Kids Call Home needs permission to save photos from messages.'" "$INFO_PLIST" 2>/dev/null || true
+            /usr/libexec/PlistBuddy -c "Add :NSUserNotificationsUsageDescription string 'Kids Call Home needs notification permission to alert you about calls and messages.'" "$INFO_PLIST" 2>/dev/null || \
+            /usr/libexec/PlistBuddy -c "Set :NSUserNotificationsUsageDescription 'Kids Call Home needs notification permission to alert you about calls and messages.'" "$INFO_PLIST" 2>/dev/null || true
+            echo "✅ iOS permissions configured"
+          fi
+
+      - name: Set up provisioning profiles settings on Xcode project
+        script: |
+          xcode-project use-profiles
+
+      - name: Increment build number (if App Store Connect API key configured)
+        script: |
+          if [ ! -z "$APP_STORE_APPLE_ID" ] && [ ! -z "$APP_STORE_CONNECT_API_KEY_ID" ]; then
+            cd ios/App
+            LATEST_BUILD_NUMBER=$(app-store-connect get-latest-app-store-build-number "$APP_STORE_APPLE_ID" || echo "0")
+            agvtool new-version -all $(($LATEST_BUILD_NUMBER + 1))
+          else
+            echo "⚠️ Skipping build number increment - App Store Connect not configured"
+          fi
+
+      - name: Build IPA for distribution
+        script: |
+          xcode-project build-ipa \
+            --workspace "ios/App/$XCODE_WORKSPACE" \
+            --scheme "$XCODE_SCHEME"
+
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.app
+      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
+
+    publishing:
+      email:
+        recipients:
+          - justin@fluidinvestmentgroup.com
+        notify:
+          success: true
+          failure: true
+      # Uncomment and configure after setting up App Store Connect API key
+      # app_store_connect:
+      #   auth: integration
+      #   submit_to_testflight: true
+      #   beta_groups:
+      #     - "Internal Testers"
+      #   submit_to_app_store: false

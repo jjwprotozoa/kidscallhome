@@ -38,6 +38,11 @@ const config: CapacitorConfig = {
       keystoreAliasPassword: undefined,
     },
   },
+  ios: {
+    // iOS-specific configuration
+    scheme: 'KidsCallHome',
+    contentInset: 'automatic',
+  },
 };
 
 export default config;

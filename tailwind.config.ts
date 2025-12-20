@@ -112,6 +112,78 @@ export default {
             transform: "translateY(0)",
           },
         },
+        // Child login onboarding animations
+        "gentle-pulse": {
+          "0%, 100%": { 
+            transform: "scale(1)",
+            boxShadow: "0 0 0 0 hsl(var(--primary) / 0.4)",
+          },
+          "50%": { 
+            transform: "scale(1.02)",
+            boxShadow: "0 0 0 8px hsl(var(--primary) / 0)",
+          },
+        },
+        "swipe-hint-left": {
+          "0%, 100%": { 
+            transform: "translateX(0)",
+            opacity: "0.7",
+          },
+          "50%": { 
+            transform: "translateX(-8px)",
+            opacity: "1",
+          },
+        },
+        "swipe-hint-right": {
+          "0%, 100%": { 
+            transform: "translateX(0)",
+            opacity: "0.7",
+          },
+          "50%": { 
+            transform: "translateX(8px)",
+            opacity: "1",
+          },
+        },
+        "tap-hint": {
+          "0%, 100%": { 
+            transform: "scale(1)",
+            opacity: "0.8",
+          },
+          "50%": { 
+            transform: "scale(0.95)",
+            opacity: "1",
+          },
+        },
+        "float-up": {
+          "0%": { 
+            opacity: "0",
+            transform: "translateY(10px)",
+          },
+          "20%": { 
+            opacity: "1",
+            transform: "translateY(0)",
+          },
+          "80%": { 
+            opacity: "1",
+            transform: "translateY(0)",
+          },
+          "100%": { 
+            opacity: "0",
+            transform: "translateY(-10px)",
+          },
+        },
+        "bounce-gentle": {
+          "0%, 100%": { 
+            transform: "translateY(0)",
+          },
+          "50%": { 
+            transform: "translateY(-4px)",
+          },
+        },
+        "wiggle": {
+          "0%, 100%": { transform: "rotate(0deg)" },
+          "25%": { transform: "rotate(-3deg)" },
+          "75%": { transform: "rotate(3deg)" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
@@ -119,6 +191,14 @@ export default {
         "spin-slow": "spin-slow 3s linear infinite",
         "fade-in": "fade-in 0.6s ease-out",
         "fade-in-up": "fade-in-up 0.6s ease-out",
+        // Child login onboarding animations
+        "gentle-pulse": "gentle-pulse 2s ease-in-out infinite",
+        "swipe-hint-left": "swipe-hint-left 1.5s ease-in-out infinite",
+        "swipe-hint-right": "swipe-hint-right 1.5s ease-in-out infinite",
+        "tap-hint": "tap-hint 1s ease-in-out infinite",
+        "float-up": "float-up 3s ease-in-out forwards",
+        "bounce-gentle": "bounce-gentle 1s ease-in-out infinite",
+        "wiggle": "wiggle 0.5s ease-in-out infinite",
       },
     },
   },

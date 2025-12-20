@@ -12,6 +12,7 @@ import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { HelpBubble } from "@/features/onboarding/HelpBubble";
 import { OnboardingTour } from "@/features/onboarding/OnboardingTour";
+import { useFamilyMemberRedirect } from "@/hooks/useFamilyMemberRedirect";
 import { useDeviceData } from "./useDeviceData";
 import { useDeviceHandlers } from "./useDeviceHandlers";
 import { History, RefreshCw, Shield, Smartphone, ArrowUp } from "lucide-react";
@@ -22,6 +23,9 @@ import { safeLog, sanitizeObject } from "@/utils/security";
 import { HISTORY_PAGE_SIZE } from "./constants";
 
 const DeviceManagement = () => {
+  // Redirect family members away from parent routes
+  useFamilyMemberRedirect();
+  
   const [activeTab, setActiveTab] = useState("active");
   const [deviceToRemove, setDeviceToRemove] = useState<Device | null>(null);
   const [deviceToRename, setDeviceToRename] = useState<Device | null>(null);
@@ -32,6 +36,8 @@ const DeviceManagement = () => {
   const [historyDeviceTypeFilter, setHistoryDeviceTypeFilter] = useState<string>("all");
   const [historyPage, setHistoryPage] = useState(1);
   const [showBackToTop, setShowBackToTop] = useState(false);
+  // Track if we've attempted to fetch history (prevents infinite loop when history is empty)
+  const [historyFetched, setHistoryFetched] = useState(false);
   
   // Active devices filter state
   const [activeChildFilter, setActiveChildFilter] = useState<string>("all");
@@ -143,14 +149,17 @@ const DeviceManagement = () => {
   }, [fetchDevices, fetchDeviceHistory, fetchChildren, activeTab]);
 
   useEffect(() => {
+    // Only fetch history once when switching to history tab
+    // Use historyFetched flag to prevent infinite loop when history is empty
     if (
       activeTab === "history" &&
-      deviceHistory.length === 0 &&
+      !historyFetched &&
       !historyLoading
     ) {
+      setHistoryFetched(true);
       fetchDeviceHistory();
     }
-  }, [activeTab, fetchDeviceHistory, deviceHistory.length, historyLoading]);
+  }, [activeTab, fetchDeviceHistory, historyFetched, historyLoading]);
 
   useEffect(() => {
     if (activeTab !== "history") {
@@ -280,12 +289,7 @@ const DeviceManagement = () => {
           {/* Tabs */}
           <Tabs
             value={activeTab}
-            onValueChange={(value) => {
-              setActiveTab(value);
-              if (value === "history" && deviceHistory.length === 0) {
-                fetchDeviceHistory();
-              }
-            }}
+            onValueChange={setActiveTab}
           >
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="active">Active Devices</TabsTrigger>

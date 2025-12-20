@@ -85,9 +85,9 @@ export async function getIPGeolocation(ipAddress: string | null): Promise<IPGeol
   try {
     // Try ip-api.com first (free, no API key needed, 45 req/min)
     // Format: https://ip-api.com/json/{ip}?fields=status,message,country,countryCode,city,regionName
-    // Add timeout to prevent hanging requests (5 seconds)
+    // Add timeout to prevent hanging requests (2 seconds per service)
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    const timeoutId = setTimeout(() => controller.abort(), 2000);
     
     try {
       const response = await fetch(
@@ -118,12 +118,6 @@ export async function getIPGeolocation(ipAddress: string | null): Promise<IPGeol
       if (response.status === 403 || response.status === 429) {
         // Rate limited - disable IP geolocation for this session to avoid repeated calls
         localStorage.setItem('kch_disable_ip_geolocation', 'true');
-        // Only log in dev mode with a debug message (not a warning)
-        if (import.meta.env.DEV) {
-          console.debug(
-            '[IP Geolocation] Rate limited by ip-api.com. Disabling for this session. Set VITE_DISABLE_IP_GEOLOCATION=true to disable permanently.'
-          );
-        }
         // Silently fall through to fallback - don't throw, don't log
         throw new Error('Rate limited');
       }
@@ -169,9 +163,9 @@ export async function getIPGeolocation(ipAddress: string | null): Promise<IPGeol
 
   // Fallback to ipapi.co (free tier: 1000 requests/day)
   try {
-    // Add timeout to prevent hanging requests (5 seconds)
+    // Add timeout to prevent hanging requests (2 seconds per service)
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    const timeoutId = setTimeout(() => controller.abort(), 2000);
     
     try {
       const response = await fetch(`https://ipapi.co/${ipAddress}/json/`, {

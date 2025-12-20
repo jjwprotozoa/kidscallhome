@@ -7,6 +7,7 @@ import type { Json } from "@/integrations/supabase/types";
 import { safeLog } from "@/utils/security";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { endCall as endCallUtil } from "../utils/callEnding";
+import { registerActiveStream, unregisterActiveStream, stopAllActiveStreams } from "../utils/mediaCleanup";
 import {
   ConnectionType,
   NetworkQualityLevel,
@@ -57,6 +58,9 @@ export const useWebRTC = (
   // CRITICAL: Idempotency guard for cleanup
   const cleanupExecutedRef = useRef(false);
 
+  // IMPROVEMENT: Track ICE restart attempts to prevent infinite loops
+  const iceRestartAttemptedRef = useRef(false);
+
   // Network quality monitoring for adaptive bitrate
   const networkQuality = useNetworkQuality();
 
@@ -71,6 +75,8 @@ export const useWebRTC = (
       safeLog.log("📞 [CALL ID] CallId updated in useWebRTC:", callId);
       // CRITICAL: Reset cleanup flag when starting a new call
       cleanupExecutedRef.current = false;
+      // IMPROVEMENT: Reset ICE restart flag for new call
+      iceRestartAttemptedRef.current = false;
     }
   }, [callId]);
 
@@ -117,19 +123,22 @@ export const useWebRTC = (
       try {
         safeLog.log("🎥 [MEDIA] Requesting camera and microphone access...");
 
-        // ALWAYS request video at a reasonable default resolution
-        // The adaptive quality control will adjust bitrate/disable video AFTER connection if needed
-        // This ensures video track exists for the peer connection
+        // Request 1080p video to enable high quality for fiber/premium connections
+        // The adaptive quality control will adjust bitrate/resolution AFTER connection if needed
+        // This ensures video track exists at the highest quality the camera supports
         stream = await navigator.mediaDevices.getUserMedia({
           video: {
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
+            width: { ideal: 1920, max: 1920 },
+            height: { ideal: 1080, max: 1080 },
+            frameRate: { ideal: 30, max: 30 },
             facingMode: "user", // Front-facing camera
           },
           audio: {
             echoCancellation: true,
             noiseSuppression: true,
             autoGainControl: true,
+            // Higher sample rate for better audio quality on good connections
+            sampleRate: { ideal: 48000 },
           },
         });
 
@@ -169,6 +178,15 @@ export const useWebRTC = (
           }
         });
       } catch (mediaError: unknown) {
+        // IMPROVEMENT: Enhanced error handling with RTCError interface
+        if (mediaError instanceof RTCError) {
+          safeLog.error("❌ [MEDIA] RTCError accessing media devices:", {
+            errorDetail: mediaError.errorDetail,
+            sdpLineNumber: mediaError.sdpLineNumber,
+            httpRequestStatusCode: mediaError.httpRequestStatusCode,
+            message: mediaError.message,
+          });
+        }
         const error = mediaError as DOMException & { code?: number };
         safeLog.error("❌ [MEDIA] Media device access error:", {
           name: error.name,
@@ -218,6 +236,11 @@ export const useWebRTC = (
 
       setLocalStream(stream);
       localStreamRef.current = stream;
+      
+      // CRITICAL: Register the stream for global cleanup tracking
+      // This ensures the camera can be released even if component refs are lost
+      registerActiveStream(stream);
+      
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = stream;
         // Local video should play immediately (no autoplay restrictions for local video)
@@ -384,6 +407,10 @@ export const useWebRTC = (
         iceServers,
         // Enable ICE candidate trickling for faster connection
         iceCandidatePoolSize: 10,
+        // Optimize bundle policy for better performance (fewer transports)
+        // max-bundle: Gather ICE candidates for only one track, negotiate only one media track
+        // This reduces overhead and improves connection reliability
+        bundlePolicy: "max-bundle",
       });
 
       // Monitor connection state changes
@@ -482,11 +509,31 @@ export const useWebRTC = (
             );
 
             // Warn if tracks are muted
+            // NOTE: Tracks can be temporarily muted during connection establishment
+            // Only log as error if track is live (receiving data) but muted
             audioTracks.forEach((track) => {
               if (track.muted) {
-                safeLog.error(
-                  "❌ [CONNECTION STATE] Audio track is muted when connected!"
-                );
+                // If track is live but muted, this might indicate an issue
+                // Otherwise, it's likely just temporary during connection setup
+                if (track.readyState === "live") {
+                  safeLog.warn(
+                    "⚠️ [CONNECTION STATE] Audio track is muted when connected (may be temporary or user-muted)",
+                    {
+                      trackId: track.id,
+                      readyState: track.readyState,
+                      enabled: track.enabled,
+                    }
+                  );
+                } else {
+                  // Track not live yet - muted state is expected during connection setup
+                  safeLog.log(
+                    "ℹ️ [CONNECTION STATE] Audio track is muted but not live yet (normal during connection setup)",
+                    {
+                      trackId: track.id,
+                      readyState: track.readyState,
+                    }
+                  );
+                }
               }
             });
             videoTracks.forEach((track) => {
@@ -928,6 +975,47 @@ export const useWebRTC = (
         }
       };
 
+      // IMPROVEMENT: ICE candidate error handling
+      // Handles errors during ICE candidate gathering (TURN/STUN failures)
+      // This provides better diagnostics and can trigger fallback strategies
+      pc.onicecandidateerror = (event) => {
+        const errorInfo = {
+          url: event.url,
+          errorCode: event.errorCode,
+          errorText: event.errorText,
+          address: event.address,
+          port: event.port,
+          timestamp: new Date().toISOString(),
+        };
+
+        safeLog.error("❌ [ICE CANDIDATE ERROR] ICE candidate gathering failed:", errorInfo);
+
+        // Log specific error types for better diagnostics
+        if (event.errorCode === 701) {
+          safeLog.error(
+            "⚠️ [ICE CANDIDATE ERROR] STUN/TURN server unreachable - check network connectivity"
+          );
+        } else if (event.errorCode === 702) {
+          safeLog.error(
+            "⚠️ [ICE CANDIDATE ERROR] STUN/TURN authentication failed - check credentials"
+          );
+        } else if (event.errorCode === 703) {
+          safeLog.error(
+            "⚠️ [ICE CANDIDATE ERROR] STUN/TURN server error - server may be overloaded"
+          );
+        }
+
+        // In development, log full error details
+        if (import.meta.env.DEV) {
+          console.error("🔍 [ICE CANDIDATE ERROR] Full error details:", {
+            ...errorInfo,
+            iceConnectionState: pc.iceConnectionState,
+            iceGatheringState: pc.iceGatheringState,
+            connectionState: pc.connectionState,
+          });
+        }
+      };
+
       // CRITICAL: Add connection state monitoring for auto-cleanup on failures
       // Monitor iceConnectionState to detect network failures and auto-cleanup stale connections
       pc.oniceconnectionstatechange = () => {
@@ -940,29 +1028,175 @@ export const useWebRTC = (
           timestamp: new Date().toISOString(),
         });
 
-        // Auto-end call after timeout if connection fails or disconnects
-        if (iceState === "failed" || iceState === "disconnected") {
+        // Enhanced logging for iPhone debugging
+        if (import.meta.env.DEV) {
+          const isIOSDevice = /iPad|iPhone|iPod/.test(navigator.userAgent);
+          if (isIOSDevice && (iceState === "failed" || iceState === "disconnected")) {
+            console.group("📱 [iOS CONNECTION DIAGNOSTICS]");
+            console.log("ICE State:", iceState);
+            console.log("Connection State:", connectionState);
+            console.log("Signaling State:", pc.signalingState);
+            console.log("Has Local Description:", !!pc.localDescription);
+            console.log("Has Remote Description:", !!pc.remoteDescription);
+            console.log("Local Tracks:", pc.getSenders().filter(s => s.track).length);
+            console.log("Remote Tracks:", pc.getReceivers().filter(r => r.track).length);
+            
+            // Check ICE servers
+            const config = pc.getConfiguration();
+            console.log("ICE Servers:", config.iceServers?.length || 0);
+            const hasTurn = config.iceServers?.some(server => {
+              const urls = Array.isArray(server.urls) ? server.urls : [server.urls];
+              return urls.some(url => typeof url === 'string' && url.includes('turn:'));
+            });
+            console.log("Has TURN Servers:", hasTurn);
+            console.groupEnd();
+          }
+        }
+
+        // IMPROVEMENT: ICE restart on failure recovery
+        // Attempt ICE restart before ending call to recover from transient failures
+        // Auto-end call after timeout if connection fails
+        // CRITICAL: "disconnected" is TRANSIENT and can recover - give it more time
+        // "failed" is terminal - try ICE restart once before ending
+        if (iceState === "failed") {
           safeLog.warn(
-            "⚠️ [CONNECTION STATE] Connection failure detected, scheduling auto-cleanup",
+            "⚠️ [CONNECTION STATE] ICE connection FAILED - attempting recovery",
+            {
+              iceState,
+              connectionState,
+              restartAttempted: iceRestartAttemptedRef.current,
+            }
+          );
+
+          // IMPROVEMENT: Try ICE restart once before ending call
+          // This can recover from transient network issues, especially on mobile
+          if (!iceRestartAttemptedRef.current && pc.signalingState !== "closed") {
+            try {
+              safeLog.log(
+                "🔄 [ICE RESTART] Attempting ICE restart to recover from failure..."
+              );
+              pc.restartIce();
+              iceRestartAttemptedRef.current = true;
+
+              // Give restart 5 seconds to work before ending call
+              setTimeout(() => {
+                const currentPC = peerConnectionRef.current;
+                if (
+                  currentPC &&
+                  currentPC.iceConnectionState === "failed" &&
+                  currentPC.signalingState !== "closed"
+                ) {
+                  const activeCallId = currentCallIdRef.current;
+                  if (activeCallId) {
+                    safeLog.error(
+                      "❌ [CONNECTION STATE] ICE restart failed, ending call",
+                      {
+                        iceState: currentPC.iceConnectionState,
+                        connectionState: currentPC.connectionState,
+                        callId: activeCallId,
+                      }
+                    );
+
+                    const isChildUser = isChild;
+                    const by = isChildUser ? "child" : "parent";
+
+                    endCallUtil({
+                      callId: activeCallId,
+                      by,
+                      reason: "failed_after_restart",
+                    }).catch(() => {
+                      // Ignore errors - call might already be ended
+                    });
+                  }
+                } else if (
+                  currentPC &&
+                  (currentPC.iceConnectionState === "connected" ||
+                    currentPC.iceConnectionState === "completed")
+                ) {
+                  safeLog.log(
+                    "✅ [ICE RESTART] ICE restart succeeded - connection recovered!"
+                  );
+                  // Reset restart flag on success for potential future restarts
+                  iceRestartAttemptedRef.current = false;
+                }
+              }, 5000); // 5 seconds for restart to work
+            } catch (restartError) {
+              safeLog.error(
+                "❌ [ICE RESTART] Failed to restart ICE:",
+                restartError
+              );
+              // If restart fails, end call immediately
+              const activeCallId = currentCallIdRef.current;
+              if (activeCallId) {
+                const isChildUser = isChild;
+                const by = isChildUser ? "child" : "parent";
+                endCallUtil({
+                  callId: activeCallId,
+                  by,
+                  reason: "failed_restart_error",
+                }).catch(() => {
+                  // Ignore errors
+                });
+              }
+            }
+          } else {
+            // Restart already attempted or not possible - end call
+            setTimeout(() => {
+              const currentPC = peerConnectionRef.current;
+              if (
+                currentPC &&
+                currentPC.iceConnectionState === "failed" &&
+                currentPC.signalingState !== "closed"
+              ) {
+                const activeCallId = currentCallIdRef.current;
+                if (activeCallId) {
+                  safeLog.error(
+                    "❌ [CONNECTION STATE] ICE connection failed, ending call",
+                    {
+                      iceState: currentPC.iceConnectionState,
+                      connectionState: currentPC.connectionState,
+                      callId: activeCallId,
+                    }
+                  );
+
+                  const isChildUser = isChild;
+                  const by = isChildUser ? "child" : "parent";
+
+                  endCallUtil({
+                    callId: activeCallId,
+                    by,
+                    reason: "failed",
+                  }).catch(() => {
+                    // Ignore errors - call might already be ended
+                  });
+                }
+              }
+            }, 2000);
+          }
+        } else if (iceState === "disconnected") {
+          safeLog.warn(
+            "⚠️ [CONNECTION STATE] ICE connection disconnected (can recover)",
             {
               iceState,
               connectionState,
             }
           );
 
-          // Auto-end call after timeout if connection doesn't recover
+          // For "disconnected" state, give more time to recover (10 seconds)
+          // This is especially important on mobile networks
           setTimeout(() => {
             const currentPC = peerConnectionRef.current;
             if (
               currentPC &&
               currentPC.iceConnectionState !== "connected" &&
               currentPC.iceConnectionState !== "completed" &&
+              currentPC.iceConnectionState !== "checking" &&
               currentPC.signalingState !== "closed"
             ) {
               const activeCallId = currentCallIdRef.current;
               if (activeCallId) {
                 safeLog.error(
-                  "❌ [CONNECTION STATE] Connection failed to recover, ending call",
+                  "❌ [CONNECTION STATE] Connection did not recover after 10 seconds, ending call",
                   {
                     iceState: currentPC.iceConnectionState,
                     connectionState: currentPC.connectionState,
@@ -970,7 +1204,6 @@ export const useWebRTC = (
                   }
                 );
 
-                // Determine role from isChild prop
                 const isChildUser = isChild;
                 const by = isChildUser ? "child" : "parent";
 
@@ -983,7 +1216,7 @@ export const useWebRTC = (
                 });
               }
             }
-          }, 2000); // 2 second timeout before auto-ending (reduced for faster call termination)
+          }, 10000); // 10 seconds for disconnected to recover (was 2 seconds)
         }
       };
 
@@ -1902,9 +2135,12 @@ export const useWebRTC = (
       // Stop all tracks from local stream
       const streamToCleanup = localStreamRef.current;
       if (streamToCleanup) {
+        // CRITICAL: Unregister from global registry before stopping
+        unregisterActiveStream(streamToCleanup);
+        
         streamToCleanup.getTracks().forEach((track) => {
           track.stop();
-          safeLog.log("Stopped track:", track.kind);
+          safeLog.log("🛑 [CLEANUP] Stopped track:", track.kind);
         });
         localStreamRef.current = null;
         setLocalStream(null);
@@ -1915,7 +2151,7 @@ export const useWebRTC = (
         const stream = localVideoRef.current.srcObject as MediaStream;
         stream.getTracks().forEach((track) => {
           track.stop();
-          safeLog.log("Stopped track from video element:", track.kind);
+          safeLog.log("🛑 [CLEANUP] Stopped track from video element:", track.kind);
         });
         localVideoRef.current.srcObject = null;
       }
@@ -1926,7 +2162,7 @@ export const useWebRTC = (
           .srcObject as MediaStream;
         remoteVideoStream.getTracks().forEach((track) => {
           track.stop();
-          safeLog.log("Stopped remote video track:", track.kind);
+          safeLog.log("🛑 [CLEANUP] Stopped remote video track:", track.kind);
         });
         remoteVideoRef.current.srcObject = null;
       }
@@ -1936,7 +2172,7 @@ export const useWebRTC = (
       if (remoteToCleanup) {
         remoteToCleanup.getTracks().forEach((track) => {
           track.stop();
-          safeLog.log("Stopped remote stream track:", track.kind);
+          safeLog.log("🛑 [CLEANUP] Stopped remote stream track:", track.kind);
         });
       }
 
@@ -1959,6 +2195,12 @@ export const useWebRTC = (
       setRemoteStream(null);
       remoteStreamRef.current = null;
       processedTrackIds.current.clear();
+      
+      // CRITICAL: As a fallback, stop any remaining registered streams
+      // This ensures camera indicator goes off even if refs are somehow lost
+      if (force) {
+        stopAllActiveStreams();
+      }
     },
     // NOTE: networkQuality is intentionally excluded from deps to prevent recreation on stats updates
     // The stopMonitoring function is stable and handles cleanup internally
@@ -2156,6 +2398,25 @@ export const useWebRTC = (
       attemptPlay();
     });
   }, [remoteStream, remoteVideoRef]);
+
+  // CRITICAL: Monitor local stream and ensure video element is updated
+  // This fixes the issue where initializeConnection runs before VideoCallUI mounts
+  // (e.g., on child side during "calling" state, the video element doesn't exist yet)
+  useEffect(() => {
+    if (localStream && localVideoRef.current) {
+      // Only update srcObject if it's different to avoid interrupting playback
+      if (localVideoRef.current.srcObject !== localStream) {
+        safeLog.log(
+          "✅ [LOCAL STREAM] Syncing local stream to video element (useEffect)"
+        );
+        localVideoRef.current.srcObject = localStream;
+        localVideoRef.current.muted = true; // Local video should always be muted to prevent echo
+        localVideoRef.current.play().catch((error) => {
+          safeLog.error("Error playing local video in useEffect:", error);
+        });
+      }
+    }
+  }, [localStream, localVideoRef]);
 
   // Monitor remote stream changes and ensure video element is updated
   useEffect(() => {

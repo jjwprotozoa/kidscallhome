@@ -4,7 +4,207 @@
 
 ---
 
-## Latest Changes (2025-12-16)
+## Latest Changes (2025-12-19)
+
+### 1. WebRTC Improvements Based on W3C Best Practices
+
+#### Purpose
+
+Enhance WebRTC call reliability and diagnostics by implementing W3C WebRTC best practices identified through Context7 documentation review. These improvements follow industry standards and improve connection resilience, especially on mobile networks.
+
+#### Restore Point
+
+- **Commit**: `3c6ecab` - "chore: Create restore point before WebRTC improvements"
+- **Rollback**: `git reset --hard 3c6ecab` if issues arise
+
+#### Complete File List
+
+**Source Code Files Modified:**
+
+- `src/features/calls/hooks/useWebRTC.ts`
+  - Added `bundlePolicy: "max-bundle"` to RTCPeerConnection configuration
+  - Added `onicecandidateerror` event handler with detailed error logging
+  - Added ICE restart logic in `oniceconnectionstatechange` handler
+  - Added `iceRestartAttemptedRef` to track restart attempts
+  - Enhanced error handling with RTCError interface checks
+  - Reset restart flag when callId changes
+  - Lines ~392-396: Bundle policy configuration
+  - Lines ~960-986: ICE candidate error handler
+  - Lines ~997-1085: ICE restart on failure recovery
+
+- `src/features/calls/hooks/useCallEngine.ts`
+  - Added end-of-candidates handling (null candidate check)
+  - Enhanced error handling with RTCError interface
+  - Lines ~1138-1178: ICE candidate processing with end-of-candidates support
+
+- `src/features/calls/utils/callHandlers.ts`
+  - Added end-of-candidates handling (null candidate check)
+  - Enhanced error handling with RTCError interface
+  - Lines ~835-869: ICE candidate processing with end-of-candidates support
+
+- `src/features/calls/utils/childCallHandler.ts`
+  - Added end-of-candidates handling (null candidate check) - 2 locations
+  - Enhanced error handling with RTCError interface - 2 locations
+  - Lines ~995-1034: First ICE candidate processing location
+  - Lines ~1598-1633: Second ICE candidate processing location
+
+**Documentation Files Created:**
+
+- `docs/WEBRTC_IMPROVEMENTS.md` - Comprehensive documentation of all improvements
+
+#### Implementation Details
+
+**1. ICE Restart on Failure Recovery:**
+
+```typescript
+// Location: useWebRTC.ts, lines ~997-1085
+if (iceState === "failed") {
+  if (!iceRestartAttemptedRef.current && pc.signalingState !== "closed") {
+    try {
+      pc.restartIce();
+      iceRestartAttemptedRef.current = true;
+      // Monitor recovery for 5 seconds
+      setTimeout(() => {
+        // Check if restart succeeded or failed
+      }, 5000);
+    } catch (restartError) {
+      // End call if restart fails
+    }
+  }
+}
+```
+
+- Attempts ICE restart once per call when connection fails
+- Monitors recovery for 5 seconds before ending call
+- Prevents infinite restart loops
+
+**2. ICE Candidate Error Handling:**
+
+```typescript
+// Location: useWebRTC.ts, lines ~960-986
+pc.onicecandidateerror = (event) => {
+  const errorInfo = {
+    url: event.url,
+    errorCode: event.errorCode,
+    errorText: event.errorText,
+    address: event.address,
+    port: event.port,
+  };
+  // Log specific error codes (701, 702, 703)
+  // Provide diagnostics for TURN/STUN failures
+};
+```
+
+- Handles ICE candidate gathering failures
+- Provides specific error code diagnostics
+- Helps identify TURN/STUN server issues
+
+**3. Bundle Policy Optimization:**
+
+```typescript
+// Location: useWebRTC.ts, lines ~392-396
+const pc = new RTCPeerConnection({
+  iceServers,
+  iceCandidatePoolSize: 10,
+  bundlePolicy: "max-bundle", // Optimize for fewer transports
+});
+```
+
+- Reduces transport overhead
+- Faster connection establishment
+- Better resource utilization
+
+**4. End-of-Candidates Handling:**
+
+```typescript
+// Location: Multiple files, ICE candidate processing loops
+if (!candidate.candidate) {
+  // End-of-candidates marker - signal completion
+  try {
+    await pc.addIceCandidate();
+    safeLog.log("✅ End-of-candidates marker processed");
+  } catch (endErr) {
+    // Already processed or connection closed - ignore
+  }
+  continue;
+}
+```
+
+- Properly signals ICE gathering completion
+- Follows WebRTC specification
+- Prevents indefinite waiting
+
+**5. RTCError Interface Usage:**
+
+```typescript
+// Location: All error catch blocks
+catch (err) {
+  if (err instanceof RTCError) {
+    safeLog.error("RTCError:", {
+      errorDetail: err.errorDetail,
+      sdpLineNumber: err.sdpLineNumber,
+      httpRequestStatusCode: err.httpRequestStatusCode,
+      message: err.message,
+    });
+  }
+  // Handle standard errors...
+}
+```
+
+- Provides WebRTC-specific error details
+- Better diagnostics for production issues
+- Standardized error handling pattern
+
+#### Testing Recommendations
+
+1. **ICE Restart Testing:**
+   - Test on unstable networks (mobile, WiFi switching)
+   - Verify restart attempts only once per call
+   - Monitor recovery success/failure logs
+   - Test call termination if restart fails
+
+2. **Error Handling Testing:**
+   - Test with invalid TURN credentials
+   - Monitor error logs for detailed diagnostics
+   - Verify error codes are logged correctly
+   - Test RTCError detection works
+
+3. **End-of-Candidates Testing:**
+   - Monitor logs for "End-of-candidates marker processed"
+   - Verify no infinite waiting for candidates
+   - Test connection completes properly
+
+4. **Bundle Policy Testing:**
+   - Verify fewer transports in connection stats
+   - Test connection speed improvement
+   - Monitor resource usage reduction
+
+5. **Integration Testing:**
+   - Test all call flows (parent↔child, family_member↔child)
+   - Verify no regressions in existing functionality
+   - Test on various network conditions (2G-5G/WiFi)
+   - Monitor production logs for improvements
+
+#### Impact
+
+- **Connection Reliability**: ICE restart recovers from transient failures automatically
+- **Better Diagnostics**: Enhanced error handling provides actionable troubleshooting information
+- **Performance**: Bundle policy optimization reduces overhead and improves connection speed
+- **Standards Compliance**: Follows W3C WebRTC best practices for production-ready applications
+- **Mobile Network Resilience**: Especially beneficial for unstable mobile network conditions
+- **Production Ready**: All improvements follow industry best practices and WebRTC specifications
+
+#### Rollback Instructions
+
+If issues arise, revert to restore point:
+
+```bash
+git reset --hard 3c6ecab
+```
+
+---
+
+## Previous Changes (2025-12-16)
 
 ### 1. Avatar Colors for Parents and Family Members
 

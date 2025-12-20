@@ -6,7 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { safeLog } from "@/utils/security";
 
 // Quality levels from worst to best
-export type NetworkQualityLevel = "critical" | "poor" | "moderate" | "good" | "excellent";
+export type NetworkQualityLevel = "critical" | "poor" | "moderate" | "good" | "excellent" | "premium";
 
 // Connection type detection
 export type ConnectionType = "2g" | "3g" | "4g" | "5g" | "wifi" | "unknown";
@@ -68,14 +68,25 @@ export const QUALITY_PRESETS: Record<NetworkQualityLevel, QualityPreset> = {
     enableVideo: true,
     scaleResolutionDownBy: 1,
   },
-  // 5G / WiFi / Excellent - Maximum quality
+  // 5G / Good WiFi / Excellent - HD quality
   excellent: {
     name: "HD Quality (5G/WiFi)",
-    maxBitrate: 2500,        // 2.5Mbps video
+    maxBitrate: 4000,        // 4Mbps video - bumped up for HD
     maxFramerate: 30,
-    maxWidth: 1280,
-    maxHeight: 720,
-    audioBitrate: 64,        // High quality audio
+    maxWidth: 1920,
+    maxHeight: 1080,
+    audioBitrate: 96,        // High quality audio (96kbps Opus)
+    enableVideo: true,
+    scaleResolutionDownBy: 1,
+  },
+  // Fiber / Premium WiFi - Full HD with higher bitrate for crisp video
+  premium: {
+    name: "Full HD Quality (Fiber/Premium)",
+    maxBitrate: 8000,        // 8Mbps video - excellent for 1080p
+    maxFramerate: 30,
+    maxWidth: 1920,
+    maxHeight: 1080,
+    audioBitrate: 128,       // Studio quality audio (128kbps Opus)
     enableVideo: true,
     scaleResolutionDownBy: 1,
   },
@@ -86,8 +97,9 @@ const BANDWIDTH_THRESHOLDS = {
   critical: 100,    // Below 100kbps = audio only
   poor: 300,        // 100-300kbps = very low quality
   moderate: 800,    // 300-800kbps = medium quality
-  good: 2000,       // 800-2000kbps = high quality
-  // Above 2000kbps = excellent
+  good: 2000,       // 800-2000kbps = high quality (720p)
+  excellent: 5000,  // 2000-5000kbps = HD quality (1080p)
+  // Above 5000kbps (5Mbps) = premium (high bitrate 1080p for fiber)
 };
 
 // Stats collected from WebRTC
@@ -172,6 +184,15 @@ function detectConnectionType(): ConnectionType {
 
 // Get initial quality level based on connection type
 function getInitialQualityLevel(connectionType: ConnectionType): NetworkQualityLevel {
+  // Check for high-speed connection via Network Information API
+  const connection = (navigator as Navigator & { 
+    connection?: { 
+      downlink?: number;
+    } 
+  }).connection;
+  
+  const downlinkMbps = connection?.downlink || 0;
+  
   switch (connectionType) {
     case "2g":
       return "critical";
@@ -180,8 +201,15 @@ function getInitialQualityLevel(connectionType: ConnectionType): NetworkQualityL
     case "4g":
       return "moderate";
     case "5g":
+      // 5G is always fast enough for premium
+      if (downlinkMbps >= 10) return "premium";
+      return "excellent";
     case "wifi":
-      return "good";
+      // WiFi quality depends on reported bandwidth
+      // Even 10Mbps fiber is plenty fast for premium video
+      if (downlinkMbps >= 10) return "premium";  // Fiber or fast WiFi (10+ Mbps)
+      if (downlinkMbps >= 5) return "excellent"; // Good WiFi (5-10 Mbps)
+      return "good"; // Standard WiFi
     default:
       return "moderate"; // Default to moderate if unknown
   }
@@ -193,7 +221,8 @@ function getQualityLevelFromBandwidth(bandwidthKbps: number): NetworkQualityLeve
   if (bandwidthKbps < BANDWIDTH_THRESHOLDS.poor) return "poor";
   if (bandwidthKbps < BANDWIDTH_THRESHOLDS.moderate) return "moderate";
   if (bandwidthKbps < BANDWIDTH_THRESHOLDS.good) return "good";
-  return "excellent";
+  if (bandwidthKbps < BANDWIDTH_THRESHOLDS.excellent) return "excellent";
+  return "premium";
 }
 
 // Calculate quality score (0-100) from stats
@@ -212,7 +241,8 @@ function calculateQualityScore(stats: Partial<NetworkStats>): number {
   
   // Bonus for high bandwidth
   const bandwidth = stats.availableBandwidth || 0;
-  if (bandwidth > 2000) score += 10;
+  if (bandwidth > 5000) score += 15; // Premium tier (5+ Mbps - fiber/fast WiFi)
+  else if (bandwidth > 2000) score += 10; // Excellent tier
   else if (bandwidth < 300) score -= 20;
   
   return Math.max(0, Math.min(100, score));
@@ -428,9 +458,10 @@ export const useNetworkQuality = (): UseNetworkQualityReturn => {
       
       // Adjust quality level based on packet loss and RTT
       let adjustedQualityLevel = newQualityLevel;
+      const levels: NetworkQualityLevel[] = ["critical", "poor", "moderate", "good", "excellent", "premium"];
+      
       if (outboundPacketLoss > 10 || inboundPacketLoss > 10) {
         // High packet loss - drop quality
-        const levels: NetworkQualityLevel[] = ["critical", "poor", "moderate", "good", "excellent"];
         const currentIndex = levels.indexOf(newQualityLevel);
         if (currentIndex > 0) {
           adjustedQualityLevel = levels[currentIndex - 1];
@@ -438,7 +469,6 @@ export const useNetworkQuality = (): UseNetworkQualityReturn => {
       }
       if (roundTripTime > 500) {
         // High latency - drop quality
-        const levels: NetworkQualityLevel[] = ["critical", "poor", "moderate", "good", "excellent"];
         const currentIndex = levels.indexOf(adjustedQualityLevel);
         if (currentIndex > 0) {
           adjustedQualityLevel = levels[currentIndex - 1];

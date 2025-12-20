@@ -38,38 +38,44 @@ export const AppDescription = () => {
           <div>
             <h3 className="font-semibold mb-2">Short Description</h3>
             <p className="text-muted-foreground">
-              Stay connected with your family through simple video calls and
-              messaging between parents, family members, and children.
+              Learn how Kids Call Home helps kids safely call and message
+              parents and family on most phones and tablets, without a phone
+              number, social media account, or passwords to remember.
             </p>
           </div>
           <Separator />
           <div>
             <h3 className="font-semibold mb-2">Full Description</h3>
             <p className="text-muted-foreground leading-relaxed">
-              Kids Call Home is a family communication app that enables secure
-              video calls and messaging between parents, family members, and
-              children. Parents can create accounts and manage their children's
-              access, while family members (grandparents, aunts, uncles, and
-              other trusted adults) can be invited to connect with children.
-              Kids can easily call and message their parents and family members
-              using a special login code. The app works on WiFi-only devices (no
-              SIM card required) and also supports devices with cellular data
-              (LTE, 3G, 4G, 5G). Perfect for tablets, Chromebooks, and mobile
-              devices.
+              Kids Call Home is a kids call parents app built by a long‑distance
+              parent who needed a simple, reliable way for his children to call
+              him from any home, country, or device. The app is designed as a
+              safe kids messenger and family communication tool, not a social
+              network: there are no public profiles, no strangers, no filters
+              hiding faces, and no addictive feeds. Parents can create accounts
+              and manage their children's access, while family members
+              (grandparents, aunts, uncles, and other trusted adults) can be
+              invited to connect with children. Kids can easily call and message
+              their parents and family members using a special login code. The
+              app works on most phones and tablets over Wi‑Fi or mobile data,
+              without requiring a phone number or SIM card. Perfect for tablets,
+              iPads, Chromebooks, and other Wi‑Fi devices.
             </p>
           </div>
           <div className="mt-4">
             <h3 className="font-semibold mb-2">Key Features</h3>
             <ul className="list-disc list-inside space-y-1 text-muted-foreground">
-              <li>Video calls between parents, family members, and children</li>
-              <li>Secure messaging</li>
-              <li>Simple login codes for kids</li>
-              <li>Parent account management</li>
-              <li>Family member invitations and access control</li>
-              <li>Real-time notifications</li>
-              <li>Mobile-friendly interface</li>
-              <li>Progressive Web App (PWA)</li>
+              <li>Family-only video calls and messaging</li>
+              <li>Parent-controlled contacts</li>
+              <li>No public profiles or stranger contact</li>
+              <li>Encrypted communication</li>
               <li>Works without SIM card or phone number</li>
+              <li>Works on most phones and tablets, including many kids tablets and e-readers</li>
+              <li>Co-parenting friendly and long-distance family friendly</li>
+              <li>No ads, no filters, no data tracking</li>
+              <li>Magic link login for kids (no passwords to remember)</li>
+              <li>Real-time notifications</li>
+              <li>Progressive Web App (PWA)</li>
               <li>Low-bandwidth optimization</li>
             </ul>
           </div>

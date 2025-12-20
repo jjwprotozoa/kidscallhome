@@ -4,7 +4,18 @@
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Crown, DollarSign, ExternalLink } from "lucide-react";
+import {
+  Building2,
+  Check,
+  Crown,
+  DollarSign,
+  ExternalLink,
+  Gift,
+  Heart,
+  Mail,
+  Sparkles,
+  Users,
+} from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 interface PricingSectionProps {
@@ -21,99 +32,168 @@ export const PricingSection = ({ isParent }: PricingSectionProps) => {
           <DollarSign className="h-5 w-5" />
           Pricing & Subscription Terms
         </h2>
-        <div className="space-y-4">
-          <div className="bg-primary/10 p-4 rounded-lg border border-primary/20">
-            <p className="font-semibold text-primary mb-2">
-              Free Tier Available
-            </p>
-            <p className="text-muted-foreground">
-              The app allows 1 parent and 1 child account for free.
-              Charges apply for each additional child account.
-            </p>
-          </div>
-          <Separator />
+        <div className="space-y-6">
+          {/* Free Plan */}
           <div>
-            <h3 className="font-semibold mb-3">Subscription Plans</h3>
+            <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-green-600" />
+              Free Plan
+            </h3>
+            <div className="bg-green-50 dark:bg-green-950/30 p-4 rounded-lg border border-green-200 dark:border-green-800">
+              <p className="text-muted-foreground mb-2">
+                <strong className="text-foreground">
+                  Kids Call Home is free for 1 parent and 1 child.
+                </strong>
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Perfect for trying out Kids Call Home with your first child
+                before upgrading. Experience safe video calls and messaging with
+                no commitment.
+              </p>
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* Family Plan */}
+          <div>
+            <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
+              <Crown className="h-5 w-5 text-primary" />
+              Family Plan
+            </h3>
             <div className="space-y-3">
-              <div className="border rounded-lg p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <h4 className="font-medium">Additional Kid Monthly</h4>
-                  <span className="text-lg font-bold">$4.99/month</span>
+              <div className="border-2 border-primary/50 rounded-lg p-4 bg-primary/5">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
+                  <h4 className="font-medium flex items-center gap-2">
+                    <Heart className="h-4 w-4 text-primary" />
+                    Monthly
+                  </h4>
+                  <span className="text-xl font-bold text-primary">
+                    US$14.99/month
+                  </span>
                 </div>
-                <p className="text-sm text-muted-foreground">
-                  Add one more child to your account
-                </p>
-              </div>
-              <div className="border rounded-lg p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <h4 className="font-medium">Additional Kid Annual</h4>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
+                  <h4 className="font-medium flex items-center gap-2">
+                    <Heart className="h-4 w-4 text-primary" />
+                    Annual
                     <span className="text-xs bg-primary text-primary-foreground px-2 py-0.5 rounded">
                       Save 17%
                     </span>
-                  </div>
-                  <span className="text-lg font-bold">$49.99/year</span>
+                  </h4>
+                  <span className="text-xl font-bold text-primary">
+                    US$149/year
+                  </span>
                 </div>
-                <p className="text-sm text-muted-foreground">
-                  Add one more child - Save 2 months with annual billing!
-                </p>
               </div>
-              <div className="border rounded-lg p-4 border-primary/50">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <h4 className="font-medium">Family Bundle Monthly</h4>
-                    <Crown className="h-4 w-4 text-primary" />
-                  </div>
-                  <span className="text-lg font-bold">$14.99/month</span>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  Perfect for families with up to 5 kids
-                </p>
-              </div>
-              <div className="border rounded-lg p-4 border-primary/50">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <h4 className="font-medium">Family Bundle Annual</h4>
-                    <Crown className="h-4 w-4 text-primary" />
-                    <span className="text-xs bg-primary text-primary-foreground px-2 py-0.5 rounded">
-                      Save 17%
-                    </span>
-                  </div>
-                  <span className="text-lg font-bold">$149.99/year</span>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  Up to 5 kids - Save 17% vs monthly
-                </p>
-              </div>
-              <div className="border-2 border-primary rounded-lg p-4 bg-primary/5">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <h4 className="font-medium">Annual Family Plan</h4>
-                    <Crown className="h-4 w-4 text-primary" />
-                    <span className="text-xs bg-primary text-primary-foreground px-2 py-0.5 rounded">
-                      Best Value
-                    </span>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-lg font-bold">$99/year</span>
-                    <div className="text-xs text-muted-foreground">
-                      Just $8.25/month
-                    </div>
-                  </div>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  Best value - up to 10 kids for the whole family. Billed annually only.
-                </p>
+
+              <p className="text-muted-foreground">
+                Upgrade once and connect the whole family. The Family Plan
+                includes:
+              </p>
+
+              <ul className="space-y-2 ml-1">
+                <li className="flex items-start gap-2">
+                  <Check className="h-5 w-5 text-green-600 mt-0.5 flex-shrink-0" />
+                  <span>
+                    <strong>Up to 5 kids</strong> – all your children under one
+                    subscription
+                  </span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <Check className="h-5 w-5 text-green-600 mt-0.5 flex-shrink-0" />
+                  <span>
+                    <strong>Unlimited invited family members</strong> –
+                    grandparents, aunts, uncles, cousins, and more
+                  </span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <Check className="h-5 w-5 text-green-600 mt-0.5 flex-shrink-0" />
+                  <span>
+                    Safe, parent-approved video calls and messaging for everyone
+                  </span>
+                </li>
+              </ul>
+
+              <p className="text-sm text-muted-foreground italic">
+                Local currency equivalents may vary.
+              </p>
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* Larger Families & Organizations */}
+          <div>
+            <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
+              <Building2 className="h-5 w-5 text-blue-600" />
+              Larger Families & Organizations
+            </h3>
+            <div className="bg-blue-50 dark:bg-blue-950/30 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
+              <p className="text-muted-foreground mb-3">
+                If you have more than 5 children, or you would like to use Kids
+                Call Home in an organization (for example a school, clinic, or
+                NGO), please contact us for custom pricing.
+              </p>
+              <div className="flex items-center gap-2">
+                <Mail className="h-4 w-4 text-blue-600" />
+                <a
+                  href="mailto:support@kidscallhome.com?subject=Custom Pricing Inquiry"
+                  className="text-primary hover:underline font-medium"
+                >
+                  support@kidscallhome.com
+                </a>
               </div>
             </div>
           </div>
+
+          <Separator />
+
+          {/* Referral Rewards */}
+          <div>
+            <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
+              <Gift className="h-5 w-5 text-purple-600" />
+              Referral Rewards
+            </h3>
+            <div className="bg-purple-50 dark:bg-purple-950/30 p-4 rounded-lg border border-purple-200 dark:border-purple-800">
+              <div className="flex items-start gap-3">
+                <Users className="h-5 w-5 text-purple-600 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="text-muted-foreground">
+                    <strong className="text-foreground">
+                      Share Kids Call Home with friends and family.
+                    </strong>{" "}
+                    When someone subscribes to the Family Plan using your
+                    referral link, you both receive{" "}
+                    <strong className="text-primary">1 week free</strong> on
+                    your subscriptions.
+                  </p>
+                  {isParent ? (
+                    <Button
+                      variant="default"
+                      size="sm"
+                      className="mt-3 bg-purple-600 hover:bg-purple-700"
+                      onClick={() => navigate("/parent/dashboard?tab=referrals")}
+                    >
+                      <Gift className="h-4 w-4 mr-2" />
+                      Get Your Referral Link & Share
+                    </Button>
+                  ) : (
+                    <p className="text-sm text-purple-600 dark:text-purple-400 mt-2">
+                      Parents can access their referral link from the Dashboard → Referrals tab.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
           {isParent && (
             <div className="pt-4">
               <Button
                 onClick={() => navigate("/parent/upgrade")}
                 className="w-full sm:w-auto"
               >
-                View Full Pricing Details
+                View Subscription Options
                 <ExternalLink className="ml-2 h-4 w-4" />
               </Button>
             </div>
@@ -123,4 +203,3 @@ export const PricingSection = ({ isParent }: PricingSectionProps) => {
     </section>
   );
 };
-

@@ -46,6 +46,7 @@ export const LoginForm = ({
 }: LoginFormProps) => {
   const { toast } = useToast();
   const CAPTCHA_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || "";
+  const CAPTCHA_ENABLED = import.meta.env.VITE_ENABLE_CAPTCHA !== "false"; // Default to enabled unless explicitly disabled
 
   return (
     <>
@@ -65,8 +66,8 @@ export const LoginForm = ({
       {/* SECURITY: Show lockout warning */}
       {lockoutInfo && <LockoutWarning lockoutInfo={lockoutInfo} />}
 
-      {/* SECURITY: CAPTCHA after failed attempts */}
-      {showCaptcha && CAPTCHA_SITE_KEY && (
+      {/* SECURITY: CAPTCHA after failed attempts - only show if enabled */}
+      {CAPTCHA_ENABLED && showCaptcha && CAPTCHA_SITE_KEY && (
         <div className="space-y-2">
           <Label className="text-sm font-medium">Security Check</Label>
           <Captcha
@@ -82,7 +83,7 @@ export const LoginForm = ({
               onCaptchaError(error);
             }}
             theme="auto"
-            size="normal"
+            size="flexible"
           />
         </div>
       )}
