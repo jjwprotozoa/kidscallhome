@@ -29,6 +29,7 @@ import {
   Sparkles,
   ArrowRight,
   Play,
+  DollarSign,
 } from "lucide-react";
 
 const Index = () => {
@@ -47,6 +48,34 @@ const Index = () => {
         <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-background to-secondary/10 -z-10" />
         
         <div className="container mx-auto px-4 py-12 md:py-20 lg:py-24">
+          {/* App Icon at Top */}
+          <div className="flex justify-center mb-8">
+            <div className="aspect-square w-20 md:w-24">
+              <picture>
+                <source
+                  type="image/webp"
+                  srcSet="/icon-96x96.webp 96w, /icon-192x192.webp 192w"
+                  sizes="96px"
+                />
+                <source
+                  type="image/png"
+                  srcSet="/icon-96x96.png 96w, /icon-192x192.png 192w"
+                  sizes="96px"
+                />
+                <img
+                  src="/icon-96x96.png"
+                  alt="Kids Call Home"
+                  className="w-full h-full object-contain drop-shadow-lg"
+                  width="96"
+                  height="96"
+                  loading="eager"
+                  fetchPriority="high"
+                  decoding="async"
+                />
+              </picture>
+            </div>
+          </div>
+
           <div className="grid lg:grid-cols-2 gap-8 lg:gap-12 items-center">
             {/* Left: Headline and CTA */}
             <div className="text-center lg:text-left space-y-6">
@@ -93,15 +122,16 @@ const Index = () => {
                   Parents & Family — Get Started Free
                 </Button>
                 <p className="text-xs text-muted-foreground mt-2">
-                  Free plan includes 1 child. No credit card required.
+                  Free plan includes 1 child. No credit card required for signup (required to upgrade).
                 </p>
               </div>
             </div>
 
-            {/* Right: Kids Login Card - PROMINENT and ACCESSIBLE */}
-            <div className="flex justify-center lg:justify-end">
+            {/* Right: Login Cards - Kids & Adults Side by Side */}
+            <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-end">
+              {/* Kids Login Card - HIGHLY VISIBLE & ACCESSIBLE */}
               <Card 
-                className="w-full max-w-sm p-8 bg-gradient-to-br from-secondary/20 to-primary/20 border-2 border-primary/30 shadow-2xl hover:shadow-3xl transition-all cursor-pointer group"
+                className="w-full sm:w-auto min-w-[280px] max-w-sm p-6 md:p-8 bg-gradient-to-br from-primary/30 via-primary/20 to-secondary/30 border-3 border-primary shadow-[0_8px_24px_rgba(0,0,0,0.15)] hover:shadow-[0_12px_32px_rgba(0,0,0,0.25)] transition-all cursor-pointer group focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-4"
                 onClick={() => navigate("/child/login")}
                 role="button"
                 tabIndex={0}
@@ -113,39 +143,80 @@ const Index = () => {
                 }}
                 aria-label="Kids login - tap to enter your special code"
               >
-                {/* Large, friendly icon */}
                 <div className="text-center space-y-4">
-                  <div className="mx-auto w-24 h-24 md:w-28 md:h-28 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform">
-                    <Baby className="h-12 w-12 md:h-14 md:w-14 text-white" aria-hidden="true" />
+                  <div className="mx-auto w-20 h-20 md:w-24 md:h-24 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center shadow-xl group-hover:scale-110 transition-transform ring-4 ring-primary/20">
+                    <Baby className="h-10 w-10 md:h-12 md:w-12 text-white" aria-hidden="true" />
                   </div>
                   
                   <div>
-                    <h2 className="text-2xl md:text-3xl font-bold text-primary">
+                    <h2 className="text-xl md:text-2xl font-bold text-primary">
                       Kids Login
                     </h2>
-                    <p className="text-muted-foreground mt-2 text-base md:text-lg">
+                    <p className="text-foreground mt-2 text-sm md:text-base font-medium">
                       Tap here to call Mom, Dad, or Grandma!
                     </p>
                   </div>
 
                   {/* Visual login hint */}
                   <div className="flex justify-center gap-2 py-2">
-                    <div className="w-10 h-10 md:w-12 md:h-12 rounded-lg bg-blue-500 flex items-center justify-center text-white text-xl">🐻</div>
-                    <div className="w-10 h-10 md:w-12 md:h-12 rounded-lg bg-green-500 flex items-center justify-center text-white text-xl">🦊</div>
-                    <div className="w-10 h-10 md:w-12 md:h-12 rounded-lg bg-purple-500 flex items-center justify-center text-white text-xl">🐰</div>
+                    <div className="w-10 h-10 md:w-12 md:h-12 rounded-lg bg-blue-500 flex items-center justify-center text-white text-xl shadow-md">🐻</div>
+                    <div className="w-10 h-10 md:w-12 md:h-12 rounded-lg bg-green-500 flex items-center justify-center text-white text-xl shadow-md">🦊</div>
+                    <div className="w-10 h-10 md:w-12 md:h-12 rounded-lg bg-purple-500 flex items-center justify-center text-white text-xl shadow-md">🐰</div>
                   </div>
-                  <p className="text-sm text-muted-foreground">
-                    Use your special animal code to log in!
+                  <p className="text-xs md:text-sm text-foreground font-medium">
+                    Use your special animal code!
                   </p>
 
                   <Button 
                     size="lg" 
-                    className="w-full text-lg py-6 group-hover:bg-primary/90"
+                    className="w-full text-base md:text-lg py-5 md:py-6 bg-primary hover:bg-primary/90 text-primary-foreground font-bold shadow-lg hover:shadow-xl transition-all"
                     tabIndex={-1}
                     aria-hidden="true"
                   >
                     <Play className="mr-2 h-5 w-5" />
                     Enter My Code
+                    <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
+                  </Button>
+                </div>
+              </Card>
+
+              {/* Adult Login Card */}
+              <Card 
+                className="w-full sm:w-auto min-w-[280px] max-w-sm p-6 md:p-8 bg-gradient-to-br from-secondary/20 to-primary/10 border-2 border-secondary/40 shadow-lg hover:shadow-xl transition-all cursor-pointer group focus-visible:outline-2 focus-visible:outline-secondary focus-visible:outline-offset-4"
+                onClick={() => navigate("/parent/auth")}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    navigate("/parent/auth");
+                  }
+                }}
+                aria-label="Parents and family members login"
+              >
+                <div className="text-center space-y-4">
+                  <div className="mx-auto w-20 h-20 md:w-24 md:h-24 rounded-full bg-gradient-to-br from-secondary to-primary/30 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform ring-4 ring-secondary/20">
+                    <Users className="h-10 w-10 md:h-12 md:w-12 text-secondary-foreground" aria-hidden="true" />
+                  </div>
+                  
+                  <div>
+                    <h2 className="text-xl md:text-2xl font-bold text-secondary-foreground">
+                      Parents Login
+                    </h2>
+                    <p className="text-muted-foreground mt-2 text-sm md:text-base">
+                      Sign in or create your family account
+                    </p>
+                  </div>
+
+                  <Button 
+                    size="lg" 
+                    variant="secondary"
+                    className="w-full text-base md:text-lg py-5 md:py-6 font-semibold shadow-md hover:shadow-lg transition-all"
+                    tabIndex={-1}
+                    aria-hidden="true"
+                  >
+                    <Users className="mr-2 h-5 w-5" />
+                    Login / Sign Up
                     <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
                   </Button>
                 </div>
@@ -240,7 +311,7 @@ const Index = () => {
                   <div>
                     <h4 className="font-semibold text-green-600 dark:text-green-400">How We Help</h4>
                     <p className="text-sm text-muted-foreground">
-                      Kids log in by tapping pictures (like Blue Bear), then tap your face to call. 
+                      Kids log in using their name and avatar (like "Emma" with a bear icon), then tap your face to call. 
                       No typing, no passwords, no adult needed.
                     </p>
                   </div>
@@ -492,10 +563,157 @@ const Index = () => {
       </section>
 
       {/* ============================================================
-          USE CASES - Who it's for
+          PRICING - Transparent, No Hidden Charges
           ============================================================ */}
       <section 
         className="bg-muted/30 py-12 md:py-16"
+        aria-labelledby="pricing-heading"
+      >
+        <div className="container mx-auto px-4">
+          <div className="text-center mb-10">
+            <h2 id="pricing-heading" className="text-2xl md:text-3xl font-bold mb-4">
+              Simple, Transparent Pricing
+            </h2>
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+              No hidden charges. No surprise fees. Start free and upgrade when you're ready.
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl mx-auto">
+            {/* Free Plan */}
+            <Card className="p-6 border-2 border-green-500/30 bg-green-50/50 dark:bg-green-950/20">
+              <div className="text-center space-y-4">
+                <div className="flex items-center justify-center gap-2">
+                  <Sparkles className="h-6 w-6 text-green-600" aria-hidden="true" />
+                  <h3 className="text-xl font-bold">Free</h3>
+                </div>
+                <div>
+                  <div className="text-3xl font-bold">$0</div>
+                  <p className="text-sm text-muted-foreground">Forever</p>
+                </div>
+                <ul className="text-sm text-left space-y-2">
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-green-600 flex-shrink-0 mt-0.5" aria-hidden="true" />
+                    <span>1 child</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-green-600 flex-shrink-0 mt-0.5" aria-hidden="true" />
+                    <span>Unlimited family members</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-green-600 flex-shrink-0 mt-0.5" aria-hidden="true" />
+                    <span>All features included</span>
+                  </li>
+                </ul>
+                <Button 
+                  className="w-full" 
+                  variant="outline"
+                  onClick={() => navigate("/parent/auth")}
+                >
+                  Start Free
+                </Button>
+              </div>
+            </Card>
+
+            {/* Additional Kid Monthly */}
+            <Card className="p-6 hover:shadow-lg transition-shadow">
+              <div className="text-center space-y-4">
+                <h3 className="text-xl font-bold">Add a Child</h3>
+                <div>
+                  <div className="text-3xl font-bold">$4.99</div>
+                  <p className="text-sm text-muted-foreground">per month</p>
+                </div>
+                <ul className="text-sm text-left space-y-2">
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" aria-hidden="true" />
+                    <span>+1 child to your account</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" aria-hidden="true" />
+                    <span>Cancel anytime</span>
+                  </li>
+                </ul>
+                <Button 
+                  className="w-full" 
+                  variant="secondary"
+                  onClick={() => navigate("/parent/upgrade")}
+                >
+                  Upgrade
+                </Button>
+              </div>
+            </Card>
+
+            {/* Family Bundle Monthly */}
+            <Card className="p-6 hover:shadow-lg transition-shadow">
+              <div className="text-center space-y-4">
+                <h3 className="text-xl font-bold">Family Bundle</h3>
+                <div>
+                  <div className="text-3xl font-bold">$14.99</div>
+                  <p className="text-sm text-muted-foreground">per month</p>
+                </div>
+                <ul className="text-sm text-left space-y-2">
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" aria-hidden="true" />
+                    <span>Up to 5 children</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" aria-hidden="true" />
+                    <span>Best for larger families</span>
+                  </li>
+                </ul>
+                <Button 
+                  className="w-full" 
+                  variant="secondary"
+                  onClick={() => navigate("/parent/upgrade")}
+                >
+                  Upgrade
+                </Button>
+              </div>
+            </Card>
+
+            {/* Annual Plan */}
+            <Card className="p-6 border-2 border-primary/30 bg-primary/5 hover:shadow-lg transition-shadow">
+              <div className="text-center space-y-4">
+                <div className="flex items-center justify-center gap-2">
+                  <Star className="h-5 w-5 text-yellow-500 fill-yellow-500" aria-hidden="true" />
+                  <h3 className="text-xl font-bold">Annual Plan</h3>
+                </div>
+                <div>
+                  <div className="text-3xl font-bold">$99</div>
+                  <p className="text-sm text-muted-foreground">per year</p>
+                  <p className="text-xs text-green-600 font-semibold mt-1">Save 17%</p>
+                </div>
+                <ul className="text-sm text-left space-y-2">
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" aria-hidden="true" />
+                    <span>Unlimited children</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" aria-hidden="true" />
+                    <span>Best value</span>
+                  </li>
+                </ul>
+                <Button 
+                  className="w-full" 
+                  onClick={() => navigate("/parent/upgrade")}
+                >
+                  Upgrade
+                </Button>
+              </div>
+            </Card>
+          </div>
+
+          <p className="text-center text-sm text-muted-foreground mt-6">
+            Prices shown in USD. Local currency conversion available at checkout.
+          </p>
+        </div>
+      </section>
+
+      {/* ============================================================
+          USE CASES - Who it's for
+          ============================================================ */}
+      <section 
+        className="py-12 md:py-16"
         aria-labelledby="use-cases-heading"
       >
         <div className="container mx-auto px-4">
@@ -631,7 +849,7 @@ const Index = () => {
               <Button
                 size="lg"
                 variant="secondary"
-                className="text-lg px-8 py-6 w-full sm:w-auto border-2 border-primary/30"
+                className="text-lg px-8 py-6 w-full sm:w-auto border-3 border-primary shadow-[0_4px_12px_rgba(0,0,0,0.15)] hover:shadow-[0_6px_16px_rgba(0,0,0,0.2)] font-bold"
                 onClick={() => navigate("/child/login")}
               >
                 <Baby className="mr-2 h-5 w-5" aria-hidden="true" />
