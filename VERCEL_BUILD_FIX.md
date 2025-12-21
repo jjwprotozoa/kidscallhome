@@ -14,7 +14,9 @@ Vercel is detecting the root `package.json` and running its build script, which 
 
 ## Solution
 
-### Option 1: Configure Root Directory in Vercel Dashboard (Recommended)
+### Configure Root Directory in Vercel Dashboard (Required)
+
+**This is the ONLY solution that works reliably.**
 
 1. Go to your Vercel project dashboard
 2. Navigate to **Settings** → **General**
@@ -30,15 +32,12 @@ Vercel is detecting the root `package.json` and running its build script, which 
 - Build command: `npm run build` (runs `vite build`)
 - Output directory: `dist`
 - No more recursive loops!
+- No more "directory not found" errors!
 
-### Option 2: Use Root-Level vercel.json (Alternative)
-
-If you can't change the Root Directory setting, the root-level `vercel.json` has been updated to:
-- Use subshells `(cd kidscallhome && ...)` to prevent npm from resolving parent directories
-- Explicitly set build and install commands
-- Specify output directory as `kidscallhome/dist`
-
-This should prevent the recursive loop, but **Option 1 is still recommended** for cleaner configuration.
+**Important:** If you see "Failed to fetch one or more git submodules" warning:
+- This is usually harmless if `kidscallhome` is not actually a submodule
+- If `kidscallhome` IS a submodule, ensure it's properly initialized in your repository
+- The root directory setting will still work correctly
 
 ## Verification
 
@@ -52,13 +51,20 @@ Instead of the recursive loop.
 
 ## Files Changed
 
-- `vercel.json` (root) - Added build configuration with subshell commands
-- `package.json` (root) - Updated scripts to use `npm --prefix` instead of `cd` commands
+- `package.json` (root) - Updated scripts to use `npm --prefix` instead of `cd` commands (for local development)
+- Root `vercel.json` removed - Not needed when root directory is set correctly
 
 ## Next Steps
 
-1. **Set Root Directory in Vercel Dashboard** (Option 1 - Recommended)
-2. Or commit and push the updated `vercel.json` (Option 2)
-3. Trigger a new deployment
-4. Verify the build completes successfully
+1. **Set Root Directory in Vercel Dashboard to `kidscallhome`** (Required)
+2. Trigger a new deployment
+3. Verify the build completes successfully
+4. The `kidscallhome/vercel.json` will be used automatically
+
+## Why This Approach?
+
+- Vercel automatically uses the `vercel.json` in the root directory you specify
+- `kidscallhome/vercel.json` already has all the correct configuration
+- No need for complex conditional logic in build commands
+- Cleaner and more maintainable configuration
 

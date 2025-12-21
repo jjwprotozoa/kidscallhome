@@ -1,8 +1,0 @@
-{
-  "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "(cd kidscallhome && npm ci && npm run build)",
-  "outputDirectory": "kidscallhome/dist",
-  "installCommand": "(cd kidscallhome && npm ci)",
-  "framework": "vite"
-}
-
