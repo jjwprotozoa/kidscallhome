@@ -131,10 +131,10 @@ const Index = () => {
         {/* Background gradient */}
         <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-background to-secondary/10 -z-10" />
         
-        <div className="container mx-auto px-4 py-12 md:py-20 lg:py-24">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8 xl:px-12 py-12 sm:py-16 md:py-20 lg:py-24 xl:py-28">
           {/* App Icon at Top */}
-          <div className="flex justify-center mb-8">
-            <div className="aspect-square w-20 md:w-24">
+          <div className="flex justify-center mb-6 sm:mb-8 md:mb-10 lg:mb-12">
+            <div className="aspect-square w-16 sm:w-20 md:w-24 lg:w-28">
               <picture>
                 <source
                   type="image/webp"
@@ -160,82 +160,95 @@ const Index = () => {
             </div>
           </div>
 
-          <div className="grid lg:grid-cols-2 gap-8 lg:gap-12 items-center">
+          <div className="grid lg:grid-cols-2 gap-10 sm:gap-12 md:gap-16 lg:gap-20 xl:gap-24 items-start lg:items-center max-w-7xl mx-auto">
             {/* Left: Headline and CTA */}
-            <div className="text-center lg:text-left space-y-6">
+            <div className="text-center lg:text-left space-y-6 sm:space-y-8 md:space-y-10 lg:space-y-12">
               {/* Emotional headline - problem focused */}
-              <h1 
-                id="hero-heading"
-                className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold leading-tight"
-              >
-                <span className="text-primary">Stay connected,</span>
-                <br />
-                <span className="text-foreground">even when you're apart.</span>
-              </h1>
-              
-              <p className="text-lg md:text-xl text-muted-foreground max-w-xl mx-auto lg:mx-0">
-                A safe, simple way for kids to video call parents and family — 
-                built by a long-distance dad who knows the heartache of missing bedtime.
-              </p>
+              <div className="space-y-4 sm:space-y-5 md:space-y-6">
+                <h1 
+                  id="hero-heading"
+                  className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-bold leading-[1.15] sm:leading-[1.1] tracking-tight"
+                >
+                  <span className="text-primary block">Stay connected,</span>
+                  <span className="text-foreground block mt-1 sm:mt-2">even when you're apart.</span>
+                </h1>
+                
+                <p className="text-base sm:text-lg md:text-xl lg:text-xl xl:text-2xl text-muted-foreground max-w-xl sm:max-w-2xl mx-auto lg:mx-0 leading-relaxed sm:leading-relaxed">
+                  A safe, simple way for kids to video call parents and family — 
+                  built by a long-distance dad who knows the heartache of missing bedtime.
+                </p>
+              </div>
 
-              {/* Key Benefits Bar */}
-              <div className="flex flex-wrap justify-center lg:justify-start gap-4 md:gap-6 py-4 border-y border-primary/10">
-                <div className="text-center">
-                  <div className="text-xl md:text-2xl font-bold text-primary">Privacy</div>
-                  <div className="text-xs md:text-sm text-muted-foreground">Compliant</div>
+              {/* Trust indicators - Safety Features */}
+              <div className="flex flex-col sm:flex-row flex-wrap justify-center lg:justify-start gap-4 sm:gap-5 md:gap-6 lg:gap-8 py-4 sm:py-5 md:py-6 lg:py-8">
+                <div className="flex items-center justify-center lg:justify-start gap-2.5 sm:gap-3 md:gap-4">
+                  <div className="flex-shrink-0">
+                    <Shield className="h-5 w-5 sm:h-6 sm:w-6 md:h-7 md:w-7 text-green-600" aria-hidden="true" />
+                  </div>
+                  <span className="text-sm sm:text-base md:text-lg font-medium text-foreground whitespace-nowrap">
+                    Family-only contacts
+                  </span>
                 </div>
-                <div className="text-center">
-                  <div className="text-xl md:text-2xl font-bold text-primary">100%</div>
-                  <div className="text-xs md:text-sm text-muted-foreground">Family-Only</div>
+                <div className="flex items-center justify-center lg:justify-start gap-2.5 sm:gap-3 md:gap-4">
+                  <div className="flex-shrink-0">
+                    <Eye className="h-5 w-5 sm:h-6 sm:w-6 md:h-7 md:w-7 text-green-600" aria-hidden="true" />
+                  </div>
+                  <span className="text-sm sm:text-base md:text-lg font-medium text-foreground whitespace-nowrap">
+                    No strangers, ever
+                  </span>
                 </div>
-                <div className="text-center">
-                  <div className="text-xl md:text-2xl font-bold text-primary">0</div>
-                  <div className="text-xs md:text-sm text-muted-foreground">Ads or Tracking</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-xl md:text-2xl font-bold text-primary">Free</div>
-                  <div className="text-xs md:text-sm text-muted-foreground">To Get Started</div>
+                <div className="flex items-center justify-center lg:justify-start gap-2.5 sm:gap-3 md:gap-4">
+                  <div className="flex-shrink-0">
+                    <Lock className="h-5 w-5 sm:h-6 sm:w-6 md:h-7 md:w-7 text-green-600" aria-hidden="true" />
+                  </div>
+                  <span className="text-sm sm:text-base md:text-lg font-medium text-foreground whitespace-nowrap">
+                    Parent controlled
+                  </span>
                 </div>
               </div>
 
-              {/* Trust indicators */}
-              <div className="flex flex-wrap justify-center lg:justify-start gap-4 text-sm text-muted-foreground">
-                <span className="flex items-center gap-1.5">
-                  <Shield className="h-4 w-4 text-green-600" aria-hidden="true" />
-                  Family-only contacts
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <Eye className="h-4 w-4 text-green-600" aria-hidden="true" />
-                  No strangers, ever
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <Lock className="h-4 w-4 text-green-600" aria-hidden="true" />
-                  Parent controlled
-                </span>
+              {/* Key Benefits Bar - Stats */}
+              <div className="flex flex-wrap justify-center lg:justify-start gap-4 sm:gap-5 md:gap-6 lg:gap-8 xl:gap-10 py-4 sm:py-5 md:py-6 lg:py-8 border-y border-primary/10">
+                <div className="text-center lg:text-left min-w-[100px] sm:min-w-[120px]">
+                  <div className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-bold text-primary leading-tight">Privacy</div>
+                  <div className="text-xs sm:text-sm md:text-base text-muted-foreground mt-1 sm:mt-1.5">Compliant</div>
+                </div>
+                <div className="text-center lg:text-left min-w-[100px] sm:min-w-[120px]">
+                  <div className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-bold text-primary leading-tight">100%</div>
+                  <div className="text-xs sm:text-sm md:text-base text-muted-foreground mt-1 sm:mt-1.5">Family-Only</div>
+                </div>
+                <div className="text-center lg:text-left min-w-[100px] sm:min-w-[120px]">
+                  <div className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-bold text-primary leading-tight">0</div>
+                  <div className="text-xs sm:text-sm md:text-base text-muted-foreground mt-1 sm:mt-1.5">Ads or Tracking</div>
+                </div>
+                <div className="text-center lg:text-left min-w-[100px] sm:min-w-[120px]">
+                  <div className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-bold text-primary leading-tight">Free</div>
+                  <div className="text-xs sm:text-sm md:text-base text-muted-foreground mt-1 sm:mt-1.5">To Get Started</div>
+                </div>
               </div>
 
               {/* Parent CTA */}
-              <div className="pt-2">
+              <div className="pt-2 sm:pt-4 md:pt-6 space-y-2 sm:space-y-3">
                 <Button
                   size="lg"
-                  className="text-lg px-8 py-6 shadow-lg hover:shadow-xl transition-all"
+                  className="text-sm sm:text-base md:text-lg lg:text-xl px-5 sm:px-6 md:px-8 lg:px-10 py-5 sm:py-6 md:py-7 lg:py-8 shadow-lg hover:shadow-xl transition-all w-full sm:w-auto min-h-[44px] sm:min-h-[48px]"
                   onClick={() => navigate("/parent/auth")}
                   aria-label="Parents and family members sign in or create account"
                 >
-                  <Users className="mr-2 h-5 w-5" aria-hidden="true" />
-                  Parents & Family — Get Started Free
+                  <Users className="mr-2 h-4 w-4 sm:h-5 sm:w-5 md:h-6 md:w-6" aria-hidden="true" />
+                  <span className="whitespace-nowrap">Parents & Family — Get Started Free</span>
                 </Button>
-                <p className="text-xs text-muted-foreground mt-2">
+                <p className="text-xs sm:text-sm md:text-base text-muted-foreground max-w-md mx-auto lg:mx-0 leading-relaxed">
                   Free plan includes 1 child. No credit card required for signup (required to upgrade).
                 </p>
               </div>
             </div>
 
             {/* Right: Login Cards - Kids & Adults Side by Side */}
-            <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-end items-stretch sm:items-stretch">
+            <div className="flex flex-col sm:flex-row gap-4 sm:gap-5 md:gap-6 lg:gap-8 justify-center lg:justify-end items-stretch sm:items-stretch">
               {/* Kids Login Card - HIGHLY VISIBLE & ACCESSIBLE */}
               <Card 
-                className="w-full sm:w-auto min-w-[280px] max-w-sm p-6 md:p-8 bg-gradient-to-br from-primary/30 via-primary/20 to-secondary/30 border-3 border-primary shadow-[0_8px_24px_rgba(0,0,0,0.15)] hover:shadow-[0_12px_32px_rgba(0,0,0,0.25)] transition-all cursor-pointer group focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-4 flex flex-col"
+                className="w-full sm:w-[320px] md:w-[340px] lg:w-[360px] h-full min-h-[480px] sm:min-h-[500px] md:min-h-[520px] p-6 md:p-8 lg:p-10 bg-gradient-to-br from-primary/30 via-primary/20 to-secondary/30 border-3 border-primary shadow-[0_8px_24px_rgba(0,0,0,0.15)] hover:shadow-[0_12px_32px_rgba(0,0,0,0.25)] transition-all cursor-pointer group focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-4 flex flex-col"
                 onClick={() => navigate("/child/login")}
                 role="button"
                 tabIndex={0}
@@ -247,31 +260,31 @@ const Index = () => {
                 }}
                 aria-label="Kids login - tap to enter your special code"
               >
-                <div className="text-center flex flex-col flex-grow space-y-4">
-                  <div className="mx-auto w-20 h-20 md:w-24 md:h-24 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center shadow-xl group-hover:scale-110 transition-transform ring-4 ring-primary/20">
-                    <Baby className="h-10 w-10 md:h-12 md:w-12 text-white" aria-hidden="true" />
+                <div className="text-center flex flex-col flex-grow space-y-5 md:space-y-6">
+                  <div className="mx-auto w-20 h-20 md:w-24 md:h-24 lg:w-28 lg:h-28 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center shadow-xl group-hover:scale-110 transition-transform ring-4 ring-primary/20">
+                    <Baby className="h-10 w-10 md:h-12 md:w-12 lg:h-14 lg:w-14 text-white" aria-hidden="true" />
                   </div>
                   
-                  <div>
-                    <h2 className="text-xl md:text-2xl font-bold text-primary">
+                  <div className="space-y-2 md:space-y-3">
+                    <h2 className="text-xl md:text-2xl lg:text-3xl font-bold text-primary">
                       Kids Login
                     </h2>
-                    <p className="text-foreground mt-2 text-sm md:text-base font-medium">
+                    <p className="text-foreground text-sm md:text-base lg:text-lg font-medium">
                       Tap here to call Mom, Dad, or Grandma!
                     </p>
                   </div>
 
                   {/* Visual login hint */}
-                  <div className="flex justify-center gap-2 py-2">
-                    <div className="w-10 h-10 md:w-12 md:h-12 rounded-lg bg-blue-500 flex items-center justify-center text-white text-xl shadow-md">🐻</div>
-                    <div className="w-10 h-10 md:w-12 md:h-12 rounded-lg bg-green-500 flex items-center justify-center text-white text-xl shadow-md">🦊</div>
-                    <div className="w-10 h-10 md:w-12 md:h-12 rounded-lg bg-purple-500 flex items-center justify-center text-white text-xl shadow-md">🐰</div>
+                  <div className="flex justify-center gap-2 md:gap-3 py-3 md:py-4 h-[72px] md:h-[88px] lg:h-[96px] items-center">
+                    <div className="w-10 h-10 md:w-12 md:h-12 lg:w-14 lg:h-14 rounded-lg bg-blue-500 flex items-center justify-center text-white text-xl md:text-2xl shadow-md">🐻</div>
+                    <div className="w-10 h-10 md:w-12 md:h-12 lg:w-14 lg:h-14 rounded-lg bg-green-500 flex items-center justify-center text-white text-xl md:text-2xl shadow-md">🦊</div>
+                    <div className="w-10 h-10 md:w-12 md:h-12 lg:w-14 lg:h-14 rounded-lg bg-purple-500 flex items-center justify-center text-white text-xl md:text-2xl shadow-md">🐰</div>
                   </div>
-                  <p className="text-xs md:text-sm text-foreground font-medium">
+                  <p className="text-xs md:text-sm lg:text-base text-foreground font-medium h-[20px] md:h-[24px] lg:h-[28px] flex items-center justify-center">
                     Use your special animal code!
                   </p>
 
-                  <div className="mt-auto pt-2">
+                  <div className="mt-auto pt-4 md:pt-6">
                     <Button 
                       size="lg" 
                       className="w-full text-base md:text-lg py-5 md:py-6 bg-primary hover:bg-primary/90 text-primary-foreground font-bold shadow-lg hover:shadow-xl transition-all"
@@ -288,7 +301,7 @@ const Index = () => {
 
               {/* Adult Login Card */}
               <Card 
-                className="w-full sm:w-auto min-w-[280px] max-w-sm p-6 md:p-8 bg-gradient-to-br from-secondary/20 to-primary/10 border-2 border-secondary/40 shadow-lg hover:shadow-xl transition-all cursor-pointer group focus-visible:outline-2 focus-visible:outline-secondary focus-visible:outline-offset-4 flex flex-col"
+                className="w-full sm:w-[320px] md:w-[340px] lg:w-[360px] h-full min-h-[480px] sm:min-h-[500px] md:min-h-[520px] p-6 md:p-8 lg:p-10 bg-gradient-to-br from-secondary/20 to-primary/10 border-2 border-secondary/40 shadow-lg hover:shadow-xl transition-all cursor-pointer group focus-visible:outline-2 focus-visible:outline-secondary focus-visible:outline-offset-4 flex flex-col"
                 onClick={() => navigate("/parent/auth")}
                 role="button"
                 tabIndex={0}
@@ -300,24 +313,24 @@ const Index = () => {
                 }}
                 aria-label="Parents and family members login"
               >
-                <div className="text-center flex flex-col flex-grow space-y-4">
-                  <div className="mx-auto w-20 h-20 md:w-24 md:h-24 rounded-full bg-gradient-to-br from-secondary to-primary/30 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform ring-4 ring-secondary/20">
-                    <Users className="h-10 w-10 md:h-12 md:w-12 text-secondary-foreground" aria-hidden="true" />
+                <div className="text-center flex flex-col flex-grow space-y-5 md:space-y-6">
+                  <div className="mx-auto w-20 h-20 md:w-24 md:h-24 lg:w-28 lg:h-28 rounded-full bg-gradient-to-br from-secondary to-primary/30 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform ring-4 ring-secondary/20">
+                    <Users className="h-10 w-10 md:h-12 md:w-12 lg:h-14 lg:w-14 text-secondary-foreground" aria-hidden="true" />
                   </div>
                   
-                  <div>
-                    <h2 className="text-xl md:text-2xl font-bold text-secondary-foreground">
+                  <div className="space-y-2 md:space-y-3">
+                    <h2 className="text-xl md:text-2xl lg:text-3xl font-bold text-secondary-foreground">
                       Parents Login
                     </h2>
-                    <p className="text-muted-foreground mt-2 text-sm md:text-base">
+                    <p className="text-muted-foreground text-sm md:text-base lg:text-lg">
                       Sign in or create your family account
                     </p>
                   </div>
 
                   {/* Spacer to match Kids card height - ensures buttons align */}
-                  <div className="flex-1 min-h-[80px] md:min-h-[100px]"></div>
+                  <div className="flex-1 min-h-[92px] md:min-h-[112px] lg:min-h-[124px]"></div>
 
-                  <div className="mt-auto pt-2">
+                  <div className="mt-auto pt-4 md:pt-6">
                     <Button 
                       size="lg" 
                       variant="secondary"
