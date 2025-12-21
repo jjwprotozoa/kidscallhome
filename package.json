@@ -3,20 +3,20 @@
   "private": true,
   "version": "1.0.0-beta",
   "scripts": {
-    "dev": "cd kidscallhome && npm run dev",
-    "dev:local": "cd kidscallhome && npm run dev:local",
-    "build": "cd kidscallhome && npm run build",
-    "build:dev": "cd kidscallhome && npm run build:dev",
-    "lint": "cd kidscallhome && npm run lint",
-    "lint:security": "cd kidscallhome && npm run lint:security",
-    "preview": "cd kidscallhome && npm run preview",
-    "tunnel": "cd kidscallhome && npm run tunnel",
-    "tunnel:ngrok": "cd kidscallhome && npm run tunnel:ngrok",
-    "tunnel:cloudflare": "cd kidscallhome && npm run tunnel:cloudflare",
-    "generate-icons": "cd kidscallhome && npm run generate-icons",
-    "cap:sync": "cd kidscallhome && npm run cap:sync",
-    "cap:android": "cd kidscallhome && npm run cap:android",
-    "cap:ios": "cd kidscallhome && npm run cap:ios"
+    "dev": "npm --prefix kidscallhome run dev",
+    "dev:local": "npm --prefix kidscallhome run dev:local",
+    "build": "npm --prefix kidscallhome run build",
+    "build:dev": "npm --prefix kidscallhome run build:dev",
+    "lint": "npm --prefix kidscallhome run lint",
+    "lint:security": "npm --prefix kidscallhome run lint:security",
+    "preview": "npm --prefix kidscallhome run preview",
+    "tunnel": "npm --prefix kidscallhome run tunnel",
+    "tunnel:ngrok": "npm --prefix kidscallhome run tunnel:ngrok",
+    "tunnel:cloudflare": "npm --prefix kidscallhome run tunnel:cloudflare",
+    "generate-icons": "npm --prefix kidscallhome run generate-icons",
+    "cap:sync": "npm --prefix kidscallhome run cap:sync",
+    "cap:android": "npm --prefix kidscallhome run cap:android",
+    "cap:ios": "npm --prefix kidscallhome run cap:ios"
   }
 }
 
