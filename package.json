@@ -17,17 +17,10 @@
     "cap:sync": "npm --prefix kidscallhome run cap:sync",
     "cap:android": "npm --prefix kidscallhome run cap:android",
     "cap:ios": "npm --prefix kidscallhome run cap:ios"
+  },
+  "dependencies": {
+    "@heroicons/react": "^2.2.0",
+    "emoji-picker-react": "^4.16.1",
+    "framer-motion": "^12.23.26"
   }
 }
-
-
-
-
-
-
-
-
-
-
-
-

@@ -502,7 +502,7 @@ workflows:
           success: true
           failure: true
 
-  ios-capacitor:
+  ios-build:
     name: iOS Capacitor Build
     max_build_duration: 120
     instance_type: mac_mini_m2
@@ -514,13 +514,13 @@ workflows:
 
     environment:
       groups:
-        - ios_certificates  # Environment group containing iOS certificates (optional, for manual uploads)
+        - ios_certificates # Environment group containing iOS certificates (optional, for manual uploads)
       ios_signing:
         distribution_type: app_store
         bundle_identifier: com.kidscallhome.app # Must match Bundle ID registered in Apple Developer Portal
       vars:
         # ✅ Apple ID from App Store Connect → My Apps → Kids Call Home → App Information
-        APP_STORE_APPLE_ID: "6756827237" # Numeric Apple ID (confirmed from App Store Connect)
+        APP_STORE_APPLE_ID: 6756827237
         BUNDLE_ID: "com.kidscallhome.app" # Team ID: 786BYGA3LW
         APP_NAME: "Kids Call Home"
         COMPANY_NAME: "Fluid Investment Group LLC" # App Store seller name
@@ -612,7 +612,7 @@ workflows:
           echo "=== Verifying Bundle Identifier ==="
           echo "Expected Bundle ID: com.kidscallhome.app"
           echo ""
-          
+
           # Check Info.plist for bundle identifier
           INFO_PLIST="ios/App/App/Info.plist"
           if [ -f "$INFO_PLIST" ]; then
@@ -634,7 +634,7 @@ workflows:
           else
             echo "⚠️ Info.plist not found at $INFO_PLIST"
           fi
-          
+
           # Check project.pbxproj for bundle identifier
           PROJECT_FILE="ios/App/App.xcodeproj/project.pbxproj"
           if [ -f "$PROJECT_FILE" ]; then
@@ -649,7 +649,7 @@ workflows:
               fi
             fi
           fi
-          
+
           echo ""
           echo "=== Bundle Identifier Verification Complete ==="
           echo "Make sure 'com.kidscallhome.app' is registered in Apple Developer Portal:"
@@ -668,10 +668,10 @@ workflows:
           echo "2. Create new profile if needed (requires App Store Connect API access)"
           echo "3. Download and install the profile"
           echo ""
-          
+
           # Use Codemagic's automatic profile management
           xcode-project use-profiles
-          
+
           echo ""
           echo "=== Provisioning Profile Setup Complete ==="
           echo ""
