@@ -579,7 +579,7 @@ const Index = () => {
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl mx-auto">
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-5xl mx-auto">
             {/* Free Plan */}
             <Card className="p-6 border-2 border-green-500/30 bg-green-50/50 dark:bg-green-950/20">
               <div className="text-center space-y-4">
@@ -594,15 +594,14 @@ const Index = () => {
                 <ul className="text-sm text-left space-y-2">
                   <li className="flex items-start gap-2">
                     <CheckCircle2 className="h-4 w-4 text-green-600 flex-shrink-0 mt-0.5" aria-hidden="true" />
-                    <span>1 child</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-green-600 flex-shrink-0 mt-0.5" aria-hidden="true" />
-                    <span>Unlimited family members</span>
+                    <span>1 parent and 1 child</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <CheckCircle2 className="h-4 w-4 text-green-600 flex-shrink-0 mt-0.5" aria-hidden="true" />
                     <span>All features included</span>
+                  </li>
+                  <li className="flex items-start gap-2 text-muted-foreground">
+                    <span className="text-xs">Upgrade to add more children or family members</span>
                   </li>
                 </ul>
                 <Button 
@@ -611,34 +610,6 @@ const Index = () => {
                   onClick={() => navigate("/parent/auth")}
                 >
                   Start Free
-                </Button>
-              </div>
-            </Card>
-
-            {/* Additional Kid Monthly */}
-            <Card className="p-6 hover:shadow-lg transition-shadow">
-              <div className="text-center space-y-4">
-                <h3 className="text-xl font-bold">Add a Child</h3>
-                <div>
-                  <div className="text-3xl font-bold">$4.99</div>
-                  <p className="text-sm text-muted-foreground">per month</p>
-                </div>
-                <ul className="text-sm text-left space-y-2">
-                  <li className="flex items-start gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" aria-hidden="true" />
-                    <span>+1 child to your account</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" aria-hidden="true" />
-                    <span>Cancel anytime</span>
-                  </li>
-                </ul>
-                <Button 
-                  className="w-full" 
-                  variant="secondary"
-                  onClick={() => navigate("/parent/upgrade")}
-                >
-                  Upgrade
                 </Button>
               </div>
             </Card>
@@ -655,6 +626,10 @@ const Index = () => {
                   <li className="flex items-start gap-2">
                     <CheckCircle2 className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" aria-hidden="true" />
                     <span>Up to 5 children</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" aria-hidden="true" />
+                    <span>Unlimited family members</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <CheckCircle2 className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" aria-hidden="true" />
@@ -679,14 +654,18 @@ const Index = () => {
                   <h3 className="text-xl font-bold">Annual Plan</h3>
                 </div>
                 <div>
-                  <div className="text-3xl font-bold">$99</div>
+                  <div className="text-3xl font-bold">$149</div>
                   <p className="text-sm text-muted-foreground">per year</p>
                   <p className="text-xs text-green-600 font-semibold mt-1">Save 17%</p>
                 </div>
                 <ul className="text-sm text-left space-y-2">
                   <li className="flex items-start gap-2">
                     <CheckCircle2 className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" aria-hidden="true" />
-                    <span>Unlimited children</span>
+                    <span>Up to 5 children</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" aria-hidden="true" />
+                    <span>Unlimited family members</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <CheckCircle2 className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" aria-hidden="true" />
