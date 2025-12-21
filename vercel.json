@@ -15,7 +15,7 @@
     },
     {
       "source": "/_next-live/(.*)",
-      "destination": "/404"
+      "destination": "/index.html"
     },
     {
       "source": "/((?!manifest\\.json|sw\\.js|icon-.*\\.png|og-image\\.png|robots\\.txt|favicon\\.ico|assets/|_next-live/|.*\\.html).*)",
@@ -36,7 +36,7 @@
     },
     {
       "source": "/_next-live/(.*)",
-      "destination": "/404",
+      "destination": "/index.html",
       "permanent": false
     }
   ],
