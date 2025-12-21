@@ -35,9 +35,15 @@ Vercel is detecting the root `package.json` and running its build script, which 
 - No more "directory not found" errors!
 
 **Important:** If you see "Failed to fetch one or more git submodules" warning:
-- This is usually harmless if `kidscallhome` is not actually a submodule
-- If `kidscallhome` IS a submodule, ensure it's properly initialized in your repository
-- The root directory setting will still work correctly
+
+This warning appears because `kidscallhome/kidscallhome` is configured as a git submodule. To suppress this warning:
+
+1. Go to **Settings** → **Git**
+2. Find **Submodules** section
+3. Toggle **"Skip Git Submodules"** to **ON**
+4. Click **Save**
+
+**Note:** This warning is harmless and won't affect your build. The submodule isn't needed for the Vercel deployment. However, disabling submodule fetching will suppress the warning and speed up deployments slightly.
 
 ## Verification
 
