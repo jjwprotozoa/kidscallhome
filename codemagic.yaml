@@ -1,8 +1,9 @@
 # codemagic.yaml
-# Codemagic CI/CD configuration for KidsCallHome iOS Capacitor app
+# Codemagic CI/CD configuration for KidsCallHome native apps (Android & iOS)
 # Located in project root (same folder as package.json)
+# Capacitor-based PWA wrapped in native containers
 #
-# Configuration Summary:
+# iOS Configuration Summary:
 # - Team ID (App ID Prefix): 786BYGA3LW
 # - Bundle ID: com.kidscallhome.app
 # - App Name: Kids Call Home
@@ -11,9 +12,496 @@
 # - Issuer ID: 597b3fa4-d3f8-43c0-9622-146e18528195 (for API auth, already in Codemagic)
 # - Apple ID: 6756827237 (confirmed from App Store Connect)
 #
+# Android Configuration:
+# - Package Name: com.kidscallhome.app
+# - App Name: Kids Call Home
+#
 # See APP_STORE_CONNECT_SETUP.md and APP_CONFIGURATION_SUMMARY.md for all configuration values
 
 workflows:
+  android-build:
+    name: Android Build
+    max_build_duration: 120
+    instance_type: mac_mini_m1
+    environment:
+      groups:
+        - android_keystore
+        - google_play
+      node: 20
+      java: 17
+      vars:
+        PACKAGE_NAME: "com.kidscallhome.app"
+        APP_NAME: "Kids Call Home"
+    scripts:
+      - name: Install dependencies
+        script: |
+          npm ci
+
+      - name: Build web app
+        script: |
+          npm run build
+
+      - name: Sync Capacitor
+        script: |
+          npx cap sync android
+
+      - name: Set up Android keystore
+        script: |
+          if [ ! -z "$CM_KEYSTORE_PATH" ]; then
+            echo "✅ Using keystore from CM_KEYSTORE_PATH"
+          else
+            echo "⚠️ No keystore configured, using debug signing"
+          fi
+
+      - name: Verify Java version and configure Gradle
+        script: |
+          echo "=== Java Environment Setup ==="
+          echo "Java version:"
+          java -version
+          echo ""
+          echo "JAVA_HOME before: $JAVA_HOME"
+
+          # Ensure JAVA_HOME is set and points to Java 17
+          # Codemagic sets java: 17, but JAVA_HOME might not be set
+          if [ -z "$JAVA_HOME" ]; then
+            # Try to find Java 17 using macOS java_home utility
+            export JAVA_HOME=$(/usr/libexec/java_home -v 17 2>/dev/null || echo "")
+            if [ -z "$JAVA_HOME" ]; then
+              # Fallback: find any Java 17+ installation
+              export JAVA_HOME=$(/usr/libexec/java_home -v 17+ 2>/dev/null || echo "")
+            fi
+            echo "Set JAVA_HOME to: $JAVA_HOME"
+          fi
+
+          # Verify JAVA_HOME points to a valid Java 17 installation
+          if [ ! -z "$JAVA_HOME" ] && [ -f "$JAVA_HOME/bin/java" ]; then
+            echo "JAVA_HOME after: $JAVA_HOME"
+            echo "Java version from JAVA_HOME:"
+            "$JAVA_HOME/bin/java" -version
+            JAVA_VERSION_OUTPUT=$("$JAVA_HOME/bin/java" -version 2>&1)
+            if echo "$JAVA_VERSION_OUTPUT" | grep -qE 'version "1\.[0-8]\.'; then
+              echo "❌ ERROR: JAVA_HOME points to Java 8 or earlier!"
+              echo "Java version output: $JAVA_VERSION_OUTPUT"
+              exit 1
+            fi
+            echo "✅ Java version is 11+"
+          else
+            echo "❌ ERROR: JAVA_HOME is not set or invalid!"
+            echo "Please ensure java: 17 is set in Codemagic environment"
+            exit 1
+          fi
+
+          # Export JAVA_HOME for this script step
+          export JAVA_HOME
+
+          # Configure Gradle to use Java 17
+          cd android
+          chmod +x ./gradlew
+
+          # Stop any existing Gradle daemons (they might be using Java 8)
+          echo ""
+          echo "=== Stopping Gradle daemons ==="
+          ./gradlew --stop || true
+          echo "✅ Gradle daemons stopped"
+
+          # Set org.gradle.java.home in gradle.properties to ensure Gradle uses Java 17
+          # This is critical for buildscript classpath resolution
+          echo ""
+          echo "=== Configuring Gradle to use Java 17 ==="
+          if [ -f gradle.properties ]; then
+            # Remove any existing org.gradle.java.home line (macOS compatible sed)
+            sed -i '' '/^org\.gradle\.java\.home=/d' gradle.properties 2>/dev/null || \
+            sed -i.bak '/^org\.gradle\.java\.home=/d' gradle.properties 2>/dev/null || \
+            grep -v '^org\.gradle\.java\.home=' gradle.properties > gradle.properties.tmp && mv gradle.properties.tmp gradle.properties
+            # Add the correct Java home
+            echo "org.gradle.java.home=$JAVA_HOME" >> gradle.properties
+            echo "✅ Updated gradle.properties with org.gradle.java.home=$JAVA_HOME"
+            echo "Verification - org.gradle.java.home setting:"
+            grep "org.gradle.java.home" gradle.properties || echo "⚠️ Warning: org.gradle.java.home not found in gradle.properties"
+          else
+            echo "org.gradle.java.home=$JAVA_HOME" > gradle.properties
+            echo "✅ Created gradle.properties with org.gradle.java.home=$JAVA_HOME"
+          fi
+
+          # Verify Gradle wrapper will use correct Java
+          echo ""
+          echo "=== Verifying Gradle wrapper configuration ==="
+          echo "Gradle wrapper will use: $JAVA_HOME/bin/java"
+
+      - name: Diagnostic checks before build
+        script: |
+          cd android
+          echo "=== PRE-BUILD DIAGNOSTICS ==="
+          echo ""
+          echo "1. Checking Java version:"
+          java -version 2>&1 || echo "Java not found in PATH"
+          echo ""
+          echo "2. Checking JAVA_HOME:"
+          echo "JAVA_HOME=$JAVA_HOME"
+          if [ ! -z "$JAVA_HOME" ]; then
+            "$JAVA_HOME/bin/java" -version 2>&1 || echo "Java at JAVA_HOME not working"
+          fi
+          echo ""
+          echo "3. Checking Gradle wrapper:"
+          ls -la gradlew* || echo "Gradle wrapper not found"
+          echo ""
+          echo "4. Testing Gradle can run:"
+          ./gradlew --version 2>&1 | head -10 || echo "Gradle --version failed"
+          echo ""
+          echo "5. Testing Gradle can list tasks:"
+          ./gradlew tasks --all 2>&1 | head -30 || echo "Gradle tasks failed"
+          echo ""
+          echo "6. Checking gradle.properties:"
+          cat gradle.properties 2>&1 | head -20 || echo "gradle.properties not found"
+          echo ""
+          echo "7. Checking build.gradle files exist:"
+          find . -name "build.gradle" -type f | head -10
+          echo ""
+
+      - name: Build Debug APK first (to verify build works)
+        script: |
+          cd android
+          # Ensure JAVA_HOME is set
+          if [ -z "$JAVA_HOME" ]; then
+            export JAVA_HOME=$(/usr/libexec/java_home -v 17 2>/dev/null || /usr/libexec/java_home -v 17+ 2>/dev/null || echo "")
+          fi
+          if [ -z "$JAVA_HOME" ] || [ ! -f "$JAVA_HOME/bin/java" ]; then
+            export JAVA_HOME=$(/usr/libexec/java_home -v 17)
+          fi
+          export JAVA_HOME
+
+          # Ensure gradle.properties has org.gradle.java.home set
+          if [ -f gradle.properties ]; then
+            if ! grep -q "^org\.gradle\.java\.home=" gradle.properties; then
+              echo "org.gradle.java.home=$JAVA_HOME" >> gradle.properties
+            fi
+          else
+            echo "org.gradle.java.home=$JAVA_HOME" > gradle.properties
+          fi
+
+          echo "=== Building Debug APK (to verify build works) ==="
+          echo "Running: ./gradlew assembleDebug --stacktrace --info"
+          echo ""
+          echo "⚠️ If build fails, look for '📄 EXTRACTED ERROR MESSAGES' section below"
+          echo ""
+
+          # Build with output visible and captured
+          set -o pipefail
+          ./gradlew assembleDebug --stacktrace --info 2>&1 | tee debug-build.log
+          BUILD_EXIT_CODE=${PIPESTATUS[0]}
+
+          # Immediately show if build failed (before detailed extraction)
+          if [ $BUILD_EXIT_CODE -ne 0 ]; then
+            echo ""
+            echo "🚨🚨🚨 BUILD FAILED! Extracting error messages... 🚨🚨🚨"
+          fi
+
+          echo ""
+          echo "=== Build completed with exit code: $BUILD_EXIT_CODE ==="
+          echo ""
+
+          if [ $BUILD_EXIT_CODE -ne 0 ]; then
+            # Extract errors to a separate file for easy access
+            echo "Extracting error messages..." > build-errors.txt
+            
+            echo "" >> build-errors.txt
+            echo "═══════════════════════════════════════════════════════════════" >> build-errors.txt
+            echo "❌ BUILD FAILED - ERROR EXTRACTION" >> build-errors.txt
+            echo "═══════════════════════════════════════════════════════════════" >> build-errors.txt
+            echo "" >> build-errors.txt
+            
+            # Find the line number where "BUILD FAILED" appears
+            FAIL_LINE=$(grep -n "BUILD FAILED" debug-build.log | tail -1 | cut -d: -f1)
+            if [ ! -z "$FAIL_LINE" ]; then
+              echo "Found 'BUILD FAILED' at line $FAIL_LINE" >> build-errors.txt
+              echo "Showing 50 lines before and 200 lines after (error usually appears right after BUILD FAILED):" >> build-errors.txt
+              echo "" >> build-errors.txt
+              sed -n "$((FAIL_LINE - 50)),$((FAIL_LINE + 200))p" debug-build.log >> build-errors.txt
+            fi
+            
+            echo "" >> build-errors.txt
+            echo "=== FAILURE MESSAGES ===" >> build-errors.txt
+            grep -A 30 "FAILURE:" debug-build.log >> build-errors.txt 2>/dev/null || echo "No FAILURE: found" >> build-errors.txt
+            
+            echo "" >> build-errors.txt
+            echo "=== WHAT WENT WRONG ===" >> build-errors.txt
+            grep -A 30 "What went wrong:" debug-build.log >> build-errors.txt 2>/dev/null || echo "No 'What went wrong:' found" >> build-errors.txt
+            
+            echo "" >> build-errors.txt
+            echo "=== EXECUTION FAILED FOR TASK ===" >> build-errors.txt
+            grep -B 10 -A 20 "Execution failed for task" debug-build.log >> build-errors.txt 2>/dev/null || echo "No task execution failures found" >> build-errors.txt
+            
+            echo "" >> build-errors.txt
+            echo "=== FAILED TASKS ===" >> build-errors.txt
+            grep "> Task :.*FAILED" debug-build.log >> build-errors.txt 2>/dev/null || echo "No failed tasks found" >> build-errors.txt
+            
+            echo "" >> build-errors.txt
+            echo "=== ERROR PATTERNS ===" >> build-errors.txt
+            grep -i -E "error|exception|failed|cannot|unable" debug-build.log | grep -v "at org.gradle" | head -50 >> build-errors.txt 2>/dev/null || echo "No error patterns found" >> build-errors.txt
+            
+            # Display the error file prominently
+            echo ""
+            echo "═══════════════════════════════════════════════════════════════"
+            echo "❌❌❌ BUILD FAILED WITH EXIT CODE $BUILD_EXIT_CODE ❌❌❌"
+            echo "═══════════════════════════════════════════════════════════════"
+            echo ""
+            echo "📄 EXTRACTED ERROR MESSAGES (also saved to build-errors.txt):"
+            echo ""
+            cat build-errors.txt
+            echo ""
+            echo "═══════════════════════════════════════════════════════════════"
+            echo ""
+            echo "=== FIRST 200 LINES OF BUILD LOG ==="
+            head -n 200 debug-build.log
+            echo ""
+            echo "=== LAST 100 LINES OF BUILD LOG ==="
+            tail -n 100 debug-build.log
+            echo ""
+            echo "📋 Full log: debug-build.log ($(wc -l < debug-build.log) lines)"
+            echo "📋 Errors: build-errors.txt"
+            exit 1
+          fi
+
+          echo "✅ Build succeeded!"
+
+          # Verify debug APK was created (only if build succeeded)
+          echo ""
+          echo "=== Verifying debug APK was created ==="
+          if [ -f "app/build/outputs/apk/debug/app-debug.apk" ]; then
+            echo "✅ Debug APK created successfully!"
+            ls -lh app/build/outputs/apk/debug/
+          else
+            echo "⚠️ Debug APK not found at expected location"
+            echo "Searching for APK files..."
+            find . -name "*.apk" -type f 2>/dev/null | head -10 || echo "No APK files found anywhere"
+            echo ""
+            echo "Checking build outputs directory:"
+            ls -la app/build/outputs/ 2>/dev/null || echo "app/build/outputs does not exist"
+            ls -la app/build/ 2>/dev/null || echo "app/build does not exist"
+          fi
+
+      - name: Build Android App Bundle
+        script: |
+          cd android
+          # Ensure JAVA_HOME is set (environment variables don't persist between steps)
+          if [ -z "$JAVA_HOME" ]; then
+            export JAVA_HOME=$(/usr/libexec/java_home -v 17 2>/dev/null || /usr/libexec/java_home -v 17+ 2>/dev/null || echo "")
+          fi
+          if [ -z "$JAVA_HOME" ] || [ ! -f "$JAVA_HOME/bin/java" ]; then
+            echo "❌ ERROR: JAVA_HOME is not set or invalid!"
+            echo "Attempting to find Java 17..."
+            export JAVA_HOME=$(/usr/libexec/java_home -v 17)
+          fi
+          export JAVA_HOME
+          echo "Building with JAVA_HOME: $JAVA_HOME"
+
+          # Ensure gradle.properties has org.gradle.java.home set (it should from previous step, but verify)
+          if [ -f gradle.properties ]; then
+            if ! grep -q "^org\.gradle\.java\.home=" gradle.properties; then
+              echo "Setting org.gradle.java.home in gradle.properties..."
+              echo "org.gradle.java.home=$JAVA_HOME" >> gradle.properties
+            fi
+          else
+            echo "Creating gradle.properties with org.gradle.java.home..."
+            echo "org.gradle.java.home=$JAVA_HOME" > gradle.properties
+          fi
+
+          # Verify Java version
+          echo "Java version:"
+          "$JAVA_HOME/bin/java" -version
+
+          # Clean build to ensure fresh state
+          echo ""
+          echo "=== Cleaning previous build ==="
+          ./gradlew clean || true
+
+          # Build with full error output
+          echo ""
+          echo "=== Building Android App Bundle (Release) ==="
+          set -o pipefail
+          ./gradlew bundleRelease --stacktrace --info 2>&1 | tee release-build.log
+          BUNDLE_EXIT_CODE=${PIPESTATUS[0]}
+
+          if [ $BUNDLE_EXIT_CODE -ne 0 ]; then
+            echo ""
+            echo "❌ Release build failed with exit code $BUNDLE_EXIT_CODE!"
+            echo ""
+            echo "=== FULL BUILD OUTPUT ==="
+            cat release-build.log
+            echo ""
+            echo "=== Searching for specific errors ==="
+            grep -i -A 10 -B 5 "error\|failed\|exception\|FAILURE" release-build.log | head -50 || echo "No obvious errors found"
+            echo ""
+            echo "⚠️ Release build failed. Trying to build debug bundle instead..."
+            ./gradlew bundleDebug --stacktrace --info 2>&1 | tee debug-bundle.log
+            DEBUG_BUNDLE_EXIT_CODE=${PIPESTATUS[0]}
+            
+            if [ $DEBUG_BUNDLE_EXIT_CODE -ne 0 ]; then
+              echo ""
+              echo "❌ Debug bundle also failed!"
+              echo "=== FULL DEBUG BUNDLE OUTPUT ==="
+              cat debug-bundle.log
+              exit 1
+            else
+              echo "✅ Debug bundle built successfully!"
+            fi
+          else
+            echo "✅ Release bundle built successfully!"
+          fi
+
+          # Verify build artifacts were created (only if build succeeded)
+          echo ""
+          echo "=== Verifying build artifacts ==="
+          echo "Checking for AAB files..."
+          find app/build/outputs -name "*.aab" -type f 2>/dev/null | head -10 || echo "No AAB files found"
+          echo ""
+          echo "Checking for APK files..."
+          find app/build/outputs -name "*.apk" -type f 2>/dev/null | head -10 || echo "No APK files found"
+          echo ""
+          echo "Listing app/build/outputs directory structure:"
+          ls -laR app/build/outputs/ 2>/dev/null | head -50 || echo "Outputs directory not found"
+          echo ""
+          echo "Full path to outputs:"
+          pwd
+          ls -la app/build/outputs/bundle/release/ 2>/dev/null || echo "Bundle release directory not found"
+          ls -la app/build/outputs/bundle/debug/ 2>/dev/null || echo "Bundle debug directory not found"
+          ls -la app/build/outputs/apk/release/ 2>/dev/null || echo "APK release directory not found"
+          ls -la app/build/outputs/apk/debug/ 2>/dev/null || echo "APK debug directory not found"
+
+      - name: Build Release APK (for testing)
+        script: |
+          cd android
+          # Ensure JAVA_HOME is set (environment variables don't persist between steps)
+          if [ -z "$JAVA_HOME" ]; then
+            export JAVA_HOME=$(/usr/libexec/java_home -v 17 2>/dev/null || /usr/libexec/java_home -v 17+ 2>/dev/null || echo "")
+          fi
+          if [ -z "$JAVA_HOME" ] || [ ! -f "$JAVA_HOME/bin/java" ]; then
+            echo "❌ ERROR: JAVA_HOME is not set or invalid!"
+            export JAVA_HOME=$(/usr/libexec/java_home -v 17)
+          fi
+          export JAVA_HOME
+          echo "Building with JAVA_HOME: $JAVA_HOME"
+
+          # Ensure gradle.properties has org.gradle.java.home set
+          if [ -f gradle.properties ]; then
+            if ! grep -q "^org\.gradle\.java\.home=" gradle.properties; then
+              echo "org.gradle.java.home=$JAVA_HOME" >> gradle.properties
+            fi
+          else
+            echo "org.gradle.java.home=$JAVA_HOME" > gradle.properties
+          fi
+
+          # Build with full error output
+          echo ""
+          echo "=== Building Android Release APK ==="
+          set -o pipefail
+          ./gradlew assembleRelease --stacktrace --info 2>&1 | tee release-apk.log
+          RELEASE_APK_EXIT_CODE=${PIPESTATUS[0]}
+
+          if [ $RELEASE_APK_EXIT_CODE -ne 0 ]; then
+            echo ""
+            echo "❌ Release APK build failed with exit code $RELEASE_APK_EXIT_CODE!"
+            echo ""
+            echo "=== FULL BUILD OUTPUT ==="
+            cat release-apk.log
+            echo ""
+            echo "=== Searching for specific errors ==="
+            grep -i -A 10 -B 5 "error\|failed\|exception\|FAILURE" release-apk.log | head -50 || echo "No obvious errors found"
+            echo ""
+            echo "⚠️ Release APK build failed. Debug APK should already be available from earlier step."
+            # Don't exit - debug APK is already built
+          else
+            echo "✅ Release APK built successfully!"
+          fi
+
+          # Verify build artifacts were created
+          echo ""
+          echo "=== Verifying build artifacts ==="
+          echo "Checking for APK files..."
+          find app/build/outputs -name "*.apk" -type f 2>/dev/null | head -10 || echo "No APK files found"
+          echo ""
+          echo "Listing app/build/outputs directory structure:"
+          ls -laR app/build/outputs/ 2>/dev/null | head -50 || echo "Outputs directory not found"
+          echo ""
+          echo "Full path to outputs:"
+          pwd
+          ls -la app/build/outputs/apk/release/ 2>/dev/null || echo "APK release directory not found"
+          ls -la app/build/outputs/apk/debug/ 2>/dev/null || echo "APK debug directory not found"
+
+      - name: Verify artifacts from workspace root
+        script: |
+          echo "=== Verifying artifacts from workspace root ==="
+          echo "Current directory: $(pwd)"
+          echo ""
+          echo "Looking for AAB files:"
+          find . -name "*.aab" -type f 2>/dev/null | head -10 || echo "No AAB files found"
+          echo ""
+          echo "Looking for APK files:"
+          find . -name "*.apk" -type f 2>/dev/null | head -10 || echo "No APK files found"
+          echo ""
+          echo "Checking android/app/build/outputs:"
+          if [ -d "android/app/build/outputs" ]; then
+            echo "✅ Outputs directory exists"
+            ls -laR android/app/build/outputs/ | head -100
+          else
+            echo "❌ Outputs directory does not exist!"
+            echo "Listing android/app/build directory:"
+            ls -la android/app/build/ 2>/dev/null || echo "android/app/build does not exist"
+          fi
+
+      - name: Artifact Summary and Download Instructions
+        script: |
+          echo "=========================================="
+          echo "📦 ARTIFACT SUMMARY"
+          echo "=========================================="
+          echo ""
+          echo "Finding all APK and AAB files:"
+          find . -type f \( -name "*.apk" -o -name "*.aab" \) 2>/dev/null | while read file; do
+            echo "  ✅ Found: $file ($(du -h "$file" | cut -f1))"
+          done || echo "  ⚠️ No APK/AAB files found"
+          echo ""
+          echo "=========================================="
+          echo "📥 HOW TO DOWNLOAD ARTIFACTS"
+          echo "=========================================="
+          echo ""
+          echo "After a successful build, download your app files from Codemagic:"
+          echo ""
+          echo "1. Go to your Codemagic dashboard"
+          echo "2. Click on the completed build"
+          echo "3. Scroll to the 'Artifacts' section"
+          echo "4. Click the download button next to:"
+          echo "   - *.apk files (for direct installation)"
+          echo "   - *.aab files (for Google Play Store upload)"
+          echo ""
+          echo "Or use the Codemagic CLI:"
+          echo "  codemagic-cli builds artifacts <build-id>"
+          echo ""
+          echo "Artifacts are automatically collected from:"
+          echo "  - android/app/build/outputs/**/*.apk"
+          echo "  - android/app/build/outputs/**/*.aab"
+          echo ""
+
+    artifacts:
+      - android/app/build/outputs/**/*.aab
+      - android/app/build/outputs/**/*.apk
+      - android/app/build/outputs/bundle/**/*
+      - android/app/build/outputs/apk/**/*
+      - android/app/build/outputs/**/debug/**
+      - android/app/build/outputs/**/release/**
+      - android/build-errors.txt
+      - android/debug-build.log
+      - android/release-build.log
+      - android/debug-bundle.log
+      - android/release-apk.log
+
+    publishing:
+      email:
+        recipients:
+          - justin@fluidinvestmentgroup.com
+        notify:
+          success: true
+          failure: true
+
   ios-capacitor:
     name: iOS Capacitor Build
     max_build_duration: 120
@@ -25,9 +513,11 @@ workflows:
       app_store_connect: codemagic
 
     environment:
+      groups:
+        - ios_certificates  # Environment group containing iOS certificates (optional, for manual uploads)
       ios_signing:
         distribution_type: app_store
-        bundle_identifier: com.kidscallhome.app # Must match Bundle ID registered in Apple Developer
+        bundle_identifier: com.kidscallhome.app # Must match Bundle ID registered in Apple Developer Portal
       vars:
         # ✅ Apple ID from App Store Connect → My Apps → Kids Call Home → App Information
         APP_STORE_APPLE_ID: "6756827237" # Numeric Apple ID (confirmed from App Store Connect)
@@ -105,21 +595,98 @@ workflows:
           if [ -f "$INFO_PLIST" ]; then
             echo "📝 Configuring iOS permissions (post-CocoaPods)..."
             /usr/libexec/PlistBuddy -c "Add :NSCameraUsageDescription string 'Kids Call Home needs camera access for video calls with family.'" "$INFO_PLIST" 2>/dev/null || \
-            /usr/libexec/PlistBuddy -c "Set :NSCameraUsageDescription 'Kids Call Home needs camera access for video calls with family.'" "$INFO_PLIST" 2>/dev/null || true
+              /usr/libexec/PlistBuddy -c "Set :NSCameraUsageDescription 'Kids Call Home needs camera access for video calls with family.'" "$INFO_PLIST" 2>/dev/null || true
             /usr/libexec/PlistBuddy -c "Add :NSMicrophoneUsageDescription string 'Kids Call Home needs microphone access for video calls with family.'" "$INFO_PLIST" 2>/dev/null || \
-            /usr/libexec/PlistBuddy -c "Set :NSMicrophoneUsageDescription 'Kids Call Home needs microphone access for video calls with family.'" "$INFO_PLIST" 2>/dev/null || true
+              /usr/libexec/PlistBuddy -c "Set :NSMicrophoneUsageDescription 'Kids Call Home needs microphone access for video calls with family.'" "$INFO_PLIST" 2>/dev/null || true
             /usr/libexec/PlistBuddy -c "Add :NSPhotoLibraryUsageDescription string 'Kids Call Home needs photo library access to share photos with family.'" "$INFO_PLIST" 2>/dev/null || \
-            /usr/libexec/PlistBuddy -c "Set :NSPhotoLibraryUsageDescription 'Kids Call Home needs photo library access to share photos with family.'" "$INFO_PLIST" 2>/dev/null || true
+              /usr/libexec/PlistBuddy -c "Set :NSPhotoLibraryUsageDescription 'Kids Call Home needs photo library access to share photos with family.'" "$INFO_PLIST" 2>/dev/null || true
             /usr/libexec/PlistBuddy -c "Add :NSPhotoLibraryAddUsageDescription string 'Kids Call Home needs permission to save photos from messages.'" "$INFO_PLIST" 2>/dev/null || \
-            /usr/libexec/PlistBuddy -c "Set :NSPhotoLibraryAddUsageDescription 'Kids Call Home needs permission to save photos from messages.'" "$INFO_PLIST" 2>/dev/null || true
+              /usr/libexec/PlistBuddy -c "Set :NSPhotoLibraryAddUsageDescription 'Kids Call Home needs permission to save photos from messages.'" "$INFO_PLIST" 2>/dev/null || true
             /usr/libexec/PlistBuddy -c "Add :NSUserNotificationsUsageDescription string 'Kids Call Home needs notification permission to alert you about calls and messages.'" "$INFO_PLIST" 2>/dev/null || \
-            /usr/libexec/PlistBuddy -c "Set :NSUserNotificationsUsageDescription 'Kids Call Home needs notification permission to alert you about calls and messages.'" "$INFO_PLIST" 2>/dev/null || true
+              /usr/libexec/PlistBuddy -c "Set :NSUserNotificationsUsageDescription 'Kids Call Home needs notification permission to alert you about calls and messages.'" "$INFO_PLIST" 2>/dev/null || true
             echo "✅ iOS permissions configured"
           fi
 
+      - name: Verify bundle identifier matches Apple Developer Portal
+        script: |
+          echo "=== Verifying Bundle Identifier ==="
+          echo "Expected Bundle ID: com.kidscallhome.app"
+          echo ""
+          
+          # Check Info.plist for bundle identifier
+          INFO_PLIST="ios/App/App/Info.plist"
+          if [ -f "$INFO_PLIST" ]; then
+            BUNDLE_ID_FROM_PLIST=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$INFO_PLIST" 2>/dev/null || echo "")
+            echo "Bundle ID in Info.plist: $BUNDLE_ID_FROM_PLIST"
+            
+            if [ "$BUNDLE_ID_FROM_PLIST" != "com.kidscallhome.app" ]; then
+              echo "⚠️ WARNING: Bundle ID mismatch!"
+              echo "Info.plist has: $BUNDLE_ID_FROM_PLIST"
+              echo "Expected: com.kidscallhome.app"
+              echo ""
+              echo "Updating Info.plist to match..."
+              /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.kidscallhome.app" "$INFO_PLIST" 2>/dev/null || \
+              /usr/libexec/PlistBuddy -c "Add :CFBundleIdentifier string com.kidscallhome.app" "$INFO_PLIST" 2>/dev/null || true
+              echo "✅ Bundle ID updated in Info.plist"
+            else
+              echo "✅ Bundle ID matches"
+            fi
+          else
+            echo "⚠️ Info.plist not found at $INFO_PLIST"
+          fi
+          
+          # Check project.pbxproj for bundle identifier
+          PROJECT_FILE="ios/App/App.xcodeproj/project.pbxproj"
+          if [ -f "$PROJECT_FILE" ]; then
+            echo ""
+            echo "Checking project.pbxproj for bundle identifier..."
+            BUNDLE_ID_IN_PROJECT=$(grep -o 'PRODUCT_BUNDLE_IDENTIFIER = "[^"]*"' "$PROJECT_FILE" | head -1 | sed 's/PRODUCT_BUNDLE_IDENTIFIER = "\(.*\)"/\1/' || echo "")
+            if [ ! -z "$BUNDLE_ID_IN_PROJECT" ]; then
+              echo "Bundle ID in project.pbxproj: $BUNDLE_ID_IN_PROJECT"
+              if [ "$BUNDLE_ID_IN_PROJECT" != "com.kidscallhome.app" ]; then
+                echo "⚠️ WARNING: Bundle ID in project.pbxproj doesn't match!"
+                echo "Consider updating manually or regenerating iOS project with: npx cap sync ios"
+              fi
+            fi
+          fi
+          
+          echo ""
+          echo "=== Bundle Identifier Verification Complete ==="
+          echo "Make sure 'com.kidscallhome.app' is registered in Apple Developer Portal:"
+          echo "https://developer.apple.com/account/resources/identifiers/list/bundleId"
+          echo ""
+
       - name: Set up provisioning profiles settings on Xcode project
         script: |
+          echo "=== Setting Up Provisioning Profiles ==="
+          echo ""
+          echo "Bundle ID: com.kidscallhome.app"
+          echo "Distribution Type: app_store"
+          echo ""
+          echo "Codemagic will automatically:"
+          echo "1. Check for existing provisioning profiles"
+          echo "2. Create new profile if needed (requires App Store Connect API access)"
+          echo "3. Download and install the profile"
+          echo ""
+          
+          # Use Codemagic's automatic profile management
           xcode-project use-profiles
+          
+          echo ""
+          echo "=== Provisioning Profile Setup Complete ==="
+          echo ""
+          echo "If you see 'No matching profiles found' error:"
+          echo "1. Verify bundle ID 'com.kidscallhome.app' exists in Apple Developer Portal"
+          echo "   → https://developer.apple.com/account/resources/identifiers/list/bundleId"
+          echo "2. Ensure App Store Connect API key has 'App Manager' or 'Admin' access"
+          echo "3. Check that certificate is uploaded/generated in Codemagic Team Settings"
+          echo "   → Team Settings → Code signing identities → iOS certificates"
+          echo "4. Manually create provisioning profile in Apple Developer Portal if needed:"
+          echo "   → https://developer.apple.com/account/resources/profiles/list"
+          echo "   → Type: App Store"
+          echo "   → App ID: com.kidscallhome.app"
+          echo "   → Certificate: Apple Distribution"
+          echo ""
 
       - name: Increment build number (if App Store Connect configured)
         script: |
