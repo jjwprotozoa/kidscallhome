@@ -141,3 +141,7 @@ The Index page checks for these query parameters:
 
 If you need to adjust the routing logic, edit `src/pages/Index.tsx` and modify the `checkAuthAndRedirect` function.
 
+
+
+
+
