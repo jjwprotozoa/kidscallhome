@@ -52,45 +52,38 @@ export const useIncomingCall = ({
         });
         setIsConnecting(true);
 
+        // OPTIMIZED: Start validation and connection setup in parallel for faster acceptance
+        // This reduces total wait time when both operations are needed
+        const needsConnection = !webRTCPeerConnectionRef.current || !localStream;
+        
+        const [validation, connectionResult] = await Promise.all([
+          // ROLE-BASED VALIDATION: Route to appropriate validator
+          role === "child"
+            ? validateChildIncomingCall({
+                callId: incomingCallId,
+                localProfileId,
+              })
+            : validateAdultIncomingCall({
+                role,
+                callId: incomingCallId,
+                localProfileId,
+              }),
+          // Only initialize connection if needed
+          needsConnection
+            ? (async () => {
+                console.warn(
+                  "📞 [INCOMING CALL] Initializing connection..."
+                );
+                await initializeConnection();
+                return webRTCPeerConnectionRef.current;
+              })()
+            : Promise.resolve(webRTCPeerConnectionRef.current),
+        ]);
+
         // Ensure peer connection is initialized
-        let pc = webRTCPeerConnectionRef.current;
+        let pc = connectionResult;
         if (!pc) {
-          console.warn(
-            "📞 [INCOMING CALL] Peer connection not initialized, initializing now..."
-          );
-          await initializeConnection();
-          pc = webRTCPeerConnectionRef.current;
-          if (!pc) {
-            throw new Error("Failed to initialize peer connection");
-          }
-        }
-
-        // Ensure local stream is ready
-        if (!localStream) {
-          console.warn(
-            "📞 [INCOMING CALL] Local stream not ready, initializing now..."
-          );
-          await initializeConnection();
-          pc = webRTCPeerConnectionRef.current;
-          if (!pc) {
-            throw new Error("Failed to initialize peer connection");
-          }
-        }
-
-        // ROLE-BASED VALIDATION: Route to appropriate validator
-        let validation;
-        if (role === "child") {
-          validation = await validateChildIncomingCall({
-            callId: incomingCallId,
-            localProfileId,
-          });
-        } else {
-          // parent or family_member - same validation logic
-          validation = await validateAdultIncomingCall({
-            role,
-            callId: incomingCallId,
-            localProfileId,
-          });
+          throw new Error("Failed to initialize peer connection");
         }
 
         if (!validation.isValid || !validation.call) {
@@ -202,28 +195,36 @@ export const useIncomingCall = ({
           }
           
           // Wait for signaling state to change to have-remote-offer
-          // This ensures the offer is properly set before creating the answer
-          await new Promise<void>((resolve, reject) => {
-            const timeout = setTimeout(() => {
-              reject(new Error("Timeout waiting for signaling state change"));
-            }, 5000);
+          // OPTIMIZED: Check immediately first, then use faster polling (10ms) and shorter timeout (2s)
+          // Most state changes happen immediately, so this speeds up the common case
+          if (
+            pc.signalingState === "have-remote-offer" ||
+            pc.signalingState === "have-local-pranswer"
+          ) {
+            // Already in the right state - no need to wait
+          } else {
+            await new Promise<void>((resolve, reject) => {
+              const timeout = setTimeout(() => {
+                reject(new Error("Timeout waiting for signaling state change"));
+              }, 2000); // Reduced from 5000ms to 2000ms
 
-            const checkState = () => {
-              if (
-                pc.signalingState === "have-remote-offer" ||
-                pc.signalingState === "have-local-pranswer"
-              ) {
-                clearTimeout(timeout);
-                resolve();
-              } else if (pc.signalingState === "closed") {
-                clearTimeout(timeout);
-                reject(new Error("Peer connection closed"));
-              } else {
-                setTimeout(checkState, 100);
-              }
-            };
-            checkState();
-          });
+              const checkState = () => {
+                if (
+                  pc.signalingState === "have-remote-offer" ||
+                  pc.signalingState === "have-local-pranswer"
+                ) {
+                  clearTimeout(timeout);
+                  resolve();
+                } else if (pc.signalingState === "closed") {
+                  clearTimeout(timeout);
+                  reject(new Error("Peer connection closed"));
+                } else {
+                  setTimeout(checkState, 10); // Reduced from 100ms to 10ms for faster detection
+                }
+              };
+              checkState();
+            });
+          }
         } else {
           // Remote description already set - verify we're in the right state
           if (
@@ -310,43 +311,7 @@ export const useIncomingCall = ({
 
         await pc.setLocalDescription(answer);
 
-        // Update call with answer - works the same for all roles
-        const { error: updateError } = await supabase
-          .from("calls")
-          .update({
-            answer: { type: answer.type, sdp: answer.sdp } as Json,
-            status: "active",
-            ended_at: null,
-          })
-          .eq("id", incomingCallId);
-
-        if (updateError) {
-          console.error(
-            "❌ [INCOMING CALL] Error updating call with answer:",
-            updateError
-          );
-          throw updateError;
-        }
-
-        setCallId(incomingCallId);
-        console.warn("📞 [INCOMING CALL] Call accepted:", incomingCallId);
-        
-        // Log connection diagnostics after accepting call (especially useful for iPhone debugging)
-        if (import.meta.env.DEV) {
-          try {
-            const { logConnectionDiagnostics } = await import(
-              "@/utils/callConnectionDiagnostics"
-            );
-            logConnectionDiagnostics(pc);
-          } catch (err) {
-            // Diagnostics module not critical - continue even if import fails
-            console.warn("Failed to load diagnostics:", err);
-          }
-        }
-        
-        setIsConnecting(false);
-
-        // Process existing remote ICE candidates immediately
+        // OPTIMIZED: Process ICE candidates and database update in parallel for faster connection
         // Family members read from child_ice_candidates (they're calling children)
         const remoteCandidateField =
           role === "parent" || role === "family_member"
@@ -367,35 +332,89 @@ export const useIncomingCall = ({
           }
         );
 
-        if (remoteCandidates.length > 0) {
-          console.warn(
-            `📞 [INCOMING CALL] Processing ${remoteCandidates.length} existing remote ICE candidates`
-          );
-          let addedCount = 0;
-          for (const candidate of remoteCandidates) {
-            try {
-              if (!candidate.candidate) continue;
-              await pc.addIceCandidate(new RTCIceCandidate(candidate));
-              addedCount++;
-            } catch (err) {
-              const error = err as Error;
-              if (
-                !error.message?.includes("duplicate") &&
-                !error.message?.includes("already")
-              ) {
-                console.error(
-                  "Error adding remote ICE candidate:",
-                  error.message
-                );
+        // Process ICE candidates in parallel with database update
+        const iceCandidatePromise = (async () => {
+          if (remoteCandidates.length > 0) {
+            console.warn(
+              `📞 [INCOMING CALL] Processing ${remoteCandidates.length} existing remote ICE candidates`
+            );
+            let addedCount = 0;
+            // Process candidates in parallel batches for speed
+            const candidatePromises = remoteCandidates.map(async (candidate) => {
+              try {
+                if (!candidate.candidate) return false;
+                await pc.addIceCandidate(new RTCIceCandidate(candidate));
+                return true;
+              } catch (err) {
+                const error = err as Error;
+                if (
+                  !error.message?.includes("duplicate") &&
+                  !error.message?.includes("already")
+                ) {
+                  console.error(
+                    "Error adding remote ICE candidate:",
+                    error.message
+                  );
+                }
+                return false;
               }
-            }
+            });
+            const results = await Promise.all(candidatePromises);
+            addedCount = results.filter(Boolean).length;
+            console.warn(`✅ [INCOMING CALL] Added ${addedCount} ICE candidates`);
+          } else {
+            console.warn(
+              `⚠️ [INCOMING CALL] No existing ICE candidates from caller - they may arrive via UPDATE events`
+            );
           }
-          console.warn(`✅ [INCOMING CALL] Added ${addedCount} ICE candidates`);
-        } else {
-          console.warn(
-            `⚠️ [INCOMING CALL] No existing ICE candidates from caller - they may arrive via UPDATE events`
+        })();
+
+        // Update call with answer - works the same for all roles
+        const dbUpdatePromise = supabase
+          .from("calls")
+          .update({
+            answer: { type: answer.type, sdp: answer.sdp } as Json,
+            status: "active",
+            ended_at: null,
+          })
+          .eq("id", incomingCallId);
+
+        // Wait for both operations in parallel
+        const [{ error: updateError }] = await Promise.all([
+          dbUpdatePromise,
+          iceCandidatePromise,
+        ]);
+
+        if (updateError) {
+          console.error(
+            "❌ [INCOMING CALL] Error updating call with answer:",
+            updateError
           );
+          throw updateError;
         }
+
+        setCallId(incomingCallId);
+        console.warn("📞 [INCOMING CALL] Call accepted:", incomingCallId);
+        
+        // Log connection diagnostics after accepting call (especially useful for iPhone debugging)
+        // Defer this to not block the connection process
+        if (import.meta.env.DEV) {
+          Promise.resolve().then(async () => {
+            try {
+              const { logConnectionDiagnostics } = await import(
+                "@/utils/callConnectionDiagnostics"
+              );
+              logConnectionDiagnostics(pc);
+            } catch (err) {
+              // Diagnostics module not critical - continue even if import fails
+              console.warn("Failed to load diagnostics:", err);
+            }
+          }).catch(() => {
+            // Silently handle errors
+          });
+        }
+        
+        setIsConnecting(false);
       } catch (error) {
         console.error("Error accepting call:", error);
         // CRITICAL: Cleanup WebRTC on error to release camera
