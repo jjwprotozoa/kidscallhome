@@ -205,11 +205,11 @@ const IncomingCallScreen = ({
         {/* Bottom section - Action buttons - pointer-events-auto ensures clicks work */}
         <div className="w-full max-w-sm space-y-4 pointer-events-auto relative z-20">
           {/* Answer button - large and prominent, matching child UI for consistency */}
-          {/* Uses both onClick and onTouchEnd for iOS/Android compatibility */}
+          {/* Uses both onClick and onTouchStart for Android/iOS compatibility */}
           <button
             type="button"
             onClick={handleAnswer}
-            onTouchEnd={handleAnswer}
+            onTouchStart={handleAnswer}
             disabled={isTriggered}
             className={`w-full py-6 px-8 bg-gradient-to-r from-green-400 to-emerald-500 hover:from-green-300 hover:to-emerald-400 text-white rounded-3xl shadow-lg shadow-green-500/40 flex items-center justify-center gap-4 transition-all duration-200 active:scale-95 hover:scale-[1.02] border-2 border-white/20 ${
               isTriggered ? "opacity-70" : ""
@@ -217,6 +217,8 @@ const IncomingCallScreen = ({
             style={{
               touchAction: "manipulation",
               WebkitTapHighlightColor: "transparent",
+              userSelect: "none",
+              WebkitUserSelect: "none"
             }}
           >
             <div className="bg-white/30 rounded-full p-3">
@@ -231,11 +233,13 @@ const IncomingCallScreen = ({
           <button
             type="button"
             onClick={handleDecline}
-            onTouchEnd={handleDecline}
+            onTouchStart={handleDecline}
             className="w-full py-5 px-8 bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-400 hover:to-rose-500 text-white rounded-2xl shadow-lg shadow-red-500/30 flex items-center justify-center gap-4 transition-all duration-200 active:scale-95 hover:scale-[1.02] border-2 border-white/20"
             style={{
               touchAction: "manipulation",
               WebkitTapHighlightColor: "transparent",
+              userSelect: "none",
+              WebkitUserSelect: "none"
             }}
           >
             <div className="bg-white/30 rounded-full p-3">
