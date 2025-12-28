@@ -11,15 +11,17 @@ import { DemoSection } from "@/components/info/DemoSection";
 import { InfoNavigation } from "@/components/info/InfoNavigation";
 import { PricingSection } from "@/components/info/PricingSection";
 import { PrivacySection } from "@/components/info/PrivacySection";
+import { ReferralsSection } from "@/components/info/ReferralsSection";
 import { SecuritySection } from "@/components/info/SecuritySection";
 import { TermsSection } from "@/components/info/TermsSection";
 import Navigation from "@/components/Navigation";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { infoSections } from "@/data/infoSections";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { safeLog, sanitizeError } from "@/utils/security";
-import { Info as InfoIcon, Share2 } from "lucide-react";
+import { HelpCircle, Info as InfoIcon, Share2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
 
@@ -317,51 +319,111 @@ const Info = () => {
               <DemoSection />
             </section>
 
+            <section id="referrals">
+              <ReferralsSection isParent={isParent} />
+            </section>
+
             {/* SEO-friendly FAQ block (optional: could be moved into its own component) */}
-            <section id="faq" className="space-y-4 md:space-y-5">
-              <h2 className="text-lg md:text-xl font-semibold">
-                Frequently asked questions
-              </h2>
-              <div className="space-y-3 text-sm md:text-base text-muted-foreground">
+            <section id="faq" className="mb-8 scroll-mt-20">
+              <Card className="p-6">
+                <h2 className="text-2xl font-semibold mb-4 flex items-center gap-2">
+                  <HelpCircle className="h-5 w-5" />
+                  Frequently Asked Questions
+                </h2>
+                <div className="space-y-4">
                 <div>
                   <h3 className="font-medium">
-                    Does my child need a phone number or SIM card?
+                    How can my child call me from a tablet without a SIM card?
                   </h3>
                   <p>
-                    No. Kids Call Home works over Wi‑Fi or mobile data and does
-                    not require a phone number, SIM card, or separate telephone
-                    account for your child.
+                    Kids Call Home works perfectly on tablets, iPads, Kindle Fire, and
+                    Chromebooks over Wi‑Fi without needing a SIM card or phone number. Your
+                    child simply opens the app, enters their login code, and can call
+                    approved family members. Parents control all contacts, so only family
+                    members you approve can connect with your child.
                   </p>
                 </div>
                 <div>
                   <h3 className="font-medium">
-                    Which devices can my child use?
+                    Is this app safer than typical kids messaging apps?
                   </h3>
                   <p>
-                    Kids can call and message from most modern phones and
-                    tablets, including many Android, iOS and compatible e‑reader
-                    devices, as long as they have an internet connection.
+                    Yes. Kids Call Home is designed specifically for family-only
+                    communication. Unlike many kids messaging apps, there are no public
+                    profiles, no search features, no friend requests from strangers, and no
+                    &quot;friends of friends&quot; connections. Only parent-approved family members
+                    can contact your child. The app uses encrypted communication, collects
+                    minimal data, does not show ads, and does not sell family data to
+                    advertisers or partners.
                   </p>
                 </div>
                 <div>
                   <h3 className="font-medium">
-                    Can both parents and family members use the app?
+                    How does Kids Call Home protect my child&apos;s privacy?
                   </h3>
                   <p>
-                    Yes. Parents can invite family members and approved adults
-                    so kids can safely stay in touch with parents, grandparents
-                    and other close family without strangers or public search.
+                    Kids Call Home uses encrypted calls and messages to protect your
+                    family&apos;s communication. The app collects minimal data necessary for the
+                    service to function, does not use tracking for advertising purposes, and
+                    does not sell family data. There are no manipulative design patterns
+                    like infinite feeds, aggressive notifications, or surprise in‑app
+                    purchases. Parents have full control over who can contact their child.
                   </p>
                 </div>
                 <div>
                   <h3 className="font-medium">
-                    Why are there no filters or games?
+                    Can my child use this to call both parents in different homes?
                   </h3>
                   <p>
-                    Kids Call Home is focused on real connection, not
-                    entertainment. There are no face filters, feeds or games, so
-                    when your child calls you, you see their real face and hear
-                    their real voice.
+                    Yes. Kids Call Home is built for co‑parents and long‑distance family. Your
+                    child can easily call both parents, grandparents, and other approved
+                    family members across different homes and even different countries.
+                    Parents control which family members are approved, making it ideal for
+                    shared custody situations and international families.
+                  </p>
+                </div>
+                <div>
+                  <h3 className="font-medium">
+                    Does Kids Call Home work on iPads and tablets?
+                  </h3>
+                  <p>
+                    Yes. Kids Call Home works great on iPads, Android tablets, Kindle Fire,
+                    and Chromebooks. It works over Wi‑Fi without needing a SIM card or phone
+                    number, making it perfect for kids who don&apos;t have their own phone. The
+                    app is also available as a Progressive Web App (PWA), so it can be added
+                    to the home screen like a native app.
+                  </p>
+                </div>
+                <div>
+                  <h3 className="font-medium">
+                    Are there ads or in‑app purchases in Kids Call Home?
+                  </h3>
+                  <p>
+                    No. Kids Call Home has no ads, no in‑app purchases, and no manipulative
+                    design features. The app is designed to be a simple, safe communication
+                    tool for families, not a platform for engagement or monetization. Your
+                    child&apos;s attention stays on connecting with family, not on games, feeds,
+                    or notifications designed to keep them online longer.
+                  </p>
+                </div>
+                <div>
+                  <h3 className="font-medium">
+                    Does my child need a password to use Kids Call Home?
+                  </h3>
+                  <p>
+                    Kids Call Home supports simple magic links so children can tap once to log
+                    in from trusted devices instead of remembering complex usernames or
+                    passwords. Parents control where and how these links are used.
+                  </p>
+                </div>
+                <div>
+                  <h3 className="font-medium">
+                    Does Kids Call Home include filters or games?
+                  </h3>
+                  <p>
+                    No. Kids Call Home is focused on real connection between kids and family,
+                    so there are no face filters, social feeds or games. When your child
+                    calls, you see their real face and hear their real voice.
                   </p>
                 </div>
                 <div>
@@ -375,7 +437,8 @@ const Info = () => {
                     child&apos;s device.
                   </p>
                 </div>
-              </div>
+                </div>
+              </Card>
             </section>
           </div>
 

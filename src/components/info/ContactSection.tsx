@@ -1,9 +1,11 @@
 // src/components/info/ContactSection.tsx
 // Purpose: Contact and support section for Info page
 
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Check, Mail } from "lucide-react";
+import { Check, Mail, MessageSquare } from "lucide-react";
+import { Link } from "react-router-dom";
 
 export const ContactSection = () => {
   return (
@@ -15,22 +17,27 @@ export const ContactSection = () => {
         </h2>
         <div className="space-y-4">
           <div>
-            <h3 className="font-semibold mb-2">Support Email</h3>
+            <h3 className="font-semibold mb-2">Submit Feedback or Get Support</h3>
             <div className="bg-muted p-4 rounded-lg mb-3">
-              <p className="font-mono text-base">
-                support@kidscallhome.com
+              <p className="text-sm text-muted-foreground mb-3">
+                Have questions, need help, or want to share feedback? Use our Beta Program feedback form to get in touch with our team.
               </p>
+              <Button asChild className="w-full sm:w-auto">
+                <Link to="/beta">
+                  <MessageSquare className="mr-2 h-4 w-4" />
+                  Go to Beta Program & Feedback
+                </Link>
+              </Button>
             </div>
             <p className="text-sm text-muted-foreground">
               For technical support, account questions, billing inquiries,
-              or data deletion requests, please email us at the address
-              above. We aim to respond within 24-48 hours.
+              or data deletion requests, please submit your request through the Beta Program page. We aim to respond within 24-48 hours.
             </p>
           </div>
           <Separator />
           <div>
             <h3 className="font-semibold mb-2">
-              What to Include in Support Emails
+              What to Include in Your Feedback
             </h3>
             <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground ml-4">
               <li>Your account email address</li>

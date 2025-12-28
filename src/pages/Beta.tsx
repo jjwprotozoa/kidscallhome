@@ -36,11 +36,13 @@ import { isNativeApp } from "@/utils/platformDetection";
 import {
   ArrowLeft,
   CheckCircle2,
+  HelpCircle,
   Loader2,
   MessageSquare,
   Star,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { useLocation, useNavigate } from "react-router-dom";
 
 const Beta = () => {
@@ -525,6 +527,28 @@ const Beta = () => {
           </CardContent>
         </Card>
       )}
+
+      {/* Support Information */}
+      <Card className="mt-6 border-muted">
+        <CardContent className="pt-6">
+          <div className="flex items-start gap-3">
+            <HelpCircle className="h-5 w-5 text-muted-foreground mt-0.5 flex-shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm text-muted-foreground">
+                <strong className="text-foreground">Need help or have questions?</strong>{" "}
+                Visit our{" "}
+                <Link
+                  to="/info#contact"
+                  className="text-primary hover:underline font-medium"
+                >
+                  Contact & Support
+                </Link>{" "}
+                page for support information, FAQs, and ways to get in touch.
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 };

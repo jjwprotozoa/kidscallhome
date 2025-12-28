@@ -4,17 +4,16 @@
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { Link } from "react-router-dom";
 import {
   Building2,
   Check,
   Crown,
   DollarSign,
   ExternalLink,
-  Gift,
   Heart,
   Mail,
   Sparkles,
-  Users,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
@@ -39,13 +38,13 @@ export const PricingSection = ({ isParent }: PricingSectionProps) => {
               <Sparkles className="h-5 w-5 text-green-600" />
               Free Plan
             </h3>
-            <div className="bg-green-50 dark:bg-green-950/30 p-4 rounded-lg border border-green-200 dark:border-green-800">
-              <p className="text-muted-foreground mb-2">
-                <strong className="text-foreground">
+            <div className="bg-green-100 dark:bg-green-950/50 p-4 rounded-lg border-2 border-green-300 dark:border-green-700">
+              <p className="text-green-900 dark:text-green-100 mb-2">
+                <strong className="text-green-950 dark:text-green-50">
                   Kids Call Home is free for 1 parent and 1 child.
                 </strong>
               </p>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-green-900 dark:text-green-100">
                 Perfect for trying out Kids Call Home with your first child
                 before upgrading. Experience safe video calls and messaging with
                 no commitment.
@@ -128,61 +127,20 @@ export const PricingSection = ({ isParent }: PricingSectionProps) => {
               <Building2 className="h-5 w-5 text-blue-600" />
               Larger Families & Organizations
             </h3>
-            <div className="bg-blue-50 dark:bg-blue-950/30 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
-              <p className="text-muted-foreground mb-3">
+            <div className="bg-blue-100 dark:bg-blue-950/50 p-4 rounded-lg border-2 border-blue-300 dark:border-blue-700">
+              <p className="text-blue-900 dark:text-blue-100 mb-3">
                 If you have more than 5 children, or you would like to use Kids
                 Call Home in an organization (for example a school, clinic, or
                 NGO), please contact us for custom pricing.
               </p>
               <div className="flex items-center gap-2">
-                <Mail className="h-4 w-4 text-blue-600" />
-                <a
-                  href="mailto:support@kidscallhome.com?subject=Custom Pricing Inquiry"
-                  className="text-primary hover:underline font-medium"
+                <Mail className="h-4 w-4 text-blue-700 dark:text-blue-300" />
+                <Link
+                  to="/beta"
+                  className="text-blue-700 dark:text-blue-300 hover:underline font-semibold"
                 >
-                  support@kidscallhome.com
-                </a>
-              </div>
-            </div>
-          </div>
-
-          <Separator />
-
-          {/* Referral Rewards */}
-          <div>
-            <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
-              <Gift className="h-5 w-5 text-purple-600" />
-              Referral Rewards
-            </h3>
-            <div className="bg-purple-50 dark:bg-purple-950/30 p-4 rounded-lg border border-purple-200 dark:border-purple-800">
-              <div className="flex items-start gap-3">
-                <Users className="h-5 w-5 text-purple-600 mt-0.5 flex-shrink-0" />
-                <div>
-                  <p className="text-muted-foreground">
-                    <strong className="text-foreground">
-                      Share Kids Call Home with friends and family.
-                    </strong>{" "}
-                    When someone subscribes to the Family Plan using your
-                    referral link, you both receive{" "}
-                    <strong className="text-primary">1 week free</strong> on
-                    your subscriptions.
-                  </p>
-                  {isParent ? (
-                    <Button
-                      variant="default"
-                      size="sm"
-                      className="mt-3 bg-purple-600 hover:bg-purple-700"
-                      onClick={() => navigate("/parent/dashboard?tab=referrals")}
-                    >
-                      <Gift className="h-4 w-4 mr-2" />
-                      Get Your Referral Link & Share
-                    </Button>
-                  ) : (
-                    <p className="text-sm text-purple-600 dark:text-purple-400 mt-2">
-                      Parents can access their referral link from the Dashboard → Referrals tab.
-                    </p>
-                  )}
-                </div>
+                  Contact us through Beta Program
+                </Link>
               </div>
             </div>
           </div>

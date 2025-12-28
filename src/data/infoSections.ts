@@ -7,14 +7,16 @@ export interface Section {
 }
 
 export const infoSections: Section[] = [
-  { id: "description", label: "App Description" },
-  { id: "beta-testing", label: "Beta Testing" },
+  { id: "overview", label: "App Description" },
+  { id: "beta", label: "Beta Testing" },
   { id: "pricing", label: "Pricing & Subscription" },
   { id: "terms", label: "Terms & Conditions" },
   { id: "privacy", label: "Privacy Policy" },
   { id: "security", label: "Security & Safety" },
-  { id: "cancel", label: "Cancellation Policy" },
-  { id: "removal", label: "Personal Information Removal" },
+  { id: "cancellation", label: "Cancellation Policy" },
+  { id: "data-removal", label: "Personal Information Removal" },
   { id: "contact", label: "Contact & Support" },
   { id: "demo", label: "Demo / Test Account" },
+  { id: "referrals", label: "Referrals" },
+  { id: "faq", label: "FAQ" },
 ];

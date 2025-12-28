@@ -4,6 +4,7 @@
 import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Trash2 } from "lucide-react";
+import { Link } from "react-router-dom";
 
 export const DataRemovalSection = () => {
   return (
@@ -24,14 +25,14 @@ export const DataRemovalSection = () => {
             </p>
             <ul className="list-disc list-inside space-y-2 text-sm text-muted-foreground ml-4">
               <li>
-                <strong>Email Request:</strong> Send an email to{" "}
-                <a
-                  href="mailto:support@kidscallhome.com"
-                  className="text-primary hover:underline"
+                <strong>Feedback Form Request:</strong> Submit a request through{" "}
+                <Link
+                  to="/beta"
+                  className="text-primary hover:underline font-medium"
                 >
-                  support@kidscallhome.com
-                </a>{" "}
-                with the subject "Account Deletion Request" and include
+                  our Beta Program feedback form
+                </Link>
+                . Please select "Other" as the category and include "Account Deletion Request" in your message along with
                 your account email address.
               </li>
               <li>

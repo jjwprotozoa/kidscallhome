@@ -14,6 +14,7 @@ import {
   CheckCircle2,
   Eye,
   Heart,
+  Info,
   Laptop,
   Lock,
   Play,
@@ -24,7 +25,7 @@ import {
   Users,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
 const Index = () => {
   const navigate = useNavigate();
@@ -112,8 +113,8 @@ const Index = () => {
         {/* Use ONE consistent horizontal padding + max width wrapper for all hero content */}
         <div className="mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8 xl:px-12 py-12 sm:py-16 md:py-20 lg:py-24 xl:py-28">
           {/* App Icon */}
-          <div className="flex justify-center mb-6 sm:mb-8 md:mb-10 lg:mb-12">
-            <div className="aspect-square w-16 sm:w-20 md:w-24 lg:w-28">
+          <div className="flex flex-col items-center mb-6 sm:mb-8 md:mb-10 lg:mb-12">
+            <div className="aspect-square w-16 sm:w-20 md:w-24 lg:w-28 mb-3 sm:mb-4">
               <picture>
                 <source
                   type="image/webp"
@@ -128,13 +129,16 @@ const Index = () => {
                 <img
                   src="/icon-96x96.png"
                   alt="Kids Call Home"
-                  className="w-full h-full object-contain drop-shadow-lg"
+                  className="w-full h-full object-contain drop-shadow-lg rounded-3xl"
                   width="96"
                   height="96"
                   loading="eager"
                   decoding="async"
                 />
               </picture>
+            </div>
+            <div className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-bold text-primary">
+              Kids Call Home
             </div>
           </div>
 
@@ -778,7 +782,7 @@ const Index = () => {
         aria-labelledby="device-compatibility-heading"
       >
         <div className="container mx-auto px-4">
-          <div className="text-center mb-10">
+          <div className="text-center mb-10 max-w-4xl mx-auto">
             <h2
               id="device-compatibility-heading"
               className="text-2xl md:text-3xl font-bold mb-4"
@@ -821,7 +825,7 @@ const Index = () => {
             ))}
           </div>
 
-          <div className="mt-8 text-center">
+          <div className="mt-8 text-center max-w-4xl mx-auto">
             <p className="text-sm md:text-base text-muted-foreground max-w-2xl mx-auto">
               <strong className="text-foreground">
                 No phone plan required.
@@ -841,7 +845,7 @@ const Index = () => {
         aria-labelledby="pricing-heading"
       >
         <div className="container mx-auto px-4">
-          <div className="text-center mb-10">
+          <div className="text-center mb-10 max-w-4xl mx-auto">
             <h2
               id="pricing-heading"
               className="text-2xl md:text-3xl font-bold mb-4"
@@ -858,6 +862,26 @@ const Index = () => {
           {/* Your pricing cards, use cases, founder story, trust badges, FAQ, final CTA, footer */}
         </div>
       </section>
+
+      {/* ============================================================
+          FOOTER - Links and Information
+          ============================================================ */}
+      <footer className="border-t border-border/40 bg-muted/20 py-8 md:py-12">
+        <div className="container mx-auto px-4">
+          <div className="flex flex-col items-center justify-center gap-4 text-center">
+            <Link
+              to="/info"
+              className="inline-flex items-center gap-2 text-sm md:text-base text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <Info className="h-4 w-4" aria-hidden="true" />
+              <span>Learn More &amp; App Information</span>
+            </Link>
+            <p className="text-xs md:text-sm text-muted-foreground">
+              Privacy, Terms, Security, and more details
+            </p>
+          </div>
+        </div>
+      </footer>
     </main>
   );
 };

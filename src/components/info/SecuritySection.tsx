@@ -4,6 +4,7 @@
 import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Shield } from "lucide-react";
+import { Link } from "react-router-dom";
 
 export const SecuritySection = () => {
   return (
@@ -14,11 +15,11 @@ export const SecuritySection = () => {
           Security & Safety
         </h2>
         <div className="space-y-4">
-          <div className="bg-primary/10 p-4 rounded-lg border border-primary/20">
-            <p className="font-semibold text-primary mb-2">
+          <div className="bg-primary/15 dark:bg-primary/25 p-4 rounded-lg border-2 border-primary/30 dark:border-primary/40">
+            <p className="font-semibold text-primary dark:text-primary-foreground mb-2">
               Your Family's Security is Our Priority
             </p>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-foreground dark:text-primary-foreground">
               We implement multiple layers of security to protect your family's data and communications.
             </p>
           </div>
@@ -110,13 +111,13 @@ export const SecuritySection = () => {
           </div>
           <div className="pt-4 border-t">
             <p className="text-xs text-muted-foreground">
-              Security is an ongoing priority. We regularly update our security measures and monitor for threats. If you have security concerns, please contact us at{" "}
-              <a
-                href="mailto:support@kidscallhome.com"
-                className="text-primary hover:underline"
+              Security is an ongoing priority. We regularly update our security measures and monitor for threats. If you have security concerns, please{" "}
+              <Link
+                to="/beta"
+                className="text-primary hover:underline font-medium"
               >
-                support@kidscallhome.com
-              </a>
+                submit feedback through our Beta Program
+              </Link>
               .
             </p>
           </div>

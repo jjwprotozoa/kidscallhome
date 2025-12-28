@@ -4,6 +4,7 @@
 import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Shield } from "lucide-react";
+import { Link } from "react-router-dom";
 
 export const PrivacySection = () => {
   return (
@@ -73,9 +74,15 @@ export const PrivacySection = () => {
               correction, or deletion, please contact us at:
             </p>
             <div className="bg-muted p-3 rounded-lg">
-              <p className="font-mono text-sm">
-                support@kidscallhome.com
+              <p className="text-sm text-muted-foreground mb-2">
+                Please submit your data request through our Beta Program feedback form.
               </p>
+              <Link
+                to="/beta"
+                className="text-primary hover:underline font-medium text-sm"
+              >
+                Go to Beta Program & Feedback →
+              </Link>
             </div>
           </div>
         </div>

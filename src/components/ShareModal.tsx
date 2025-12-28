@@ -265,7 +265,7 @@ Safe kids messaging and video calling app for family-only communication – no p
             <Button
               onClick={shareToTwitter}
               variant="outline"
-              className="bg-black/5 hover:bg-black/10 border-black/20 text-black dark:bg-white/10 dark:hover:bg-white/20 dark:border-white/30 dark:text-white"
+              className="bg-[#1DA1F2]/10 hover:bg-[#1DA1F2]/20 border-[#1DA1F2]/30 text-[#1DA1F2] dark:bg-[#1DA1F2]/20 dark:hover:bg-[#1DA1F2]/30 dark:border-[#1DA1F2]/40 dark:text-[#1DA1F2]"
             >
               <Twitter className="h-4 w-4 mr-2" />
               X / Twitter

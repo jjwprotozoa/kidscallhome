@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { ExternalLink, XCircle } from "lucide-react";
+import { Link } from "react-router-dom";
 import { useNavigate } from "react-router-dom";
 
 interface CancellationSectionProps {
@@ -80,13 +81,13 @@ export const CancellationSection = ({ isParent }: CancellationSectionProps) => {
           <div>
             <h3 className="font-semibold mb-2">Account Deletion</h3>
             <p className="text-sm text-muted-foreground">
-              To delete your account completely, please contact support at{" "}
-              <a
-                href="mailto:support@kidscallhome.com"
-                className="text-primary hover:underline"
+              To delete your account completely, please{" "}
+              <Link
+                to="/beta"
+                className="text-primary hover:underline font-medium"
               >
-                support@kidscallhome.com
-              </a>
+                submit a request through our Beta Program
+              </Link>
               . Account deletion will permanently remove all your data,
               including children's accounts, messages, and call history.
             </p>

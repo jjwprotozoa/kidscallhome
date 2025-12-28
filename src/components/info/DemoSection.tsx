@@ -2,6 +2,7 @@
 // Purpose: Demo/test account section for Info page
 
 import { Card } from "@/components/ui/card";
+import { Link } from "react-router-dom";
 
 export const DemoSection = () => {
   return (
@@ -20,13 +21,13 @@ export const DemoSection = () => {
           <div className="bg-muted p-4 rounded-lg">
             <p className="text-xs text-muted-foreground">
               <strong>Note:</strong> Test account information is available
-              upon request for app store review purposes. Please contact{" "}
-              <a
-                href="mailto:support@kidscallhome.com"
-                className="text-primary hover:underline"
+              upon request for app store review purposes. Please{" "}
+              <Link
+                to="/beta"
+                className="text-primary hover:underline font-medium"
               >
-                support@kidscallhome.com
-              </a>{" "}
+                submit a request through our Beta Program
+              </Link>{" "}
               with your review request.
             </p>
           </div>
