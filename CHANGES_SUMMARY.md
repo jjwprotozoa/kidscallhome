@@ -1,8 +1,46 @@
 # KidsCallHome - Changes Summary
 
+<!-- markdownlint-disable MD024 MD060 -->
+<!-- Duplicate headings are intentional in this changelog format -->
+<!-- Table style (MD060) - compact tables are intentional for readability -->
+
 > **Note**: For detailed technical information, complete file lists, testing recommendations, and implementation specifics, see [CHANGES_DETAILED.md](./CHANGES_DETAILED.md).
 
-## Latest Changes (2025-12-19) - Volume Control Slider Implementation
+## Latest Changes (2025-12-19) - Analytics Setup & Info Page Improvements
+
+### -15. Analytics & Performance Monitoring Setup
+
+- **Purpose**: Add comprehensive analytics and performance monitoring to track user behavior, page performance, and deployment health
+- **Changes Applied**:
+  - **Google Analytics Integration** (`index.html`):
+    - Added Google Tag (gtag.js) with tracking ID `G-5EY72BLX1X`
+    - Async script loading for non-blocking initialization
+    - Automatic page view tracking
+    - Ready for custom event tracking
+  - **Vercel Web Analytics** (`index.html`):
+    - Added Vercel Insights script for web analytics
+    - Tracks page views, user sessions, and navigation patterns
+    - Privacy-focused analytics (no cookies, GDPR compliant)
+  - **Vercel Speed Insights** (`index.html`):
+    - Added Speed Insights script for Core Web Vitals monitoring
+    - Tracks LCP (Largest Contentful Paint), FID (First Input Delay), CLS (Cumulative Layout Shift)
+    - Real-time performance monitoring for production deployments
+- **Technical Implementation**:
+  - All analytics scripts use `defer` or `async` attributes to prevent blocking page load
+  - Scripts placed at end of `<body>` for optimal performance
+  - Non-blocking initialization patterns for all analytics services
+- **Files Modified**:
+  - `index.html` - Added Google Analytics, Vercel Web Analytics, and Speed Insights scripts
+- **Impact**:
+  - **User Behavior Tracking**: Understand how users navigate and interact with the app
+  - **Performance Monitoring**: Real-time Core Web Vitals tracking for optimization opportunities
+  - **Deployment Health**: Monitor production performance and identify regressions
+  - **Privacy Compliant**: Vercel Analytics is privacy-focused (no cookies, GDPR compliant)
+  - **Non-Blocking**: All analytics load asynchronously without impacting page performance
+
+---
+
+## Previous Changes (2025-12-19) - Volume Control Slider Implementation
 
 ### -14. Volume Control Slider - Variable Volume (0-10 Scale)
 
@@ -475,10 +513,12 @@ CREATE POLICY "Adults can view profiles in their family"
 #### Image Optimization
 
 - **WebP Conversion**: Created WebP versions of icons with dramatic size savings
+
   | File | Original (PNG) | WebP | Savings |
   |------|----------------|------|---------|
   | `icon-192x192` | 45.6 KB | **3 KB** | **93% smaller** |
   | `icon-96x96` | 14.5 KB | **1.5 KB** | **90% smaller** |
+
 - **Responsive Images**: Updated hero image to use `<picture>` element with `srcset`
   - WebP for modern browsers (93% smaller)
   - PNG fallback for older browsers
@@ -523,6 +563,7 @@ CREATE POLICY "Adults can view profiles in their family"
 
 - **Issue**: Primary color (#3B82F6) had only 3.0:1 contrast on white (below 4.5:1 WCAG AA requirement)
 - **Fix**: Darkened primary color for proper contrast
+
   | CSS Variable | Before | After | Contrast |
   |--------------|--------|-------|----------|
   | `--primary` | `217 100% 59%` (#3B82F6) | `217 91% 45%` (#1565C0) | 3.0:1 → **5.8:1** ✓ |
@@ -530,18 +571,21 @@ CREATE POLICY "Adults can view profiles in their family"
   | `--ring` | `217 100% 59%` | `217 91% 45%` | Focus ring matches |
   | `--kid-blue` | `217 100% 59%` | `217 91% 45%` | Consistent theme |
   | `--sidebar-ring` | `217.2 91.2% 59.8%` | `217 91% 45%` | Consistent |
+
 - **Elements Fixed**: Privacy Policy link, Cookie Consent text, Sign In/Accept buttons
 
 #### Cookie Consent Tied to User Account (`CookieConsent.tsx`)
 
 - **Issue**: Consent shown to everyone using localStorage, could show repeatedly
 - **Solution**: Only show consent after login, always store in Supabase
+
   | Before | After |
   |--------|-------|
   | Showed to everyone (including before login) | **Only shows after login** |
   | Stored in localStorage for anonymous users | **Always stored in Supabase** |
   | Could show repeatedly if localStorage cleared | **Never shows again once accepted** |
   | Not linked to user account | **Linked to email/account** |
+
 - **Excluded Routes**: Landing (`/`), auth pages, child routes, info, beta
 - **Removed**: localStorage fallback, console.log debug statements
 
@@ -755,11 +799,13 @@ CREATE POLICY "Adults can view profiles in their family"
 
 - **Purpose**: Document email service configuration for family member invitations and auth emails
 - **Email Architecture**:
+
   | Email Type | Service | Configuration |
   |------------|---------|---------------|
   | Auth emails (signup confirmation, password reset) | Hostinger SMTP | Supabase Dashboard → Auth → SMTP Settings |
   | Family member invitations | Resend API | `RESEND_API_KEY` secret in Edge Functions |
   | Beta signup confirmations | Resend API | `RESEND_API_KEY` secret in Edge Functions |
+
 - **Changes**:
   - **Edge Function Update** (`send-family-member-invitation/index.ts`):
     - Clarified that Resend API is primary for edge function emails
@@ -968,6 +1014,7 @@ CREATE POLICY "Adults can view profiles in their family"
   - Identified RLS policy was created without explicit `TO authenticated` role specification
 - **Solution**:
   - **RLS Policy Fix** (applied via Supabase SQL Editor):
+
     ```sql
     DROP POLICY IF EXISTS "Parents can view own devices" ON public.devices;
     CREATE POLICY "Parents can view own devices"
@@ -976,6 +1023,7 @@ CREATE POLICY "Adults can view profiles in their family"
       USING (parent_id = (select auth.uid()));
     GRANT SELECT, INSERT, UPDATE, DELETE ON public.devices TO authenticated;
     ```
+
   - **File Cleanup**: Deleted duplicate `src/pages/DeviceManagement.tsx` (kept `src/pages/DeviceManagement/DeviceManagement.tsx`)
   - **Import Fix**: Updated `App.tsx` import from `./pages/DeviceManagement` to `./pages/DeviceManagement/index` for explicit resolution
   - **Infinite Loop Fix**: Added `historyFetched` state flag in `DeviceManagement.tsx` to prevent repeated device history fetches when "history" tab is active
@@ -1239,6 +1287,7 @@ Comprehensive performance optimization focused on reducing database calls, impro
 
 - **Purpose**: Reduce excessive database queries during normal app usage
 - **Changes**:
+
   | Component | Before | After | Savings |
   |-----------|--------|-------|---------|
   | Status check (GlobalMessageNotifications) | 5 sec | 120 sec | **-96%** |
@@ -1247,6 +1296,7 @@ Comprehensive performance optimization focused on reducing database calls, impro
   | Presence heartbeat | 60 sec | 120 sec | **-50%** |
   | Video UI check (local) | 500ms | 2 sec | **-75% CPU** |
   | Termination polling | 1.5 sec | Removed | **-100%** |
+
 - **Smart Fallback Polling**: Polling only activates when Supabase Realtime fails; when realtime is healthy (SUBSCRIBED state), polling is disabled
 - **Files Modified**:
   - `src/components/GlobalMessageNotifications.tsx` - Status check interval
@@ -1262,19 +1312,23 @@ Comprehensive performance optimization focused on reducing database calls, impro
 
 - **Purpose**: Reduce bandwidth and improve load times through aggressive caching
 - **New Caching Rules Added** (`vite.config.ts`):
+
   | Asset Type | Strategy | Cache Duration |
   |------------|----------|----------------|
   | Google Fonts CSS | CacheFirst | 1 year |
   | Google Fonts Files | CacheFirst | 1 year |
   | Supabase Storage (avatars) | CacheFirst | 7 days |
   | Precached assets (production) | On install | Until update |
+
 - **Existing Caching** (already present):
+
   | Asset Type | Strategy | Cache Duration |
   |------------|----------|----------------|
   | Vendor JS chunks | CacheFirst | 30 days |
   | App JS chunks | NetworkFirst | 7 days |
   | CSS/Fonts/Images | CacheFirst | 30 days |
   | HTML pages | NetworkFirst | 7 days |
+
 - **Precaching**: Added explicit glob patterns for production builds to precache critical app shell assets
 - **Impact**: ~70-80% bandwidth reduction on repeat visits; fonts cached for 1 year
 
@@ -1301,12 +1355,14 @@ Comprehensive performance optimization focused on reducing database calls, impro
 
 - **Confirmation**: App already uses Supabase Realtime (WebSockets) as primary communication method
 - **Architecture**:
+
   | Feature | Primary Method | Fallback |
   |---------|---------------|----------|
   | Incoming calls | Realtime subscription | 90s polling (only if realtime fails) |
   | Message notifications | Realtime subscription | 120s polling (only if realtime fails) |
   | Call status updates | Realtime subscription | WebRTC state detection |
   | Presence tracking | Realtime presence | 120s heartbeat |
+
 - **Impact**: No additional changes needed; polling is already event-driven fallback only
 
 ### Summary of Efficiency Gains
@@ -1436,6 +1492,7 @@ These remaining optimizations primarily improve UX/perceived performance rather 
   - `src/features/safety/components/SafetyReportsTab.tsx` - Removed internal TabsContent
   - `src/features/family/components/FamilySetupTab.tsx` - Removed internal TabsContent
 - **Impact**:
+
   | Before | After |
   |--------|-------|
   | Mount → Render → Layout → Paint (every switch) | CSS display toggle only |
@@ -1454,6 +1511,7 @@ These remaining optimizations primarily improve UX/perceived performance rather 
     - Calculates quality score (0-100) for connection assessment
     - Implements hysteresis to prevent rapid quality oscillation on unstable connections
   - **Quality Presets for All Network Conditions**:
+
     | Quality Level | Network Type | Video Resolution | Video Bitrate | Audio Bitrate | Behavior |
     |---------------|--------------|------------------|---------------|---------------|----------|
     | **Critical** | 2G / Very Poor | ❌ Disabled | 0 kbps | 24 kbps | **Audio-only mode** |
@@ -1461,6 +1519,7 @@ These remaining optimizations primarily improve UX/perceived performance rather 
     | **Moderate** | 4G / Fair | 640×480 @ 24fps | 500 kbps | 48 kbps | Medium quality |
     | **Good** | LTE+ / Good | 1280×720 @ 30fps | 1.5 Mbps | 64 kbps | High quality |
     | **Excellent** | 5G / WiFi Fast | 1280×720 @ 30fps | 2.5 Mbps | 64 kbps | Maximum quality |
+
   - **Adaptive Bitrate Control**:
     - Uses `RTCRtpSender.setParameters()` to dynamically adjust video/audio bitrate
     - Video automatically paused when bandwidth falls below 100 kbps
@@ -1499,6 +1558,7 @@ These remaining optimizations primarily improve UX/perceived performance rather 
   - `src/pages/ChildCallScreen.tsx` - Pass networkQuality to VideoCallUI
   - `src/pages/FamilyMemberCallScreen.tsx` - Pass networkQuality to VideoCallUI
 - **Network Behavior**:
+
   | Network | Expected Behavior |
   |---------|-------------------|
   | **2G / Very Poor Signal** | ✅ Audio-only call works - Video disabled automatically |
@@ -1507,6 +1567,7 @@ These remaining optimizations primarily improve UX/perceived performance rather 
   | **5G / Fast WiFi** | ✅ Full HD quality (720p @ 30fps) |
   | **WiFi drops to 2G** | ✅ Video pauses, audio continues, quality indicator shows change |
   | **Signal improves** | ✅ Video gradually re-enables, quality upgrades |
+
 - **Impact**:
   - **Universal Connectivity**: Calls now work on any network from 2G to 5G/WiFi
   - **Audio Priority**: Audio ALWAYS continues even in worst conditions
@@ -1799,17 +1860,21 @@ These remaining optimizations primarily improve UX/perceived performance rather 
   - `package.json` - Added `@vercel/node` dev dependency for API endpoint types
 - **Environment Variables Required**:
   - **For Cloudflare TURN**:
+
     ```env
     TURN_KEY_ID=your_cloudflare_turn_key_id
     TURN_KEY_API_TOKEN=your_cloudflare_turn_api_token
     VITE_USE_CLOUDFLARE_TURN=true
     ```
+
   - **For Static TURN Servers**:
+
     ```env
     VITE_TURN_SERVERS=turn:server1.com:3478,turn:server2.com:3478
     VITE_TURN_USERNAME=your_username
     VITE_TURN_CREDENTIAL=your_credential
     ```
+
 - **Impact**:
   - **Production Reliability**: Production-grade TURN servers ensure reliable call connections
   - **Security**: Cloudflare credentials generated server-side, never exposed to client
