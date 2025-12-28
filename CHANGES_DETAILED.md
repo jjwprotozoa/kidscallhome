@@ -4,9 +4,518 @@
 
 ---
 
-## Latest Changes (2025-12-19)
+## Latest Changes (2025-12-28)
 
-### 1. WebRTC Improvements Based on W3C Best Practices
+### 1. Call Reconnection Improvements & Diagnostics Panel Fixes
+
+#### Purpose
+
+Improve call reconnection after page refresh and fix diagnostics panel to show accurate local/remote media state. This ensures calls can automatically reconnect when one party refreshes the page, prevents WebRTC signaling state errors, and provides better debugging information.
+
+#### Issues Fixed
+
+1. **Reconnection Failure**: Calls couldn't reconnect after page refresh - one side would create new offer but other side wouldn't detect it and create answer
+2. **WebRTC Signaling State Error**: `InvalidStateError: Failed to execute 'setRemoteDescription' on 'RTCPeerConnection': Called in wrong state: stable` due to race conditions
+3. **Diagnostics Not Updating**: Diagnostics panel didn't show local user's mute/video state, only showed remote tracks
+4. **PIP Toggle Position**: Orientation toggle button was in top-left corner, not easily accessible
+
+#### Complete File List
+
+**Source Code Files Modified:**
+
+- `src/features/calls/utils/callHandlers.ts`
+  - Added reconnection detection for new offers on active calls (parent side)
+  - Automatically creates new answer when detecting reconnection offer
+  - 5-second timeout for signaling state changes
+  - Graceful error handling
+  - Lines ~363-418: Reconnection offer detection and answer creation
+  - Lines ~145-180: Signaling state protection for existing answers
+
+- `src/features/calls/utils/childCallHandler.ts`
+  - Added reconnection detection for new offers on active calls (child side)
+  - Automatically creates new answer when detecting reconnection offer
+  - 5-second timeout for signaling state changes
+  - Graceful error handling
+  - Lines ~548-633: Reconnection offer detection and answer creation
+  - Lines ~310-343: Signaling state protection for existing answers
+
+- `src/features/calls/hooks/useCallEngine.ts`
+  - Added double-check for signaling state before setting remote description
+  - Prevents InvalidStateError by ensuring peer connection is in correct state
+  - Lines ~914-932: Signaling state double-check before setRemoteDescription
+
+- `src/features/calls/hooks/modules/useIncomingCall.ts`
+  - Added double-check for signaling state before setting remote answer
+  - Timeout handling for signaling state transitions
+  - Lines ~150-165: Signaling state protection with timeout
+
+- `src/features/calls/components/DiagnosticPanel.tsx`
+  - Added "Your Media" section showing local user's mute/video state
+  - Shows real-time local track status (audio/video enabled/muted)
+  - Separated "Remote Media" section for clarity
+  - Lines ~230-237: Added local stream and state props to interface
+  - Lines ~249-252: Local track info extraction
+  - Lines ~378-426: "Your Media" section implementation
+  - Lines ~428-476: "Remote Media" section (renamed from "Tracks")
+
+- `src/features/calls/components/VideoCallUI.tsx`
+  - Moved PIP orientation toggle to bottom-right next to "You" label
+  - Passes `isMuted`, `isVideoOff`, and `localStream` to diagnostics
+  - Lines ~1321-1346: PIP toggle repositioned to bottom-right
+  - Lines ~1377-1385: Added local state props to DiagnosticContainer
+
+#### Implementation Details
+
+**1. Reconnection Detection (Parent Side):**
+
+```typescript
+// Location: callHandlers.ts, lines ~363-418
+if (
+  updatedCall.status === "active" &&
+  updatedCall.offer &&
+  pc.signalingState === "stable" &&
+  pc.localDescription === null &&
+  pc.remoteDescription === null
+) {
+  const newOffer = updatedCall.offer as unknown as RTCSessionDescriptionInit;
+  const oldOffer = oldCall?.offer as unknown as RTCSessionDescriptionInit | undefined;
+  
+  // Check if this is a new offer (different from old one)
+  const isNewOffer = !oldOffer || 
+    oldOffer.sdp !== newOffer.sdp ||
+    oldOffer.type !== newOffer.type;
+  
+  if (isNewOffer) {
+    // Set remote description with the new offer
+    await pc.setRemoteDescription(new RTCSessionDescription(newOffer));
+    
+    // Wait for signaling state to change (with timeout)
+    await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error("Timeout waiting for signaling state to change"));
+      }, 5000);
+      
+      const checkState = () => {
+        if (
+          pc.signalingState === "have-remote-offer" ||
+          pc.signalingState === "have-local-pranswer"
+        ) {
+          clearTimeout(timeout);
+          resolve();
+        } else if (pc.signalingState === "closed") {
+          clearTimeout(timeout);
+          reject(new Error("Peer connection closed during reconnection"));
+        } else {
+          setTimeout(checkState, 100);
+        }
+      };
+      checkState();
+    });
+    
+    // Create answer for reconnection
+    const answer = await pc.createAnswer({
+      offerToReceiveAudio: true,
+      offerToReceiveVideo: true,
+    });
+    
+    await pc.setLocalDescription(answer);
+    
+    // Save answer to database
+    await supabase
+      .from("calls")
+      .update({
+        answer: { type: answer.type, sdp: answer.sdp } as Json,
+      })
+      .eq("id", updatedCall.id);
+  }
+}
+```
+
+- Detects new offers for active calls (reconnection scenario)
+- Compares old vs new offer SDP to identify reconnection attempts
+- Creates answer automatically when reconnection detected
+- 5-second timeout prevents infinite waiting
+- Handles peer connection closure gracefully
+
+**2. Signaling State Protection:**
+
+```typescript
+// Location: useCallEngine.ts, lines ~914-932
+// CRITICAL: Double-check signaling state right before setting (race condition protection)
+if (pc.signalingState !== "have-local-offer") {
+  console.warn(
+    "⚠️ [CALL ENGINE] Signaling state changed before setting remote description - skipping",
+    {
+      callId,
+      expectedState: "have-local-offer",
+      actualState: pc.signalingState,
+      hasLocalDescription: !!pc.localDescription,
+      hasRemoteDescription: !!pc.remoteDescription,
+    }
+  );
+  return;
+}
+
+const answerDesc = updatedCall.answer as unknown as RTCSessionDescriptionInit;
+await pc.setRemoteDescription(new RTCSessionDescription(answerDesc));
+```
+
+- Double-checks signaling state right before `setRemoteDescription`
+- Prevents `InvalidStateError` by ensuring correct state
+- Detailed logging for debugging state transitions
+- Graceful failure that doesn't crash the call
+
+**3. Diagnostics Panel Local State:**
+
+```typescript
+// Location: DiagnosticPanel.tsx, lines ~378-426
+{/* Local Media Section */}
+<div className="bg-white/5 rounded-xl p-4 space-y-3">
+  <div className="flex items-center gap-2 text-yellow-400">
+    <Radio className="h-4 w-4" />
+    <span className="font-medium text-sm">Your Media ({localTracks.length})</span>
+  </div>
+  
+  {/* Local Media State */}
+  <div className="grid grid-cols-2 gap-2 text-sm">
+    <div className="flex justify-between">
+      <span className="text-white/60">Audio Muted:</span>
+      <span className={cn("font-mono", isMuted ? "text-red-400" : "text-green-400")}>
+        {isMuted ? "Yes" : "No"}
+      </span>
+    </div>
+    <div className="flex justify-between">
+      <span className="text-white/60">Video Off:</span>
+      <span className={cn("font-mono", isVideoOff ? "text-red-400" : "text-green-400")}>
+        {isVideoOff ? "Yes" : "No"}
+      </span>
+    </div>
+  </div>
+  
+  {/* Local Audio/Video Tracks */}
+  {/* ... track details ... */}
+</div>
+```
+
+- Shows local user's mute/video state in real-time
+- Displays local track status (enabled/muted)
+- Separated from remote media for clarity
+- Updates immediately when user changes settings
+
+**4. PIP Toggle Repositioning:**
+
+```typescript
+// Location: VideoCallUI.tsx, lines ~1321-1346
+{/* "You" label and orientation toggle */}
+<div className="absolute bottom-1 left-1 right-1 flex items-center justify-between gap-1">
+  <div className="bg-black/60 backdrop-blur-sm px-2 py-0.5 rounded-md">
+    <span className="text-white text-xs font-medium">You</span>
+  </div>
+  {/* Orientation toggle button */}
+  <button
+    onClick={(e) => {
+      e.stopPropagation();
+      setPipOrientation(prev => prev === "portrait" ? "landscape" : "portrait");
+    }}
+    className="bg-black/60 hover:bg-black/80 backdrop-blur-sm rounded-md p-1.5 transition-colors z-10"
+  >
+    <span className="text-white text-xs">
+      {pipOrientation === "portrait" ? "↔️" : "↕️"}
+    </span>
+  </button>
+</div>
+```
+
+- Toggle moved to bottom-right next to "You" label
+- Flex container keeps elements aligned
+- Better accessibility and easier to reach
+
+#### Testing Recommendations
+
+1. **Reconnection Testing:**
+   - Start a call between parent and child
+   - Refresh parent's page during active call
+   - Verify child detects new offer and creates answer automatically
+   - Verify call reconnects successfully
+   - Repeat test with child refreshing instead
+   - Test multiple refresh cycles
+
+2. **Signaling State Protection Testing:**
+   - Monitor console for InvalidStateError (should not occur)
+   - Test rapid state changes during call setup
+   - Verify state checks prevent errors
+   - Check detailed logging for state transitions
+
+3. **Diagnostics Panel Testing:**
+   - Open diagnostics panel during call
+   - Mute/unmute audio, verify "Your Media" section updates
+   - Disable/enable video, verify "Your Media" section updates
+   - Verify local track status matches actual state
+   - Check remote media section shows remote tracks correctly
+
+4. **PIP Toggle Testing:**
+   - Verify toggle button is accessible at bottom-right
+   - Test switching between portrait and landscape
+   - Verify "You" label and toggle are aligned
+   - Test on different screen sizes
+
+5. **Integration Testing:**
+   - Test all call flows (parent↔child, family_member↔child)
+   - Test reconnection with various network conditions
+   - Verify no regressions in existing functionality
+   - Test error recovery scenarios
+
+#### Impact
+
+- **Automatic Reconnection**: Calls reconnect automatically after page refresh without manual intervention
+- **Better Error Handling**: Signaling state errors prevented with state checks
+- **Accurate Diagnostics**: Users can see their own mute/video state in real-time
+- **Improved UX**: PIP toggle is more accessible, diagnostics are more informative
+- **Graceful Degradation**: Reconnection failures don't crash the call, allows recovery
+- **No Regressions**: All existing functionality preserved, improvements are additive
+
+---
+
+### 2. Video Call User Control Respect & Remote State Detection
+
+#### Purpose
+
+Ensure adaptive quality system respects user's explicit mute/video-off settings and improve detection of remote user's media state. This prevents the quality controller from overriding user choices and provides better visual feedback when remote users disable their media.
+
+#### Issues Fixed
+
+1. **Quality System Overriding User Settings**: Adaptive quality controller was re-enabling video/audio tracks even when user had explicitly disabled them
+2. **No Remote State Detection**: UI didn't show when remote user had disabled their video/audio
+3. **Fixed PIP Orientation**: Picture-in-picture was always landscape, not optimal for individual face shots
+4. **Placeholder Logic**: Placeholders only showed for network issues, not when remote user disabled media
+
+#### Complete File List
+
+**Source Code Files Modified:**
+
+- `src/features/calls/hooks/useNetworkQuality.ts`
+  - Added `wasEnabled` tracking before applying quality presets
+  - Only re-enables tracks if they were previously enabled (respects user's choice)
+  - Updates bitrate settings even when tracks are disabled (ready for when user re-enables)
+  - Lines ~200-250: Video track enabled state preservation
+  - Lines ~280-320: Audio track enabled state preservation
+
+- `src/features/calls/hooks/useWebRTC.ts`
+  - Added `userMutedRef` and `userVideoOffRef` to track explicit user actions
+  - Added `setUserMuted()` and `setUserVideoOff()` functions for media controls
+  - Track enabled state set based on user preferences when adding to peer connection
+  - Quality controller respects user state when adjusting quality
+  - Lines ~150-200: User state refs and setter functions
+  - Lines ~600-650: Track enabled state based on user preferences
+  - Lines ~1200-1250: Quality change handler respects user state
+
+- `src/features/calls/components/VideoCallUI.tsx`
+  - Added `isRemoteVideoDisabled` and `isRemoteAudioDisabled` state tracking
+  - Fast polling (100ms) to detect when remote user disables video/audio
+  - Monitors MediaStreamTrack enabled state, mute events, and video element state
+  - Added `pipOrientation` state (portrait/landscape) with toggle button
+  - Enhanced placeholder logic for both network issues and remote user disabled media
+  - Smooth fade transitions when switching between video and placeholder
+  - Lines ~50-100: Remote state tracking state variables
+  - Lines ~400-550: Remote state detection useEffect with polling and event listeners
+  - Lines ~800-850: PIP orientation toggle implementation
+  - Lines ~900-950: Enhanced placeholder rendering logic
+
+- `src/features/calls/components/ConnectionQualityIndicator.tsx`
+  - Added `isReconnecting` prop to show reconnection status
+  - Displays "Reconnecting..." state during ICE restarts
+  - Lines ~30-40: Added isReconnecting prop
+
+#### Implementation Details
+
+**1. User Control Respect in Quality Presets:**
+
+```typescript
+// Location: useNetworkQuality.ts, lines ~200-250
+const wasEnabled = sender.track.enabled; // Remember current state
+
+if (!presetToApply.enableVideo || forceAudioOnlyRef.current) {
+  // Disable video...
+} else {
+  // CRITICAL: Only enable video if it was previously enabled
+  if (wasEnabled) {
+    sender.track.enabled = true;
+    setIsVideoPausedDueToNetwork(false);
+  } else {
+    // User has video off - keep it disabled but update bitrate settings
+    sender.track.enabled = false;
+  }
+}
+```
+
+- Remembers track enabled state before applying presets
+- Only re-enables if previously enabled (respects user's choice)
+- Updates bitrate settings even when disabled (ready for re-enable)
+
+**2. User State Tracking:**
+
+```typescript
+// Location: useWebRTC.ts, lines ~150-200
+const userMutedRef = useRef<boolean>(false);
+const userVideoOffRef = useRef<boolean>(false);
+
+const setUserMuted = useCallback((muted: boolean) => {
+  userMutedRef.current = muted;
+  if (localStreamRef.current) {
+    localStreamRef.current.getAudioTracks().forEach((track) => {
+      track.enabled = !muted;
+    });
+  }
+}, []);
+
+const setUserVideoOff = useCallback((videoOff: boolean) => {
+  userVideoOffRef.current = videoOff;
+  if (localStreamRef.current) {
+    localStreamRef.current.getVideoTracks().forEach((track) => {
+      track.enabled = !videoOff;
+    });
+  }
+}, []);
+```
+
+- Refs track explicit user actions separately from adaptive quality
+- Setter functions update both refs and track enabled state immediately
+- Exposed to media controls for state updates
+
+**3. Remote State Detection:**
+
+```typescript
+// Location: VideoCallUI.tsx, lines ~400-550
+useEffect(() => {
+  const checkTrackState = () => {
+    const videoTracks = remoteStream.getVideoTracks();
+    const audioTracks = remoteStream.getAudioTracks();
+    
+    const videoDisabled = videoTracks.length === 0 || 
+      videoTracks.every(track => !track.enabled);
+    const audioDisabled = audioTracks.length === 0 || 
+      audioTracks.every(track => !track.enabled);
+    
+    setIsRemoteVideoDisabled(videoDisabled);
+    setIsRemoteAudioDisabled(audioDisabled);
+  };
+
+  // Fast polling (100ms) for immediate detection
+  const pollInterval = setInterval(checkTrackState, 100);
+  
+  // Event listeners for track changes
+  videoTracks.forEach(track => {
+    track.addEventListener("ended", checkTrackState);
+    track.addEventListener("mute", checkTrackState);
+    track.addEventListener("unmute", checkTrackState);
+  });
+  
+  return () => {
+    clearInterval(pollInterval);
+    // Cleanup listeners...
+  };
+}, [remoteStream]);
+```
+
+- Fast polling (100ms) for immediate response
+- Event listeners on MediaStreamTrack for state changes
+- Monitors video element state for comprehensive detection
+
+**4. PIP Orientation Toggle:**
+
+```typescript
+// Location: VideoCallUI.tsx, lines ~800-850
+const [pipOrientation, setPipOrientation] = useState<"portrait" | "landscape">("portrait");
+
+<div className={cn(
+  "relative rounded-xl overflow-hidden shadow-2xl border-2 border-white/30 bg-slate-900 transition-all duration-300",
+  pipOrientation === "portrait" 
+    ? "w-24 h-32 sm:w-28 sm:h-40 md:w-36 md:h-48"  // Taller
+    : "w-32 h-24 sm:w-40 sm:h-28 md:w-48 md:h-36"  // Wider
+)}>
+  <button
+    onClick={() => setPipOrientation(prev => prev === "portrait" ? "landscape" : "portrait")}
+    className="bg-black/60 hover:bg-black/80 backdrop-blur-sm rounded-md p-1.5"
+  >
+    {pipOrientation === "portrait" ? "↔️" : "↕️"}
+  </button>
+</div>
+```
+
+- Toggle button in PIP corner
+- Portrait: taller aspect ratio (better for individual face shots)
+- Landscape: wider aspect ratio (better for group/wide shots)
+- Smooth transitions between orientations
+
+**5. Enhanced Placeholder Logic:**
+
+```typescript
+// Location: VideoCallUI.tsx, lines ~900-950
+<video
+  className={cn(
+    "w-full h-full object-cover transition-opacity duration-200",
+    (networkQuality?.isVideoPausedDueToNetwork || isRemoteVideoDisabled) && "opacity-0"
+  )}
+/>
+
+{(networkQuality?.isVideoPausedDueToNetwork || isRemoteVideoDisabled) && (
+  <VideoPlaceholder
+    type="remote"
+    reason={isRemoteVideoDisabled ? "disabled" : "network"}
+    isAudioDisabled={isRemoteAudioDisabled}
+  />
+)}
+```
+
+- Placeholders show for both network issues AND remote user disabled media
+- Different messaging based on reason (network vs disabled)
+- Smooth fade transitions with CSS opacity
+- Audio disabled state passed to placeholder
+
+#### Testing Recommendations
+
+1. **User Control Respect Testing:**
+   - Mute audio during call, verify quality controller doesn't re-enable it
+   - Turn off video during call, verify quality controller doesn't re-enable it
+   - Test network quality changes don't override user's mute/video-off settings
+   - Verify bitrate settings still update even when tracks are disabled
+
+2. **Remote State Detection Testing:**
+   - Have remote user mute audio, verify placeholder shows immediately
+   - Have remote user turn off video, verify placeholder shows immediately
+   - Test fast polling detects state changes within 100ms
+   - Verify event listeners catch track state changes
+
+3. **PIP Orientation Testing:**
+   - Toggle between portrait and landscape orientations
+   - Verify smooth transitions between orientations
+   - Test on different screen sizes (mobile, tablet, desktop)
+   - Verify toggle button is accessible and responsive
+
+4. **Placeholder Logic Testing:**
+   - Test placeholder shows for network issues (existing behavior)
+   - Test placeholder shows when remote user disables media (new behavior)
+   - Verify smooth fade transitions when switching between video and placeholder
+   - Test different placeholder messaging for network vs disabled reasons
+
+5. **Integration Testing:**
+   - Test all call flows (parent↔child, family_member↔child)
+   - Verify no regressions in existing functionality
+   - Test on various network conditions (2G-5G/WiFi)
+   - Verify user controls work correctly with adaptive quality system
+
+#### Impact
+
+- **User Control Maintained**: Users' explicit mute/video-off choices are never overridden by adaptive quality system
+- **Better UX**: Clear visual feedback when remote user has disabled their media
+- **Flexible PIP**: Users can choose optimal orientation for their call type
+- **Smooth Transitions**: Professional fade effects when switching between video and placeholders
+- **Accurate State**: Real-time detection of remote user's media state with fast polling and event listeners
+- **No Regressions**: All existing functionality preserved, improvements are additive
+
+---
+
+### 2. WebRTC Improvements Based on W3C Best Practices
 
 #### Purpose
 

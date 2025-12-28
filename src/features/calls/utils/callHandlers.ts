@@ -98,11 +98,88 @@ export const handleParentCall = async (
     );
     setCallId(existingCall.id);
 
-    // If call has an answer from child, handle it
-    if (existingCall.answer && pc.remoteDescription === null) {
+    // Handle reconnection to active calls - need new offer for new peer connection
+    if (existingCall.status === "active") {
       console.log(
-        "📞 [PARENT CALL] Existing call has answer, setting remote description..."
+        "📞 [PARENT CALL] Reconnecting to active call - creating new offer for new peer connection..."
       );
+      
+      // Clear old offer/answer/ICE candidates since we have a new peer connection
+      // But keep status as "active" so child knows it's a reconnection, not a new call
+      await supabase
+        .from("calls")
+        .update({
+          offer: null,
+          answer: null,
+          parent_ice_candidates: null,
+          child_ice_candidates: null,
+          // Keep status as "active" - don't reset to "ringing"
+        })
+        .eq("id", existingCall.id);
+      
+      // Update local object to reflect cleared values
+      existingCall.offer = undefined;
+      existingCall.answer = undefined;
+      
+      // Create a new offer for the reconnection
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      
+      const offerData = { type: offer.type, sdp: offer.sdp } as Json;
+      await supabase
+        .from("calls")
+        .update({ offer: offerData })
+        .eq("id", existingCall.id);
+      
+      // Update local object to reflect new offer (prevents subsequent branches from creating another offer)
+      existingCall.offer = offerData as unknown as RTCSessionDescriptionInit;
+      
+      console.log("📞 [PARENT CALL] Fresh offer created for active call reconnection");
+      // Continue to set up listener below - the subsequent else-if branches will be skipped
+    } else if (existingCall.status === "ended") {
+      // For ended calls, we can't reconnect - the call is already over
+      console.log(
+        "📞 [PARENT CALL] Cannot reconnect to ended call. Call is already terminated."
+      );
+      throw new Error("Cannot reconnect to an ended call");
+    } else if (existingCall.answer && pc.remoteDescription === null) {
+      // If call has an answer from child, handle it (for ringing calls)
+      // CRITICAL: Check signaling state before setting remote description
+      if (pc.signalingState !== "have-local-offer") {
+        console.warn(
+          "⚠️ [PARENT CALL] Cannot set remote answer - wrong signaling state",
+          {
+            callId: existingCall.id,
+            expectedState: "have-local-offer",
+            actualState: pc.signalingState,
+            hasLocalDescription: !!pc.localDescription,
+          }
+        );
+        // Don't throw - might recover later
+        return;
+      }
+      
+      console.log(
+        "📞 [PARENT CALL] Existing call has answer, setting remote description...",
+        {
+          callId: existingCall.id,
+          signalingState: pc.signalingState,
+        }
+      );
+      
+      // CRITICAL: Double-check signaling state right before setting (race condition protection)
+      if (pc.signalingState !== "have-local-offer") {
+        console.warn(
+          "⚠️ [PARENT CALL] Signaling state changed before setting remote description - skipping",
+          {
+            callId: existingCall.id,
+            expectedState: "have-local-offer",
+            actualState: pc.signalingState,
+          }
+        );
+        return;
+      }
+      
       const answerDesc =
         existingCall.answer as unknown as RTCSessionDescriptionInit;
       await pc.setRemoteDescription(new RTCSessionDescription(answerDesc));
@@ -287,6 +364,98 @@ export const handleParentCall = async (
             // This prevents errors when call is terminated but UPDATE events still arrive
             if (pc.signalingState === "closed" || pc.connectionState === "closed") {
               return;
+            }
+
+            // CRITICAL: Handle reconnection - if call is active and a new offer appears, create answer
+            // This handles the case where child refreshes and creates a new offer for reconnection
+            if (
+              updatedCall.status === "active" &&
+              updatedCall.offer &&
+              pc.signalingState === "stable" &&
+              pc.localDescription === null &&
+              pc.remoteDescription === null
+            ) {
+              const newOffer = updatedCall.offer as unknown as RTCSessionDescriptionInit;
+              const oldOffer = oldCall?.offer as unknown as RTCSessionDescriptionInit | undefined;
+              
+              // Check if this is a new offer (different from old one) or if old offer was null
+              const isNewOffer = !oldOffer || 
+                oldOffer.sdp !== newOffer.sdp ||
+                oldOffer.type !== newOffer.type;
+              
+              if (isNewOffer) {
+                try {
+                  console.log(
+                    "🔄 [PARENT HANDLER] Detected new offer for active call (reconnection) - creating answer...",
+                    {
+                      callId: updatedCall.id,
+                      oldOfferSdp: oldOffer?.sdp?.substring(0, 50),
+                      newOfferSdp: newOffer.sdp?.substring(0, 50),
+                    }
+                  );
+                  
+                  // Set remote description with the new offer
+                  await pc.setRemoteDescription(new RTCSessionDescription(newOffer));
+                  
+                  // Wait for signaling state to change (with timeout)
+                  await new Promise<void>((resolve, reject) => {
+                    const timeout = setTimeout(() => {
+                      reject(new Error("Timeout waiting for signaling state to change"));
+                    }, 5000); // 5 second timeout
+                    
+                    const checkState = () => {
+                      if (
+                        pc.signalingState === "have-remote-offer" ||
+                        pc.signalingState === "have-local-pranswer"
+                      ) {
+                        clearTimeout(timeout);
+                        resolve();
+                      } else if (pc.signalingState === "closed") {
+                        clearTimeout(timeout);
+                        reject(new Error("Peer connection closed during reconnection"));
+                      } else {
+                        setTimeout(checkState, 100);
+                      }
+                    };
+                    checkState();
+                  });
+                  
+                  // Create answer for reconnection
+                  const answer = await pc.createAnswer({
+                    offerToReceiveAudio: true,
+                    offerToReceiveVideo: true,
+                  });
+                  
+                  await pc.setLocalDescription(answer);
+                  
+                  // Save answer to database
+                  await supabase
+                    .from("calls")
+                    .update({
+                      answer: { type: answer.type, sdp: answer.sdp } as Json,
+                    })
+                    .eq("id", updatedCall.id);
+                  
+                  console.log(
+                    "✅ [PARENT HANDLER] Created and saved answer for reconnection"
+                  );
+                  setIsConnecting(false);
+                } catch (error) {
+                  const err = error as Error;
+                  console.error(
+                    "❌ [PARENT HANDLER] Error handling reconnection offer:",
+                    err.message,
+                    {
+                      callId: updatedCall.id,
+                      signalingState: pc.signalingState,
+                      connectionState: pc.connectionState,
+                    }
+                  );
+                  // Don't throw - allow call to continue, might recover through other mechanisms
+                  // The other side might retry or the call might end gracefully
+                }
+                return; // Don't process other updates in this event
+              }
             }
 
             // Check if child answered the call

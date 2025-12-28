@@ -4,6 +4,7 @@
 // AUDIO: Only enabled after user clicks Call/Accept, not on page load
 
 import { useEffect, useRef, useState, useTransition } from "react";
+import { cn } from "@/lib/utils";
 import { CallControls } from "./CallControls";
 import { getUserHasStartedCall } from "@/utils/userInteraction";
 import { deferredLog, deferTask } from "@/utils/inpOptimization";
@@ -11,6 +12,7 @@ import {
   ConnectionQualityIndicator, 
   ConnectionQualityBadge 
 } from "./ConnectionQualityIndicator";
+import { NetworkStatusBadge } from "./NetworkStatusBadge";
 import { DiagnosticContainer } from "./DiagnosticPanel";
 import { VideoPlaceholder } from "./VideoPlaceholder";
 import type { NetworkQualityLevel, ConnectionType, NetworkStats } from "../hooks/useNetworkQuality";
@@ -23,6 +25,7 @@ interface NetworkQualityProps {
   isVideoPausedDueToNetwork: boolean;
   forceAudioOnly: () => void;
   enableVideoIfPossible: () => void;
+  reconnecting?: boolean;
 }
 
 interface VideoCallUIProps {
@@ -61,6 +64,11 @@ export const VideoCallUI = ({
   const [isAudioMutedByBrowser, setIsAudioMutedByBrowser] = useState(false);
   // CRITICAL: Control the muted state via React state, not hardcoded prop
   const [isVideoMuted, setIsVideoMuted] = useState(true);
+  // Track if remote user has disabled their video/audio
+  const [isRemoteVideoDisabled, setIsRemoteVideoDisabled] = useState(false);
+  const [isRemoteAudioDisabled, setIsRemoteAudioDisabled] = useState(false);
+  // PIP orientation: portrait (taller) for individual calls, landscape (wider) for group/wide shots
+  const [pipOrientation, setPipOrientation] = useState<"portrait" | "landscape">("portrait");
   const playAttemptedRef = useRef(false);
   // Track if user has started/accepted call (enables audio)
   const audioEnabledRef = useRef(getUserHasStartedCall());
@@ -151,7 +159,7 @@ export const VideoCallUI = ({
         // Connect source -> analyser (don't connect to destination to avoid double audio)
         source.connect(analyser);
 
-        console.log("🔊 [AUDIO ANALYZER] Created audio analyzer for remote stream");
+        console.warn("🔊 [AUDIO ANALYZER] Created audio analyzer for remote stream");
       } catch (error) {
         console.error("❌ [AUDIO ANALYZER] Failed to create audio analyzer:", error);
       }
@@ -196,7 +204,7 @@ export const VideoCallUI = ({
         
         // Only log every 3rd call (9 seconds) to reduce console spam in production
         if (process.env.NODE_ENV === "development") {
-          console.log("🎧 [AUDIO DEBUG]", {
+          console.warn("🎧 [AUDIO DEBUG]", {
             videoMuted: video.muted,
             videoPaused: video.paused,
             audioTrackEnabled: audioTracks[0]?.enabled,
@@ -213,7 +221,7 @@ export const VideoCallUI = ({
         // Once detected, never show the warning (avoids false positives during quiet moments)
         if (hasAudioSignal) {
           if (!hasEverDetectedAudioRef.current) {
-            console.log("✅ [AUDIO] First audio detected from remote mic!");
+            console.warn("✅ [AUDIO] First audio detected from remote mic!");
           }
           hasEverDetectedAudioRef.current = true;
           noAudioCountRef.current = 0;
@@ -263,7 +271,6 @@ export const VideoCallUI = ({
       const audioElement = document.createElement("audio");
       // CRITICAL: Don't set autoplay=true - we control playback based on user interaction
       audioElement.autoplay = false;  // Respect user interaction requirement
-      audioElement.playsInline = true;
       audioElement.volume = 1.0;   // Full volume
       audioElement.style.display = "none";
       document.body.appendChild(audioElement);
@@ -580,6 +587,122 @@ export const VideoCallUI = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [remoteStream, remoteVideoRef]);
 
+  // CRITICAL: Monitor remote video/audio track state to show placeholder when disabled
+  // This detects when the remote user has disabled their video/audio
+  // Uses fast polling and video element state checking for immediate detection
+  useEffect(() => {
+    if (!remoteStream) {
+      setIsRemoteVideoDisabled(false);
+      setIsRemoteAudioDisabled(false);
+      return;
+    }
+
+    const checkTrackState = () => {
+      const videoTracks = remoteStream.getVideoTracks();
+      const audioTracks = remoteStream.getAudioTracks();
+      
+      // Check if video is disabled (no tracks or all tracks disabled)
+      const videoDisabled = videoTracks.length === 0 || videoTracks.every(track => !track.enabled);
+      
+      // Also check video element state - if it's showing black/empty, consider it disabled
+      let videoElementShowsBlack = false;
+      if (remoteVideoRef.current) {
+        const video = remoteVideoRef.current;
+        // Check if video is paused, has no video tracks, or readyState indicates no data
+        videoElementShowsBlack = 
+          video.readyState === 0 || // HAVE_NOTHING - no data
+          (video.readyState === 1 && videoTracks.length === 0) || // HAVE_METADATA but no tracks
+          (video.paused && videoTracks.every(track => !track.enabled)); // Paused with disabled tracks
+      }
+      
+      // Video is disabled if tracks are disabled OR video element shows black
+      const isVideoDisabled = videoDisabled || videoElementShowsBlack;
+      setIsRemoteVideoDisabled(isVideoDisabled);
+      
+      // Check if audio is disabled (no tracks or all tracks disabled)
+      const audioDisabled = audioTracks.length === 0 || audioTracks.every(track => !track.enabled);
+      setIsRemoteAudioDisabled(audioDisabled);
+    };
+
+    // Check initial state immediately
+    checkTrackState();
+
+    // Monitor track enabled/disabled events
+    const videoTracks = remoteStream.getVideoTracks();
+    const audioTracks = remoteStream.getAudioTracks();
+
+    const handleTrackChange = () => {
+      checkTrackState();
+    };
+
+    // Add listeners to all tracks
+    videoTracks.forEach(track => {
+      track.addEventListener("ended", handleTrackChange);
+      track.addEventListener("mute", handleTrackChange);
+      track.addEventListener("unmute", handleTrackChange);
+    });
+
+    audioTracks.forEach(track => {
+      track.addEventListener("ended", handleTrackChange);
+      track.addEventListener("mute", handleTrackChange);
+      track.addEventListener("unmute", handleTrackChange);
+    });
+
+    // Monitor stream for track additions/removals
+    const handleAddTrack = () => {
+      checkTrackState();
+    };
+    const handleRemoveTrack = () => {
+      checkTrackState();
+    };
+    
+    remoteStream.addEventListener("addtrack", handleAddTrack);
+    remoteStream.addEventListener("removetrack", handleRemoveTrack);
+
+    // Fast polling for enabled state changes (since MediaStreamTrack doesn't fire events for enabled changes)
+    // Reduced to 100ms for immediate detection
+    const pollInterval = setInterval(() => {
+      checkTrackState();
+    }, 100); // Check every 100ms for immediate response
+
+    // Also check when video element state changes
+    const video = remoteVideoRef.current;
+    const handleVideoStateChange = () => {
+      checkTrackState();
+    };
+    
+    if (video) {
+      video.addEventListener("loadedmetadata", handleVideoStateChange);
+      video.addEventListener("play", handleVideoStateChange);
+      video.addEventListener("pause", handleVideoStateChange);
+      video.addEventListener("waiting", handleVideoStateChange);
+      video.addEventListener("stalled", handleVideoStateChange);
+    }
+
+    return () => {
+      clearInterval(pollInterval);
+      remoteStream.removeEventListener("addtrack", handleAddTrack);
+      remoteStream.removeEventListener("removetrack", handleRemoveTrack);
+      videoTracks.forEach(track => {
+        track.removeEventListener("ended", handleTrackChange);
+        track.removeEventListener("mute", handleTrackChange);
+        track.removeEventListener("unmute", handleTrackChange);
+      });
+      audioTracks.forEach(track => {
+        track.removeEventListener("ended", handleTrackChange);
+        track.removeEventListener("mute", handleTrackChange);
+        track.removeEventListener("unmute", handleTrackChange);
+      });
+      if (video) {
+        video.removeEventListener("loadedmetadata", handleVideoStateChange);
+        video.removeEventListener("play", handleVideoStateChange);
+        video.removeEventListener("pause", handleVideoStateChange);
+        video.removeEventListener("waiting", handleVideoStateChange);
+        video.removeEventListener("stalled", handleVideoStateChange);
+      }
+    };
+  }, [remoteStream, remoteVideoRef]);
+
   // Play a test beep to verify audio output works
   const playTestBeep = () => {
     try {
@@ -766,7 +889,7 @@ export const VideoCallUI = ({
         analyserRef.current.getByteFrequencyData(dataArray);
         const avgLevel = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
         const peakLevel = Math.max(...dataArray);
-        console.log("📊 [WEB AUDIO] Audio level after routing:", { avg: avgLevel.toFixed(2), peak: peakLevel });
+        console.warn("📊 [WEB AUDIO] Audio level after routing:", { avg: avgLevel.toFixed(2), peak: peakLevel });
         
         if (avgLevel < 1 && peakLevel < 5) {
           console.warn("⚠️ [WEB AUDIO] No audio data detected - remote microphone may be muted or not working!");
@@ -938,7 +1061,11 @@ export const VideoCallUI = ({
           autoPlay
           playsInline
           muted={isVideoMuted}  // CONTROLLED: React state controls muted
-          className="w-full h-full object-cover"
+          className={cn(
+            "w-full h-full object-cover transition-opacity duration-200",
+            // Hide video when placeholder should be shown (smooth fade)
+            (networkQuality?.isVideoPausedDueToNetwork || isRemoteVideoDisabled) && "opacity-0"
+          )}
           style={{ backgroundColor: "#000" }}
           onLoadedMetadata={() => {
             // Enable audio tracks and potentially unmute video if user started call
@@ -1001,14 +1128,15 @@ export const VideoCallUI = ({
           }}
         />
 
-        {/* Video placeholder - shown when video is disabled due to poor network */}
+        {/* Video placeholder - shown when video is disabled due to poor network OR user disabled it */}
         {/* Kid-friendly animated placeholder instead of frozen video frame */}
-        {networkQuality?.isVideoPausedDueToNetwork && (
+        {(networkQuality?.isVideoPausedDueToNetwork || isRemoteVideoDisabled) && (
           <div className="absolute inset-0 z-10">
             <VideoPlaceholder
               type="remote"
-              reason="network"
+              reason={isRemoteVideoDisabled ? "disabled" : "network"}
               name={undefined} // TODO: Pass remote user's name if available
+              isAudioDisabled={isRemoteAudioDisabled}
             />
           </div>
         )}
@@ -1161,12 +1289,20 @@ export const VideoCallUI = ({
         )}
 
         {/* Local video (picture-in-picture) - high z-index to stay above placeholders */}
+        {/* Switchable between portrait (taller) and landscape (wider) orientations */}
         <div className="absolute top-4 right-4 z-30">
           <div className="relative">
             {/* Glowing border effect */}
             <div className="absolute -inset-1 bg-gradient-to-br from-blue-500/50 to-purple-500/50 rounded-2xl blur-sm" />
-            {/* Video container */}
-            <div className="relative w-32 h-24 sm:w-40 sm:h-30 md:w-48 md:h-36 rounded-xl overflow-hidden shadow-2xl border-2 border-white/30 bg-slate-900">
+            {/* Video container - dimensions change based on orientation */}
+            <div className={cn(
+              "relative rounded-xl overflow-hidden shadow-2xl border-2 border-white/30 bg-slate-900 transition-all duration-300",
+              // Portrait: taller than wide (better for individual/face shots)
+              pipOrientation === "portrait" 
+                ? "w-24 h-32 sm:w-28 sm:h-40 md:w-36 md:h-48"
+                // Landscape: wider than tall (better for group/wide shots)
+                : "w-32 h-24 sm:w-40 sm:h-28 md:w-48 md:h-36"
+            )}>
               {/* Show placeholder when video is off or paused due to network */}
               {(isVideoOff || networkQuality?.isVideoPausedDueToNetwork) ? (
                 <VideoPlaceholder
@@ -1182,9 +1318,25 @@ export const VideoCallUI = ({
                   className="w-full h-full object-cover"
                 />
               )}
-              {/* "You" label */}
-              <div className="absolute bottom-1 left-1 bg-black/60 backdrop-blur-sm px-2 py-0.5 rounded-md">
-                <span className="text-white text-xs font-medium">You</span>
+              {/* "You" label and orientation toggle */}
+              <div className="absolute bottom-1 left-1 right-1 flex items-center justify-between gap-1">
+                <div className="bg-black/60 backdrop-blur-sm px-2 py-0.5 rounded-md">
+                  <span className="text-white text-xs font-medium">You</span>
+                </div>
+                {/* Orientation toggle button */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setPipOrientation(prev => prev === "portrait" ? "landscape" : "portrait");
+                  }}
+                  className="bg-black/60 hover:bg-black/80 backdrop-blur-sm rounded-md p-1.5 transition-colors z-10"
+                  aria-label={pipOrientation === "portrait" ? "Switch to landscape" : "Switch to portrait"}
+                  title={pipOrientation === "portrait" ? "Switch to landscape (wide)" : "Switch to portrait (tall)"}
+                >
+                  <span className="text-white text-xs">
+                    {pipOrientation === "portrait" ? "↔️" : "↕️"}
+                  </span>
+                </button>
               </div>
               {/* Muted indicator on PIP */}
               {isMuted && (
@@ -1207,6 +1359,7 @@ export const VideoCallUI = ({
               isVideoPausedDueToNetwork={networkQuality.isVideoPausedDueToNetwork}
               showDetails={true}
               defaultExpanded={false}
+              isReconnecting={networkQuality.reconnecting}
             />
           </div>
         ) : (
@@ -1229,6 +1382,9 @@ export const VideoCallUI = ({
             isAudioMutedByBrowser={isAudioMutedByBrowser}
             audioElementRef={audioElementRef}
             remoteStream={remoteStream}
+            localStream={localStream}
+            isMuted={isMuted}
+            isVideoOff={isVideoOff}
             className="absolute bottom-28 left-4 z-[60]"
           />
         )}

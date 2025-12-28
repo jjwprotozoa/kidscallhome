@@ -4,14 +4,20 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { safeLog } from "@/utils/security";
+import {
+  QUALITY_PROFILES,
+  type QualityLevel,
+  type QualityProfile,
+} from "../config/callQualityProfiles";
 
-// Quality levels from worst to best
-export type NetworkQualityLevel = "critical" | "poor" | "moderate" | "good" | "excellent" | "premium";
+// Quality levels from worst to best (re-export for backward compatibility)
+export type NetworkQualityLevel = QualityLevel;
 
 // Connection type detection
 export type ConnectionType = "2g" | "3g" | "4g" | "5g" | "wifi" | "unknown";
 
-// Quality presets for different network conditions
+// Quality preset interface for backward compatibility
+// Maps QualityProfile to the old interface structure
 export interface QualityPreset {
   name: string;
   maxBitrate: number;        // kbps for video
@@ -23,73 +29,28 @@ export interface QualityPreset {
   scaleResolutionDownBy?: number;
 }
 
-// Quality presets optimized for each network condition
+// Convert QualityProfile to QualityPreset for backward compatibility
+function profileToPreset(profile: QualityProfile): QualityPreset {
+  return {
+    name: profile.name,
+    maxBitrate: profile.videoKbps,
+    maxFramerate: profile.videoFps,
+    maxWidth: profile.videoWidth,
+    maxHeight: profile.videoHeight,
+    audioBitrate: profile.audioKbps,
+    enableVideo: profile.enableVideo,
+    scaleResolutionDownBy: profile.scaleResolutionDownBy,
+  };
+}
+
+// Quality presets - mapped from centralized profiles
 export const QUALITY_PRESETS: Record<NetworkQualityLevel, QualityPreset> = {
-  // 2G / Very poor signal - Audio only to ensure call works
-  critical: {
-    name: "Audio Only (2G/Critical)",
-    maxBitrate: 0,           // No video
-    maxFramerate: 0,
-    maxWidth: 0,
-    maxHeight: 0,
-    audioBitrate: 24,        // Low quality audio (24kbps Opus)
-    enableVideo: false,
-  },
-  // 3G / Poor signal - Very low quality video
-  poor: {
-    name: "Low Quality (3G/Poor)",
-    maxBitrate: 150,         // 150kbps video
-    maxFramerate: 15,
-    maxWidth: 320,
-    maxHeight: 240,
-    audioBitrate: 32,        // Standard quality audio
-    enableVideo: true,
-    scaleResolutionDownBy: 4,
-  },
-  // 4G / Moderate - Medium quality video
-  moderate: {
-    name: "Medium Quality (4G/Moderate)",
-    maxBitrate: 500,         // 500kbps video
-    maxFramerate: 24,
-    maxWidth: 640,
-    maxHeight: 480,
-    audioBitrate: 48,        // Good quality audio
-    enableVideo: true,
-    scaleResolutionDownBy: 2,
-  },
-  // LTE+ / Good signal - High quality video
-  good: {
-    name: "High Quality (LTE+/Good)",
-    maxBitrate: 1500,        // 1.5Mbps video
-    maxFramerate: 30,
-    maxWidth: 1280,
-    maxHeight: 720,
-    audioBitrate: 64,        // High quality audio
-    enableVideo: true,
-    scaleResolutionDownBy: 1,
-  },
-  // 5G / Good WiFi / Excellent - HD quality
-  excellent: {
-    name: "HD Quality (5G/WiFi)",
-    maxBitrate: 4000,        // 4Mbps video - bumped up for HD
-    maxFramerate: 30,
-    maxWidth: 1920,
-    maxHeight: 1080,
-    audioBitrate: 96,        // High quality audio (96kbps Opus)
-    enableVideo: true,
-    scaleResolutionDownBy: 1,
-  },
-  // Fiber / Premium WiFi - Full HD with higher bitrate for crisp video
-  premium: {
-    name: "Full HD Quality (Fiber/Premium)",
-    maxBitrate: 8000,        // 8Mbps video - excellent for 1080p
-    maxFramerate: 30,
-    maxWidth: 1920,
-    maxHeight: 1080,
-    audioBitrate: 128,       // Studio quality audio (128kbps Opus)
-    enableVideo: true,
-    scaleResolutionDownBy: 1,
-  },
+  critical: profileToPreset(QUALITY_PROFILES.critical),
+  poor: profileToPreset(QUALITY_PROFILES.poor),
+  moderate: profileToPreset(QUALITY_PROFILES.moderate),
+  good: profileToPreset(QUALITY_PROFILES.good),
+  excellent: profileToPreset(QUALITY_PROFILES.excellent),
+  premium: profileToPreset(QUALITY_PROFILES.premium),
 };
 
 // Bandwidth thresholds for quality level detection (in kbps)
@@ -318,6 +279,8 @@ export const useNetworkQuality = (): UseNetworkQualityReturn => {
         
         if (sender.track.kind === "video") {
           // Handle video track
+          const wasEnabled = sender.track.enabled; // Remember current state
+          
           if (!presetToApply.enableVideo || forceAudioOnlyRef.current) {
             // Disable video by setting maxBitrate to 0 and pausing track
             params.encodings[0].maxBitrate = 0;
@@ -336,20 +299,34 @@ export const useNetworkQuality = (): UseNetworkQualityReturn => {
               params.encodings[0].scaleResolutionDownBy = presetToApply.scaleResolutionDownBy;
             }
             
-            sender.track.enabled = true;
-            setIsVideoPausedDueToNetwork(false);
-            
-            safeLog.log("🎥 [QUALITY] Video bitrate set to:", presetToApply.maxBitrate, "kbps");
+            // CRITICAL: Only enable video if it was previously enabled (respect user's video-off setting)
+            // If user turned video off, keep it disabled even if network quality improves
+            if (wasEnabled) {
+              sender.track.enabled = true;
+              setIsVideoPausedDueToNetwork(false);
+              safeLog.log("🎥 [QUALITY] Video bitrate set to:", presetToApply.maxBitrate, "kbps");
+            } else {
+              // User has video off - keep it disabled but update bitrate settings for when they turn it back on
+              sender.track.enabled = false;
+              safeLog.log("🎥 [QUALITY] Video bitrate updated but track kept disabled (user has video off)");
+            }
           }
         } else if (sender.track.kind === "audio") {
           // Apply audio quality settings
           params.encodings[0].maxBitrate = presetToApply.audioBitrate * 1000; // Convert to bps
           params.encodings[0].active = true;
           
-          // CRITICAL: Audio is ALWAYS enabled, even when video is disabled
-          sender.track.enabled = true;
-          
-          safeLog.log("🔊 [QUALITY] Audio bitrate set to:", presetToApply.audioBitrate, "kbps");
+          // CRITICAL: Only enable audio if it was previously enabled (respect user's mute setting)
+          // If user muted, keep it disabled even when network quality changes
+          const wasEnabled = sender.track.enabled; // Remember current state
+          if (wasEnabled) {
+            sender.track.enabled = true;
+            safeLog.log("🔊 [QUALITY] Audio bitrate set to:", presetToApply.audioBitrate, "kbps");
+          } else {
+            // User has muted - keep it disabled but update bitrate settings for when they unmute
+            sender.track.enabled = false;
+            safeLog.log("🔊 [QUALITY] Audio bitrate updated but track kept disabled (user is muted)");
+          }
         }
         
         await sender.setParameters(params);

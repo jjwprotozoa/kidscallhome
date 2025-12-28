@@ -55,6 +55,7 @@ export interface SafetyModeSettings {
   keyword_alerts: boolean;
   export_conversations: boolean;
   alert_threshold: 'low' | 'medium' | 'high';
+  keywords?: string[]; // Custom keywords for word filtering
 }
 
 /**

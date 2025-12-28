@@ -30,6 +30,7 @@ interface ConnectionQualityIndicatorProps {
   className?: string;
   showDetails?: boolean;
   defaultExpanded?: boolean;
+  isReconnecting?: boolean;
 }
 
 // Colors for each quality level
@@ -100,6 +101,7 @@ export const ConnectionQualityIndicator = ({
   className,
   showDetails = false,
   defaultExpanded = true,
+  isReconnecting = false,
 }: ConnectionQualityIndicatorProps) => {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const colorClass = qualityColors[qualityLevel];
@@ -130,6 +132,14 @@ export const ConnectionQualityIndicator = ({
         {isVideoPausedDueToNetwork && (
           <div className="flex items-center gap-1 ml-1 text-orange-400">
             <VideoOff className="h-3 w-3" />
+          </div>
+        )}
+        
+        {/* Reconnecting indicator */}
+        {isReconnecting && (
+          <div className="flex items-center gap-1 ml-1 text-blue-400">
+            <div className="h-2 w-2 rounded-full bg-current animate-pulse" />
+            <span className="text-xs">Reconnecting...</span>
           </div>
         )}
         

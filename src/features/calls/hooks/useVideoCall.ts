@@ -92,6 +92,7 @@ export const useVideoCall = () => {
     playRemoteVideo,
     isConnected, // Add connection state from useWebRTC
     networkQuality, // Network quality info for adaptive streaming
+    reconnecting, // ICE restart in progress
   } = useWebRTC(callId, localVideoRef, remoteVideoRef, isChild);
 
   // Track if we've already attempted to play to avoid multiple calls
@@ -1477,6 +1478,9 @@ export const useVideoCall = () => {
     toggleMute,
     toggleVideo,
     endCall,
-    networkQuality, // Network quality info for adaptive streaming UI
+    networkQuality: {
+      ...networkQuality,
+      reconnecting, // Include reconnecting state
+    }, // Network quality info for adaptive streaming UI
   };
 };

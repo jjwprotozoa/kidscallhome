@@ -47,14 +47,60 @@ export const useCallAnswerHandler = ({
       return; // Already processed or no peer connection
     }
 
+    // CRITICAL: Check signaling state before setting remote description
+    // Can only set remote answer if we have a local offer (have-local-offer state)
+    // If in "stable" state, we need to create an offer first
+    if (pc.signalingState === "stable") {
+      console.warn(
+        `⚠️ [ANSWER HANDLER] Cannot set remote answer in stable state - need local offer first`,
+        {
+          callId,
+          signalingState: pc.signalingState,
+          hasLocalDescription: pc.localDescription !== null,
+        }
+      );
+      // If we have a local description, the state should not be stable
+      // If we don't, we need to create an offer first (but this shouldn't happen for incoming calls)
+      return;
+    }
+
+    // Only set remote answer if we're in have-local-offer state
+    if (pc.signalingState !== "have-local-offer") {
+      console.warn(
+        `⚠️ [ANSWER HANDLER] Cannot set remote answer - wrong signaling state`,
+        {
+          callId,
+          signalingState: pc.signalingState,
+          expectedState: "have-local-offer",
+        }
+      );
+      return;
+    }
+
     console.warn(`📞 [ANSWER HANDLER] Processing answer from ${source}:`, {
       callId,
       hasAnswer: !!answer,
+      signalingState: pc.signalingState,
     });
 
-    const answerDesc = answer as unknown as RTCSessionDescriptionInit;
-    await pc.setRemoteDescription(new RTCSessionDescription(answerDesc));
-    console.warn(`✅ [ANSWER HANDLER] Remote description set from ${source}`);
+    try {
+      const answerDesc = answer as unknown as RTCSessionDescriptionInit;
+      await pc.setRemoteDescription(new RTCSessionDescription(answerDesc));
+      console.warn(`✅ [ANSWER HANDLER] Remote description set from ${source}`);
+    } catch (error) {
+      const err = error as Error;
+      console.error(
+        `❌ [ANSWER HANDLER] Failed to set remote description:`,
+        err.message,
+        {
+          callId,
+          signalingState: pc.signalingState,
+          hasLocalDescription: pc.localDescription !== null,
+        }
+      );
+      // Don't throw - let the call continue, might recover
+      return;
+    }
 
     // Process queued ICE candidates
     const queuedCount = iceCandidatesQueue.current.length;
@@ -234,10 +280,13 @@ export const useCallAnswerHandler = ({
       clearInterval(answerPollingIntervalRef.current);
     }
 
-    console.warn("🔄 [ANSWER HANDLER] Starting answer polling fallback", {
-      callId,
-      role,
-    });
+    // Only log when starting polling (not every poll)
+    if (import.meta.env.DEV) {
+      console.warn("🔄 [ANSWER HANDLER] Starting answer polling fallback", {
+        callId,
+        role,
+      });
+    }
 
     answerPollingIntervalRef.current = setInterval(async () => {
       // Only poll if we're still in "calling" state and have a callId
@@ -250,11 +299,7 @@ export const useCallAnswerHandler = ({
       }
 
       try {
-        console.warn("🔄 [ANSWER HANDLER] Polling for answer update...", {
-          callId,
-          currentState: stateRef.current,
-        });
-
+        // Removed verbose polling log - only log errors or when answer is found
         const { data: polledCall, error } = await supabase
           .from("calls")
           .select("answer, status")
@@ -262,6 +307,7 @@ export const useCallAnswerHandler = ({
           .single();
 
         if (error) {
+          // Only log errors, not every poll
           console.warn(
             "⚠️ [ANSWER HANDLER] Error polling for answer:",
             error.message
@@ -269,20 +315,21 @@ export const useCallAnswerHandler = ({
           return;
         }
 
-        console.warn("🔄 [ANSWER HANDLER] Poll result:", {
-          callId,
-          hasAnswer: !!polledCall?.answer,
-          status: polledCall?.status,
-          hasRemoteDesc: !!webRTCPeerConnectionRef.current?.remoteDescription,
-        });
-
         // If answer is present but we haven't processed it yet, process it now
         if (polledCall?.answer) {
           const pc = webRTCPeerConnectionRef.current;
           if (pc && pc.remoteDescription === null) {
+            // Only log when we actually find and process an answer
+            if (import.meta.env.DEV) {
+              console.log("✅ [ANSWER HANDLER] Found answer via polling, processing...", {
+                callId,
+                status: polledCall?.status,
+              });
+            }
             await processAnswer(polledCall.answer, "polling");
           }
         }
+        // Removed verbose poll result log - only log when something meaningful happens
       } catch (pollError) {
         console.error(
           "❌ [ANSWER HANDLER] Error in answer polling:",
@@ -293,9 +340,12 @@ export const useCallAnswerHandler = ({
   };
 
   const checkExistingAnswer = async () => {
-    console.warn("🔄 [ANSWER HANDLER] Checking for existing answer...", {
-      callId,
-    });
+    // Only log in dev mode
+    if (import.meta.env.DEV) {
+      console.warn("🔄 [ANSWER HANDLER] Checking for existing answer...", {
+        callId,
+      });
+    }
 
     const { data: currentCall, error: currentCallError } = await supabase
       .from("calls")

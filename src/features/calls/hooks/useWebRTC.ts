@@ -14,6 +14,32 @@ import {
   NetworkStats,
   useNetworkQuality,
 } from "./useNetworkQuality";
+import {
+  applyVideoCodecPreferences,
+  shouldAllowAV1,
+} from "../webrtc/codecPreferences";
+import {
+  getMediaConstraintsForQuality,
+  getInitialQualityLevel,
+  adjustQualityForDataSaver,
+  getNetworkConnectionInfo,
+} from "../webrtc/mediaConstraints";
+import {
+  QUALITY_PROFILES,
+  type QualityLevel,
+} from "../config/callQualityProfiles";
+import { QUALITY_PRESETS } from "./useNetworkQuality";
+import {
+  startNetworkMonitor,
+  shouldTriggerIceRestart,
+  getNetworkConnectionInfo as getNetworkInfo,
+  type NetworkConnectionInfo,
+} from "../webrtc/networkMonitor";
+import {
+  QualityController,
+  type QualityChangeCallback,
+} from "../webrtc/qualityController";
+import { applyAudioTuning } from "../webrtc/audioTuning";
 
 interface UseWebRTCReturn {
   peerConnection: RTCPeerConnection | null;
@@ -27,6 +53,9 @@ interface UseWebRTCReturn {
   cleanup: (force?: boolean) => void;
   iceCandidatesQueue: React.MutableRefObject<RTCIceCandidateInit[]>;
   playRemoteVideo: () => void;
+  // Functions to update user's mute/video state
+  setUserMuted: (muted: boolean) => void;
+  setUserVideoOff: (videoOff: boolean) => void;
   // Network quality state for adaptive streaming
   networkQuality: {
     qualityLevel: NetworkQualityLevel;
@@ -35,6 +64,16 @@ interface UseWebRTCReturn {
     isVideoPausedDueToNetwork: boolean;
     forceAudioOnly: () => void;
     enableVideoIfPossible: () => void;
+  };
+  // Additional state for UI components
+  qualityLevel: NetworkQualityLevel;
+  reconnecting: boolean;
+  networkType: ConnectionType;
+  statsSummary: {
+    outboundBitrate: number;
+    inboundBitrate: number;
+    packetLoss: number;
+    roundTripTime: number;
   };
 }
 
@@ -48,6 +87,7 @@ export const useWebRTC = (
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const [isConnecting, setIsConnecting] = useState(true);
   const [isConnected, setIsConnected] = useState(false); // Track actual ICE connection state
+  const [isReconnecting, setIsReconnecting] = useState(false); // Track ICE restart in progress
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const iceCandidatesQueue = useRef<RTCIceCandidateInit[]>([]);
@@ -61,8 +101,68 @@ export const useWebRTC = (
   // IMPROVEMENT: Track ICE restart attempts to prevent infinite loops
   const iceRestartAttemptedRef = useRef(false);
 
+  // Network monitoring
+  const networkMonitorCleanupRef = useRef<(() => void) | null>(null);
+  const previousNetworkInfoRef = useRef<NetworkConnectionInfo | null>(null);
+  const iceRestartTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Quality controller
+  const qualityControllerRef = useRef<QualityController | null>(null);
+
+  // CRITICAL: Track user's explicit mute/video-off state to prevent overrides
+  // These refs are updated by the media controls and checked before forcing tracks enabled
+  const userMutedRef = useRef<boolean>(false);
+  const userVideoOffRef = useRef<boolean>(false);
+
+  // Track logged stream IDs to avoid duplicate logging
+  const loggedStreamIdsRef = useRef<Set<string>>(new Set());
+
   // Network quality monitoring for adaptive bitrate
   const networkQuality = useNetworkQuality();
+
+  // ICE restart function
+  const triggerIceRestart = useCallback(
+    async (pc: RTCPeerConnection, activeCallId: string) => {
+      if (iceRestartAttemptedRef.current) {
+        safeLog.log("ℹ️ [ICE RESTART] ICE restart already attempted, skipping");
+        return;
+      }
+
+      try {
+        setIsReconnecting(true);
+        iceRestartAttemptedRef.current = true;
+
+        safeLog.log("🔄 [ICE RESTART] Creating new offer with ICE restart...");
+
+        // Create new offer with ICE restart
+        const offer = await pc.createOffer({ iceRestart: true });
+        await pc.setLocalDescription(offer);
+
+        // Update database with new offer
+        const offerData = { type: offer.type, sdp: offer.sdp };
+        const { error: updateError } = await supabase
+          .from("calls")
+          .update({ offer: offerData as Json })
+          .eq("id", activeCallId);
+
+        if (updateError) {
+          safeLog.error("❌ [ICE RESTART] Failed to update offer in database:", updateError);
+        } else {
+          safeLog.log("✅ [ICE RESTART] New offer sent for ICE restart");
+        }
+
+        // Reset flag after a delay to allow retry if needed
+        setTimeout(() => {
+          iceRestartAttemptedRef.current = false;
+        }, 10000);
+      } catch (error) {
+        safeLog.error("❌ [ICE RESTART] Error during ICE restart:", error);
+        setIsReconnecting(false);
+        iceRestartAttemptedRef.current = false;
+      }
+    },
+    []
+  );
 
   // NOTE: ICE candidate buffering is already handled in call handlers
   // via iceCandidatesQueue.current - candidates are queued when remoteDescription
@@ -117,30 +217,30 @@ export const useWebRTC = (
         throw new Error(errorMessage);
       }
 
-      // Get media stream with proper constraints
+      // Get media stream with proper constraints based on network conditions
       // Handle "Device in use" errors gracefully (e.g., when testing on same device with multiple browsers)
       let stream: MediaStream;
       try {
         safeLog.log("🎥 [MEDIA] Requesting camera and microphone access...");
 
-        // Request 1080p video to enable high quality for fiber/premium connections
-        // The adaptive quality control will adjust bitrate/resolution AFTER connection if needed
-        // This ensures video track exists at the highest quality the camera supports
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            width: { ideal: 1920, max: 1920 },
-            height: { ideal: 1080, max: 1080 },
-            frameRate: { ideal: 30, max: 30 },
-            facingMode: "user", // Front-facing camera
-          },
-          audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true,
-            // Higher sample rate for better audio quality on good connections
-            sampleRate: { ideal: 48000 },
-          },
+        // Determine initial quality level based on network conditions
+        const connectionInfo = getNetworkConnectionInfo();
+        const saveData = connectionInfo?.saveData ?? false;
+        let initialQuality: QualityLevel = getInitialQualityLevel();
+        
+        // Adjust for data saver mode
+        initialQuality = adjustQualityForDataSaver(initialQuality, saveData);
+        
+        safeLog.log("📊 [MEDIA] Initial quality level:", {
+          level: initialQuality,
+          saveData,
+          effectiveType: connectionInfo?.effectiveType,
         });
+
+        // Get media constraints for the determined quality level
+        const constraints = getMediaConstraintsForQuality(initialQuality);
+        
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
 
         safeLog.log("✅ [MEDIA] Media stream obtained:", {
           audioTracks: stream.getAudioTracks().map((t) => ({
@@ -713,6 +813,64 @@ export const useWebRTC = (
           // CRITICAL: Mark as connected only when ICE is actually connected
           setIsConnected(true);
           setIsConnecting(false);
+          setIsReconnecting(false);
+
+          // Start quality controller when ICE connects
+          if (qualityControllerRef.current) {
+            qualityControllerRef.current.start(pc);
+          }
+
+          // Apply audio tuning after ICE connects
+          const connectionInfo = getNetworkConnectionInfo();
+          const saveData = connectionInfo?.saveData ?? false;
+          let currentQuality = networkQuality.qualityLevel;
+          
+          // Adjust quality for data saver
+          if (saveData) {
+            currentQuality = adjustQualityForDataSaver(currentQuality, saveData);
+          }
+
+          // Get quality profile (with data saver adjustment if needed)
+          let audioProfile = QUALITY_PROFILES[currentQuality];
+          
+          // Reduce audio bitrate by 25% if data saver is enabled
+          if (saveData) {
+            audioProfile = {
+              ...audioProfile,
+              audioKbps: Math.round(audioProfile.audioKbps * 0.75),
+            };
+            safeLog.log("📊 [DATA SAVER] Reduced audio bitrate by 25%", {
+              original: QUALITY_PROFILES[currentQuality].audioKbps,
+              adjusted: audioProfile.audioKbps,
+            });
+          }
+
+          // Apply audio tuning
+          applyAudioTuning(pc, audioProfile);
+
+          // Start network monitoring for ICE restart on network changes
+          if (!networkMonitorCleanupRef.current) {
+            previousNetworkInfoRef.current = getNetworkInfo();
+            networkMonitorCleanupRef.current = startNetworkMonitor((networkInfo) => {
+              const pc = peerConnectionRef.current;
+              if (!pc || !callId) return;
+
+              // Only trigger ICE restart if connection is active
+              const iceState = pc.iceConnectionState;
+              if (iceState !== "connected" && iceState !== "completed") {
+                return;
+              }
+
+              // Check if ICE restart is needed
+              if (shouldTriggerIceRestart(previousNetworkInfoRef.current, networkInfo)) {
+                safeLog.log("📡 [NETWORK] Network change detected, triggering ICE restart");
+                triggerIceRestart(pc, callId);
+              }
+
+              previousNetworkInfoRef.current = networkInfo;
+            });
+            safeLog.log("✅ [NETWORK] Started network monitoring for ICE restart");
+          }
 
           // CRITICAL FIX: When ICE connects, aggressively ensure remote stream is playing
           // This is especially important for parent-to-child calls
@@ -741,9 +899,16 @@ export const useWebRTC = (
               videoPaused: video.paused,
             });
 
-            // Ensure all tracks are enabled
+            // CRITICAL: Only enable tracks if user hasn't explicitly disabled them
+            // Respect user's mute/video-off settings
             audioTracks.forEach((track) => {
-              track.enabled = true;
+              // Only force enable if user hasn't muted
+              if (!userMutedRef.current) {
+                track.enabled = true;
+              } else {
+                // User has muted - keep it disabled
+                track.enabled = false;
+              }
               if (track.muted) {
                 safeLog.warn(
                   "⚠️ [ICE STATE] Audio track is muted after ICE connected"
@@ -751,7 +916,13 @@ export const useWebRTC = (
               }
             });
             videoTracks.forEach((track) => {
-              track.enabled = true;
+              // Only force enable if user hasn't turned video off
+              if (!userVideoOffRef.current) {
+                track.enabled = true;
+              } else {
+                // User has turned video off - keep it disabled
+                track.enabled = false;
+              }
               if (track.muted) {
                 safeLog.warn(
                   "⚠️ [ICE STATE] Video track is muted after ICE connected"
@@ -1071,12 +1242,17 @@ export const useWebRTC = (
           // IMPROVEMENT: Try ICE restart once before ending call
           // This can recover from transient network issues, especially on mobile
           if (!iceRestartAttemptedRef.current && pc.signalingState !== "closed") {
-            try {
-              safeLog.log(
-                "🔄 [ICE RESTART] Attempting ICE restart to recover from failure..."
-              );
-              pc.restartIce();
-              iceRestartAttemptedRef.current = true;
+            const activeCallId = currentCallIdRef.current;
+            if (activeCallId) {
+              triggerIceRestart(pc, activeCallId);
+            } else {
+              // Fallback to restartIce if no callId
+              try {
+                safeLog.log(
+                  "🔄 [ICE RESTART] Attempting ICE restart to recover from failure..."
+                );
+                pc.restartIce();
+                iceRestartAttemptedRef.current = true;
 
               // Give restart 5 seconds to work before ending call
               setTimeout(() => {
@@ -1139,6 +1315,7 @@ export const useWebRTC = (
                 });
               }
             }
+            }
           } else {
             // Restart already attempted or not possible - end call
             setTimeout(() => {
@@ -1181,6 +1358,31 @@ export const useWebRTC = (
               connectionState,
             }
           );
+
+          // Clear any existing timeout
+          if (iceRestartTimeoutRef.current) {
+            clearTimeout(iceRestartTimeoutRef.current);
+            iceRestartTimeoutRef.current = null;
+          }
+
+          // If disconnected for >3 seconds, trigger ICE restart
+          iceRestartTimeoutRef.current = setTimeout(() => {
+            const currentPC = peerConnectionRef.current;
+            const activeCallId = currentCallIdRef.current;
+            
+            if (
+              currentPC &&
+              activeCallId &&
+              currentPC.iceConnectionState === "disconnected" &&
+              currentPC.signalingState !== "closed" &&
+              !iceRestartAttemptedRef.current
+            ) {
+              safeLog.log("🔄 [ICE RESTART] Disconnected for >3 seconds, triggering ICE restart");
+              triggerIceRestart(currentPC, activeCallId);
+            }
+            
+            iceRestartTimeoutRef.current = null;
+          }, 3000); // 3 seconds
 
           // For "disconnected" state, give more time to recover (10 seconds)
           // This is especially important on mobile networks
@@ -1226,17 +1428,32 @@ export const useWebRTC = (
       processedTrackIds.current.clear();
       remoteStreamRef.current = null;
 
-      // CRITICAL: Add local stream tracks and ensure audio tracks are enabled
+      // CRITICAL: Add local stream tracks and respect user's mute/video settings
       // NOTE: Must add tracks BEFORE starting quality monitoring so senders exist
       stream.getTracks().forEach((track) => {
-        // Explicitly enable audio tracks before adding to peer connection
+        // Set track enabled state based on user's preferences
         if (track.kind === "audio") {
-          track.enabled = true;
+          // Only enable if user hasn't muted
+          track.enabled = !userMutedRef.current;
           safeLog.log(
-            "🔊 [MEDIA] Enabling audio track before adding to peer connection:",
+            "🔊 [MEDIA] Setting audio track enabled state before adding to peer connection:",
             {
               trackId: track.id,
               enabled: track.enabled,
+              userMuted: userMutedRef.current,
+              muted: track.muted,
+              readyState: track.readyState,
+            }
+          );
+        } else if (track.kind === "video") {
+          // Only enable if user hasn't turned video off
+          track.enabled = !userVideoOffRef.current;
+          safeLog.log(
+            "🎥 [MEDIA] Setting video track enabled state before adding to peer connection:",
+            {
+              trackId: track.id,
+              enabled: track.enabled,
+              userVideoOff: userVideoOffRef.current,
               muted: track.muted,
               readyState: track.readyState,
             }
@@ -1325,12 +1542,92 @@ export const useWebRTC = (
         }
       }
 
+      // Apply codec preferences after tracks are added
+      // Determine if AV1 should be allowed based on initial quality level
+      const initialQualityLevel = networkQuality.qualityLevel;
+      const allowAV1 = shouldAllowAV1(initialQualityLevel);
+      applyVideoCodecPreferences(pc, allowAV1);
+
+      // Initialize quality controller
+      const handleQualityChange: QualityChangeCallback = async (newLevel) => {
+        const pc = peerConnectionRef.current;
+        if (!pc) return;
+
+        const levels: QualityLevel[] = [
+          "critical",
+          "poor",
+          "moderate",
+          "good",
+          "excellent",
+          "premium",
+        ];
+        const oldIndex = levels.indexOf(qualityControllerRef.current?.getCurrentQuality() || initialQualityLevel);
+        const newIndex = levels.indexOf(newLevel);
+        const isLargeChange = Math.abs(newIndex - oldIndex) > 1;
+
+        safeLog.log("📊 [QUALITY CONTROLLER] Quality change requested", {
+          from: qualityControllerRef.current?.getCurrentQuality(),
+          to: newLevel,
+          isLargeChange,
+        });
+
+        // For small changes, adjust bitrate via setParameters
+        if (!isLargeChange) {
+          const senders = pc.getSenders();
+          const newProfile = QUALITY_PROFILES[newLevel];
+
+          for (const sender of senders) {
+            if (!sender.track) continue;
+
+            try {
+              const params = sender.getParameters();
+              if (!params.encodings || params.encodings.length === 0) {
+                continue;
+              }
+
+              if (sender.track.kind === "video") {
+                if (newLevel === "critical" || !newProfile.enableVideo) {
+                  params.encodings[0].maxBitrate = 0;
+                  params.encodings[0].active = false;
+                  sender.track.enabled = false;
+                } else {
+                  params.encodings[0].maxBitrate = newProfile.videoKbps * 1000; // bps
+                  params.encodings[0].maxFramerate = newProfile.videoFps;
+                  params.encodings[0].active = true;
+                  sender.track.enabled = true;
+                }
+              } else if (sender.track.kind === "audio") {
+                params.encodings[0].maxBitrate = newProfile.audioKbps * 1000; // bps
+                params.encodings[0].active = true;
+              }
+
+              await sender.setParameters(params);
+            } catch (error) {
+              safeLog.warn("⚠️ [QUALITY CONTROLLER] Failed to set parameters:", error);
+            }
+          }
+        } else {
+          // For large changes (e.g., critical toggle), let networkQuality handle it
+          // or renegotiate if needed
+          safeLog.log("📊 [QUALITY CONTROLLER] Large quality change, using networkQuality handler");
+          networkQuality.applyQualityPreset(pc, QUALITY_PRESETS[newLevel]);
+        }
+      };
+
+      qualityControllerRef.current = new QualityController(initialQualityLevel, {
+        onQualityChange: handleQualityChange,
+        statsInterval: 2000,
+        cooldownPeriod: 12000,
+      });
+
       // ADAPTIVE: Start network quality monitoring AFTER tracks are added
       // This ensures senders exist when applyQualityPreset is called
       safeLog.log(
         "📊 [QUALITY] Starting network quality monitoring for peer connection"
       );
       networkQuality.startMonitoring(pc);
+
+      // Start quality controller when ICE connects (will be started in ICE state handler)
 
       // Handle remote stream
       // DIAGNOSTIC: Log when ontrack fires - this is critical for diagnosing media binding issues
@@ -2191,6 +2488,26 @@ export const useWebRTC = (
       // Stop network quality monitoring
       networkQuality.stopMonitoring();
 
+      // Stop quality controller
+      if (qualityControllerRef.current) {
+        qualityControllerRef.current.stop();
+        qualityControllerRef.current = null;
+      }
+
+      // Stop network monitoring for ICE restart
+      if (networkMonitorCleanupRef.current) {
+        networkMonitorCleanupRef.current();
+        networkMonitorCleanupRef.current = null;
+      }
+
+      // Clear ICE restart timeout
+      if (iceRestartTimeoutRef.current) {
+        clearTimeout(iceRestartTimeoutRef.current);
+        iceRestartTimeoutRef.current = null;
+      }
+
+      setIsReconnecting(false);
+
       // Clear remote stream state
       setRemoteStream(null);
       remoteStreamRef.current = null;
@@ -2497,28 +2814,42 @@ export const useWebRTC = (
         }
       }, 5000); // Check every 5 seconds (reduced frequency)
 
-      // Log stream info for debugging
-      safeLog.log("📹 [REMOTE STREAM] Remote stream in useEffect:", {
-        id: remoteStream.id,
-        audioTracks: remoteStream.getAudioTracks().map((t) => ({
-          id: t.id,
-          enabled: t.enabled,
-          muted: t.muted,
-          readyState: t.readyState,
-        })),
-        videoTracks: remoteStream.getVideoTracks().map((t) => ({
-          id: t.id,
-          enabled: t.enabled,
-          muted: t.muted,
-          readyState: t.readyState,
-        })),
-      });
+      // Log stream info only once when stream is first attached (not on every effect run)
+      if (!loggedStreamIdsRef.current.has(remoteStream.id)) {
+        loggedStreamIdsRef.current.add(remoteStream.id);
+        safeLog.log("📹 [REMOTE STREAM] Remote stream attached:", {
+          id: remoteStream.id,
+          audioTracks: remoteStream.getAudioTracks().length,
+          videoTracks: remoteStream.getVideoTracks().length,
+        });
+      }
 
       return () => {
         clearInterval(monitorInterval);
       };
     }
   }, [remoteStream, remoteVideoRef]);
+
+  // Functions to update user's mute/video state (called by media controls)
+  const setUserMuted = useCallback((muted: boolean) => {
+    userMutedRef.current = muted;
+    // Update local stream tracks immediately
+    if (localStreamRef.current) {
+      localStreamRef.current.getAudioTracks().forEach((track) => {
+        track.enabled = !muted;
+      });
+    }
+  }, []);
+
+  const setUserVideoOff = useCallback((videoOff: boolean) => {
+    userVideoOffRef.current = videoOff;
+    // Update local stream tracks immediately
+    if (localStreamRef.current) {
+      localStreamRef.current.getVideoTracks().forEach((track) => {
+        track.enabled = !videoOff;
+      });
+    }
+  }, []);
 
   return {
     peerConnection: peerConnectionRef.current,
@@ -2532,6 +2863,8 @@ export const useWebRTC = (
     iceCandidatesQueue,
     peerConnectionRef, // Expose ref for direct access when needed
     playRemoteVideo, // Expose function to play remote video after user interaction
+    setUserMuted, // Function to update user's mute state
+    setUserVideoOff, // Function to update user's video-off state
     // Network quality state for adaptive streaming (2G-5G/WiFi support)
     networkQuality: {
       qualityLevel: networkQuality.qualityLevel,
@@ -2540,6 +2873,19 @@ export const useWebRTC = (
       isVideoPausedDueToNetwork: networkQuality.isVideoPausedDueToNetwork,
       forceAudioOnly: networkQuality.forceAudioOnly,
       enableVideoIfPossible: networkQuality.enableVideoIfPossible,
+    },
+    // Additional state for UI components
+    qualityLevel: networkQuality.qualityLevel,
+    reconnecting: isReconnecting,
+    networkType: networkQuality.connectionType,
+    statsSummary: {
+      outboundBitrate: networkQuality.networkStats.outboundBitrate,
+      inboundBitrate: networkQuality.networkStats.inboundBitrate,
+      packetLoss: Math.max(
+        networkQuality.networkStats.outboundPacketLoss,
+        networkQuality.networkStats.inboundPacketLoss
+      ),
+      roundTripTime: networkQuality.networkStats.roundTripTime,
     },
   };
 };

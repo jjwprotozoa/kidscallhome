@@ -103,6 +103,9 @@ export const useCallEngine = ({
     peerConnectionRef: webRTCPeerConnectionRef,
     playRemoteVideo,
     networkQuality, // Network quality for adaptive streaming
+    reconnecting, // Reconnecting state
+    setUserMuted, // Function to update user's mute state in WebRTC
+    setUserVideoOff, // Function to update user's video-off state in WebRTC
   } = useWebRTC(callId, localVideoRef, remoteVideoRef, role === "child");
 
   // Audio notifications for outgoing calls
@@ -118,24 +121,32 @@ export const useCallEngine = ({
   const playCallAnswered = audioNotifications.playCallAnswered;
 
   // Play outgoing ringtone when in "calling" state (waiting for answer)
+  // Use ref to track previous state to avoid logging on every render
+  const previousAudioStateRef = useRef<CallState | null>(null);
+  
   useEffect(() => {
+    // Only log when state actually changes (not on every render)
+    const stateChanged = previousAudioStateRef.current !== state;
+    previousAudioStateRef.current = state;
+    
     if (state === "calling" && callId) {
       // Outgoing call - play waiting tone
-      // eslint-disable-next-line no-console
-      console.log("🔔 [CALL ENGINE AUDIO] Starting outgoing waiting tone", {
-        callId,
-        state,
-        timestamp: new Date().toISOString(),
-      });
+      if (stateChanged && import.meta.env.DEV) {
+        // eslint-disable-next-line no-console
+        console.log("🔔 [CALL ENGINE AUDIO] Starting outgoing waiting tone", {
+          callId,
+        });
+      }
       playOutgoingRingtone();
     } else if (state === "in_call" || state === "ended" || state === "idle") {
       // Stop waiting tone when call connects or ends
-      // eslint-disable-next-line no-console
-      console.log("🔇 [CALL ENGINE AUDIO] Stopping outgoing waiting tone", {
-        callId,
-        state,
-        timestamp: new Date().toISOString(),
-      });
+      if (stateChanged && import.meta.env.DEV) {
+        // eslint-disable-next-line no-console
+        console.log("🔇 [CALL ENGINE AUDIO] Stopping outgoing waiting tone", {
+          callId,
+          state,
+        });
+      }
       stopOutgoingRingtone();
 
       // Play happy chime when call connects
@@ -919,6 +930,23 @@ export const useCallEngine = ({
                       signalingState: pc.signalingState,
                     }
                   );
+                  
+                  // CRITICAL: Double-check signaling state right before setting (race condition protection)
+                  // The state might have changed between the initial check and this point
+                  if (pc.signalingState !== "have-local-offer") {
+                    console.warn(
+                      "⚠️ [CALL ENGINE] Signaling state changed before setting remote description - skipping",
+                      {
+                        callId,
+                        expectedState: "have-local-offer",
+                        actualState: pc.signalingState,
+                        hasLocalDescription: !!pc.localDescription,
+                        hasRemoteDescription: !!pc.remoteDescription,
+                      }
+                    );
+                    return;
+                  }
+                  
                   const answerDesc =
                     updatedCall.answer as unknown as RTCSessionDescriptionInit;
                   await pc.setRemoteDescription(
@@ -1856,6 +1884,16 @@ export const useCallEngine = ({
   const { isMuted, isVideoOff, toggleMute, toggleVideo } =
     useCallMedia(localStream);
 
+  // CRITICAL: Sync mute/video state with WebRTC to prevent overrides
+  // This ensures that when ICE connects or quality changes, user's settings are respected
+  useEffect(() => {
+    setUserMuted(isMuted);
+  }, [isMuted, setUserMuted]);
+
+  useEffect(() => {
+    setUserVideoOff(isVideoOff);
+  }, [isVideoOff, setUserVideoOff]);
+
   // Cleanup polling interval when state changes from "calling" to something else
   useEffect(() => {
     if (state !== "calling" && answerPollingIntervalRef.current) {
@@ -2020,6 +2058,9 @@ export const useCallEngine = ({
     toggleMute,
     toggleVideo,
     // Network quality for adaptive streaming (2G-5G/WiFi support)
-    networkQuality,
+    networkQuality: {
+      ...networkQuality,
+      reconnecting,
+    },
   };
 };

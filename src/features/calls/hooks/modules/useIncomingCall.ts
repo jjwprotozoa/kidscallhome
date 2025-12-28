@@ -134,8 +134,72 @@ export const useIncomingCall = ({
         // Only set remote description if it's not already set
         const justSetRemoteDescription = pc.remoteDescription === null;
         if (justSetRemoteDescription) {
+          // CRITICAL: Check signaling state - must be "stable" to set remote offer
+          if (pc.signalingState !== "stable") {
+            console.warn(
+              "⚠️ [INCOMING CALL] Cannot set remote offer - wrong signaling state",
+              {
+                signalingState: pc.signalingState,
+                expectedState: "stable",
+                hasLocalDescription: pc.localDescription !== null,
+                hasRemoteDescription: pc.remoteDescription !== null,
+              }
+            );
+            // If we're not in stable state, the connection might already be in progress
+            // Check if we need to create an answer instead
+            if (pc.signalingState === "have-local-offer" && call.answer) {
+              // We have a local offer and call has an answer - set the answer instead
+              console.warn(
+                "📞 [INCOMING CALL] Already have local offer, setting remote answer instead",
+                {
+                  callId: incomingCallId,
+                  signalingState: pc.signalingState,
+                }
+              );
+              
+              // CRITICAL: Double-check signaling state right before setting (race condition protection)
+              if (pc.signalingState !== "have-local-offer") {
+                console.warn(
+                  "⚠️ [INCOMING CALL] Signaling state changed before setting remote answer - skipping",
+                  {
+                    callId: incomingCallId,
+                    expectedState: "have-local-offer",
+                    actualState: pc.signalingState,
+                  }
+                );
+                throw new Error(
+                  `Cannot set remote answer - peer connection in ${pc.signalingState} state`
+                );
+              }
+              
+              const answerDesc = call.answer as unknown as RTCSessionDescriptionInit;
+              try {
+                await pc.setRemoteDescription(new RTCSessionDescription(answerDesc));
+                setCallId(incomingCallId);
+                setIsConnecting(false);
+                return;
+              } catch (error) {
+                console.error("❌ [INCOMING CALL] Failed to set remote answer:", error);
+                throw error;
+              }
+            } else {
+              throw new Error(
+                `Cannot set remote offer - peer connection in ${pc.signalingState} state`
+              );
+            }
+          }
+
           const offerDesc = call.offer as unknown as RTCSessionDescriptionInit;
-          await pc.setRemoteDescription(new RTCSessionDescription(offerDesc));
+          try {
+            await pc.setRemoteDescription(new RTCSessionDescription(offerDesc));
+          } catch (error) {
+            const err = error as Error;
+            console.error("❌ [INCOMING CALL] Failed to set remote offer:", err.message, {
+              signalingState: pc.signalingState,
+              hasLocalDescription: pc.localDescription !== null,
+            });
+            throw new Error(`Failed to set remote offer: ${err.message}`);
+          }
           
           // Wait for signaling state to change to have-remote-offer
           // This ensures the offer is properly set before creating the answer

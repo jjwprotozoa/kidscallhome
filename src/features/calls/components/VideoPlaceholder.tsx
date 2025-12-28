@@ -10,6 +10,7 @@ interface VideoPlaceholderProps {
   reason: "network" | "disabled" | "connecting" | "error";
   className?: string;
   name?: string; // Person's name for personalization
+  isAudioDisabled?: boolean; // Whether audio is also disabled (for remote type)
 }
 
 // Animated wave bars for audio visualization
@@ -128,6 +129,7 @@ export const VideoPlaceholder = ({
   reason,
   className,
   name,
+  isAudioDisabled = false,
 }: VideoPlaceholderProps) => {
   // Different content based on reason
   const getContent = () => {
@@ -180,21 +182,77 @@ export const VideoPlaceholder = ({
 
       case "disabled":
         return (
-          <div className="flex flex-col items-center gap-3 text-center">
-            <div className="relative">
-              {/* Subtle glow */}
-              <div className="absolute inset-0 bg-slate-500/20 rounded-full blur-xl" />
-              <div className="relative w-16 h-16 rounded-full bg-gradient-to-br from-slate-700 to-slate-800 flex items-center justify-center border border-white/10 shadow-lg">
-                <span className="text-3xl">📷</span>
-              </div>
-              {/* Off indicator */}
-              <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-red-500/80 flex items-center justify-center border-2 border-slate-800">
-                <span className="text-white text-xs">✕</span>
-              </div>
-            </div>
-            <p className="text-white/50 text-xs font-medium">
-              {type === "local" ? "Camera off" : "Video off"}
-            </p>
+          <div className="flex flex-col items-center gap-4 text-center">
+            {type === "remote" ? (
+              // Enhanced remote video disabled indicator - more prominent and animated
+              <>
+                <div className="relative">
+                  {/* Pulsing outer ring */}
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div 
+                      className="w-32 h-32 rounded-full bg-orange-500/30 animate-ping"
+                      style={{ animationDuration: "2s" }}
+                    />
+                  </div>
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div 
+                      className="w-28 h-28 rounded-full bg-orange-500/20 animate-ping"
+                      style={{ animationDuration: "2s", animationDelay: "0.5s" }}
+                    />
+                  </div>
+                  {/* Main camera icon with animation */}
+                  <div 
+                    className="relative w-24 h-24 rounded-full bg-gradient-to-br from-orange-500/90 to-red-500/90 flex items-center justify-center border-4 border-orange-400/50 shadow-2xl shadow-orange-500/50"
+                    style={{
+                      animation: "pulse 2s ease-in-out infinite",
+                    }}
+                  >
+                    <span className="text-5xl" style={{ animation: "bounce 2s ease-in-out infinite" }}>📷</span>
+                  </div>
+                  {/* Large off indicator */}
+                  <div 
+                    className="absolute -bottom-2 -right-2 w-10 h-10 rounded-full bg-red-600 flex items-center justify-center border-4 border-white shadow-xl"
+                    style={{
+                      animation: "bounce 1.5s ease-in-out infinite",
+                    }}
+                  >
+                    <span className="text-white text-lg font-bold">✕</span>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-orange-300 text-lg font-bold animate-pulse">
+                    Video is Off
+                  </p>
+                  <p className="text-white/70 text-sm">
+                    {isAudioDisabled ? "Audio & Video disabled" : "Audio only mode"}
+                  </p>
+                  {/* Audio waves if audio is still on */}
+                  {!isAudioDisabled && (
+                    <div className="mt-3">
+                      <AudioWaves className="mx-auto" />
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : (
+              // Local video disabled (simpler, less prominent)
+              <>
+                <div className="relative">
+                  {/* Subtle glow */}
+                  <div className="absolute inset-0 bg-slate-500/20 rounded-full blur-xl" />
+                  <div className="relative w-16 h-16 rounded-full bg-gradient-to-br from-slate-700 to-slate-800 flex items-center justify-center border border-white/10 shadow-lg">
+                    <span className="text-3xl">📷</span>
+                  </div>
+                  {/* Off indicator */}
+                  <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-red-500/80 flex items-center justify-center border-2 border-slate-800">
+                    <span className="text-white text-xs">✕</span>
+                  </div>
+                </div>
+                <p className="text-white/50 text-xs font-medium">
+                  Camera off
+                </p>
+              </>
+            )}
           </div>
         );
 

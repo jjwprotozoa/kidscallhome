@@ -38,7 +38,8 @@ export const validateAdultIncomingCall = async ({
   // Parent/family_member receives calls from child
   const callerTypeMatches = call.caller_type === "child";
   const hasOffer = !!call.offer;
-  const isRinging = call.status === "ringing";
+  // Accept both "ringing" and "active" status - "active" allows reconnection to existing calls
+  const isValidStatus = call.status === "ringing" || call.status === "active";
 
   // Check ID match based on role
   let idMatches = true; // Default to true if localProfileId is empty
@@ -51,7 +52,7 @@ export const validateAdultIncomingCall = async ({
     }
   }
 
-  const isValid = isRinging && callerTypeMatches && hasOffer && idMatches;
+  const isValid = isValidStatus && callerTypeMatches && hasOffer && idMatches;
 
   if (!isValid) {
     return {

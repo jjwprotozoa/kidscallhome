@@ -35,8 +35,12 @@ export const MessageList = ({
 
   return (
     <div
-      className="flex-1 overflow-y-auto p-4 space-y-4"
-      style={{ paddingTop: "80px", paddingBottom: "100px" }}
+      className="flex-1 overflow-y-auto px-2 sm:px-4 py-2"
+      style={{ 
+        paddingTop: "calc(80px + var(--safe-area-inset-top))", 
+        paddingBottom: "100px",
+        backgroundImage: "radial-gradient(circle at 20% 50%, rgba(0,0,0,0.02) 0%, transparent 50%), radial-gradient(circle at 80% 80%, rgba(0,0,0,0.02) 0%, transparent 50%)",
+      }}
     >
       {messages.map((message) => {
         // Determine if this message is from the current user

@@ -6,7 +6,145 @@
 
 > **Note**: For detailed technical information, complete file lists, testing recommendations, and implementation specifics, see [CHANGES_DETAILED.md](./CHANGES_DETAILED.md).
 
-## Latest Changes (2025-12-19) - Analytics Setup & Info Page Improvements
+## Latest Changes (2025-12-28) - Call Reconnection & Diagnostics Improvements
+
+### -17. Call Reconnection Improvements & Diagnostics Panel Fixes
+
+- **Purpose**: Improve call reconnection after page refresh and fix diagnostics panel to show accurate local/remote media state
+- **Issues Fixed**:
+  1. **Reconnection Failure**: Calls couldn't reconnect after page refresh - one side would create new offer but other side wouldn't detect it and create answer
+  2. **WebRTC Signaling State Error**: `InvalidStateError` when setting remote description from answer due to race conditions
+  3. **Diagnostics Not Updating**: Diagnostics panel didn't show local user's mute/video state, only showed remote tracks
+  4. **PIP Toggle Position**: Orientation toggle button was in top-left corner, not easily accessible
+
+#### Changes Applied
+
+- **Reconnection Handling** (`callHandlers.ts`, `childCallHandler.ts`):
+  - Added detection for new offers on active calls (reconnection scenario)
+  - Automatically creates new answer when detecting reconnection offer
+  - Handles both parent and child refresh scenarios
+  - 5-second timeout for signaling state changes to prevent infinite waiting
+  - Graceful error handling that doesn't crash the call
+
+- **WebRTC Signaling State Protection** (`useCallEngine.ts`, `useIncomingCall.ts`, `callHandlers.ts`, `childCallHandler.ts`):
+  - Added double-check for signaling state right before `setRemoteDescription`
+  - Prevents `InvalidStateError` by ensuring peer connection is in correct state
+  - Checks for `"have-local-offer"` state before setting remote answer
+  - Detailed logging for debugging state transitions
+
+- **Diagnostics Panel** (`DiagnosticPanel.tsx`, `VideoCallUI.tsx`):
+  - Added "Your Media" section showing local user's mute/video state
+  - Shows real-time local track status (audio/video enabled/muted)
+  - Separated "Remote Media" section for clarity
+  - Passes `isMuted`, `isVideoOff`, and `localStream` props to diagnostics
+  - Updates immediately when user mutes/unmutes or disables/enables video
+
+- **PIP Toggle Position** (`VideoCallUI.tsx`):
+  - Moved orientation toggle button to bottom-right, next to "You" label
+  - Better accessibility and easier to reach
+  - Flex container keeps "You" label and toggle aligned
+
+#### Technical Implementation
+
+- **Reconnection Detection**: Compares old vs new offer SDP to detect reconnection attempts
+- **State Management**: Checks peer connection state before all critical operations
+- **Error Recovery**: Failures don't crash the call, allows recovery through other mechanisms
+- **Real-time Updates**: Diagnostics panel receives props directly from call state
+
+#### Files Modified
+
+- `src/features/calls/utils/callHandlers.ts` - Reconnection handling for parent calls
+- `src/features/calls/utils/childCallHandler.ts` - Reconnection handling for child calls
+- `src/features/calls/hooks/useCallEngine.ts` - Signaling state protection
+- `src/features/calls/hooks/modules/useIncomingCall.ts` - Signaling state protection
+- `src/features/calls/components/DiagnosticPanel.tsx` - Local/remote media sections
+- `src/features/calls/components/VideoCallUI.tsx` - PIP toggle position, diagnostics props
+
+#### Impact
+
+- **Automatic Reconnection**: Calls reconnect automatically after page refresh without manual intervention
+- **Better Error Handling**: Signaling state errors prevented with state checks
+- **Accurate Diagnostics**: Users can see their own mute/video state in real-time
+- **Improved UX**: PIP toggle is more accessible, diagnostics are more informative
+- **Graceful Degradation**: Reconnection failures don't crash the call, allows recovery
+
+---
+
+## Previous Changes (2025-12-28) - Video Call UX Improvements & User Control Respect
+
+### -16. Video Call User Control Respect & Remote State Detection
+
+- **Purpose**: Ensure adaptive quality system respects user's explicit mute/video-off settings and improve detection of remote user's media state
+- **Issues Fixed**:
+  1. **Quality System Overriding User Settings**: Adaptive quality controller was re-enabling video/audio tracks even when user had explicitly disabled them
+  2. **No Remote State Detection**: UI didn't show when remote user had disabled their video/audio
+  3. **Fixed PIP Orientation**: Picture-in-picture was always landscape, not optimal for individual face shots
+  4. **Placeholder Logic**: Placeholders only showed for network issues, not when remote user disabled media
+
+#### Changes Applied
+
+- **User Control Respect** (`useNetworkQuality.ts`):
+  - Quality preset application now checks if user has explicitly muted/turned off video before re-enabling tracks
+  - Remembers track enabled state before applying presets
+  - Only re-enables tracks if they were previously enabled (respects user's choice)
+  - Updates bitrate settings even when tracks are disabled (ready for when user re-enables)
+
+- **User State Tracking** (`useWebRTC.ts`):
+  - Added `userMutedRef` and `userVideoOffRef` to track explicit user actions
+  - Added `setUserMuted()` and `setUserVideoOff()` functions for media controls to update state
+  - Track enabled state set based on user preferences when adding to peer connection
+  - Quality controller respects user state when adjusting quality
+
+- **Remote State Detection** (`VideoCallUI.tsx`):
+  - Added `isRemoteVideoDisabled` and `isRemoteAudioDisabled` state tracking
+  - Fast polling (100ms) to detect when remote user disables video/audio
+  - Monitors MediaStreamTrack enabled state, mute events, and video element state
+  - Shows appropriate placeholders when remote user has disabled media
+  - Smooth fade transitions when switching between video and placeholder
+
+- **PIP Orientation Toggle** (`VideoCallUI.tsx`):
+  - Added `pipOrientation` state (portrait/landscape)
+  - Toggle button in PIP corner to switch between orientations
+  - Portrait mode: taller aspect ratio (better for individual face shots)
+  - Landscape mode: wider aspect ratio (better for group/wide shots)
+  - Smooth transitions between orientations
+
+- **Enhanced Placeholder Logic** (`VideoCallUI.tsx`):
+  - Placeholders now show for both network issues AND remote user disabled media
+  - Different placeholder messaging based on reason (network vs disabled)
+  - Video element fades out smoothly when placeholder should be shown
+  - Audio disabled state passed to placeholder component
+
+- **Connection Quality Indicator** (`ConnectionQualityIndicator.tsx`):
+  - Added `isReconnecting` prop to show reconnection status
+  - Displays "Reconnecting..." state during ICE restarts
+
+#### Technical Implementation
+
+- **State Management**: Refs used to track user's explicit actions separately from adaptive quality decisions
+- **Event Monitoring**: Multiple event listeners on MediaStreamTrack and video element for comprehensive state detection
+- **Performance**: Fast polling (100ms) balanced with event listeners for immediate response
+- **Smooth Transitions**: CSS transitions for opacity changes when switching between video and placeholders
+
+#### Files Modified
+
+- `src/features/calls/hooks/useNetworkQuality.ts` - Respect user mute/video-off state in quality presets
+- `src/features/calls/hooks/useWebRTC.ts` - Track user state, expose setter functions
+- `src/features/calls/components/VideoCallUI.tsx` - Remote state detection, PIP orientation toggle, enhanced placeholders
+- `src/features/calls/components/ConnectionQualityIndicator.tsx` - Added reconnecting state display
+
+#### Impact
+
+- **User Control Maintained**: Users' explicit mute/video-off choices are never overridden by adaptive quality system
+- **Better UX**: Clear visual feedback when remote user has disabled their media
+- **Flexible PIP**: Users can choose optimal orientation for their call type
+- **Smooth Transitions**: Professional fade effects when switching between video and placeholders
+- **Accurate State**: Real-time detection of remote user's media state with fast polling and event listeners
+- **No Regressions**: All existing functionality preserved, improvements are additive
+
+---
+
+## Previous Changes (2025-12-19) - Analytics Setup & Info Page Improvements
 
 ### -15. Analytics & Performance Monitoring Setup
 

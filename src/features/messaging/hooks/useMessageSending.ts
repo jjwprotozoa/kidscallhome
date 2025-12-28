@@ -12,6 +12,8 @@ import {
   getChildConversations,
 } from "@/utils/conversations";
 import { safeLog, sanitizeError } from "@/utils/security";
+import { checkBlockedWords } from "@/lib/wordFilter";
+import { notifyParentsOfBlockedWords } from "@/lib/parentNotifications";
 
 interface Message {
   id: string;
@@ -34,6 +36,7 @@ interface UseMessageSendingProps {
   conversationId: string | null;
   setConversationId: (id: string) => void;
   onMessageSent: (message: Message) => void;
+  customKeywords?: string[]; // Custom keywords from safety settings
 }
 
 export const useMessageSending = ({
@@ -45,6 +48,7 @@ export const useMessageSending = ({
   conversationId,
   setConversationId,
   onMessageSent,
+  customKeywords = [],
 }: UseMessageSendingProps) => {
   const { childId } = useParams();
   const { toast } = useToast();
@@ -242,6 +246,70 @@ export const useMessageSending = ({
 
       if (!senderId || !targetChildId || !currentConversationId) {
         throw new Error("Missing required fields");
+      }
+
+      // Check for blocked words
+      const { isBlocked, matchedWords } = checkBlockedWords(content.trim(), customKeywords);
+      
+      // For children: Block messages with inappropriate words
+      if (isChild && isBlocked) {
+        toast({
+          title: "Message blocked",
+          description: `Your message contains inappropriate words. Please remove: ${matchedWords.join(", ")}`,
+          variant: "destructive",
+        });
+        return false;
+      }
+
+      // For family members: Notify parents but still allow message to be sent
+      if (currentSenderType === "family_member" && isBlocked && targetChildId) {
+        try {
+          // Get child profile ID for notification
+          const childProfileId = await getChildProfileId(targetChildId);
+          
+          if (childProfileId) {
+            // Get family member name
+            let familyMemberName = "A family member";
+            if (familyMemberId) {
+              // Try to get name from adult_profiles using user_id (familyMemberId is typically the user_id)
+              // @ts-expect-error - adult_profiles table exists but not in types
+              const { data: fmProfile } = await supabase
+                .from("adult_profiles" as never)
+                .select("name")
+                .eq("user_id", familyMemberId)
+                .eq("role", "family_member")
+                .maybeSingle();
+              
+              if (fmProfile) {
+                familyMemberName = (fmProfile as { name?: string })?.name || familyMemberName;
+              } else {
+                // Fallback: Try family_members table
+                const { data: fmData } = await supabase
+                  .from("family_members")
+                  .select("name")
+                  .eq("id", familyMemberId)
+                  .maybeSingle();
+                
+                if (fmData) {
+                  familyMemberName = (fmData as { name?: string })?.name || familyMemberName;
+                }
+              }
+            }
+
+            // Notify parents asynchronously (don't block message sending)
+            notifyParentsOfBlockedWords(
+              childProfileId,
+              familyMemberName,
+              matchedWords,
+              content.trim()
+            ).catch((error) => {
+              console.error("Failed to notify parents:", error);
+            });
+          }
+        } catch (error) {
+          console.error("Error notifying parents of blocked words:", error);
+          // Don't block message sending if notification fails
+        }
       }
 
       const payload: {

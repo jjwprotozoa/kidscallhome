@@ -33,7 +33,8 @@ export const useCallStateMachine = (
     stateRef.current = state;
   }, [state]);
 
-  // DIAGNOSTIC: Log all state transitions (dev mode only)
+  // DIAGNOSTIC: Log important state transitions (dev mode only)
+  // Only log transitions to/from key states to reduce console noise
   const logStateTransition = useCallback(
     (
       newState: CallState,
@@ -41,16 +42,22 @@ export const useCallStateMachine = (
       context?: Record<string, unknown>
     ) => {
       if (import.meta.env.DEV) {
-        // eslint-disable-next-line no-console
-        console.log("[CALL STATE] State transition:", {
-          from: state,
-          to: newState,
-          callId: callId || "none",
-          role,
-          reason,
-          timestamp: new Date().toISOString(),
-          ...context,
-        });
+        // Only log transitions to/from important states (not every transition)
+        const importantStates = ["calling", "in_call", "ended", "idle"];
+        const isImportantTransition = 
+          importantStates.includes(state) || importantStates.includes(newState);
+        
+        if (isImportantTransition) {
+          // eslint-disable-next-line no-console
+          console.log("[CALL STATE] State transition:", {
+            from: state,
+            to: newState,
+            callId: callId || "none",
+            role,
+            reason,
+            ...context,
+          });
+        }
       }
     },
     [state, callId, role]

@@ -11,6 +11,9 @@ import { useMarkMessagesRead } from "@/features/messaging/hooks/useMarkMessagesR
 import { useMessages } from "@/features/messaging/hooks/useMessages";
 import { useMessageSending } from "@/features/messaging/hooks/useMessageSending";
 import { canCommunicate } from "@/lib/permissions";
+import { getFamilySafetyKeywords } from "@/lib/wordFilter";
+import { getChildProfileId } from "@/utils/conversations";
+import { supabase } from "@/integrations/supabase/client";
 import { useBadgeStore } from "@/stores/badgeStore";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -21,6 +24,7 @@ const Chat = () => {
   const [permissionError, setPermissionError] = useState<string | null>(null);
   const [hasPermission, setHasPermission] = useState(true);
   const [isBlocked, setIsBlocked] = useState(false);
+  const [customKeywords, setCustomKeywords] = useState<string[]>([]);
 
   // Initialize chat state
   const {
@@ -111,6 +115,7 @@ const Chat = () => {
     conversationId: conversationIdState,
     setConversationId: setConversationIdState,
     onMessageSent: handleNewMessage,
+    customKeywords,
   });
 
   // Check permissions when chat initializes or participants change
@@ -178,6 +183,171 @@ const Chat = () => {
     childData,
   ]);
 
+  // Fetch safety mode keywords if safety mode is enabled
+  useEffect(() => {
+    const fetchSafetyKeywords = async () => {
+      try {
+        let familyId: string | null = null;
+
+        if (isChild && childData) {
+          // For children, get family_id from child_family_memberships junction table
+          try {
+            const childProfileId = await getChildProfileId(childData.id);
+            console.warn("[Chat] Child profile lookup:", {
+              childId: childData.id,
+              childProfileId,
+            });
+            
+            if (childProfileId) {
+              // Try child_family_memberships first (correct way for multi-family support)
+              const { data: membership, error: membershipError } = await supabase
+                .from("child_family_memberships" as never)
+                .select("family_id")
+                .eq("child_profile_id", childProfileId)
+                .limit(1)
+                .maybeSingle();
+              
+              if (!membershipError && membership) {
+                familyId = (membership as { family_id?: string } | null)?.family_id || null;
+                console.warn("[Chat] Family ID from child_family_memberships:", familyId);
+              } else {
+                // Fallback: Try child_profiles.family_id (for backward compatibility)
+                const { data: childProfile, error: profileError } = await supabase
+                  .from("child_profiles" as never)
+                  .select("family_id")
+                  .eq("id", childProfileId)
+                  .maybeSingle();
+                
+                if (!profileError && childProfile) {
+                  familyId = (childProfile as { family_id?: string } | null)?.family_id || null;
+                  console.warn("[Chat] Fallback: Family ID from child_profiles:", familyId);
+                }
+              }
+            } else {
+              // Fallback: Try using childData.id directly
+              const { data: membership, error: membershipError } = await supabase
+                .from("child_family_memberships" as never)
+                .select("family_id")
+                .eq("child_profile_id", childData.id)
+                .limit(1)
+                .maybeSingle();
+              
+              if (!membershipError && membership) {
+                familyId = (membership as { family_id?: string } | null)?.family_id || null;
+                console.warn("[Chat] Fallback 2: Family ID from child_family_memberships:", familyId);
+              }
+            }
+          } catch (error) {
+            console.error("[Chat] Error fetching child family:", error);
+          }
+        } else {
+          // For parents/family members, get their family_id
+          const { data: { user } } = await supabase.auth.getUser();
+          if (!user) return;
+
+          const { data: adultProfile } = await supabase
+            .from("adult_profiles" as never)
+            .select("family_id")
+            .eq("user_id", user.id)
+            .maybeSingle();
+          familyId = (adultProfile as { family_id?: string } | null)?.family_id || null;
+        }
+
+        console.warn("[Chat] Family lookup:", {
+          familyId,
+          isChild,
+          childData: childData?.id,
+        });
+
+        if (familyId) {
+          // Check if safety mode is enabled and get keywords
+          const { data: family, error: familyError } = await supabase
+            .from("families")
+            .select("safety_mode_enabled, safety_mode_settings")
+            .eq("id", familyId)
+            .maybeSingle();
+
+          if (familyError) {
+            console.error("[Chat] Error fetching family:", familyError);
+            setCustomKeywords([]);
+            return;
+          }
+
+          // Debug: Log raw family data
+          console.warn("[Chat] Raw family data from DB:", {
+            family,
+            familyId,
+            hasData: !!family,
+          });
+
+          // Handle both possible data structures:
+          // 1. Keywords inside safety_mode_settings (correct structure)
+          // 2. Keywords at root level (if data was saved incorrectly)
+          const familyData = family as {
+            safety_mode_enabled?: boolean;
+            safety_mode_settings?: {
+              keyword_alerts?: boolean;
+              keywords?: string[] | null;
+            } | null;
+            keywords?: string[] | null; // Handle case where keywords might be at root
+          } | null;
+
+          if (familyData?.safety_mode_enabled) {
+            let keywords: string[] = [];
+            
+            // First, try to get keywords from safety_mode_settings (correct location)
+            if (familyData.safety_mode_settings) {
+              const settings = familyData.safety_mode_settings;
+              if (settings.keywords && Array.isArray(settings.keywords)) {
+                keywords = settings.keywords;
+              }
+            }
+            
+            // Fallback: Check if keywords are at root level (incorrect but handle it)
+            if (keywords.length === 0 && familyData.keywords && Array.isArray(familyData.keywords)) {
+              keywords = familyData.keywords;
+            }
+            
+            // Debug logging
+            console.warn("[Chat] Safety keywords fetch:", {
+              isChild,
+              safety_mode_enabled: familyData.safety_mode_enabled,
+              safety_mode_settings: familyData.safety_mode_settings,
+              keywords_found: keywords,
+              keywords_count: keywords.length,
+            });
+            
+            // For children: Always filter blocked words if safety mode is enabled
+            // Custom keywords are used in addition to default words
+            if (isChild) {
+              setCustomKeywords(keywords);
+            } else {
+              // Parents/Family members: Use custom keywords if keyword_alerts is enabled
+              const settings = familyData.safety_mode_settings;
+              if (settings?.keyword_alerts) {
+                setCustomKeywords(keywords);
+              } else {
+                setCustomKeywords([]);
+              }
+            }
+          } else {
+            console.warn("[Chat] Safety mode not enabled or no family data");
+            setCustomKeywords([]);
+          }
+        } else {
+          setCustomKeywords([]);
+        }
+      } catch (error) {
+        console.error("Error fetching safety keywords:", error);
+        setCustomKeywords([]);
+      }
+    };
+
+    if (initialized) {
+      fetchSafetyKeywords();
+    }
+  }, [initialized, isChild, childData]);
+
   // Cleanup: Clear badge when navigating away
   useEffect(() => {
     return () => {
@@ -225,7 +395,7 @@ const Chat = () => {
 
   if (!initialized) {
     return (
-      <div className="min-h-[100dvh] flex flex-col bg-background relative">
+      <div className="min-h-[100dvh] flex flex-col relative" style={{ backgroundColor: "#f0f2f5" }}>
         <Navigation />
         <div className="flex items-center justify-center min-h-[60vh]">
           <p className="text-muted-foreground">Loading chat...</p>
@@ -237,7 +407,7 @@ const Chat = () => {
   // Show helpful message if child has no conversation selected
   if (isChild && !conversationIdState) {
     return (
-      <div className="min-h-[100dvh] flex flex-col bg-background relative">
+      <div className="min-h-[100dvh] flex flex-col relative" style={{ backgroundColor: "#f0f2f5" }}>
         <Navigation />
         <ChatHeader
           recipientName="Select a Contact"
@@ -261,7 +431,7 @@ const Chat = () => {
   }
 
   return (
-    <div className="min-h-[100dvh] flex flex-col bg-background relative">
+    <div className="min-h-[100dvh] flex flex-col relative" style={{ backgroundColor: "#f0f2f5" }}>
       <Navigation />
       <ChatHeader
         recipientName={recipientName}
@@ -288,6 +458,7 @@ const Chat = () => {
         onSubmit={handleSendMessage}
         loading={loading}
         disabled={!hasPermission || isBlocked || !conversationIdState}
+        customKeywords={customKeywords}
         placeholder={
           !conversationIdState
             ? "No conversation selected"

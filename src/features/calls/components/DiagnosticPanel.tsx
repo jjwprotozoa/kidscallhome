@@ -233,6 +233,9 @@ interface DiagnosticContainerProps {
   isAudioMutedByBrowser: boolean;
   audioElementRef: React.RefObject<HTMLAudioElement>;
   remoteStream: MediaStream | null;
+  localStream?: MediaStream | null;
+  isMuted?: boolean;
+  isVideoOff?: boolean;
   className?: string;
 }
 
@@ -242,6 +245,9 @@ export const DiagnosticContainer = ({
   isAudioMutedByBrowser,
   audioElementRef,
   remoteStream,
+  localStream,
+  isMuted = false,
+  isVideoOff = false,
   className,
 }: DiagnosticContainerProps) => {
   const [showDiagnostics, setShowDiagnostics] = useState(false);
@@ -250,6 +256,11 @@ export const DiagnosticContainer = ({
   const tracks = remoteStream?.getTracks() || [];
   const audioTracks = remoteStream?.getAudioTracks() || [];
   const videoTracks = remoteStream?.getVideoTracks() || [];
+  
+  // Get local track info for display
+  const localTracks = localStream?.getTracks() || [];
+  const localAudioTracks = localStream?.getAudioTracks() || [];
+  const localVideoTracks = localStream?.getVideoTracks() || [];
 
   return (
     <>
@@ -375,17 +386,83 @@ export const DiagnosticContainer = ({
                 </div>
               </div>
 
-              {/* Tracks Section */}
+              {/* Local Media Section */}
+              <div className="bg-white/5 rounded-xl p-4 space-y-3">
+                <div className="flex items-center gap-2 text-yellow-400">
+                  <Radio className="h-4 w-4" />
+                  <span className="font-medium text-sm">Your Media ({localTracks.length})</span>
+                </div>
+                
+                {/* Local Media State */}
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-white/60">Audio Muted:</span>
+                    <span className={cn("font-mono", isMuted ? "text-red-400" : "text-green-400")}>
+                      {isMuted ? "Yes" : "No"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-white/60">Video Off:</span>
+                    <span className={cn("font-mono", isVideoOff ? "text-red-400" : "text-green-400")}>
+                      {isVideoOff ? "Yes" : "No"}
+                    </span>
+                  </div>
+                </div>
+                
+                {/* Local Audio Tracks */}
+                {localAudioTracks.length > 0 && (
+                  <div className="space-y-2">
+                    <div className="text-xs text-white/50 uppercase tracking-wide">Your Audio ({localAudioTracks.length})</div>
+                    {localAudioTracks.map((track) => (
+                      <div key={track.id} className="flex items-center gap-2 text-sm pl-2">
+                        <span className={cn(
+                          "w-2 h-2 rounded-full",
+                          track.enabled && !track.muted ? "bg-green-400 animate-pulse" : "bg-red-400"
+                        )} />
+                        <span className="text-white/80 font-mono text-xs">
+                          {track.muted ? "🔇 muted" : "🔊 unmuted"} • {track.enabled ? "✓ enabled" : "✗ disabled"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                
+                {/* Local Video Tracks */}
+                {localVideoTracks.length > 0 && (
+                  <div className="space-y-2">
+                    <div className="text-xs text-white/50 uppercase tracking-wide">Your Video ({localVideoTracks.length})</div>
+                    {localVideoTracks.map((track) => (
+                      <div key={track.id} className="flex items-center gap-2 text-sm pl-2">
+                        <span className={cn(
+                          "w-2 h-2 rounded-full",
+                          track.enabled && !track.muted ? "bg-green-400 animate-pulse" : "bg-red-400"
+                        )} />
+                        <span className="text-white/80 font-mono text-xs">
+                          {track.muted ? "📵 muted" : "📹 unmuted"} • {track.enabled ? "✓ enabled" : "✗ disabled"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {localTracks.length === 0 && (
+                  <div className="text-center text-white/40 text-sm py-2">
+                    No local tracks available
+                  </div>
+                )}
+              </div>
+
+              {/* Remote Tracks Section */}
               <div className="bg-white/5 rounded-xl p-4 space-y-3">
                 <div className="flex items-center gap-2 text-purple-400">
                   <Radio className="h-4 w-4" />
-                  <span className="font-medium text-sm">Media Tracks ({tracks.length})</span>
+                  <span className="font-medium text-sm">Remote Media ({tracks.length})</span>
                 </div>
                 
-                {/* Audio Tracks */}
+                {/* Remote Audio Tracks */}
                 {audioTracks.length > 0 && (
                   <div className="space-y-2">
-                    <div className="text-xs text-white/50 uppercase tracking-wide">Audio ({audioTracks.length})</div>
+                    <div className="text-xs text-white/50 uppercase tracking-wide">Remote Audio ({audioTracks.length})</div>
                     {audioTracks.map((track) => (
                       <div key={track.id} className="flex items-center gap-2 text-sm pl-2">
                         <span className={cn(
@@ -400,10 +477,10 @@ export const DiagnosticContainer = ({
                   </div>
                 )}
                 
-                {/* Video Tracks */}
+                {/* Remote Video Tracks */}
                 {videoTracks.length > 0 && (
                   <div className="space-y-2">
-                    <div className="text-xs text-white/50 uppercase tracking-wide">Video ({videoTracks.length})</div>
+                    <div className="text-xs text-white/50 uppercase tracking-wide">Remote Video ({videoTracks.length})</div>
                     {videoTracks.map((track) => (
                       <div key={track.id} className="flex items-center gap-2 text-sm pl-2">
                         <span className={cn(
@@ -420,7 +497,7 @@ export const DiagnosticContainer = ({
 
                 {tracks.length === 0 && (
                   <div className="text-center text-white/40 text-sm py-2">
-                    No tracks available
+                    No remote tracks available
                   </div>
                 )}
               </div>

@@ -249,43 +249,48 @@ const handleExistingCall = async (
   safeLog.log("Using existing call:", existingCall.id);
   setCallId(existingCall.id);
 
-  // If the call is ended or active (meaning it was already connected), reset it to ringing
-  // This ensures the parent sees it as a new incoming call when child reconnects
-  let wasReset = false;
-  if (existingCall.status === "ended" || existingCall.status === "active") {
+  // Handle reconnection to active calls vs resetting ended calls
+  let needsNewOffer = false;
+  
+  if (existingCall.status === "active") {
+    // For active calls, we're reconnecting - keep status as "active" but create new offer
+    // The parent will detect the new offer and handle it as a reconnection
     safeLog.log(
-      "Resetting existing call to ringing status (was:",
-      existingCall.status,
-      ")..."
+      "Reconnecting to active call - creating new offer for new peer connection..."
     );
-    const { error: resetError } = await supabase
+    needsNewOffer = true;
+    
+    // Clear old offer/answer/ICE candidates since we have a new peer connection
+    // But keep status as "active" so parent knows it's a reconnection, not a new call
+    const { error: clearError } = await supabase
       .from("calls")
       .update({
-        status: "ringing",
-        ended_at: null, // Clear ended_at when resetting to ringing (constraint requires ended_at IS NULL for non-ended status)
         offer: null,
         answer: null,
         parent_ice_candidates: null,
         child_ice_candidates: null,
+        // Keep status as "active" - don't reset to "ringing"
       })
       .eq("id", existingCall.id);
 
-    if (resetError) {
-      safeLog.error("Error resetting call status:", resetError);
+    if (clearError) {
+      safeLog.error("Error clearing old offer/answer for reconnection:", clearError);
     } else {
       // Update the existingCall object for the rest of the function
-      existingCall.status = "ringing";
       existingCall.offer = undefined;
       existingCall.answer = undefined;
-      wasReset = true;
     }
+  } else if (existingCall.status === "ended") {
+    // For ended calls, we can't reconnect - the call is already over
+    safeLog.log(
+      "Cannot reconnect to ended call (status: ended). Call is already terminated."
+    );
+    throw new Error("Cannot reconnect to an ended call");
   }
 
-  // If we reset the call, we need to create a fresh offer
-  // Don't try to reuse old offers/answers as they won't match the new peer connection
-  if (wasReset) {
-    safeLog.log("Call was reset, creating fresh offer...");
-    // Create a new offer for the reset call
+  // If we need a new offer (for active call reconnection), create it
+  if (needsNewOffer) {
+    safeLog.log("Creating fresh offer for active call reconnection...");
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
 
@@ -300,7 +305,7 @@ const handleExistingCall = async (
       throw new Error(`Failed to create offer: ${updateError.message}`);
     }
 
-    safeLog.log("Fresh offer created and set for reset call");
+    safeLog.log("Fresh offer created for active call reconnection");
     // Continue to set up listener below - don't process old answers/offers
   } else if (existingCall.answer && pc.remoteDescription === null) {
     // If the existing call has an answer from parent, handle it
@@ -336,7 +341,7 @@ const handleExistingCall = async (
     }
     iceCandidatesQueue.current = [];
     setIsConnecting(false);
-  } else if (existingCall.offer && !wasReset) {
+  } else if (existingCall.offer && !needsNewOffer) {
     // Call has an offer, but we're using a new peer connection
     // Old offers from previous peer connections won't work - create a fresh one
     // This happens when child navigates back to call page with a new peer connection
@@ -538,6 +543,98 @@ const handleExistingCall = async (
             safeLog.log(
               "Call status changed to active - parent answered the call!"
             );
+          }
+
+          // CRITICAL: Handle reconnection - if call is active and a new offer appears, create answer
+          // This handles the case where parent refreshes and creates a new offer for reconnection
+          if (
+            updatedCall.status === "active" &&
+            updatedCall.offer &&
+            pc.signalingState === "stable" &&
+            pc.localDescription === null &&
+            pc.remoteDescription === null
+          ) {
+            const newOffer = updatedCall.offer as unknown as RTCSessionDescriptionInit;
+            const oldOffer = oldCall?.offer as unknown as RTCSessionDescriptionInit | undefined;
+            
+            // Check if this is a new offer (different from old one) or if old offer was null
+            const isNewOffer = !oldOffer || 
+              oldOffer.sdp !== newOffer.sdp ||
+              oldOffer.type !== newOffer.type;
+            
+            if (isNewOffer) {
+              try {
+                safeLog.log(
+                  "🔄 [CHILD HANDLER] Detected new offer for active call (reconnection) - creating answer...",
+                  {
+                    callId: updatedCall.id,
+                    oldOfferSdp: oldOffer?.sdp?.substring(0, 50),
+                    newOfferSdp: newOffer.sdp?.substring(0, 50),
+                  }
+                );
+                
+                // Set remote description with the new offer
+                await pc.setRemoteDescription(new RTCSessionDescription(newOffer));
+                
+                // Wait for signaling state to change (with timeout)
+                await new Promise<void>((resolve, reject) => {
+                  const timeout = setTimeout(() => {
+                    reject(new Error("Timeout waiting for signaling state to change"));
+                  }, 5000); // 5 second timeout
+                  
+                  const checkState = () => {
+                    if (
+                      pc.signalingState === "have-remote-offer" ||
+                      pc.signalingState === "have-local-pranswer"
+                    ) {
+                      clearTimeout(timeout);
+                      resolve();
+                    } else if (pc.signalingState === "closed") {
+                      clearTimeout(timeout);
+                      reject(new Error("Peer connection closed during reconnection"));
+                    } else {
+                      setTimeout(checkState, 100);
+                    }
+                  };
+                  checkState();
+                });
+                
+                // Create answer for reconnection
+                const answer = await pc.createAnswer({
+                  offerToReceiveAudio: true,
+                  offerToReceiveVideo: true,
+                });
+                
+                await pc.setLocalDescription(answer);
+                
+                // Save answer to database
+                await supabase
+                  .from("calls")
+                  .update({
+                    answer: { type: answer.type, sdp: answer.sdp } as Json,
+                  })
+                  .eq("id", updatedCall.id);
+                
+                safeLog.log(
+                  "✅ [CHILD HANDLER] Created and saved answer for reconnection"
+                );
+                setIsConnecting(false);
+              } catch (error) {
+                const err = error as Error;
+                safeLog.error(
+                  "❌ [CHILD HANDLER] Error handling reconnection offer:",
+                  err.message,
+                  {
+                    callId: updatedCall.id,
+                    signalingState: pc.signalingState,
+                    connectionState: pc.connectionState,
+                  }
+                );
+                // Don't throw - allow call to continue, might recover through other mechanisms
+                // The other side might retry or the call might end gracefully
+              }
+              return; // Don't process other updates in this event
+            }
           }
 
           // Process answer if received and not already set
@@ -1454,6 +1551,21 @@ const handleChildInitiatedCall = async (
         // Check if parent answered the call - CRITICAL: Process answer before ICE candidates
         if (updatedCall.answer && pc.remoteDescription === null) {
           try {
+            // CRITICAL: Check signaling state before setting remote description
+            // Can only set remote answer if we have a local offer (have-local-offer state)
+            if (pc.signalingState !== "have-local-offer") {
+              safeLog.warn(
+                "⚠️ [CHILD HANDLER] Cannot set remote answer - wrong signaling state",
+                {
+                  callId: updatedCall.id,
+                  expectedState: "have-local-offer",
+                  actualState: pc.signalingState,
+                  hasLocalDescription: !!pc.localDescription,
+                }
+              );
+              return;
+            }
+            
             safeLog.log(
               "✅ [CHILD HANDLER] Received answer from parent, setting remote description...",
               {
@@ -1462,8 +1574,23 @@ const handleChildInitiatedCall = async (
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 answerType: (updatedCall.answer as any)?.type,
                 currentRemoteDesc: !!pc.remoteDescription,
+                signalingState: pc.signalingState,
               }
             );
+            
+            // CRITICAL: Double-check signaling state right before setting (race condition protection)
+            if (pc.signalingState !== "have-local-offer") {
+              safeLog.warn(
+                "⚠️ [CHILD HANDLER] Signaling state changed before setting remote description - skipping",
+                {
+                  callId: updatedCall.id,
+                  expectedState: "have-local-offer",
+                  actualState: pc.signalingState,
+                }
+              );
+              return;
+            }
+            
             const answerDesc =
               updatedCall.answer as unknown as RTCSessionDescriptionInit;
             await pc.setRemoteDescription(
