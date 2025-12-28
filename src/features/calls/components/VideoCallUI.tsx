@@ -15,7 +15,9 @@ import {
 import { NetworkStatusBadge } from "./NetworkStatusBadge";
 import { DiagnosticContainer } from "./DiagnosticPanel";
 import { VideoPlaceholder } from "./VideoPlaceholder";
+import { BatteryNotification } from "./BatteryNotification";
 import type { NetworkQualityLevel, ConnectionType, NetworkStats } from "../hooks/useNetworkQuality";
+import type { BatteryStatus } from "../webrtc/qualityController";
 
 // Network quality props for adaptive streaming
 interface NetworkQualityProps {
@@ -42,6 +44,8 @@ interface VideoCallUIProps {
   peerConnection?: RTCPeerConnection | null;
   // Optional network quality for adaptive streaming indicator
   networkQuality?: NetworkQualityProps;
+  // Optional battery status for low-battery notifications
+  batteryStatus?: BatteryStatus | null;
 }
 
 export const VideoCallUI = ({
@@ -57,6 +61,7 @@ export const VideoCallUI = ({
   onEndCall,
   peerConnection,
   networkQuality,
+  batteryStatus,
 }: VideoCallUIProps) => {
   const [videoState, setVideoState] = useState<
     "waiting" | "loading" | "playing" | "error"
@@ -1347,6 +1352,9 @@ export const VideoCallUI = ({
             </div>
           </div>
         </div>
+
+        {/* Battery Notification - shows when battery is low or critical */}
+        <BatteryNotification batteryStatus={batteryStatus || null} />
 
         {/* Network Quality Indicator - shows connection quality for adaptive streaming */}
         {/* Supports all network conditions from 2G to 5G/WiFi - collapsed by default, click to expand */}

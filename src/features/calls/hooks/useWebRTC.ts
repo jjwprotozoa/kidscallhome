@@ -38,6 +38,7 @@ import {
 import {
   QualityController,
   type QualityChangeCallback,
+  type BatteryStatus,
 } from "../webrtc/qualityController";
 import { applyAudioTuning } from "../webrtc/audioTuning";
 
@@ -75,6 +76,8 @@ interface UseWebRTCReturn {
     packetLoss: number;
     roundTripTime: number;
   };
+  // Battery status for low-battery notifications
+  batteryStatus: BatteryStatus | null;
 }
 
 export const useWebRTC = (
@@ -88,6 +91,7 @@ export const useWebRTC = (
   const [isConnecting, setIsConnecting] = useState(true);
   const [isConnected, setIsConnected] = useState(false); // Track actual ICE connection state
   const [isReconnecting, setIsReconnecting] = useState(false); // Track ICE restart in progress
+  const [batteryStatus, setBatteryStatus] = useState<BatteryStatus | null>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const iceCandidatesQueue = useRef<RTCIceCandidateInit[]>([]);
@@ -108,6 +112,8 @@ export const useWebRTC = (
 
   // Quality controller
   const qualityControllerRef = useRef<QualityController | null>(null);
+  // Battery status polling interval
+  const batteryStatusIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // CRITICAL: Track user's explicit mute/video-off state to prevent overrides
   // These refs are updated by the media controls and checked before forcing tracks enabled
@@ -815,9 +821,11 @@ export const useWebRTC = (
           setIsConnecting(false);
           setIsReconnecting(false);
 
-          // Start quality controller when ICE connects
+          // Start quality controller when ICE connects (async for battery monitoring)
           if (qualityControllerRef.current) {
-            qualityControllerRef.current.start(pc);
+            qualityControllerRef.current.start(pc).catch((error) => {
+              safeLog.warn("⚠️ [QUALITY CONTROLLER] Failed to start:", error);
+            });
           }
 
           // Apply audio tuning after ICE connects
@@ -1619,6 +1627,14 @@ export const useWebRTC = (
         statsInterval: 2000,
         cooldownPeriod: 12000,
       });
+
+      // Poll battery status periodically to update UI
+      batteryStatusIntervalRef.current = setInterval(() => {
+        if (qualityControllerRef.current) {
+          const status = qualityControllerRef.current.getBatteryStatus();
+          setBatteryStatus(status);
+        }
+      }, 2000); // Check every 2 seconds
 
       // ADAPTIVE: Start network quality monitoring AFTER tracks are added
       // This ensures senders exist when applyQualityPreset is called
@@ -2494,6 +2510,13 @@ export const useWebRTC = (
         qualityControllerRef.current = null;
       }
 
+      // Clear battery status and stop polling
+      setBatteryStatus(null);
+      if (batteryStatusIntervalRef.current) {
+        clearInterval(batteryStatusIntervalRef.current);
+        batteryStatusIntervalRef.current = null;
+      }
+
       // Stop network monitoring for ICE restart
       if (networkMonitorCleanupRef.current) {
         networkMonitorCleanupRef.current();
@@ -2887,5 +2910,7 @@ export const useWebRTC = (
       ),
       roundTripTime: networkQuality.networkStats.roundTripTime,
     },
+    // Battery status for low-battery notifications
+    batteryStatus,
   };
 };

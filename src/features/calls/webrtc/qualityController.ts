@@ -1,9 +1,14 @@
 // src/features/calls/webrtc/qualityController.ts
 // Adaptive quality controller with stats-driven quality adjustment
 // Implements hysteresis rules to prevent oscillation
+// Includes battery-aware optimizations for low-power scenarios
 
 import { safeLog } from "@/utils/security";
 import { QUALITY_PROFILES, type QualityLevel } from "../config/callQualityProfiles";
+import { getBatteryMonitor, type BatteryStatus } from "./batteryMonitor";
+
+// Re-export BatteryStatus for use in other components
+export type { BatteryStatus } from "./batteryMonitor";
 
 /**
  * Quality change callback
@@ -29,6 +34,7 @@ export interface QualityControllerOptions {
   onQualityChange?: QualityChangeCallback;
   statsInterval?: number;       // milliseconds (default: 2000)
   cooldownPeriod?: number;       // milliseconds (default: 12000)
+  enableBatteryOptimizations?: boolean; // Enable battery-aware quality adjustments (default: true)
 }
 
 /**
@@ -37,7 +43,7 @@ export interface QualityControllerOptions {
 export class QualityController {
   private pc: RTCPeerConnection | null = null;
   private currentQuality: QualityLevel;
-  private options: Required<QualityControllerOptions>;
+  private options: Required<QualityControllerOptions> & { enableBatteryOptimizations: boolean };
   private statsInterval: ReturnType<typeof setInterval> | null = null;
   private previousStats: Map<string, RTCStats> = new Map();
   private previousTimestamp: number = 0;
@@ -45,6 +51,8 @@ export class QualityController {
   private consecutivePoorSamples: number = 0;
   private consecutiveGoodSamples: number = 0;
   private isRunning: boolean = false;
+  private batteryStatus: BatteryStatus | null = null;
+  private batteryUnsubscribe: (() => void) | null = null;
 
   constructor(
     initialQuality: QualityLevel,
@@ -55,13 +63,14 @@ export class QualityController {
       onQualityChange: options.onQualityChange || (() => {}),
       statsInterval: options.statsInterval || 2000,
       cooldownPeriod: options.cooldownPeriod || 12000,
+      enableBatteryOptimizations: options.enableBatteryOptimizations !== false, // Default: true
     };
   }
 
   /**
    * Start quality monitoring
    */
-  start(pc: RTCPeerConnection): void {
+  async start(pc: RTCPeerConnection): Promise<void> {
     if (this.isRunning) {
       safeLog.warn("⚠️ [QUALITY CONTROLLER] Already running");
       return;
@@ -71,10 +80,40 @@ export class QualityController {
     this.isRunning = true;
     this.previousTimestamp = Date.now();
 
+    // Start battery monitoring if enabled
+    if (this.options.enableBatteryOptimizations) {
+      try {
+        const batteryMonitor = getBatteryMonitor();
+        await batteryMonitor.start();
+        
+        // Subscribe to battery status changes
+        this.batteryUnsubscribe = batteryMonitor.onStatusChange((status) => {
+          this.batteryStatus = status;
+          safeLog.log("🔋 [QUALITY CONTROLLER] Battery status updated", {
+            level: (status.level * 100).toFixed(0) + "%",
+            charging: status.charging,
+            isLow: status.isLow,
+            isCritical: status.isCritical,
+          });
+          
+          // If battery becomes critical, immediately adjust quality
+          if (status.isCritical && !status.charging) {
+            this.applyBatteryOptimizations();
+          }
+        });
+        
+        // Get initial battery status
+        this.batteryStatus = batteryMonitor.getStatus();
+      } catch (error) {
+        safeLog.warn("⚠️ [QUALITY CONTROLLER] Failed to start battery monitoring:", error);
+      }
+    }
+
     safeLog.log("✅ [QUALITY CONTROLLER] Started quality monitoring", {
       initialQuality: this.currentQuality,
       statsInterval: this.options.statsInterval,
       cooldownPeriod: this.options.cooldownPeriod,
+      batteryOptimizations: this.options.enableBatteryOptimizations,
     });
 
     // Start periodic stats collection
@@ -99,9 +138,16 @@ export class QualityController {
       this.statsInterval = null;
     }
 
+    // Unsubscribe from battery monitoring
+    if (this.batteryUnsubscribe) {
+      this.batteryUnsubscribe();
+      this.batteryUnsubscribe = null;
+    }
+
     this.previousStats.clear();
     this.consecutivePoorSamples = 0;
     this.consecutiveGoodSamples = 0;
+    this.batteryStatus = null;
 
     safeLog.log("🛑 [QUALITY CONTROLLER] Stopped quality monitoring");
   }
@@ -111,6 +157,13 @@ export class QualityController {
    */
   getCurrentQuality(): QualityLevel {
     return this.currentQuality;
+  }
+
+  /**
+   * Get current battery status
+   */
+  getBatteryStatus(): BatteryStatus | null {
+    return this.batteryStatus;
   }
 
   /**
@@ -251,6 +304,24 @@ export class QualityController {
     ];
     const currentIndex = levels.indexOf(this.currentQuality);
 
+    // Apply battery optimizations first (if battery is low)
+    if (this.options.enableBatteryOptimizations && this.batteryStatus) {
+      const batteryAdjustment = this.getBatteryQualityAdjustment();
+      if (batteryAdjustment) {
+        const batteryIndex = levels.indexOf(batteryAdjustment);
+        if (batteryIndex < currentIndex) {
+          safeLog.log("🔋 [QUALITY CONTROLLER] Battery optimization: downgrading for low battery", {
+            from: this.currentQuality,
+            to: batteryAdjustment,
+            batteryLevel: (this.batteryStatus.level * 100).toFixed(0) + "%",
+            charging: this.batteryStatus.charging,
+          });
+          this.changeQuality(batteryAdjustment);
+          return; // Battery optimization takes priority
+        }
+      }
+    }
+
     // Check for severe conditions (force critical/audio-only)
     const avgPacketLoss =
       (stats.outboundPacketLoss + stats.inboundPacketLoss) / 2;
@@ -296,32 +367,90 @@ export class QualityController {
       }
     } else {
       // Check if we should upgrade
-      this.consecutiveGoodSamples++;
-      this.consecutivePoorSamples = 0;
+      // BUT: Don't upgrade if battery is low (unless charging)
+      const canUpgrade = !this.batteryStatus || 
+                         this.batteryStatus.charging || 
+                         (!this.batteryStatus.isLow && !this.batteryStatus.isCritical);
 
-      // Upgrade slowly (5-6 consecutive good samples)
-      if (
-        this.consecutiveGoodSamples >= 5 &&
-        currentIndex < levels.length - 1
-      ) {
-        const nextLevel = levels[currentIndex + 1];
-        const nextProfile = QUALITY_PROFILES[nextLevel];
-        const hasEnoughBandwidth = stats.outboundBitrate >= nextProfile.videoKbps * 0.9;
+      if (canUpgrade) {
+        this.consecutiveGoodSamples++;
+        this.consecutivePoorSamples = 0;
 
-        if (hasEnoughBandwidth && avgPacketLoss < 2 && stats.roundTripTime < 200) {
-          safeLog.log("📊 [QUALITY CONTROLLER] Upgrading quality", {
-            from: this.currentQuality,
-            to: nextLevel,
-            reason: {
-              bitrate: stats.outboundBitrate.toFixed(0) + " kbps",
-              packetLoss: avgPacketLoss.toFixed(1) + "%",
-              rtt: stats.roundTripTime.toFixed(0) + "ms",
-            },
-          });
-          this.changeQuality(nextLevel);
-          this.consecutiveGoodSamples = 0;
+        // Upgrade slowly (5-6 consecutive good samples)
+        if (
+          this.consecutiveGoodSamples >= 5 &&
+          currentIndex < levels.length - 1
+        ) {
+          const nextLevel = levels[currentIndex + 1];
+          const nextProfile = QUALITY_PROFILES[nextLevel];
+          const hasEnoughBandwidth = stats.outboundBitrate >= nextProfile.videoKbps * 0.9;
+
+          if (hasEnoughBandwidth && avgPacketLoss < 2 && stats.roundTripTime < 200) {
+            safeLog.log("📊 [QUALITY CONTROLLER] Upgrading quality", {
+              from: this.currentQuality,
+              to: nextLevel,
+              reason: {
+                bitrate: stats.outboundBitrate.toFixed(0) + " kbps",
+                packetLoss: avgPacketLoss.toFixed(1) + "%",
+                rtt: stats.roundTripTime.toFixed(0) + "ms",
+              },
+            });
+            this.changeQuality(nextLevel);
+            this.consecutiveGoodSamples = 0;
+          }
         }
+      } else {
+        // Battery is low - prevent upgrades to save power
+        safeLog.log("🔋 [QUALITY CONTROLLER] Preventing quality upgrade due to low battery", {
+          batteryLevel: this.batteryStatus ? (this.batteryStatus.level * 100).toFixed(0) + "%" : "unknown",
+        });
       }
+    }
+  }
+
+  /**
+   * Get recommended quality adjustment based on battery status
+   */
+  private getBatteryQualityAdjustment(): QualityLevel | null {
+    if (!this.batteryStatus || this.batteryStatus.charging) {
+      return null; // No adjustment if charging or unknown
+    }
+
+    const levels: QualityLevel[] = [
+      "critical",
+      "poor",
+      "moderate",
+      "good",
+      "excellent",
+      "premium",
+    ];
+    const currentIndex = levels.indexOf(this.currentQuality);
+
+    // Critical battery (< 10%): force audio-only
+    if (this.batteryStatus.isCritical) {
+      return "critical";
+    }
+
+    // Low battery (< 20%): downgrade by one level
+    if (this.batteryStatus.isLow && currentIndex > 0) {
+      return levels[currentIndex - 1];
+    }
+
+    return null;
+  }
+
+  /**
+   * Apply battery optimizations immediately
+   */
+  private applyBatteryOptimizations(): void {
+    const adjustment = this.getBatteryQualityAdjustment();
+    if (adjustment && adjustment !== this.currentQuality) {
+      safeLog.log("🔋 [QUALITY CONTROLLER] Applying battery optimizations", {
+        from: this.currentQuality,
+        to: adjustment,
+        batteryLevel: this.batteryStatus ? (this.batteryStatus.level * 100).toFixed(0) + "%" : "unknown",
+      });
+      this.changeQuality(adjustment);
     }
   }
 

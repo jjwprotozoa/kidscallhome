@@ -378,6 +378,7 @@ const ChildCallScreen = () => {
       onToggleVideo={callEngine.toggleVideo}
       onEndCall={callEngine.endCall}
       networkQuality={callEngine.networkQuality}
+      batteryStatus={callEngine.batteryStatus}
     />
   );
 };

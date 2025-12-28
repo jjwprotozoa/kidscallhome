@@ -66,6 +66,8 @@ export interface UseCallEngineReturn {
   toggleVideo: () => void;
   // Network quality for adaptive streaming (2G-5G/WiFi support)
   networkQuality: NetworkQualityInfo;
+  // Battery status for low-battery notifications
+  batteryStatus: import("../webrtc/qualityController").BatteryStatus | null;
 }
 
 export const useCallEngine = ({
@@ -106,6 +108,7 @@ export const useCallEngine = ({
     reconnecting, // Reconnecting state
     setUserMuted, // Function to update user's mute state in WebRTC
     setUserVideoOff, // Function to update user's video-off state in WebRTC
+    batteryStatus, // Battery status for low-battery notifications
   } = useWebRTC(callId, localVideoRef, remoteVideoRef, role === "child");
 
   // Audio notifications for outgoing calls
@@ -2062,5 +2065,7 @@ export const useCallEngine = ({
       ...networkQuality,
       reconnecting,
     },
+    // Battery status for low-battery notifications
+    batteryStatus,
   };
 };

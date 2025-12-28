@@ -17,6 +17,7 @@ const VideoCall = () => {
     toggleVideo,
     endCall,
     networkQuality,
+    batteryStatus,
   } = useVideoCall();
 
   return (
@@ -32,6 +33,7 @@ const VideoCall = () => {
       onToggleVideo={toggleVideo}
       onEndCall={endCall}
       networkQuality={networkQuality}
+      batteryStatus={batteryStatus}
     />
   );
 };

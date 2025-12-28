@@ -93,6 +93,7 @@ export const useVideoCall = () => {
     isConnected, // Add connection state from useWebRTC
     networkQuality, // Network quality info for adaptive streaming
     reconnecting, // ICE restart in progress
+    batteryStatus, // Battery status for low-battery notifications
   } = useWebRTC(callId, localVideoRef, remoteVideoRef, isChild);
 
   // Track if we've already attempted to play to avoid multiple calls
@@ -1482,5 +1483,6 @@ export const useVideoCall = () => {
       ...networkQuality,
       reconnecting, // Include reconnecting state
     }, // Network quality info for adaptive streaming UI
+    batteryStatus, // Battery status for low-battery notifications
   };
 };
