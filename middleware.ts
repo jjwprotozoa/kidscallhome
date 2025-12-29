@@ -142,8 +142,8 @@ export default async function middleware(request: Request) {
   ];
   
   if (staticFilePatterns.some(pattern => path.includes(pattern))) {
-    // Let Vercel serve static files normally
-    return new Response(null, { status: 200 });
+    // Let Vercel serve static files normally - don't return anything to pass through
+    return;
   }
   
   // SECURITY: CORS headers (adjust for your domain)
@@ -228,18 +228,9 @@ export default async function middleware(request: Request) {
   }
 
   // For Vercel Edge Middleware with Vite/React apps, we need to pass through
-  // Headers will be added via vercel.json headers configuration
-  // Don't return an empty response - let Vercel handle the request normally
-  return new Response(null, {
-    status: 200,
-    headers: {
-      'X-Content-Type-Options': 'nosniff',
-      'X-Frame-Options': 'DENY',
-      'X-XSS-Protection': '1; mode=block',
-      'Referrer-Policy': 'strict-origin-when-cross-origin',
-      'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), interest-cohort=()',
-    },
-  });
+  // Security headers are already configured in vercel.json
+  // Don't return anything - let Vercel handle the request normally and serve the React app
+  // Returning undefined or nothing allows Vercel to continue with normal request handling
 }
 
 // Configure which routes to run middleware on
