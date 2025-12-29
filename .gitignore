@@ -53,3 +53,13 @@ android/**/*.keystore
 bun.lockb
 yarn.lock
 pnpm-lock.yaml
+
+# Test files (not required for app)
+*.test.ts
+*.test.tsx
+*.dev-test.ts
+*.spec.ts
+*.spec.tsx
+
+# LLM/AI related files (not required for app)
+public/llms.txt
