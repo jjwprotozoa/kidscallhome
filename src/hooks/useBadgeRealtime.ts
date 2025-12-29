@@ -3,10 +3,11 @@
 // Only increments badges for NEW messages/calls (created after last cleared timestamp)
 
 import { useEffect, useRef } from "react";
-import { supabase } from "@/integrations/supabase/client";
+// Supabase is NOT imported here - it's lazy-loaded only when needed
 import { useBadgeStore } from "@/stores/badgeStore";
 import { getLastClearedTimestamp } from "@/utils/badgeStorage";
-import type { RealtimeChannel } from "@supabase/supabase-js";
+import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/integrations/supabase/types";
 
 export function useBadgeRealtime() {
   const messagesChannelRef = useRef<RealtimeChannel | null>(null);
@@ -26,11 +27,19 @@ export function useBadgeRealtime() {
       return;
     }
     
-    const childSession = localStorage.getItem("childSession");
-    const isChild = !!childSession;
+    // Lazy load Supabase only when actually needed (not on marketing routes)
+    let supabaseInstance: SupabaseClient<Database> | null = null;
+    
+    const initRealtime = async () => {
+      try {
+        const { supabase } = await import("@/integrations/supabase/client");
+        supabaseInstance = supabase;
+        
+        const childSession = localStorage.getItem("childSession");
+        const isChild = !!childSession;
 
-    // Messages subscription
-    messagesChannelRef.current = supabase
+        // Messages subscription
+        messagesChannelRef.current = supabase
       .channel("badge-messages")
       .on(
         "postgres_changes",
@@ -380,13 +389,21 @@ export function useBadgeRealtime() {
         }
         // CLOSED is normal cleanup, don't log as error
       });
+      } catch (error) {
+        console.error("❌ [BADGE REALTIME] Failed to initialize realtime:", error);
+      }
+    };
+    
+    initRealtime();
 
     return () => {
-      if (messagesChannelRef.current) {
-        supabase.removeChannel(messagesChannelRef.current);
-      }
-      if (callsChannelRef.current) {
-        supabase.removeChannel(callsChannelRef.current);
+      if (supabaseInstance) {
+        if (messagesChannelRef.current) {
+          supabaseInstance.removeChannel(messagesChannelRef.current);
+        }
+        if (callsChannelRef.current) {
+          supabaseInstance.removeChannel(callsChannelRef.current);
+        }
       }
     };
   }, []);
