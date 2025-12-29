@@ -35,6 +35,15 @@ function checkRateLimit(key: string, path: string): { allowed: boolean; resetAt?
   }
 
   const now = Date.now();
+  
+  // Lazy cleanup: remove expired entries before checking
+  // This replaces setInterval which isn't available in Edge Runtime
+  for (const [storeKey, entry] of rateLimitStore.entries()) {
+    if (entry.resetAt < now) {
+      rateLimitStore.delete(storeKey);
+    }
+  }
+  
   const entry = rateLimitStore.get(key);
 
   if (!entry || entry.resetAt < now) {
@@ -55,16 +64,6 @@ function checkRateLimit(key: string, path: string): { allowed: boolean; resetAt?
   rateLimitStore.set(key, entry);
   return { allowed: true };
 }
-
-// Clean up old entries periodically
-setInterval(() => {
-  const now = Date.now();
-  for (const [key, entry] of rateLimitStore.entries()) {
-    if (entry.resetAt < now) {
-      rateLimitStore.delete(key);
-    }
-  }
-}, 60000); // Clean every minute
 
 // Detect known scrapers by User-Agent
 function isScraper(userAgent: string): boolean {
