@@ -7,7 +7,129 @@
 
 > **Note**: For detailed technical information, complete file lists, testing recommendations, and implementation specifics, see [CHANGES_DETAILED.md](./CHANGES_DETAILED.md).
 
-## Latest Changes (2024-12-29) - Upgrade Page UI Improvements & Error Handling
+## Latest Changes (2025-01-22) - Email Breach Check Browser Limitation Documentation
+
+### -25. Email Breach Check - Browser Limitation Documentation & Error Handling Improvements
+
+- **Purpose**: Document expected CORS/401 errors from Have I Been Pwned API and improve error handling to reduce console noise
+- **Issues Addressed**:
+  1. **Console Error Noise**: CORS and 401 errors appearing in browser console when checking email breaches
+  2. **Unclear Error Handling**: No documentation explaining why these errors occur and that they're expected
+  3. **User Confusion**: Developers seeing errors without understanding they're harmless
+
+#### Changes Applied
+
+- **Error Handling Improvements** (`src/utils/passwordBreachCheck.ts`):
+  - Enhanced comments explaining CORS/401 errors are expected in browser environment
+  - Improved 401 error handling with silent fail-open behavior
+  - Reduced console noise by using `console.debug` for expected errors instead of `console.warn`
+  - Added explicit handling for CORS errors in catch blocks
+
+- **Hook Updates** (`src/hooks/useEmailBreachCheck.ts`):
+  - Added comments explaining expected CORS/401 errors
+  - Clarified that errors are harmless and signup proceeds normally
+
+- **Documentation** (`docs/EMAIL_BREACH_CHECK_BROWSER_LIMITATION.md`):
+  - Comprehensive guide explaining why CORS/401 errors occur
+  - Current behavior documentation (fail-open, never blocks signup)
+  - Three solution options: server-side proxy (recommended), disable in dev, or accept errors
+  - Impact assessment (zero user impact)
+  - Next steps for production deployment
+
+#### Files Created
+
+- `docs/EMAIL_BREACH_CHECK_BROWSER_LIMITATION.md` - Complete documentation of browser limitation and solutions
+
+#### Files Modified
+
+- `src/utils/passwordBreachCheck.ts` - Improved error handling and comments for CORS/401 errors
+- `src/hooks/useEmailBreachCheck.ts` - Added comments about expected errors
+
+#### Impact
+
+- **Reduced Console Noise**: Better error handling reduces unnecessary warnings
+- **Clear Documentation**: Developers understand why errors occur and that they're expected
+- **Production Guidance**: Clear path forward for implementing server-side proxy
+- **Zero User Impact**: Fail-open behavior ensures signup never blocks due to API failures
+- **Better Developer Experience**: Less confusion about harmless console errors
+
+---
+
+## Previous Changes (2025-01-22) - Email Typo Prevention & Relationship Type Saving
+
+### -24. Email Typo Prevention - Confirm Email Field & Domain Typo Detection
+
+- **Purpose**: Prevent common email typos during signup with lightweight client-side validation and typo suggestions
+- **Issues Addressed**:
+  1. **No Email Confirmation**: Users could mistype email addresses without detection
+  2. **Common Domain Typos**: No detection for common typos like "gmail.con" or "hotnail.com"
+  3. **No Email Normalization**: Email comparison didn't account for whitespace or case differences
+  4. **Missing Validation Feedback**: Users didn't see validation errors until form submission
+
+#### Changes Applied
+
+- **Email Validation Utilities** (`src/utils/emailValidation.ts`):
+  - `normalizeEmail()`: Trims whitespace and converts to lowercase for consistent comparison
+  - `isValidEmailBasic()`: Validates email shape (one "@", at least one ".", no spaces, TLD ≥ 2 chars)
+  - `suggestEmailCorrection()`: Detects common domain typos and suggests corrections
+  - Typo detection for: gmail (gmail.con, gmal.com, gmial.com), hotmail (hotnail.com), outlook (outlok.com), yahoo (yaho.com), icloud (iclud.com), and more
+
+- **Confirm Email Field** (`src/components/auth/EmailInputWithBreachCheck.tsx`):
+  - Added "Confirm Email" field below email input (similar to password confirmation)
+  - Real-time validation with inline error messages
+  - Shows "Emails don't match" when confirmEmail doesn't match normalized email
+  - Shows "Enter a valid email address" for invalid email format
+
+- **Typo Suggestion Banner** (`src/components/auth/EmailInputWithBreachCheck.tsx`):
+  - Non-blocking banner appears when typo detected: "Did you mean `suggestedEmail`?"
+  - "Use this" button applies correction and clears confirmEmail field
+  - Only shows when email has valid shape or user has blurred the field
+  - Integrated with existing breach check (only shows when emails match to avoid double friction)
+
+- **Signup Form Updates** (`src/pages/ParentAuth/SignupForm.tsx`):
+  - Added `confirmEmail` prop and state management
+  - Submit button disabled when email invalid or emails don't match
+  - Passes confirmEmail to EmailInputWithBreachCheck component
+
+- **Signup Handler Updates** (`src/pages/ParentAuth/authHandlers.ts`):
+  - Added `familyRole` parameter to SignupParams interface
+  - Creates/updates `adult_profiles` record with correct `role` and `relationship_type`
+  - For parents: `role = 'parent'`, `relationship_type = null`
+  - For family members: `role = 'family_member'`, `relationship_type = selected value`
+  - Stores `familyRole` in auth metadata for reference
+
+- **Validation Integration** (`src/pages/ParentAuth/ParentAuth.tsx`):
+  - Email validation before submission (format check and match check)
+  - Uses normalized email comparison (trim + lowercase)
+  - Shows toast notifications for validation errors
+  - Passes `familyRole` to signup handler
+
+#### Files Created
+
+- `src/utils/emailValidation.ts` - Email normalization, validation, and typo correction utilities
+- `src/utils/emailValidation.test.ts` - Unit tests for email validation functions
+- `src/utils/emailValidation.dev-test.ts` - Dev console test snippet for quick testing
+
+#### Files Modified
+
+- `src/components/auth/EmailInputWithBreachCheck.tsx` - Added confirmEmail field, typo suggestions, validation errors
+- `src/pages/ParentAuth/SignupForm.tsx` - Added confirmEmail prop, button disable logic
+- `src/pages/ParentAuth/useAuthState.ts` - Added confirmEmail state
+- `src/pages/ParentAuth/ParentAuth.tsx` - Added email validation, passes familyRole to handler
+- `src/pages/ParentAuth/authHandlers.ts` - Added familyRole parameter, creates adult_profiles with relationship_type
+
+#### Impact
+
+- **Reduced Signup Errors**: Email confirmation prevents typos from going undetected
+- **Better UX**: Typo suggestions help users correct mistakes without blocking signup
+- **Consistent Data**: Email normalization ensures proper comparison regardless of whitespace/case
+- **Mobile-Friendly**: Lightweight client-side validation, no new paid services required
+- **Relationship Type Saved**: Family role selection now properly saved to adult_profiles table
+- **Database Consistency**: adult_profiles records created with correct role and relationship_type during signup
+
+---
+
+## Previous Changes (2024-12-29) - Upgrade Page UI Improvements & Error Handling
 
 ### -23. Upgrade Page UI Improvements - Wording Updates & Button Refinements
 

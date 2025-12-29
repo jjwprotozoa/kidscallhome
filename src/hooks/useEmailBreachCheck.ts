@@ -46,6 +46,9 @@ export const useEmailBreachCheck = (email: string, isLogin: boolean) => {
         }
       } catch (error) {
         // Any error: silently fail - never block signup
+        // Note: CORS/401 errors from HaveIBeenPwned API are expected in browser
+        // The browser console may show these errors, but they're harmless
+        // In production, email breach checking should be done server-side
         setCheckingEmailBreach(false);
         setEmailBreachInfo(null);
         // Don't show any error to user - signup proceeds normally
