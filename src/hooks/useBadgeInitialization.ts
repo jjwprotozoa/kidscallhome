@@ -2,7 +2,7 @@
 // One-time initial snapshot fetch for badge counts (called once per session)
 
 import { useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
+// Supabase is NOT imported here - it's lazy-loaded only when needed
 import { useBadgeStore } from "@/stores/badgeStore";
 import { loadBadgeState, getLastClearedTimestamp } from "@/utils/badgeStorage";
 
@@ -18,6 +18,8 @@ export function useBadgeInitialization() {
     let timeoutId: NodeJS.Timeout | null = null;
 
     const fetchInitialBadges = async () => {
+      // Lazy load Supabase only when actually needed (not on marketing routes)
+      const { supabase } = await import("@/integrations/supabase/client");
       try {
         // Add timeout to prevent hanging - if this takes more than 10 seconds, abort
         const timeoutPromise = new Promise<never>((_, reject) => {

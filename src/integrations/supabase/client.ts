@@ -24,11 +24,13 @@ if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
   if (!SUPABASE_URL) missingVars.push('VITE_SUPABASE_URL');
   if (!SUPABASE_PUBLISHABLE_KEY) missingVars.push('VITE_SUPABASE_PUBLISHABLE_KEY');
   
-  safeLog.error(
-    `❌ Missing required environment variables: ${missingVars.join(', ')}\n` +
+  // Always log this error, even in production - it's critical for debugging
+  const errorMsg = `❌ [SUPABASE] Missing required environment variables: ${missingVars.join(', ')}\n` +
     `Please set these in your Vercel project settings or .env file.\n` +
-    `The app will not function without these variables.`
-  );
+    `The app will not function without these variables.`;
+  
+  console.error(errorMsg);
+  safeLog.error(errorMsg);
 }
 
 // Import the supabase client like this:
@@ -39,11 +41,18 @@ if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
 let supabase: ReturnType<typeof createClient<Database>>;
 
 // Check if we're on a marketing route (where realtime should be disabled)
-// Import route utility to avoid duplication
+// This check happens at module load time, but we make it defensive
+// to prevent errors if window.location is not available
 let isMarketingRoute = false;
-if (typeof window !== 'undefined') {
-  const pathname = window.location.pathname;
-  isMarketingRoute = pathname === '/' || pathname === '/info';
+try {
+  if (typeof window !== 'undefined' && window.location) {
+    const pathname = window.location.pathname;
+    isMarketingRoute = pathname === '/' || pathname === '/info';
+  }
+} catch (error) {
+  // If window.location access fails, default to not being a marketing route
+  // This ensures the app doesn't break if there's an issue accessing location
+  isMarketingRoute = false;
 }
 
 try {
@@ -71,6 +80,8 @@ try {
     }
   );
 } catch (error) {
+  // Always log this error, even in production - it's critical for debugging
+  console.error('❌ [SUPABASE CLIENT] Failed to create client:', error);
   safeLog.error('❌ [SUPABASE CLIENT] Failed to create client:', error);
   // Create a minimal client to prevent app crash
   supabase = createClient<Database>(
@@ -221,22 +232,25 @@ if (typeof window !== 'undefined') {
     }
   });
 
-  // Intercept console.error to suppress Supabase refresh token errors
+  // Intercept console.error to suppress ONLY Supabase refresh token errors
+  // CRITICAL: Don't suppress other errors - they're needed for debugging
   const originalConsoleError = console.error;
   console.error = (...args: unknown[]) => {
     // Check if this is a Supabase refresh token error
     const errorMessage = args.join(' ');
-    if (
+    const isSupabaseRefreshError = 
       isRefreshTokenError(args[0]) ||
       (typeof errorMessage === 'string' && 
        (errorMessage.includes('Invalid Refresh Token') ||
         errorMessage.includes('Refresh Token Not Found') ||
-        errorMessage.includes('refresh_token_not_found')))
-    ) {
+        errorMessage.includes('refresh_token_not_found')));
+    
+    // Only suppress Supabase refresh token errors, log everything else
+    if (isSupabaseRefreshError) {
       // Suppress the error - we've already handled it
       return;
     }
-    // Otherwise, log normally
+    // Otherwise, log normally (including all other errors)
     originalConsoleError.apply(console, args);
   };
 }

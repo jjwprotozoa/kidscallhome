@@ -4,8 +4,9 @@ import "./index.css";
 import { safeLog } from "./utils/security";
 
 // Disable console in production (fallback - esbuild should remove these)
+// CRITICAL: Always keep console.error and console.warn enabled for debugging
 if (import.meta.env.PROD) {
-  // Override console methods to prevent any logging in production
+  // Override console methods to prevent verbose logging in production
   const noop = () => {};
   // eslint-disable-next-line no-console
   console.log = noop;
@@ -13,9 +14,8 @@ if (import.meta.env.PROD) {
   console.debug = noop;
   // eslint-disable-next-line no-console
   console.info = noop;
-  // Keep console.error and console.warn for critical issues, but they'll be removed by esbuild
-  // console.error = noop;
-  // console.warn = noop;
+  // CRITICAL: Keep console.error and console.warn enabled for debugging production issues
+  // These are essential for diagnosing blank screens and rendering errors
 }
 
 // Log startup (only in development)
@@ -94,6 +94,8 @@ try {
     }
   }, 5000);
 } catch (error) {
+  // Always log errors to console, even in production, for debugging
+  console.error("❌ [APP INIT] Failed to render app:", error);
   safeLog.error("❌ [APP INIT] Failed to render app:", error);
   // Hide loading spinner on error
   const loadingElement = document.getElementById("app-loading");

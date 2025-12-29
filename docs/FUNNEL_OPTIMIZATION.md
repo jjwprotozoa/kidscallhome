@@ -102,7 +102,8 @@ CER = (confidence_signal → click_primary_cta) / confidence_signal
 - **20-30%** → Healthy trust → action bridge (optimal range)
 - **>35%** → Users are over-qualified; CTA might be too weak or late (consider stronger CTAs or earlier placement)
 
-**Why it matters:** This is your single best indicator of copy alignment. It tells you if your trust-building content successfully bridges to action.
+**Why it matters:** This is your single best indicator of copy alignment. It tells you if your trust-building content
+successfully bridges to action.
 
 ### Diagnostic Signals
 

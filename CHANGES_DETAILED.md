@@ -4,7 +4,652 @@
 
 ---
 
-## Latest Changes (2024-12-29)
+## Latest Changes (2025-01-22)
+
+### 1. SEO + GEO + Social Sharing + Conversion Infrastructure Updates
+
+#### Purpose
+
+Improve SEO/AEO/GEO, social sharing previews, trust pages, crawlability, and lay groundwork for converting to paid subscriptions. All changes are additive with no breaking changes, following TypeScript strict mode and lint-clean requirements.
+
+#### Issues Fixed
+
+1. **Missing Crawlability Files**: No robots.txt or sitemap.xml for search engine discovery
+2. **Incomplete Social Sharing**: Open Graph and Twitter Card metadata needed updates for better link previews
+3. **No Trust Pages**: Missing dedicated pricing, privacy, terms, security, and supported devices pages
+4. **Missing Structured Data**: JSON-LD structured data not injected via React for dynamic content
+5. **No LLM Discovery**: Missing llms.txt file for AI assistant discovery
+6. **Pricing Page Mismatch**: Pricing page didn't match Info page pricing information
+
+#### Complete File List
+
+**Files Modified:**
+
+- `public/robots.txt` - Updated with simplified allow rules and sitemap reference
+- `public/sitemap.xml` - Added trust page routes with priorities and lastmod dates
+- `index.html` - Updated robots meta tag, OG image path, canonical link, Twitter Card image
+- `src/pages/Index.tsx` - Added JSON-LD structured data injection, updated footer links
+- `src/App.tsx` - Added lazy-loaded routes for all trust pages
+- `src/pages/Pricing.tsx` - Updated to match Info page pricing section exactly
+
+**Files Created:**
+
+- `public/llms.txt` - LLM discovery file with product summary and key information
+- `public/og/kidscallhome-og.png` - OG image (copied from existing og-image.png)
+- `src/pages/Pricing.tsx` - Pricing page matching Info page pricing section
+- `src/pages/Privacy.tsx` - Privacy policy page with data collection and protection details
+- `src/pages/Terms.tsx` - Terms of service page with acceptable use and responsibilities
+- `src/pages/Security.tsx` - Security information page with encryption and access control details
+- `src/pages/SupportedDevices.tsx` - Supported devices page with compatibility information
+
+#### Implementation Details
+
+**1. Public Assets & Crawlability:**
+
+**robots.txt:**
+- Simplified to `User-agent: *`, `Allow: /`, and `Sitemap: https://www.kidscallhome.com/sitemap.xml`
+- Removed unnecessary `Disallow: /api/` rule (API routes not accessible via web)
+
+**sitemap.xml:**
+- Added trust page routes with appropriate priorities:
+  - `/` (priority 1.0, changefreq: weekly)
+  - `/pricing` (priority 0.9, changefreq: monthly)
+  - `/privacy` (priority 0.6, changefreq: monthly)
+  - `/terms` (priority 0.6, changefreq: monthly)
+  - `/security` (priority 0.6, changefreq: monthly)
+  - `/supported-devices` (priority 0.5, changefreq: monthly)
+- Updated lastmod dates to 2025-01-22
+- Maintained existing routes (parent/auth, child/login, info)
+
+**llms.txt:**
+- Product summary (3-6 lines)
+- Key features bullets
+- Pricing, Privacy, Security URLs
+- Support contact information
+- Concise, factual, no legal claims
+
+**2. HTML Head Metadata (index.html):**
+
+**Robots Meta Tag:**
+- Updated from `index, follow` to `index,follow,max-image-preview:large`
+- Enables large image previews in search results
+
+**Canonical Link:**
+- Updated from `https://www.kidscallhome.com` to `https://www.kidscallhome.com/` (trailing slash for consistency)
+
+**Open Graph Image:**
+- Updated from `/og-image.png` to `/og/kidscallhome-og.png`
+- Maintains 1200x630 dimensions
+- Updated both `og:image` and `og:image:secure_url`
+
+**Twitter Card Image:**
+- Updated to match OG image path: `/og/kidscallhome-og.png`
+- Maintains `summary_large_image` card type
+
+**3. Structured Data (Index.tsx):**
+
+**SoftwareApplication Schema:**
+- Name, description, URL, applicationCategory
+- Operating systems: ["Web", "Android", "iOS", "Tablet"]
+- Offers: Free tier with price "0" USD
+- Typical age range: "5-17"
+- Audience: "Families with children"
+- Feature list: 9 key features emphasizing safety and privacy
+- Screenshot: Updated to new OG image path
+
+**FAQPage Schema:**
+- 6 FAQ questions matching existing FAQ content:
+  1. "How can my child call me from a tablet without a SIM card?"
+  2. "Is this app safer than typical kids messaging apps?"
+  3. "How does Kids Call Home protect my child's privacy?"
+  4. "Can my child use this to call both parents in different homes?"
+  5. "Does Kids Call Home work on iPads and tablets?"
+  6. "Are there ads or in‑app purchases in Kids Call Home?"
+
+**Injection Method:**
+- Uses `useEffect` hook to inject JSON-LD scripts
+- Scripts marked with `data-kch-seo="true"` attribute for identification
+- Proper cleanup on unmount removes injected scripts
+- Uses `JSON.stringify()` for safe serialization
+- Scripts appended to `document.head`
+
+**4. Trust Pages:**
+
+**Pricing.tsx:**
+- Matches Info page `PricingSection` component exactly
+- Free Plan: 1 parent + 1 child, free forever
+- Family Plan: Monthly ($14.99/month) and Annual ($149/year, save 17%)
+- Up to 5 kids, unlimited family members
+- Larger Families & Organizations section with Beta Program contact link
+- Payment note about Fluid Investment Group LLC
+- CTA button to `/parent/upgrade`
+
+**Privacy.tsx:**
+- Data collection details (minimal data necessary)
+- Data we don't collect (location, browsing history, device contacts, biometrics, advertising data)
+- How we protect data (encryption, no data sales, no tracking)
+- User rights (access, correction, deletion)
+- Uses Shield, Lock, Eye icons for visual hierarchy
+
+**Terms.tsx:**
+- Acceptable use policy
+- Parent responsibilities
+- Service availability disclaimer
+- Changes to terms notice
+- Factual, no legal compliance claims
+
+**Security.tsx:**
+- Encryption details ("encrypted in transit" - not E2E unless confirmed)
+- Access control (parent-approved contacts only)
+- Data protection (minimal data, no tracking, no selling)
+- Account security (secure authentication methods)
+- Regular updates notice
+- Uses Shield, Lock, Eye icons
+
+**SupportedDevices.tsx:**
+- Device grid: iPad, Android Tablets, Kindle Fire, Chromebook, iPhone, Android Phones
+- Requirements: Camera, internet connection, modern browser, no SIM required
+- PWA information (installable on home screen)
+- Uses Tablet, Laptop, Smartphone icons
+
+**5. Routing & Navigation:**
+
+**App.tsx Routes:**
+- Added lazy-loaded imports for all trust pages
+- Routes added before catch-all `*` route:
+  - `/pricing` → `<Pricing />`
+  - `/privacy` → `<Privacy />`
+  - `/terms` → `<Terms />`
+  - `/security` → `<Security />`
+  - `/supported-devices` → `<SupportedDevices />`
+
+**Index.tsx Footer:**
+- Updated footer links to include all trust pages
+- Added Pricing, Security, and Supported Devices links
+- Maintained existing Privacy and Terms links
+- All links use consistent styling and hover effects
+
+#### Technical Implementation
+
+**JSON-LD Injection:**
+- Constants defined outside component: `softwareApplicationSchema`, `faqSchema`
+- `useEffect` hook runs once on mount (empty dependency array)
+- Creates script elements with `type="application/ld+json"`
+- Marks with `data-kch-seo="true"` for cleanup identification
+- Cleanup function removes all marked scripts on unmount
+- Prevents duplicate scripts if component re-renders
+
+**OG Image Directory:**
+- Created `/public/og/` directory
+- Copied existing `og-image.png` to `og/kidscallhome-og.png`
+- Maintains backward compatibility (old path still works)
+
+**Lazy Loading:**
+- All trust pages lazy-loaded via `React.lazy()`
+- Reduces initial bundle size
+- Pages load on-demand when routes are accessed
+
+**TypeScript Strict Mode:**
+- All files pass TypeScript strict checks
+- No `any` types, proper interfaces
+- Proper null/undefined handling
+
+**Lint Clean:**
+- All files pass ESLint checks
+- No console.log statements (uses console.warn/error where needed)
+- Proper React hooks usage
+
+#### Testing Recommendations
+
+1. **SEO Testing:**
+   - Verify robots.txt accessible at `/robots.txt`
+   - Verify sitemap.xml accessible at `/sitemap.xml`
+   - Test structured data with Google Rich Results Test
+   - Verify OG image loads at `/og/kidscallhome-og.png`
+
+2. **Social Sharing:**
+   - Test link previews on Facebook, Twitter, LinkedIn
+   - Verify OG image displays correctly (1200x630)
+   - Check Twitter Card preview
+
+3. **Trust Pages:**
+   - Verify all routes accessible and render correctly
+   - Check mobile responsiveness
+   - Verify footer links navigate correctly
+   - Test pricing page matches Info page pricing
+
+4. **Structured Data:**
+   - Verify JSON-LD scripts injected in document.head
+   - Check scripts removed on component unmount
+   - Validate schema with Google's Structured Data Testing Tool
+
+5. **LLM Discovery:**
+   - Verify llms.txt accessible at `/llms.txt`
+   - Check content is concise and factual
+
+#### Impact
+
+- **Improved SEO**: Better crawlability with robots.txt and sitemap.xml, structured data for rich snippets
+- **Better Social Sharing**: Updated OG/Twitter metadata for rich link previews
+- **Trust Building**: Dedicated trust pages improve credibility and conversion potential
+- **AI Discovery**: llms.txt helps AI assistants understand and recommend the app
+- **Conversion Ready**: Pricing page matches Info page, ready for paid conversion infrastructure
+- **No Breaking Changes**: All changes are additive, existing functionality preserved
+- **TypeScript Strict**: All code passes strict mode checks
+- **Lint Clean**: All files pass ESLint validation
+
+---
+
+### 2. Landing Page Conversion Upgrades - Hero CTA, Trust Signals & Parents Section
+
+#### Purpose
+
+Implement 5 conversion + clarity upgrades on the landing page (`src/pages/Index.tsx`) to improve hierarchy, add clear CTAs, enhance trust signals, and clarify the onboarding process without changing the overall design vibe. Keep it mobile-first, accessible, and scannable.
+
+#### Issues Fixed
+
+1. **No Primary CTA Above Fold**: Hero section lacked clear call-to-action buttons for immediate conversion, making it unclear how users should proceed
+2. **Missing Trust Micro-Copy**: No personal trust signal from founder to build credibility and emotional connection
+3. **Unclear Parents Onboarding**: Parents section didn't clearly explain the 3-step process, making signup feel complex
+4. **No Animal Code Visualization**: Animal codes mentioned in copy but not visually demonstrated, leaving concept abstract
+5. **Compliance Wording Risk**: Generic "Compliant" wording in Key Benefits Bar without concrete privacy mechanisms, potentially creating legal risk
+
+#### Complete File List
+
+**Files Modified:**
+
+- `src/pages/Index.tsx` - Complete landing page conversion upgrades (~1,239 lines total):
+  - Added hero CTA buttons with smooth scrolling (lines 304-337)
+  - Added trust micro-copy below hero subcopy (lines 298-301)
+  - Created new Parents section with 3-step process (lines 748-860)
+  - Added animal code visual cards (lines 821-850)
+  - Replaced compliance wording with privacy-first messaging (line 382)
+  - Added privacy section with concrete mechanisms (lines 1005-1045)
+  - Updated footer with privacy/terms links (lines 1060-1076)
+  - Updated device compatibility text (line 803)
+  - Added `id="kids-login"` to Kids Login card (line 156)
+  - Removed duplicate parent CTA from hero section (lines 414-432)
+
+#### Implementation Details
+
+**1. Hero CTA Above the Fold:**
+
+**Primary CTA Button:**
+- Text: "Create your free family space"
+- Position: Directly under hero headline and subcopy
+- Styling: Large button with Users icon, primary color, shadow effects
+- Behavior: Smooth scrolls to `#parents-get-started` section, or navigates to `/parent/auth` if section not found
+- Tracking: Calls `trackPrimaryCTA("Create your free family space", "explore", "hero")`
+- Accessibility: Proper `aria-label` and keyboard navigation support
+
+**Secondary Text Link:**
+- Text: "Kids login"
+- Position: Next to primary CTA button (flexbox layout)
+- Styling: Underlined text link with primary color, hover effects
+- Behavior: Smooth scrolls to `#kids-login` section, or navigates to `/child/login` if section not found
+- Accessibility: Proper `aria-label` and focus states
+
+**Smooth Scrolling Implementation:**
+- Uses `scrollIntoView({ behavior: "smooth", block: "start" })`
+- Fallback navigation if target element not found
+- Works even if user is already near the section
+
+**2. Hero Trust Micro-Copy:**
+
+**Trust Line:**
+- Text: "Built by a long-distance dad for families who want safe, simple calling."
+- Position: Directly below hero subcopy, before CTA buttons
+- Styling: Smaller text (`text-sm sm:text-base md:text-lg`), italic, muted foreground with 80% opacity
+- Purpose: Builds personal connection and credibility without being pushy
+
+**3. Parents Section: 3-Step How It Works:**
+
+**New Section Created:**
+- Section ID: `parents-get-started` (for anchor navigation)
+- Background: `bg-muted/20` for visual separation
+- Heading: "How It Works for Parents"
+
+**3-Step Process:**
+- **Step 1**: Create your family space
+  - Icon: `UserPlus` from lucide-react
+  - Description: "Set up your account and add your children in minutes."
+- **Step 2**: Approve who your child can call
+  - Icon: `Shield` from lucide-react
+  - Description: "You control every contact. Only approved family members can be called."
+- **Step 3**: Install on your child's device
+  - Icon: `Download` from lucide-react
+  - Description: "Then they call using their animal code. Simple and secure."
+
+**Layout:**
+- Grid layout: `md:grid-cols-3` (stacks on mobile)
+- Each step: Icon in circular badge + heading + description
+- Spacing: Consistent gaps and padding
+
+**Primary CTA Button:**
+- Text: "Get started free"
+- Styling: Large button with Users icon and ArrowRight icon
+- Behavior: Navigates to `/parent/auth`
+- Tracking: Calls `trackPrimaryCTA("Get started free", "commit", "parents-get-started")`
+- Position: Centered below 3-step process
+
+**4. Animal Code Mini Visual:**
+
+**Visual Cards:**
+- Layout: Grid with 3 sample cards (Blue Bear, Red Fox, Green Lion)
+- Responsive: `grid-cols-1 sm:grid-cols-3` (stacks on mobile)
+- Each card contains:
+  - Color dot: Emoji (🐻, 🦊, 🦁) in colored circle (blue-500, green-500, purple-500)
+  - Animal name: Bold, primary color text
+  - Helper text: "Kids type this to call you" in muted foreground
+
+**Styling:**
+- Card component with hover shadow effects
+- Centered layout with max-width constraint
+- Consistent spacing and padding
+
+**5. Compliance Wording Safety:**
+
+**Key Benefits Bar Update:**
+- Changed "Privacy Compliant" to "Privacy-first by design"
+- More accurate and avoids legal compliance claims
+
+**New Privacy & Compliance Section:**
+- Heading: "Privacy-first by design"
+- Layout: 2-column grid on desktop, stacks on mobile
+- Four concrete mechanisms with icons:
+  1. Parent-approved contacts only (Shield icon)
+  2. No public profiles or strangers (Lock icon)
+  3. Data not sold to advertisers (Eye icon)
+  4. Secure transmission (in transit) (Shield icon)
+
+**Footer Updates:**
+- Added Privacy and Terms links
+- Links to `/privacy` and `/terms` (placeholders until routes exist)
+- Styled as underlined text links with hover effects
+- Separated by bullet point for visual clarity
+
+**Device Compatibility Text:**
+- Updated from detailed device list to: "Works on tablets, phones, and laptops"
+- Removed repetitive device-specific mentions
+- More concise while maintaining clarity
+
+**6. Additional Improvements:**
+
+**Anchor IDs:**
+- Added `id="kids-login"` to Kids Login card for smooth scrolling
+- Added `id="parents-get-started"` to new Parents section
+
+**Removed Duplicate CTA:**
+- Removed old "Create a family space" button from hero section (was redundant with new CTA)
+
+**Icon Imports:**
+- Added `UserPlus` and `Download` icons from lucide-react for 3-step process
+
+#### Technical Implementation
+
+**Smooth Scrolling:**
+- Uses native `scrollIntoView()` API with `behavior: "smooth"`
+- Fallback to navigation if target element not found
+- Works across all modern browsers
+
+**Funnel Tracking:**
+- Hero CTA: `trackPrimaryCTA("Create your free family space", "explore", "hero")`
+- Parents CTA: `trackPrimaryCTA("Get started free", "commit", "parents-get-started")`
+- Intent types: "explore" for hero (early stage), "commit" for parents section (later stage)
+
+**Responsive Design:**
+- All new elements use Tailwind responsive classes
+- Mobile-first approach with `sm:`, `md:`, `lg:` breakpoints
+- Grid layouts stack on mobile, expand on larger screens
+
+**Accessibility:**
+- All buttons have proper `aria-label` attributes
+- Text links have focus states for keyboard navigation
+- Smooth scrolling respects user's `prefers-reduced-motion` setting (browser default)
+
+**Component Structure:**
+- Uses existing Card component from shadcn/ui
+- Uses existing Button component with proper variants
+- Maintains consistent spacing and typography with rest of page
+
+#### Testing Recommendations
+
+1. **Smooth Scrolling:**
+   - Test on different browsers (Chrome, Firefox, Safari, Edge)
+   - Verify scrolling works when user is already near target section
+   - Test with keyboard navigation (Tab + Enter)
+
+2. **Responsive Design:**
+   - Test on mobile devices (320px, 375px, 414px widths)
+   - Test on tablets (768px, 1024px widths)
+   - Verify grid layouts stack properly on mobile
+
+3. **Anchor Navigation:**
+   - Test direct URL navigation to `#parents-get-started` and `#kids-login`
+   - Verify sections scroll into view correctly
+   - Test browser back button behavior
+
+4. **Funnel Tracking:**
+   - Verify `trackPrimaryCTA` events fire correctly
+   - Check Google Analytics for event tracking
+   - Verify intent types are correct ("explore" vs "commit")
+
+5. **Accessibility:**
+   - Test with screen reader (NVDA, JAWS, VoiceOver)
+   - Verify all buttons and links are keyboard accessible
+   - Test focus states are visible
+
+#### Impact
+
+- **Improved Conversion**: Clear CTAs above the fold guide users to signup, reducing friction
+- **Better Trust Signals**: Personal founder story builds credibility and emotional connection
+- **Clearer Onboarding**: 3-step process helps parents understand setup is simple and quick
+- **Visual Clarity**: Animal code cards demonstrate the concept visually, making abstract concept concrete
+- **Legal Safety**: Privacy-first wording avoids compliance claims while building trust with concrete mechanisms
+- **Better Navigation**: Smooth scrolling and anchor links improve UX and reduce bounce rate
+- **Mobile-First**: All changes responsive and accessible on mobile devices
+- **No Breaking Changes**: Existing functionality preserved, changes are additive
+- **Performance**: No new dependencies added, lightweight implementation
+- **SEO**: New content sections improve keyword coverage and user engagement signals
+
+---
+
+## Previous Changes (2025-01-22)
+
+### 1. Email Typo Prevention - Confirm Email Field & Domain Typo Detection
+
+#### Purpose
+
+Prevent common email typos during signup with lightweight client-side validation, typo suggestions, and email confirmation field. Also ensure family role selection (relationship_type) is properly saved to adult_profiles table.
+
+#### Issues Fixed
+
+1. **No Email Confirmation**: Users could mistype email addresses without detection, leading to account creation with incorrect emails
+2. **Common Domain Typos**: No detection for common typos like "gmail.con", "hotnail.com", "outlok.com" causing signup failures
+3. **No Email Normalization**: Email comparison didn't account for whitespace or case differences
+4. **Missing Validation Feedback**: Users didn't see validation errors until form submission
+5. **Relationship Type Not Saved**: Family role selection from "I'm a..." dropdown wasn't being saved to adult_profiles table
+
+#### Complete File List
+
+**Files Created:**
+
+- `src/utils/emailValidation.ts` - Email normalization, validation, and typo correction utilities (~150 lines)
+- `src/utils/emailValidation.test.ts` - Unit tests for email validation functions (~100 lines)
+- `src/utils/emailValidation.dev-test.ts` - Dev console test snippet for quick testing (~80 lines)
+
+**Files Modified:**
+
+- `src/components/auth/EmailInputWithBreachCheck.tsx` - Added confirmEmail field, typo suggestions, validation errors (~220 lines)
+- `src/pages/ParentAuth/SignupForm.tsx` - Added confirmEmail prop, button disable logic (~170 lines)
+- `src/pages/ParentAuth/useAuthState.ts` - Added confirmEmail state (~75 lines)
+- `src/pages/ParentAuth/ParentAuth.tsx` - Added email validation, passes familyRole to handler (~340 lines)
+- `src/pages/ParentAuth/authHandlers.ts` - Added familyRole parameter, creates adult_profiles with relationship_type (~330 lines)
+
+#### Implementation Details
+
+**1. Email Validation Utilities (`src/utils/emailValidation.ts`):**
+
+**Functions Created:**
+
+- `normalizeEmail(email: string): string`
+  - Trims whitespace and converts to lowercase
+  - Returns empty string for invalid input
+  - Used for consistent email comparison
+
+- `isValidEmailBasic(email: string): boolean`
+  - Validates email shape: exactly one "@", at least one ".", no spaces, TLD ≥ 2 chars
+  - Checks local part is not empty
+  - More lenient than full RFC validation but catches common mistakes
+
+- `suggestEmailCorrection(email: string): string | null`
+  - Detects common domain typos and suggests corrections
+  - Typo mapping includes:
+    - Gmail: gmail.con, gmail.co, gmal.com, gmial.com, gmaill.com, gmail.cm, etc.
+    - Hotmail: hotnail.com, hotmial.com, hotmai.com, etc.
+    - Outlook: outlok.com, outlook.co, outlook.con
+    - Yahoo: yaho.com, yhoo.com, yahoo.co, yahoo.con
+    - iCloud: iclud.com, icloud.co, icloud.con, iclod.com
+    - AOL, Protonmail, Yandex variants
+  - Returns corrected email with original local part preserved
+  - Returns null if no typo detected
+
+**2. Email Input Component Updates (`src/components/auth/EmailInputWithBreachCheck.tsx`):**
+
+**New Props:**
+- `confirmEmail?: string` - Confirm email value
+- `onConfirmEmailChange?: (value: string) => void` - Confirm email change handler
+- `showConfirmEmail?: boolean` - Whether to show confirm email field (default: false)
+
+**New Features:**
+- **Confirm Email Field**: Added below email input with same styling
+- **Typo Suggestion Banner**: Non-blocking blue banner with "Did you mean <suggestedEmail>?" and "Use this" button
+- **Inline Validation Errors**:
+  - "Enter a valid email address" shown when email invalid and field blurred
+  - "Emails don't match" shown when confirmEmail doesn't match and field blurred
+- **Visual Feedback**: Red border on invalid fields, green checkmark when valid
+- **Breach Check Integration**: Restricted email (breach) warning only shows when emails match (avoids double friction)
+
+**State Management:**
+- `emailSuggestion`: Stores suggested correction
+- `showSuggestion`: Controls banner visibility
+- `emailBlurred`: Tracks if email field has been blurred
+- `confirmEmailBlurred`: Tracks if confirm email field has been blurred
+
+**3. Signup Form Updates (`src/pages/ParentAuth/SignupForm.tsx`):**
+
+**New Props:**
+- `confirmEmail: string` - Confirm email value
+- `onConfirmEmailChange: (email: string) => void` - Confirm email change handler
+
+**Button Disable Logic:**
+- Submit button disabled when:
+  - `disabled` prop is true (loading state)
+  - `loading` is true
+  - `!isFormValid` (email invalid or emails don't match)
+- `isFormValid` calculated using:
+  - `isValidEmailBasic(email)` - Email format validation
+  - `normalizeEmail(email) === normalizeEmail(confirmEmail)` - Email match check
+
+**4. Signup Handler Updates (`src/pages/ParentAuth/authHandlers.ts`):**
+
+**New Parameter:**
+- `familyRole?: "parent" | "grandparent" | "aunt" | "uncle" | "cousin" | "other"` (default: "parent")
+
+**Adult Profiles Creation:**
+- After successful signup, creates/updates `adult_profiles` record:
+  - `user_id`: New user's ID
+  - `family_id`: User's ID (for parents, family_id = user_id initially)
+  - `role`: "parent" if familyRole === "parent", otherwise "family_member"
+  - `relationship_type`: null if "parent", otherwise the selected value (grandparent, aunt, uncle, cousin, other)
+  - `name`: Sanitized name from form
+  - `email`: Normalized email
+- Uses `upsert` with `onConflict: "user_id,family_id,role"` to handle existing records
+- Non-blocking: Signup succeeds even if adult_profiles creation fails (logged as warning)
+
+**Auth Metadata:**
+- Stores `familyRole` in `raw_user_meta_data` for reference:
+  ```typescript
+  data: { 
+    name: validation.sanitized.name || name, 
+    role: "parent",
+    familyRole: familyRole, // Store for later use
+  }
+  ```
+
+**5. Validation Integration (`src/pages/ParentAuth/ParentAuth.tsx`):**
+
+**Email Validation Before Submission:**
+- Validates email format using `isValidEmailBasic()`
+- Validates email match using normalized comparison
+- Shows toast notifications for validation errors:
+  - "Invalid email" - Enter a valid email address
+  - "Emails don't match" - Please make sure both emails match
+- Prevents form submission if validation fails
+
+**Family Role Passing:**
+- Passes `authState.familyRole` to `signupHandler()`
+- Family role comes from "I'm a..." dropdown in SignupForm
+
+#### Testing Recommendations
+
+**Email Validation Testing:**
+1. Test valid emails: `user@example.com`, `test.email@domain.co.uk`
+2. Test invalid emails: `user@example`, `user@@example.com`, `user @example.com`
+3. Test email normalization: `  Test@Example.COM  ` should match `test@example.com`
+4. Test typo suggestions: `user@gmail.con` should suggest `user@gmail.com`
+5. Test confirm email matching: Different case/whitespace should still match
+
+**Typo Detection Testing:**
+1. Test Gmail typos: gmail.con, gmail.co, gmal.com, gmial.com
+2. Test Hotmail typos: hotnail.com, hotmial.com
+3. Test Outlook typos: outlok.com
+4. Test Yahoo typos: yaho.com
+5. Test iCloud typos: iclud.com
+6. Verify "Use this" button applies correction and clears confirmEmail
+
+**Form Validation Testing:**
+1. Test submit button disabled when email invalid
+2. Test submit button disabled when emails don't match
+3. Test submit button enabled when both valid and matching
+4. Test error messages appear on blur
+5. Test error messages clear when fixed
+
+**Relationship Type Testing:**
+1. Sign up as "parent" - verify `adult_profiles.role = 'parent'`, `relationship_type = null`
+2. Sign up as "grandparent" - verify `adult_profiles.role = 'family_member'`, `relationship_type = 'grandparent'`
+3. Verify adult_profiles record created during signup
+4. Verify existing records updated if conflict occurs
+
+**Integration Testing:**
+1. Test full signup flow with email typo suggestion
+2. Test signup with mismatched emails (should block submission)
+3. Test signup with valid matching emails (should succeed)
+4. Verify breach check only shows when emails match
+5. Test mobile responsiveness of confirm email field
+
+#### Impact
+
+**User Experience:**
+- **Reduced Signup Errors**: Email confirmation prevents typos from going undetected
+- **Better UX**: Typo suggestions help users correct mistakes without blocking signup
+- **Clear Feedback**: Inline validation errors guide users to fix issues immediately
+- **Mobile-Friendly**: Lightweight client-side validation, no new paid services required
+
+**Data Quality:**
+- **Consistent Data**: Email normalization ensures proper comparison regardless of whitespace/case
+- **Relationship Type Saved**: Family role selection now properly saved to adult_profiles table
+- **Database Consistency**: adult_profiles records created with correct role and relationship_type during signup
+
+**Technical:**
+- **Lightweight**: All validation client-side, no API calls for typo detection
+- **Non-Blocking**: Typo suggestions don't prevent signup, only guide users
+- **Backward Compatible**: Existing signup flow unchanged, new features are additive
+- **Type-Safe**: Full TypeScript support with proper interfaces
+
+---
+
+## Previous Changes (2024-12-29)
 
 ### 1. Network Quality Badge - Green for Good Reception & Keyboard Shortcut Fix
 

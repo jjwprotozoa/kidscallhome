@@ -7,7 +7,251 @@
 
 > **Note**: For detailed technical information, complete file lists, testing recommendations, and implementation specifics, see [CHANGES_DETAILED.md](./CHANGES_DETAILED.md).
 
-## Latest Changes (2025-01-22) - Email Breach Check Browser Limitation Documentation
+## Latest Changes (2025-01-22) - SEO, Social Sharing & Trust Pages Infrastructure
+
+### -28. SEO + GEO + Social Sharing + Conversion Infrastructure Updates
+
+- **Purpose**: Improve SEO/AEO/GEO, social sharing previews, trust pages, crawlability, and lay groundwork for converting to paid subscriptions
+- **Issues Addressed**:
+  1. **Missing Crawlability Files**: No robots.txt or sitemap.xml for search engine discovery
+  2. **Incomplete Social Sharing**: Open Graph and Twitter Card metadata needed updates for better link previews
+  3. **No Trust Pages**: Missing dedicated pricing, privacy, terms, security, and supported devices pages
+  4. **Missing Structured Data**: JSON-LD structured data not injected via React for dynamic content
+  5. **No LLM Discovery**: Missing llms.txt file for AI assistant discovery
+
+#### Changes Applied
+
+- **Public Assets & Crawlability**:
+  - **`/public/robots.txt`**: Updated with `Allow: /` and sitemap reference
+  - **`/public/sitemap.xml`**: Updated with trust page routes:
+    - `/` (priority 1.0)
+    - `/pricing` (0.9)
+    - `/privacy` (0.6)
+    - `/terms` (0.6)
+    - `/security` (0.6)
+    - `/supported-devices` (0.5)
+  - **`/public/llms.txt`**: Created with product summary, key features, and links to pricing/privacy/security pages
+
+- **HTML Head Metadata** (`index.html`):
+  - Updated robots meta: `index,follow,max-image-preview:large`
+  - Updated canonical link: `https://www.kidscallhome.com/`
+  - Updated Open Graph image: `/og/kidscallhome-og.png` (1200x630)
+  - Updated Twitter Card image to match OG image path
+  - Theme-color already set correctly
+
+- **Structured Data** (`src/pages/Index.tsx`):
+  - Added JSON-LD `SoftwareApplication` schema with app details, features, and offers
+  - Added JSON-LD `FAQPage` schema with 6 FAQ questions/answers
+  - Injected via `useEffect` with proper cleanup on unmount
+  - Uses constants for schema objects, safely stringified
+
+- **Trust Pages Created**:
+  - **`src/pages/Pricing.tsx`**: Matches Info page pricing (Free plan, Family Plan monthly/annual, larger families section)
+  - **`src/pages/Privacy.tsx`**: Data collection, protection, and user rights information
+  - **`src/pages/Terms.tsx`**: Acceptable use, parent responsibilities, service availability
+  - **`src/pages/Security.tsx`**: Encryption details, access control, data protection (uses "encrypted in transit")
+  - **`src/pages/SupportedDevices.tsx`**: Device compatibility and requirements
+
+- **Routing & Navigation**:
+  - Added lazy-loaded routes in `App.tsx` for all trust pages
+  - Updated footer in `Index.tsx` with links to Pricing, Privacy, Terms, Security, and Supported Devices
+
+#### Files Modified
+
+- `public/robots.txt` - Updated with simplified allow rules
+- `public/sitemap.xml` - Added trust page routes with priorities
+- `index.html` - Updated robots meta, OG image path, canonical link
+- `src/pages/Index.tsx` - Added JSON-LD structured data injection, updated footer links
+- `src/App.tsx` - Added routes for trust pages
+
+#### Files Created
+
+- `public/llms.txt` - LLM discovery file with product summary
+- `public/og/kidscallhome-og.png` - OG image (copied from existing og-image.png)
+- `src/pages/Pricing.tsx` - Pricing page matching Info page
+- `src/pages/Privacy.tsx` - Privacy policy page
+- `src/pages/Terms.tsx` - Terms of service page
+- `src/pages/Security.tsx` - Security information page
+- `src/pages/SupportedDevices.tsx` - Supported devices page
+
+#### Impact
+
+- **Improved SEO**: Better crawlability with robots.txt and sitemap.xml
+- **Better Social Sharing**: Updated OG/Twitter metadata for rich link previews
+- **Trust Building**: Dedicated trust pages improve credibility and conversion
+- **AI Discovery**: llms.txt helps AI assistants understand and recommend the app
+- **Structured Data**: JSON-LD improves search engine understanding and rich snippets
+- **Conversion Ready**: Pricing page matches Info page, ready for paid conversion
+- **No Breaking Changes**: All changes are additive, existing functionality preserved
+
+---
+
+## Previous Changes (2025-01-22) - Child Login UX Improvements & Navigation Enhancements
+
+### -27. Child Login UX Improvements - Keyboard Toggle, Switch to Parent & Triple Confirmation Logout
+
+- **Purpose**: Improve child login experience with keyboard flexibility, add navigation options for parents who accidentally access child login, and provide secure logout option for children with triple confirmation
+- **Issues Addressed**:
+  1. **No Keyboard Option**: Family code entry only used on-screen keypad, which might not be intuitive for all users
+  2. **No Way to Switch Accounts**: If a parent accidentally navigated to child login, there was no easy way to get back to parent login
+  3. **No Logout Option**: Children had no way to log out if needed (logout was removed to prevent accidental logouts)
+  4. **Accidental Logout Risk**: Adding logout back could cause children to accidentally log out
+
+#### Changes Applied
+
+- **Keyboard Toggle for Family Code Entry** (`src/components/childLogin/FamilyCodeKeypad.tsx`):
+  - Added toggle button (keyboard icon) in top-right corner next to help button
+  - Switches between on-screen keypad (default) and device keyboard input
+  - When using device keyboard:
+    - Shows standard text input field that auto-focuses
+    - Automatically converts to uppercase and filters to alphanumeric characters
+    - Limits input to 6 characters
+    - Hides on-screen keypad and block navigation
+  - Icon changes to indicate current mode (keyboard icon vs grid icon)
+  - Tooltip on hover: "Switch to device keyboard" / "Switch to on-screen keypad"
+
+- **Switch to Parent Navigation**:
+  - **Child Navigation Menu** (`src/components/Navigation.tsx`):
+    - Added "Switch to Parent" option in "More" dropdown menu (desktop)
+    - Added "Switch to Parent" option in hamburger menu drawer (mobile)
+    - Uses `Shuffle` icon to indicate account switching
+    - Navigates directly to `/parent/auth` when clicked
+    - Placed below "App Information" with divider separator
+  - **Child Login Screens**:
+    - **FamilyCodeKeypad**: Added icon-only "Switch to Parent" button in top-right corner
+    - **ColorAnimalSelector**: Added icon-only "Switch to Parent" button in top-right corner
+    - **NumberEntryScreen**: Added icon-only "Switch to Parent" button in top-right corner
+    - All buttons use same styling as help/keyboard toggle buttons (circular icon button)
+    - Consistent placement across all login screens for easy access
+
+- **Triple Confirmation Logout for Children** (`src/components/Navigation.tsx`):
+  - Added logout option to child navigation menu (both mobile and desktop)
+  - Implemented triple confirmation dialog system to prevent accidental logouts:
+    - **Step 1**: "Are you sure you want to log out?" - Warns that login code will be required again
+    - **Step 2**: "Are you really sure?" - Emphasizes complete logout
+    - **Step 3**: "Final confirmation" - Last chance with "Last chance!" warning
+  - Each step requires explicit "Yes, Continue" confirmation
+  - Cancel button available at all steps
+  - Final step shows "Yes, Logout" button
+  - Uses `e.preventDefault()` to prevent dialog from auto-closing during intermediate steps
+  - Clears child session from localStorage using `clearChildSession()`
+  - Resets badge store and navigates to `/child/login` after logout
+
+#### Technical Implementation
+
+- **Keyboard Toggle**:
+  - State management: `useDeviceKeyboard` state tracks current input mode
+  - Input ref for auto-focus when switching to device keyboard
+  - Conditional rendering: Shows either keypad or text input based on mode
+  - Input attributes: `autoCapitalize="characters"`, `autoCorrect="off"`, `spellCheck="false"` for optimal UX
+
+- **Switch to Parent**:
+  - Uses `useNavigate` hook from react-router-dom
+  - Icon-only buttons match existing help/keyboard toggle styling
+  - Consistent placement in top-right corner on all child login screens
+
+- **Triple Confirmation Logout**:
+  - State management: `childLogoutStep` tracks current confirmation step (0, 1, 2, or null)
+  - AlertDialog with conditional content based on step
+  - `handleChildLogout` function clears session and navigates only after step 2 confirmation
+  - Prevents default close behavior on intermediate steps using `e.preventDefault()`
+
+#### Files Modified
+
+- `src/components/Navigation.tsx` - Added "Switch to Parent" option and triple confirmation logout for children
+- `src/components/childLogin/FamilyCodeKeypad.tsx` - Added keyboard toggle and "Switch to Parent" button
+- `src/components/childLogin/ColorAnimalSelector.tsx` - Added "Switch to Parent" button
+- `src/components/childLogin/NumberEntryScreen.tsx` - Added "Switch to Parent" button
+
+#### Impact
+
+- **Better UX**: Users can choose between on-screen keypad and device keyboard based on preference
+- **Reduced Friction**: Parents who accidentally navigate to child login can easily switch back
+- **Secure Logout**: Children can log out when needed, but triple confirmation prevents accidental logouts
+- **Consistent Navigation**: "Switch to Parent" available in both navigation menu and login screens
+- **Accessibility**: Keyboard toggle provides alternative input method for users who prefer device keyboard
+- **No Breaking Changes**: All changes are additive, existing functionality preserved
+
+---
+
+## Previous Changes (2025-01-22) - Landing Page Conversion & Clarity Upgrades
+
+### -26. Landing Page Conversion Upgrades - Hero CTA, Trust Signals & Parents Section
+
+- **Purpose**: Implement 5 conversion + clarity upgrades on the landing page to improve hierarchy, add clear CTAs, and enhance trust signals without changing the overall design vibe
+- **Issues Addressed**:
+  1. **No Primary CTA Above Fold**: Hero section lacked clear call-to-action buttons for immediate conversion
+  2. **Missing Trust Micro-Copy**: No personal trust signal from founder to build credibility
+  3. **Unclear Parents Onboarding**: Parents section didn't clearly explain the 3-step process
+  4. **No Animal Code Visualization**: Animal codes mentioned but not visually demonstrated
+  5. **Compliance Wording Risk**: Generic "Compliant" wording without concrete privacy mechanisms
+
+#### Changes Applied
+
+- **Hero CTA Above the Fold** (`src/pages/Index.tsx`):
+  - Added primary CTA button: "Create your free family space" under main headline
+  - Added secondary text link: "Kids login" for quick access
+  - Both buttons use smooth scrolling to respective sections (`#parents-get-started` and `#kids-login`)
+  - Added `id="kids-login"` to Kids Login card for anchor navigation
+  - CTA button tracks funnel event with "explore" intent type
+
+- **Hero Trust Micro-Copy**:
+  - Added trust line: "Built by a long-distance dad for families who want safe, simple calling."
+  - Styled as smaller, italic text below hero subcopy for subtle emphasis
+  - Builds personal connection and credibility
+
+- **Parents Section: 3-Step How It Works**:
+  - Created new "How It Works for Parents" section with `id="parents-get-started"`
+  - Added 3-step bulleted list with icons:
+    - Create your family space (UserPlus icon)
+    - Approve who your child can call (Shield icon)
+    - Install on your child's device (Download icon)
+  - Added primary "Get started free" button linking to `/parent/auth`
+  - Removed duplicate parent CTA from hero section to avoid redundancy
+
+- **Animal Code Mini Visual**:
+  - Added sample animal code cards below the 3 steps:
+    - Blue Bear, Red Fox, Green Lion
+  - Each card shows color dot (emoji), animal name, and helper text
+  - Responsive grid (stacks on mobile, 3 columns on larger screens)
+  - Lightweight Card components with hover effects
+
+- **Compliance Wording Safety**:
+  - Replaced "Compliant" with "Privacy-first by design" in Key Benefits Bar
+  - Added dedicated Privacy & Compliance section with concrete mechanisms:
+    - Parent-approved contacts only
+    - No public profiles or strangers
+    - Data not sold to advertisers
+    - Secure transmission (in transit)
+  - Added footer links to `/privacy` and `/terms` (placeholders until routes exist)
+  - Updated device compatibility text to "Works on tablets, phones, and laptops" (removed repetitive device list)
+
+#### Files Modified
+
+- `src/pages/Index.tsx` - Complete landing page conversion upgrades:
+  - Added hero CTA buttons with smooth scrolling
+  - Added trust micro-copy
+  - Created new Parents section with 3-step process
+  - Added animal code visual cards
+  - Replaced compliance wording with privacy-first messaging
+  - Added privacy section with concrete mechanisms
+  - Updated footer with privacy/terms links
+  - Updated device compatibility text
+
+#### Impact
+
+- **Improved Conversion**: Clear CTAs above the fold guide users to signup
+- **Better Trust Signals**: Personal founder story builds credibility
+- **Clearer Onboarding**: 3-step process helps parents understand setup
+- **Visual Clarity**: Animal code cards demonstrate the concept visually
+- **Legal Safety**: Privacy-first wording avoids compliance claims while building trust
+- **Better Navigation**: Smooth scrolling and anchor links improve UX
+- **Mobile-First**: All changes responsive and accessible on mobile devices
+- **No Breaking Changes**: Existing functionality preserved, changes are additive
+
+---
+
+## Previous Changes (2025-01-22) - Email Breach Check Browser Limitation Documentation
 
 ### -25. Email Breach Check - Browser Limitation Documentation & Error Handling Improvements
 

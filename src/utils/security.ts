@@ -183,18 +183,15 @@ export const safeLog = {
   },
 
   error: (...args: any[]) => {
-    // In production, completely disable error logging to console
-    // Errors should be handled through error tracking services instead
-    if (import.meta.env.PROD) {
-      return;
-    }
-    // In development, sanitize and log
+    // CRITICAL: Always log errors, even in production, for debugging
+    // Errors are essential for diagnosing blank screens and rendering issues
+    // Sanitize and log
     const sanitized = args.map((arg) => {
       if (arg instanceof Error) {
         return {
           name: arg.name,
           message: arg.message,
-          stack: arg.stack,
+          stack: import.meta.env.DEV ? arg.stack : '[REDACTED]',
         };
       }
       if (typeof arg === 'object' && arg !== null) {
