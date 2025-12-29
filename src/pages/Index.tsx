@@ -63,60 +63,8 @@ const softwareApplicationSchema = {
   softwareVersion: "1.0",
 };
 
-const faqSchema = {
-  "@context": "https://schema.org",
-  "@type": "FAQPage",
-  mainEntity: [
-    {
-      "@type": "Question",
-      name: "How can my child call me from a tablet without a SIM card?",
-      acceptedAnswer: {
-        "@type": "Answer",
-        text: "Kids Call Home works perfectly on tablets, iPads, Kindle Fire, and Chromebooks over Wi‑Fi without needing a SIM card or phone number. Your child simply opens the app, enters their login code, and can call approved family members. Parents control all contacts, so only family members you approve can connect with your child.",
-      },
-    },
-    {
-      "@type": "Question",
-      name: "Is this app safer than typical kids messaging apps?",
-      acceptedAnswer: {
-        "@type": "Answer",
-        text: 'Yes. Kids Call Home is designed specifically for family-only communication. Unlike many kids messaging apps, there are no public profiles, no search features, no friend requests from strangers, and no "friends of friends" connections. Only parent-approved family members can contact your child. The app uses encrypted communication, collects minimal data, does not show ads, and does not sell family data to advertisers or partners.',
-      },
-    },
-    {
-      "@type": "Question",
-      name: "How does Kids Call Home protect my child's privacy?",
-      acceptedAnswer: {
-        "@type": "Answer",
-        text: "Kids Call Home uses encrypted calls and messages to protect your family's communication. The app collects minimal data necessary for the service to function, does not use tracking for advertising purposes, and does not sell family data. There are no manipulative design patterns like infinite feeds, aggressive notifications, or surprise in‑app purchases. Parents have full control over who can contact their child.",
-      },
-    },
-    {
-      "@type": "Question",
-      name: "Can my child use this to call both parents in different homes?",
-      acceptedAnswer: {
-        "@type": "Answer",
-        text: "Yes. Kids Call Home is built for co‑parents and long‑distance family. Your child can easily call both parents, grandparents, and other approved family members across different homes and even different countries. Parents control which family members are approved, making it ideal for shared custody situations and international families.",
-      },
-    },
-    {
-      "@type": "Question",
-      name: "Does Kids Call Home work on iPads and tablets?",
-      acceptedAnswer: {
-        "@type": "Answer",
-        text: "Yes. Kids Call Home works great on iPads, Android tablets, Kindle Fire, and Chromebooks. It works over Wi‑Fi without needing a SIM card or phone number, making it perfect for kids who don't have their own phone. The app is also available as a Progressive Web App (PWA), so it can be added to the home screen like a native app.",
-      },
-    },
-    {
-      "@type": "Question",
-      name: "Are there ads or in‑app purchases in Kids Call Home?",
-      acceptedAnswer: {
-        "@type": "Answer",
-        text: "No. Kids Call Home has no ads, no in‑app purchases, and no manipulative design features. The app is designed to be a simple, safe communication tool for families, not a platform for engagement or monetization. Your child's attention stays on connecting with family, not on games, feeds, or notifications designed to keep them online longer.",
-      },
-    },
-  ],
-};
+// FAQPage schema removed - using static version from index.html (15 questions)
+// to avoid duplication. Google only allows one FAQPage schema per page.
 
 const Index = () => {
   const navigate = useNavigate();
@@ -200,6 +148,8 @@ const Index = () => {
   }, [isCheckingAuth]);
 
   // Inject JSON-LD structured data for SEO
+  // Note: FAQPage schema is already in index.html (15 questions)
+  // We only inject SoftwareApplication schema here if needed for dynamic updates
   useEffect(() => {
     // Remove any existing JSON-LD scripts we may have added
     const existingScripts = document.querySelectorAll(
@@ -207,19 +157,16 @@ const Index = () => {
     );
     existingScripts.forEach((script) => script.remove());
 
-    // Add SoftwareApplication schema
+    // Add SoftwareApplication schema (if dynamic updates are needed)
+    // Note: Static version already exists in index.html
     const softwareScript = document.createElement("script");
     softwareScript.type = "application/ld+json";
     softwareScript.setAttribute("data-kch-seo", "true");
     softwareScript.textContent = JSON.stringify(softwareApplicationSchema);
     document.head.appendChild(softwareScript);
 
-    // Add FAQPage schema
-    const faqScript = document.createElement("script");
-    faqScript.type = "application/ld+json";
-    faqScript.setAttribute("data-kch-seo", "true");
-    faqScript.textContent = JSON.stringify(faqSchema);
-    document.head.appendChild(faqScript);
+    // FAQPage schema removed - using static version from index.html to avoid duplication
+    // Google only allows one FAQPage schema per page
 
     // Cleanup on unmount
     return () => {

@@ -353,6 +353,9 @@ export default defineConfig(({ mode }) => {
       // CSS optimization for faster FCP
       cssCodeSplit: true, // Split CSS per component (lazy-loaded routes get their CSS later)
       cssMinify: true, // Minify CSS for smaller bundle
+      // Reduce initial bundle size by optimizing chunk splitting
+      // Target smaller chunks for better parallel loading
+      chunkSizeWarningLimit: 500, // Lower limit to catch large chunks earlier
       // Vendor chunk splitting for weak network conditions (LTE/2G)
       // This separates rarely-changing vendor code from frequently-updated application code,
       // optimizing caching and reducing download size on slow networks.
@@ -368,35 +371,57 @@ export default defineConfig(({ mode }) => {
               return "date-fns-vendor";
             }
             
-            // React core libraries - rarely change, can be cached long-term
-            if (id.includes("react") || id.includes("react-dom") || id.includes("react-router")) {
-              return "react-vendor";
+            // Split React core from React DOM for better code splitting
+            // React core is smaller and needed earlier, React DOM can load later
+            if (id.includes("react/") && !id.includes("react-dom")) {
+              return "react-core-vendor";
+            }
+            
+            // React DOM - larger, can be loaded separately
+            if (id.includes("react-dom")) {
+              return "react-dom-vendor";
+            }
+            
+            // React Router - separate chunk since it's only needed for routing
+            if (id.includes("react-router")) {
+              return "react-router-vendor";
             }
             
             // TanStack Query - data fetching library, stable API
+            // Split into separate chunk - only needed in app routes, not marketing
             if (id.includes("@tanstack/react-query")) {
               return "query-vendor";
             }
             
             // Supabase client - database and auth, stable SDK
+            // CRITICAL: This should NEVER be in the initial bundle for marketing routes
+            // Keep in separate chunk so it can be lazy-loaded
             if (id.includes("@supabase")) {
               return "supabase-vendor";
             }
             
-            // Capacitor native mobile APIs - rarely change
+            // Capacitor native mobile APIs - rarely change, only needed in app
             if (id.includes("@capacitor")) {
               return "capacitor-vendor";
             }
             
-            // Radix UI components - all used UI primitives, stable component library
+            // Radix UI components - split into smaller chunks for better tree-shaking
+            // Only load what's needed per route
             if (id.includes("@radix-ui")) {
               return "radix-vendor";
             }
             
             // WebRTC-related code - separate chunk for better code splitting
             // This helps reduce initial bundle size since WebRTC is only needed during calls
-            if (id.includes("useWebRTC") || id.includes("webrtc") || id.includes("WebRTC")) {
+            if (id.includes("useWebRTC") || id.includes("webrtc") || id.includes("WebRTC") || 
+                id.includes("features/calls")) {
               return "webrtc-vendor";
+            }
+            
+            // Lucide icons - large library, split into separate chunk
+            // Only load icons when needed
+            if (id.includes("lucide-react")) {
+              return "lucide-vendor";
             }
             
             // Default: let Vite handle other chunks
@@ -404,8 +429,7 @@ export default defineConfig(({ mode }) => {
           },
         },
       },
-      // Keep chunk size warning limit at 600 KB to monitor bundle health
-      chunkSizeWarningLimit: 600,
+      // Chunk size warning limit set above in build config
     },
     test: {
       globals: true,

@@ -500,7 +500,7 @@ workflows:
         APP_NAME: "Kids Call Home"
         XCODE_WORKSPACE: "App.xcworkspace"  # Capacitor iOS uses workspace
         XCODE_SCHEME: "App"  # Default Capacitor scheme
-        APP_STORE_APPLE_ID: ""  # Set this after creating app in App Store Connect
+        APP_STORE_APPLE_ID: "6756827237"  # From App Store Connect (confirmed in IOS_READINESS_STATUS.md)
       xcode: latest
       cocoapods: default
       ios_signing:

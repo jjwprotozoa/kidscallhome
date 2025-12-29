@@ -147,7 +147,8 @@
       }
     </script>
 
-    <!-- FAQ Schema for Problem-Solving Queries -->
+    <!-- FAQ Schema for Homepage - Quick Decision-Making Questions -->
+    <!-- Focus: Questions parents need to decide if they want to try the app -->
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
@@ -167,14 +168,6 @@
             "acceptedAnswer": {
               "@type": "Answer",
               "text": "Yes. Kids Call Home is designed specifically for family-only communication. Unlike many kids messaging apps, there are no public profiles, no search features, no friend requests from strangers, and no \"friends of friends\" connections. Only parent-approved family members can contact your child. The app uses encrypted communication, collects minimal data, does not show ads, and does not sell family data to advertisers or partners."
-            }
-          },
-          {
-            "@type": "Question",
-            "name": "How does Kids Call Home protect my child's privacy?",
-            "acceptedAnswer": {
-              "@type": "Answer",
-              "text": "Kids Call Home uses encrypted calls and messages to protect your family's communication. The app collects minimal data necessary for the service to function, does not use tracking for advertising purposes, and does not sell family data. There are no manipulative design patterns like infinite feeds, aggressive notifications, or surprise in‑app purchases. Parents have full control over who can contact their child."
             }
           },
           {
@@ -219,58 +212,10 @@
           },
           {
             "@type": "Question",
-            "name": "Is Kids Call Home accessible on iPads/tablets?",
+            "name": "How much does Kids Call Home cost?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Absolutely. Kids Call Home is designed to work on any device with internet access, including iPads, Android tablets, Kindle Fire tablets, and Chromebooks. No phone number or SIM card is required—just Wi‑Fi or mobile data. The app works as a Progressive Web App (PWA), so it can be installed on the home screen and used like a native app."
-            }
-          },
-          {
-            "@type": "Question",
-            "name": "How do approved contacts work?",
-            "acceptedAnswer": {
-              "@type": "Answer",
-              "text": "Parents have complete control over who can contact their child. When you set up your family account, you explicitly approve each family member (grandparents, aunts, uncles, etc.) before they can connect with your child. Your child can only see and contact people you've approved—there's no way for strangers or unapproved contacts to reach them. You can add or remove approved contacts at any time from your parent dashboard."
-            }
-          },
-          {
-            "@type": "Question",
-            "name": "How does encryption protect my family?",
-            "acceptedAnswer": {
-              "@type": "Answer",
-              "text": "Kids Call Home uses end-to-end encryption for all calls and messages, meaning your family's conversations are scrambled and can only be decrypted by the intended recipient. Even if someone intercepted the data, they couldn't read or listen to it. This is the same level of security used by banks and healthcare systems to protect sensitive information."
-            }
-          },
-          {
-            "@type": "Question",
-            "name": "Can my child call relatives internationally?",
-            "acceptedAnswer": {
-              "@type": "Answer",
-              "text": "Yes. Kids Call Home works anywhere there's internet access—Wi‑Fi or mobile data. Your child can call approved family members in different countries just as easily as calling someone in the same city. There are no geographic restrictions, and international calls work the same way as local calls (no extra charges beyond your internet connection)."
-            }
-          },
-          {
-            "@type": "Question",
-            "name": "Is Kids Call Home safer than FaceTime?",
-            "acceptedAnswer": {
-              "@type": "Answer",
-              "text": "Kids Call Home offers several safety advantages over FaceTime for families with kids: (1) No phone number required—works on tablets without SIM cards, (2) Parent-controlled contacts—kids can only call people you approve, not everyone in their device contacts, (3) Works across all devices (not just Apple), (4) No personal phone numbers shared between family members, and (5) Designed specifically for kids' safety, not general communication."
-            }
-          },
-          {
-            "@type": "Question",
-            "name": "What data does Kids Call Home collect?",
-            "acceptedAnswer": {
-              "@type": "Answer",
-              "text": "Kids Call Home collects only the minimal data necessary for the service to function: account information (parent email, child's display name and avatar), contact relationships (which family members are approved), and call/message metadata (who called whom, when, duration—not the content, which is encrypted). We do NOT collect: location data (unless you enable it), browsing history, device contacts, biometric data, or any data for advertising purposes."
-            }
-          },
-          {
-            "@type": "Question",
-            "name": "Can grandparents use Kids Call Home?",
-            "acceptedAnswer": {
-              "@type": "Answer",
-              "text": "Yes. Grandparents and other extended family members can easily use Kids Call Home. Once a parent invites them and they create an account, they'll appear in your child's contact list. Grandparents can call and message kids directly, and kids can call them back with one tap. The app is designed to be simple enough for grandparents who aren't tech-savvy, while still being secure and parent-controlled."
+              "text": "Kids Call Home is free to get started. You can create your family account, add your children, and invite family members at no cost. Premium features may be available for advanced needs, but the core calling and messaging functionality is free to use."
             }
           }
         ]
@@ -744,24 +689,8 @@
         </p>
       </div>
     </noscript>
-        <!-- Vercel Web Analytics -->
-        <script>
-          window.va =
-            window.va ||
-            function () {
-              (window.vaq = window.vaq || []).push(arguments);
-            };
-        </script>
-        <script defer src="/_vercel/insights/script.js"></script>
-            <!-- Vercel Speed Insights -->
-            <script>
-              window.si =
-                window.si ||
-                function () {
-                  (window.siq = window.siq || []).push(arguments);
-                };
-            </script>
-            <script defer src="/_vercel/speed-insights/script.js"></script>
+        <!-- Vercel Web Analytics and Speed Insights are automatically injected by Vercel at runtime -->
+        <!-- No need to include them in the HTML - Vercel will add them automatically -->
 
     <!-- Google Analytics - Only loaded on app routes, not marketing routes -->
     <!-- This improves Lighthouse scores on marketing pages -->
