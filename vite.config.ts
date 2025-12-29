@@ -396,7 +396,9 @@ export default defineConfig(({ mode }) => {
             // Supabase client - database and auth, stable SDK
             // CRITICAL: This should NEVER be in the initial bundle for marketing routes
             // Keep in separate chunk so it can be lazy-loaded
-            if (id.includes("@supabase")) {
+            // NOTE: Exclude the client wrapper file itself since it's both statically and dynamically imported
+            // This prevents chunking conflicts while still separating the @supabase package
+            if (id.includes("@supabase") && !id.includes("integrations/supabase/client")) {
               return "supabase-vendor";
             }
             
