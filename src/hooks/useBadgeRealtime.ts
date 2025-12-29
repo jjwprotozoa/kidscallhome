@@ -15,6 +15,12 @@ export function useBadgeRealtime() {
   const recentlyProcessedRef = useRef<Map<string, number>>(new Map());
 
   useEffect(() => {
+    // Skip realtime subscriptions on marketing routes
+    const pathname = typeof window !== 'undefined' ? window.location.pathname : '';
+    if (pathname === '/' || pathname === '/info') {
+      return; // Don't subscribe to realtime on marketing routes
+    }
+    
     // Check if localStorage is available
     if (typeof window === 'undefined' || !window.localStorage) {
       return;

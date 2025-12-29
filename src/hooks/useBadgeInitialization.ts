@@ -8,6 +8,12 @@ import { loadBadgeState, getLastClearedTimestamp } from "@/utils/badgeStorage";
 
 export function useBadgeInitialization() {
   useEffect(() => {
+    // Skip badge initialization on marketing routes
+    const pathname = typeof window !== 'undefined' ? window.location.pathname : '';
+    if (pathname === '/' || pathname === '/info') {
+      return; // Don't initialize badges on marketing routes
+    }
+    
     let mounted = true;
     let timeoutId: NodeJS.Timeout | null = null;
 

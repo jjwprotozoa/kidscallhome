@@ -22,7 +22,6 @@ import Navigation from "@/components/Navigation";
 import { Button } from "@/components/ui/button";
 import { infoSections } from "@/data/infoSections";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
 import { trackPageView, trackConfidenceSignal } from "@/utils/funnelTracking";
 import { safeLog, sanitizeError } from "@/utils/security";
 import { Info as InfoIcon, Share2 } from "lucide-react";
@@ -80,13 +79,39 @@ const Info = () => {
   };
 
   // Determine user type
+  // Lazy-load Supabase only when needed to avoid loading on marketing page
   useEffect(() => {
     const determineUserType = async () => {
       try {
+        // Check child session first (no Supabase needed)
+        const childSession = localStorage.getItem("childSession");
+        if (childSession) {
+          try {
+            JSON.parse(childSession);
+            setUserType("child");
+            setLoading(false);
+            return;
+          } catch {
+            // Invalid child session, continue
+          }
+        }
+
+        // Only load Supabase if we detect a stored session
+        const hasStoredSession = typeof window !== 'undefined' && 
+          Object.keys(localStorage).some(key => key.startsWith('sb-') || key.includes('supabase'));
+        
+        if (!hasStoredSession) {
+          setUserType(null);
+          setLoading(false);
+          return;
+        }
+
+        // Lazy import Supabase only when we detect a stored session
+        const { supabase } = await import("@/integrations/supabase/client");
+        
         const {
           data: { session },
         } = await supabase.auth.getSession();
-        const childSession = localStorage.getItem("childSession");
 
         if (session) {
           const {
@@ -119,13 +144,6 @@ const Info = () => {
             }
           } else {
             setUserType("parent");
-          }
-        } else if (childSession) {
-          try {
-            JSON.parse(childSession);
-            setUserType("child");
-          } catch {
-            setUserType(null);
           }
         } else {
           setUserType(null);

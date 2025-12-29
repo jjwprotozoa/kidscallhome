@@ -30,7 +30,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
+// Supabase is lazy-loaded only when needed (not on marketing routes)
 import { cn } from "@/lib/utils";
 import {
   useBadgeStore,
@@ -148,6 +148,8 @@ const Navigation = () => {
       if (pathname.includes("/parent/") || pathname === "/parent") {
         // On parent route - check auth session and verify it's a parent
         try {
+          // Lazy load Supabase only on app routes
+          const { supabase } = await import("@/integrations/supabase/client");
           const {
             data: { session },
           } = await supabase.auth.getSession();
@@ -177,6 +179,8 @@ const Navigation = () => {
       ) {
         // On family member route - verify it's a family member
         try {
+          // Lazy load Supabase only on app routes
+          const { supabase } = await import("@/integrations/supabase/client");
           const {
             data: { session },
           } = await supabase.auth.getSession();
@@ -212,6 +216,8 @@ const Navigation = () => {
       // CRITICAL: Always check auth session FIRST - parents and family members have auth session, children don't
       // This prevents parents from being misidentified as children due to stale childSession
       try {
+        // Lazy load Supabase only on app routes
+        const { supabase } = await import("@/integrations/supabase/client");
         const {
           data: { session },
         } = await supabase.auth.getSession();
@@ -274,6 +280,8 @@ const Navigation = () => {
       }
 
       try {
+        // Lazy load Supabase only on app routes
+        const { supabase } = await import("@/integrations/supabase/client");
         const {
           data: { user },
         } = await supabase.auth.getUser();
@@ -364,6 +372,8 @@ const Navigation = () => {
     // Children don't have logout - they stay logged in for easy access
     // This removes friction and ensures children are always available
     if (userType === "parent" || userType === "family_member") {
+      // Lazy load Supabase only on app routes
+      const { supabase } = await import("@/integrations/supabase/client");
       // Get user ID before signing out
       const {
         data: { user },

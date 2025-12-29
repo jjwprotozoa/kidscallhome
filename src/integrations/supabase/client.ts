@@ -35,7 +35,16 @@ if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
 // import { supabase } from "@/integrations/supabase/client";
 
 // Create Supabase client with error handling
+// Realtime is disabled on marketing routes to prevent WebSocket errors
 let supabase: ReturnType<typeof createClient<Database>>;
+
+// Check if we're on a marketing route (where realtime should be disabled)
+// Import route utility to avoid duplication
+let isMarketingRoute = false;
+if (typeof window !== 'undefined') {
+  const pathname = window.location.pathname;
+  isMarketingRoute = pathname === '/' || pathname === '/info';
+}
 
 try {
   supabase = createClient<Database>(
@@ -48,7 +57,8 @@ try {
         autoRefreshToken: true,
         detectSessionInUrl: false, // Prevent auto-redirect on auth errors
       },
-      realtime: {
+      // Disable realtime on marketing routes to prevent WebSocket connection attempts
+      realtime: isMarketingRoute ? undefined : {
         params: {
           eventsPerSecond: 10,
         },
@@ -148,7 +158,8 @@ supabase.auth.onAuthStateChange(async (event, session) => {
 });
 
 // Proactively check for invalid tokens on initialization
-if (typeof window !== 'undefined') {
+// Skip on marketing routes to avoid unnecessary Supabase calls
+if (typeof window !== 'undefined' && !isMarketingRoute) {
   // Check session on load and clear if invalid
   // Add timeout to prevent hanging if Supabase is unreachable
   const sessionCheckPromise = supabase.auth.getSession().then(({ error }) => {

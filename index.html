@@ -10,6 +10,7 @@
       name="viewport"
       content="width=device-width, initial-scale=1, viewport-fit=cover"
     />
+    <title>Kids Call Home – Safe Video Calls for Kids Without a Phone Number or SIM Card</title>
     <!-- Resource hints for performance optimization -->
     <!-- Preconnect to self-origin for faster asset loading -->
     <link rel="preconnect" href="https://www.kidscallhome.com" crossorigin />
@@ -35,11 +36,6 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/icon-192x192.png" />
     <link rel="icon" type="image/png" sizes="512x512" href="/icon-512x512.png" />
     <link rel="apple-touch-icon" href="/icon-192x192.png" />
-
-    <title>
-      Kids Call Home – Safe Video Calls for Kids Without a Phone Number or SIM
-      Card
-    </title>
     <meta
       name="description"
       content="Safe video calling and messaging app for kids. Family-only contacts controlled by parents. Works on most phones and tablets over Wi‑Fi or mobile data, no phone number or SIM card required. No ads, no strangers, no filters, no data tracking."
@@ -57,7 +53,7 @@
     />
     <meta
       property="og:description"
-      content="Kids Call Home is a safe kids messaging and video calling app for family-only communication. Kids call parents and family from tablets, phones and Wi‑Fi devices without a phone number or SIM card. No ads, no strangers, no filters."
+      content="Safe video calls for kids—no phone number needed. Family-only contacts, parent-controlled. Works on tablets & Wi‑Fi devices. Free to start. No ads, no strangers, no tracking."
     />
     <meta
       property="og:image"
@@ -86,7 +82,7 @@
     />
     <meta
       name="twitter:description"
-      content="Kids Call Home is a safe kids messaging and video calling app for family-only communication. Kids call parents and family from tablets, phones and Wi‑Fi devices without a phone number or SIM card. No ads, no strangers, no filters."
+      content="Safe video calls for kids—no phone number needed. Family-only contacts, parent-controlled. Works on tablets & Wi‑Fi devices. Free to start. No ads, no strangers, no tracking."
     />
     <meta
       name="twitter:image"
@@ -767,49 +763,58 @@
             </script>
             <script defer src="/_vercel/speed-insights/script.js"></script>
 
-    <!-- Google Analytics - Deferred initialization to prevent blocking -->
-    <!-- Loaded after page content to avoid setTimeout violations -->
+    <!-- Google Analytics - Only loaded on app routes, not marketing routes -->
+    <!-- This improves Lighthouse scores on marketing pages -->
     <script>
-      // Initialize dataLayer immediately (lightweight, no blocking)
-      window.dataLayer = window.dataLayer || [];
-      function gtag() { dataLayer.push(arguments); }
-      
-      // Defer Google Analytics initialization until after page load
-      // This prevents setTimeout violations and improves page performance
-      if (document.readyState === 'complete') {
-        // Page already loaded, initialize immediately
-        initializeGA();
-      } else {
-        // Wait for page load, then use requestIdleCallback for non-blocking init
-        window.addEventListener('load', function() {
-          if ('requestIdleCallback' in window) {
-            // Use requestIdleCallback to initialize when browser is idle
-            requestIdleCallback(initializeGA, { timeout: 2000 });
-          } else {
-            // Fallback for browsers without requestIdleCallback
-            setTimeout(initializeGA, 100);
-          }
-        });
+      // Check if we're on a marketing route
+      function isMarketingRoute() {
+        const pathname = window.location.pathname;
+        return pathname === '/' || pathname === '/info';
       }
       
-      function initializeGA() {
-        // Load gtag.js script asynchronously
-        var script = document.createElement('script');
-        script.async = true;
-        script.src = 'https://www.googletagmanager.com/gtag/js?id=G-5EY72BLX1X';
-        script.onload = function() {
-          // Initialize GA after script loads
-          gtag('js', new Date());
-          gtag('config', 'G-5EY72BLX1X', {
-            // Optimize performance settings
-            send_page_view: true,
-            // Reduce data collection overhead
-            anonymize_ip: true,
-            // Use minimal cookie settings
-            cookie_flags: 'SameSite=None;Secure'
+      // Only initialize GA on app routes (not marketing routes)
+      if (!isMarketingRoute()) {
+        // Initialize dataLayer immediately (lightweight, no blocking)
+        window.dataLayer = window.dataLayer || [];
+        function gtag() { dataLayer.push(arguments); }
+        
+        // Defer Google Analytics initialization until after page load
+        // This prevents setTimeout violations and improves page performance
+        if (document.readyState === 'complete') {
+          // Page already loaded, initialize immediately
+          initializeGA();
+        } else {
+          // Wait for page load, then use requestIdleCallback for non-blocking init
+          window.addEventListener('load', function() {
+            if ('requestIdleCallback' in window) {
+              // Use requestIdleCallback to initialize when browser is idle
+              requestIdleCallback(initializeGA, { timeout: 2000 });
+            } else {
+              // Fallback for browsers without requestIdleCallback
+              setTimeout(initializeGA, 100);
+            }
           });
-        };
-        document.head.appendChild(script);
+        }
+        
+        function initializeGA() {
+          // Load gtag.js script asynchronously
+          var script = document.createElement('script');
+          script.async = true;
+          script.src = 'https://www.googletagmanager.com/gtag/js?id=G-5EY72BLX1X';
+          script.onload = function() {
+            // Initialize GA after script loads
+            gtag('js', new Date());
+            gtag('config', 'G-5EY72BLX1X', {
+              // Optimize performance settings
+              send_page_view: true,
+              // Reduce data collection overhead
+              anonymize_ip: true,
+              // Use minimal cookie settings
+              cookie_flags: 'SameSite=None;Secure'
+            });
+          };
+          document.head.appendChild(script);
+        }
       }
     </script>
 

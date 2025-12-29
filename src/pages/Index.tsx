@@ -6,8 +6,6 @@
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { supabase } from "@/integrations/supabase/client";
-import { getUserRole } from "@/utils/userRole";
 import { trackPageView, trackPrimaryCTA } from "@/utils/funnelTracking";
 import {
   ArrowRight,
@@ -126,6 +124,7 @@ const Index = () => {
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
 
   // Smart routing: Check if user should be redirected
+  // Only load Supabase when actually needed (lazy import to avoid loading on marketing page)
   useEffect(() => {
     const checkAuthAndRedirect = async () => {
       try {
@@ -138,22 +137,7 @@ const Index = () => {
           source?.toLowerCase().includes("playstore") ||
           source?.toLowerCase().includes("app_store");
 
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
-
-        if (session?.user) {
-          const userRole = await getUserRole(session.user.id);
-
-          if (userRole === "family_member") {
-            navigate("/family-member/dashboard", { replace: true });
-            return;
-          } else if (userRole === "parent") {
-            navigate("/parent/dashboard", { replace: true });
-            return;
-          }
-        }
-
+        // Check child session first (no Supabase needed)
         const childSession = localStorage.getItem("childSession");
         if (childSession) {
           try {
@@ -170,8 +154,36 @@ const Index = () => {
           return;
         }
 
+        // Only load Supabase if we need to check for existing session
+        // This prevents Supabase from initializing on marketing page for most users
+        const hasStoredSession = typeof window !== 'undefined' && 
+          Object.keys(localStorage).some(key => key.startsWith('sb-') || key.includes('supabase'));
+        
+        if (hasStoredSession) {
+          // Lazy import Supabase only when we detect a stored session
+          const { supabase } = await import("@/integrations/supabase/client");
+          const { getUserRole } = await import("@/utils/userRole");
+          
+          const {
+            data: { session },
+          } = await supabase.auth.getSession();
+
+          if (session?.user) {
+            const userRole = await getUserRole(session.user.id);
+
+            if (userRole === "family_member") {
+              navigate("/family-member/dashboard", { replace: true });
+              return;
+            } else if (userRole === "parent") {
+              navigate("/parent/dashboard", { replace: true });
+              return;
+            }
+          }
+        }
+
         setIsCheckingAuth(false);
       } catch (error) {
+        // Silently fail - don't break marketing page if Supabase check fails
         console.error("Error checking auth:", error);
         setIsCheckingAuth(false);
       }
@@ -417,7 +429,7 @@ const Index = () => {
               </p>
               
               {/* Trust micro-copy */}
-              <p className="mx-auto max-w-[56ch] text-sm sm:text-base md:text-lg text-muted-foreground/80 italic">
+              <p className="mx-auto max-w-[56ch] text-sm sm:text-base md:text-lg text-foreground/70 italic">
                 Built by a long-distance dad for families who want safe, simple calling.
               </p>
             </div>

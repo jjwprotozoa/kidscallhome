@@ -1,5 +1,5 @@
 // middleware.ts
-// Purpose: Vercel Edge Middleware for rate limiting and security headers
+// Purpose: Vercel Edge Middleware for rate limiting, security headers, and scraper detection
 
 // Note: This uses Vercel Edge Runtime API
 // For Vite/React apps, this runs on Vercel Edge Network
@@ -66,9 +66,68 @@ setInterval(() => {
   }
 }, 60000); // Clean every minute
 
-export default function middleware(request: Request) {
+// Detect known scrapers by User-Agent
+function isScraper(userAgent: string): boolean {
+  const scraperPatterns = [
+    'WhatsApp',
+    'facebookexternalhit',
+    'Facebot',
+    'Twitterbot',
+    'Slackbot',
+    'LinkedInBot',
+    'TelegramBot',
+    'Discordbot',
+    'SkypeUriPreview',
+    'Applebot',
+    'Googlebot',
+    'bingbot',
+    'Slurp',
+    'DuckDuckBot',
+    'Baiduspider',
+    'YandexBot',
+    'Sogou',
+    'Exabot',
+    'facebot',
+    'ia_archiver',
+  ];
+  
+  const ua = userAgent.toLowerCase();
+  return scraperPatterns.some(pattern => ua.includes(pattern.toLowerCase()));
+}
+
+export default async function middleware(request: Request) {
   const url = new URL(request.url);
   const path = url.pathname;
+  const userAgent = request.headers.get('user-agent') || '';
+  
+  // SEO/OG: Serve static HTML to scrapers for marketing routes
+  // This ensures scrapers see proper OG tags without loading the React app
+  if (isScraper(userAgent) && (path === '/' || path === '/info')) {
+    const staticPath = path === '/' ? '/og/index.html' : '/og/info.html';
+    
+    // Fetch the static HTML file
+    try {
+      const baseUrl = url.origin;
+      const staticUrl = new URL(staticPath, baseUrl);
+      const staticResponse = await fetch(staticUrl.toString());
+      
+      if (staticResponse.ok) {
+        const html = await staticResponse.text();
+        return new Response(html, {
+          status: 200,
+          headers: {
+            'Content-Type': 'text/html; charset=utf-8',
+            'Cache-Control': 'public, max-age=3600, s-maxage=3600',
+            'X-Content-Type-Options': 'nosniff',
+            'X-Frame-Options': 'SAMEORIGIN',
+          },
+        });
+      }
+    } catch (error) {
+      // If static file fetch fails, fall through to normal handling
+      console.error('Failed to fetch static HTML for scraper:', error);
+    }
+  }
   
   // Skip middleware for static files (manifest, service worker, icons, etc.)
   const staticFilePatterns = [
@@ -76,6 +135,7 @@ export default function middleware(request: Request) {
     '/sw.js',
     '/icon-',
     '/og-image.png',
+    '/og/',
     '/robots.txt',
     '/favicon.ico',
     '/assets/',
@@ -127,8 +187,7 @@ export default function middleware(request: Request) {
     }
   }
 
-  // SECURITY: Block known bot user agents
-  const userAgent = request.headers.get('user-agent') || '';
+  // SECURITY: Block known malicious bot user agents (but allow legitimate scrapers)
   const botPatterns = [
     'headless',
     'phantom',
@@ -137,17 +196,14 @@ export default function middleware(request: Request) {
     'puppeteer',
     'playwright',
     'scrapy',
-    'bot',
-    'crawler',
-    'spider',
   ];
 
-  const isBot = botPatterns.some((pattern) =>
+  const isMaliciousBot = botPatterns.some((pattern) =>
     userAgent.toLowerCase().includes(pattern)
   );
 
-  // Block bots from auth endpoints
-  if (isBot && (path.includes('/auth/') || path.includes('/api/'))) {
+  // Block malicious bots from auth endpoints
+  if (isMaliciousBot && (path.includes('/auth/') || path.includes('/api/'))) {
     return new Response(
       JSON.stringify({ error: 'Forbidden', message: 'Automated access not allowed' }),
       { 
@@ -188,9 +244,11 @@ export default function middleware(request: Request) {
 
 // Configure which routes to run middleware on
 // Note: Vercel Edge Middleware uses this config
-// Only run middleware on API/auth endpoints, not on HTML pages or static assets
+// Now includes marketing routes for scraper detection
 export const config = {
   matcher: [
+    '/',
+    '/info',
     '/auth/:path*',
     '/rest/:path*',
     '/functions/:path*',

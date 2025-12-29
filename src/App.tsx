@@ -23,7 +23,7 @@ const Toaster = lazy(() => import("@/components/ui/toaster").then(m => ({ defaul
 import { useBadgeInitialization } from "@/hooks/useBadgeInitialization";
 import { useBadgeRealtime } from "@/hooks/useBadgeRealtime";
 import { useWidgetData } from "@/hooks/useWidgetData";
-import { supabase } from "@/integrations/supabase/client";
+// Supabase is NOT imported here - it's lazy-loaded only in app routes
 import {
   initializeNativeAndroid,
   isNativeAndroid,
@@ -184,9 +184,12 @@ const persistOptions = {
 };
 
 // Badge initialization component (runs once per session)
+// Only loads on app routes, not marketing routes
+// Hooks must be called unconditionally, so we check the route inside the hooks
 const BadgeProvider = () => {
-  useBadgeInitialization(); // One-time initial snapshot
-  useBadgeRealtime(); // Realtime subscriptions
+  // Always call hooks (React rules), but hooks will check route internally
+  useBadgeInitialization(); // One-time initial snapshot (checks route internally)
+  useBadgeRealtime(); // Realtime subscriptions (checks route internally)
   return null;
 };
 
@@ -211,13 +214,19 @@ const WidgetIntentHandler = () => {
 
     // Listen for widget quick call events
     const handleWidgetQuickCall = (event: CustomEvent) => {
-      console.log("📱 Widget quick call received:", event.detail);
+      if (import.meta.env.DEV) {
+        // eslint-disable-next-line no-console
+        console.log("📱 Widget quick call received:", event.detail);
+      }
 
       const { childId } = event.detail || {};
 
       // Use childId from event if available (from widget URI)
       if (childId) {
-        console.log("📱 Routing to child from widget:", childId);
+        if (import.meta.env.DEV) {
+          // eslint-disable-next-line no-console
+          console.log("📱 Routing to child from widget:", childId);
+        }
         navigate(`/parent/call/${childId}`);
         return;
       }
@@ -227,7 +236,10 @@ const WidgetIntentHandler = () => {
 
       if (widgetData?.childId) {
         // Route directly to last-called child's call screen
-        console.log("📱 Routing to last-called child:", widgetData.childId);
+        if (import.meta.env.DEV) {
+          // eslint-disable-next-line no-console
+          console.log("📱 Routing to last-called child:", widgetData.childId);
+        }
         navigate(`/parent/call/${widgetData.childId}`);
       } else {
         // Fallback to parent dashboard
@@ -269,16 +281,25 @@ const SessionManager = () => {
     const shouldClearOnClose = sessionStorage.getItem("clearSessionOnClose");
 
     if (shouldClearOnClose === "true") {
-      const clearSession = () => {
+      const clearSession = async () => {
         // Clear Supabase session from localStorage
         const supabaseKeys = Object.keys(localStorage).filter(
           (key) => key.startsWith("sb-") || key.includes("supabase")
         );
         supabaseKeys.forEach((key) => localStorage.removeItem(key));
-        // Also sign out from Supabase to ensure clean state
-        supabase.auth.signOut().catch(() => {
-          // Ignore errors during signout
-        });
+        // Also sign out from Supabase to ensure clean state (lazy load only if needed)
+        const pathname = window.location.pathname;
+        if (!pathname.startsWith('/') && !pathname.startsWith('/info')) {
+          // Only load Supabase on app routes
+          try {
+            const { supabase } = await import("@/integrations/supabase/client");
+            supabase.auth.signOut().catch(() => {
+              // Ignore errors during signout
+            });
+          } catch {
+            // Ignore if Supabase can't be loaded
+          }
+        }
       };
 
       // Clear session on page unload/close
