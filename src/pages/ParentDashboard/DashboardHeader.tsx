@@ -4,18 +4,27 @@
 import { Button } from "@/components/ui/button";
 import { FamilyCodeCard } from "@/features/family/components/FamilyCodeCard";
 import { isPWA } from "@/utils/platformDetection";
+import { SubscriptionTier } from "@/pages/Upgrade/types";
 
 interface DashboardHeaderProps {
   parentName: string | null;
   familyCode: string | null;
+  subscriptionType?: SubscriptionTier;
   onUpgradeClick: () => void;
 }
 
 export const DashboardHeader = ({
   parentName,
   familyCode,
+  subscriptionType,
   onUpgradeClick,
 }: DashboardHeaderProps) => {
+  // Determine button text based on subscription type
+  // Annual is the "higher" plan, so if on annual, show "Downgrade Plan"
+  const buttonText = subscriptionType === "family-bundle-annual" 
+    ? "Downgrade Plan" 
+    : "Upgrade Plan";
+
   return (
     <>
       <div className="px-4 pb-4">
@@ -41,7 +50,7 @@ export const DashboardHeader = ({
                 className="flex-shrink-0"
                 data-tour="parent-upgrade-plan"
               >
-                Upgrade Plan
+                {buttonText}
               </Button>
             )}
           </div>

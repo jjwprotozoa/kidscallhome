@@ -12,6 +12,16 @@ interface StripeSubscription {
   customer: string;
   status: string;
   current_period_end: number;
+  items?: {
+    data?: Array<{
+      price?: {
+        id: string;
+      };
+    }>;
+  };
+  metadata?: {
+    subscription_type?: string;
+  };
 }
 
 interface StripeInvoice {
@@ -286,6 +296,26 @@ serve(async (req) => {
   }
 });
 
+// Helper function to map Price ID to subscription type
+function mapPriceIdToSubscriptionType(priceId: string | undefined): string {
+  if (!priceId) return "free";
+  
+  // Test mode Price IDs
+  if (priceId === "price_1SjULhIIyqCwTeH2GmBL1jVk") return "family-bundle-monthly";
+  if (priceId === "price_1SjUiEIIyqCwTeH2xnxCVAAT") return "family-bundle-annual"; // Updated test annual Price ID
+  
+  // Live mode Price IDs (from environment or common patterns)
+  // Check against environment variables
+  const liveMonthly = Deno.env.get("STRIPE_PRICE_FAMILY_BUNDLE_MONTHLY");
+  const liveAnnual = Deno.env.get("STRIPE_PRICE_FAMILY_BUNDLE_ANNUAL");
+  
+  if (priceId === liveMonthly) return "family-bundle-monthly";
+  if (priceId === liveAnnual) return "family-bundle-annual";
+  
+  // Fallback: check metadata
+  return "free";
+}
+
 async function handleSubscriptionUpdate(
   supabase: SupabaseClient,
   subscription: StripeSubscription
@@ -296,6 +326,20 @@ async function handleSubscriptionUpdate(
   const currentPeriodEnd = new Date(
     subscription.current_period_end * 1000
   ).toISOString();
+
+  // Extract subscription type from Price ID or metadata
+  let subscriptionType = subscription.metadata?.subscription_type;
+  let allowedChildren = 1;
+  
+  if (!subscriptionType && subscription.items?.data?.[0]?.price?.id) {
+    const priceId = subscription.items.data[0].price.id;
+    subscriptionType = mapPriceIdToSubscriptionType(priceId);
+  }
+  
+  // Map subscription type to allowed children
+  if (subscriptionType === "family-bundle-monthly" || subscriptionType === "family-bundle-annual") {
+    allowedChildren = 5;
+  }
 
   // Find parent by Stripe customer ID or subscription ID
   const { data: parentData } = await supabase
@@ -319,7 +363,20 @@ async function handleSubscriptionUpdate(
   // Map Stripe status to our database status
   const dbStatus = mapStripeStatusToDbStatus(status);
 
-  // Update subscription in database
+  // Update subscription in database with subscription type
+  const updateData: Record<string, unknown> = {
+    subscription_status: dbStatus,
+    subscription_expires_at: currentPeriodEnd,
+    stripe_subscription_id: subscriptionId,
+    stripe_customer_id: customerId,
+  };
+  
+  // Only update subscription_type if we found it
+  if (subscriptionType && subscriptionType !== "free") {
+    updateData.subscription_type = subscriptionType;
+    updateData.allowed_children = allowedChildren;
+  }
+
   const { error } = await supabase.rpc("sync_stripe_subscription", {
     p_stripe_subscription_id: subscriptionId,
     p_stripe_customer_id: customerId,
@@ -329,16 +386,22 @@ async function handleSubscriptionUpdate(
 
   if (error) {
     console.error("Error syncing subscription:", error);
-    // Fallback: direct update
+    // Fallback: direct update with subscription type
     await supabase
       .from("parents")
-      .update({
-        subscription_status: dbStatus,
-        subscription_expires_at: currentPeriodEnd,
-        stripe_subscription_id: subscriptionId,
-        stripe_customer_id: customerId,
-      })
+      .update(updateData)
       .eq("id", parentData.id);
+  } else {
+    // If RPC succeeded, also update subscription_type separately if needed
+    if (subscriptionType && subscriptionType !== "free") {
+      await supabase
+        .from("parents")
+        .update({
+          subscription_type: subscriptionType,
+          allowed_children: allowedChildren,
+        })
+        .eq("id", parentData.id);
+    }
   }
 }
 

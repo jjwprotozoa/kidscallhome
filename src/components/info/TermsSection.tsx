@@ -66,6 +66,13 @@ export const TermsSection = () => {
               </p>
             </div>
           </div>
+          <div>
+            <h3 className="font-semibold mb-2">Company Information</h3>
+            <p className="text-sm text-muted-foreground">
+              Kids Call Home is operated by Fluid Investment Group LLC, a holding and development company. 
+              You may see "Fluid Investment Group LLC" on your payment receipts and billing statements.
+            </p>
+          </div>
           <div className="pt-4 border-t">
             <p className="text-xs text-muted-foreground">
               These terms may be updated from time to time. Continued use

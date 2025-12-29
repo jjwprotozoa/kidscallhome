@@ -26,6 +26,7 @@ import { useIncomingCallHandlers } from "./useIncomingCallHandlers";
 import { DashboardHeader } from "./DashboardHeader";
 import { DashboardTabs } from "./DashboardTabs";
 import { Child, IncomingCall, FamilyMember, ValidTab } from "./types";
+import { useSubscriptionData } from "@/pages/Upgrade/useSubscriptionData";
 
 const ParentDashboard = () => {
   // Redirect family members away from parent routes
@@ -74,6 +75,9 @@ const ParentDashboard = () => {
     checkAuth,
     refreshCanAddMoreChildren,
   } = useParentData();
+
+  // Get subscription data for button text
+  const { subscriptionData } = useSubscriptionData();
 
   const { fetchChildren, fetchFamilyMembers } = useDashboardData(refreshCanAddMoreChildren);
 
@@ -222,6 +226,7 @@ const ParentDashboard = () => {
       <DashboardHeader
         parentName={parentName}
         familyCode={familyCode}
+        subscriptionType={subscriptionData?.subscriptionType}
         onUpgradeClick={() => navigate("/parent/upgrade")}
       />
 

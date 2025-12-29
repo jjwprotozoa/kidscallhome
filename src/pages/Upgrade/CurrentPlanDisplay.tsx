@@ -1,9 +1,7 @@
 // src/pages/Upgrade/CurrentPlanDisplay.tsx
 // Purpose: Display current subscription status
 
-import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Loader2, ExternalLink } from "lucide-react";
 import { SubscriptionTier } from "./types";
 import { PLANS } from "./constants";
 
@@ -12,8 +10,6 @@ interface CurrentPlanDisplayProps {
   subscriptionType: SubscriptionTier;
   currentChildrenCount: number;
   allowedChildren: number;
-  isManagingSubscription: boolean;
-  onManageSubscription: () => void;
 }
 
 export const CurrentPlanDisplay = ({
@@ -21,8 +17,6 @@ export const CurrentPlanDisplay = ({
   subscriptionType,
   currentChildrenCount,
   allowedChildren,
-  isManagingSubscription,
-  onManageSubscription,
 }: CurrentPlanDisplayProps) => {
   if (hasActiveSubscription) {
     return (
@@ -34,37 +28,16 @@ export const CurrentPlanDisplay = ({
             </h3>
             <p className="text-sm text-muted-foreground">
               {PLANS.find(p => p.id === subscriptionType)?.name || subscriptionType}
-              {subscriptionType === "annual-family-plan" && " - Unlimited children"}
             </p>
           </div>
-          <div className="flex items-center gap-4">
-            <div className="text-right">
-              <p className="text-sm font-semibold text-primary">
-                Active Subscription
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {currentChildrenCount} /{" "}
-                {allowedChildren === 999 ? "∞" : allowedChildren} children
-              </p>
-            </div>
-            <Button
-              variant="default"
-              onClick={onManageSubscription}
-              disabled={isManagingSubscription}
-              size="sm"
-            >
-              {isManagingSubscription ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Opening...
-                </>
-              ) : (
-                <>
-                  <ExternalLink className="mr-2 h-4 w-4" />
-                  Manage
-                </>
-              )}
-            </Button>
+          <div className="text-right">
+            <p className="text-sm font-semibold text-primary">
+              Active Subscription
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {currentChildrenCount} /{" "}
+              {allowedChildren === 999 ? "∞" : allowedChildren} children
+            </p>
           </div>
         </div>
       </Card>

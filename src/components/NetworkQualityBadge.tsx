@@ -108,12 +108,18 @@ function detectNetworkInfo(): NetworkInfo {
         } else if (downlink && downlink > 30) {
           connectionType = "4g";
           qualityLevel = "excellent";
-        } else if (downlink && downlink > 10) {
+        } else if (downlink && downlink > 5) {
+          // Lower threshold: 5+ Mbps is good for 4G
           connectionType = "4g";
           qualityLevel = "good";
-        } else {
+        } else if (downlink && downlink < 2) {
+          // Only show moderate if we have evidence of very slow speeds
           connectionType = "4g";
           qualityLevel = "moderate";
+        } else {
+          // Default 4G to good (green) - 4G is generally good reception
+          connectionType = "4g";
+          qualityLevel = "good";
         }
         break;
       default:
@@ -223,7 +229,7 @@ interface NetworkQualityBadgeProps {
 
 // DEBUG: Test different connection types via URL param or keyboard
 // Add ?network=5g (or 4g, 3g, 2g, wifi, offline) to URL to test
-// Or press Ctrl+Shift+N to cycle through connection types
+// Or press Ctrl+Alt+N to cycle through connection types
 const DEBUG_CONNECTIONS: ConnectionType[] = ["wifi", "5g", "4g", "3g", "2g", "offline"];
 
 function getDebugOverride(): ConnectionType | null {
@@ -269,12 +275,12 @@ export const NetworkQualityBadge = ({
     return override ? getNetworkInfoForType(override) : detectNetworkInfo();
   });
 
-  // DEBUG: Keyboard shortcut to cycle through connection types (Ctrl+Shift+N)
+  // DEBUG: Keyboard shortcut to cycle through connection types (Ctrl+Alt+N)
   useEffect(() => {
     if (process.env.NODE_ENV !== "development") return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.ctrlKey && e.shiftKey && e.key === "N") {
+      if (e.ctrlKey && e.altKey && e.key === "N") {
         e.preventDefault();
         setDebugOverride((current) => {
           if (current === null) {
@@ -349,7 +355,7 @@ export const NetworkQualityBadge = ({
     <div className="text-xs space-y-1">
       {debugOverride && (
         <div className="text-blue-400 font-medium border-b border-blue-400/30 pb-1 mb-1">
-          🔧 DEBUG MODE (Ctrl+Shift+N to cycle)
+          🔧 DEBUG MODE (Ctrl+Alt+N to cycle)
         </div>
       )}
       <div className="font-medium">
@@ -371,7 +377,7 @@ export const NetworkQualityBadge = ({
       )}
       {!debugOverride && process.env.NODE_ENV === "development" && (
         <div className="text-muted-foreground/50 text-[10px] border-t border-muted/20 pt-1 mt-1">
-          Ctrl+Shift+N to test different networks
+          Ctrl+Alt+N to test different networks
         </div>
       )}
     </div>

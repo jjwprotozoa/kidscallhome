@@ -116,6 +116,11 @@ export const PricingSection = ({ isParent }: PricingSectionProps) => {
               <p className="text-sm text-muted-foreground italic">
                 Local currency equivalents may vary.
               </p>
+              <p className="text-xs text-muted-foreground mt-2">
+                <strong>Note:</strong> Payments are processed by Fluid Investment Group LLC, 
+                the holding and development company operating Kids Call Home. 
+                You will see "Fluid Investment Group LLC" on your payment receipts and billing statements.
+              </p>
             </div>
           </div>
 

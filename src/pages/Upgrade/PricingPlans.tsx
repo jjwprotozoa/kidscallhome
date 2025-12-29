@@ -26,13 +26,11 @@ export const PricingPlans = ({
     
     if (hasActiveSubscription) {
       const isUpgrade = 
-        plan.id === "annual-family-plan" || 
-        (plan.id === "family-bundle-monthly" && subscriptionType !== "annual-family-plan" && subscriptionType !== "family-bundle-monthly" && subscriptionType !== "family-bundle-annual") ||
-        (plan.id === "family-bundle-annual" && subscriptionType !== "annual-family-plan" && subscriptionType !== "family-bundle-annual" && subscriptionType !== "family-bundle-monthly") ||
-        (plan.id.includes("additional") && !subscriptionType.includes("additional"));
+        (plan.id === "family-bundle-monthly" && subscriptionType !== "family-bundle-monthly" && subscriptionType !== "family-bundle-annual") ||
+        (plan.id === "family-bundle-annual" && subscriptionType !== "family-bundle-annual" && subscriptionType !== "family-bundle-monthly");
       
       const isDowngrade = 
-        subscriptionType === "annual-family-plan" && plan.id !== "annual-family-plan";
+        subscriptionType === "family-bundle-annual" && plan.id === "family-bundle-monthly";
       
       if (isUpgrade) return "Upgrade";
       if (isDowngrade) return "Downgrade";
@@ -44,17 +42,15 @@ export const PricingPlans = ({
   const isCurrentPlan = (plan: SubscriptionPlan) => subscriptionType === plan.id;
 
   return (
-    <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8" data-tour="parent-upgrade-plans">
+    <div className="grid gap-6 md:grid-cols-2 mb-8" data-tour="parent-upgrade-plans">
       {PLANS.map((plan) => {
         const isCurrent = isCurrentPlan(plan);
         const isUpgrade = hasActiveSubscription && 
-          (plan.id === "annual-family-plan" || 
-           (plan.id === "family-bundle-monthly" && subscriptionType !== "annual-family-plan" && subscriptionType !== "family-bundle-monthly" && subscriptionType !== "family-bundle-annual") ||
-           (plan.id === "family-bundle-annual" && subscriptionType !== "annual-family-plan" && subscriptionType !== "family-bundle-annual" && subscriptionType !== "family-bundle-monthly") ||
-           (plan.id.includes("additional") && !subscriptionType.includes("additional")));
+          ((plan.id === "family-bundle-monthly" && subscriptionType !== "family-bundle-monthly" && subscriptionType !== "family-bundle-annual") ||
+           (plan.id === "family-bundle-annual" && subscriptionType !== "family-bundle-annual" && subscriptionType !== "family-bundle-monthly"));
         const isDowngrade = hasActiveSubscription && 
-          subscriptionType === "annual-family-plan" && 
-          plan.id !== "annual-family-plan";
+          subscriptionType === "family-bundle-annual" && 
+          plan.id === "family-bundle-monthly";
         
         return (
           <Card
@@ -130,7 +126,7 @@ export const PricingPlans = ({
               </Button>
               {isDowngrade && (
                 <p className="text-xs text-muted-foreground text-center">
-                  Note: Downgrading will reduce your child limit
+                  You'll be switching to monthly billing.
                 </p>
               )}
             </div>

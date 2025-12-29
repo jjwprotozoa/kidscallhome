@@ -41,14 +41,28 @@ export interface NativePurchasePlugin {
  * Check if running on Android
  */
 export function isAndroid(): boolean {
-  return Capacitor.getPlatform() === "android";
+  try {
+    if (typeof window === "undefined" || !(window as any).Capacitor) {
+      return false;
+    }
+    return Capacitor.getPlatform() === "android";
+  } catch {
+    return false;
+  }
 }
 
 /**
  * Check if running on iOS
  */
 export function isIOS(): boolean {
-  return Capacitor.getPlatform() === "ios";
+  try {
+    if (typeof window === "undefined" || !(window as any).Capacitor) {
+      return false;
+    }
+    return Capacitor.getPlatform() === "ios";
+  } catch {
+    return false;
+  }
 }
 
 /**

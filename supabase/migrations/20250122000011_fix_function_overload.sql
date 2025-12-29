@@ -27,6 +27,8 @@ DECLARE
   v_current_children_count INTEGER;
   v_authenticated_user_id UUID;
   v_session_already_used BOOLEAN;
+  v_has_stripe_price_id BOOLEAN;
+  v_update_sql TEXT;
 BEGIN
   -- Get authenticated user ID
   v_authenticated_user_id := auth.uid();
@@ -81,23 +83,53 @@ BEGIN
   END IF;
   
   -- Update subscription with all Stripe details
-  UPDATE public.parents
-  SET 
-    subscription_type = p_subscription_type,
-    allowed_children = p_allowed_children,
-    subscription_status = 'active',
-    subscription_started_at = COALESCE(subscription_started_at, NOW()),
-    subscription_expires_at = CASE 
-      WHEN p_subscription_type LIKE '%annual%' OR p_subscription_type LIKE '%year%' THEN NOW() + INTERVAL '1 year'
-      WHEN p_subscription_type LIKE '%month%' THEN NOW() + INTERVAL '1 month'
-      ELSE NULL
-    END,
-    stripe_customer_id = COALESCE(p_stripe_customer_id, stripe_customer_id),
-    stripe_subscription_id = COALESCE(p_stripe_subscription_id, stripe_subscription_id),
-    stripe_price_id = COALESCE(p_stripe_price_id, stripe_price_id),
-    stripe_payment_link_id = COALESCE(p_stripe_payment_link_id, stripe_payment_link_id),
-    stripe_checkout_session_id = COALESCE(p_stripe_checkout_session_id, stripe_checkout_session_id)
-  WHERE id = v_parent_id;
+  -- Check if stripe_price_id column exists
+  SELECT EXISTS(
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_schema = 'public' 
+    AND table_name = 'parents' 
+    AND column_name = 'stripe_price_id'
+  ) INTO v_has_stripe_price_id;
+  
+  -- Update subscription (conditionally include stripe_price_id)
+  IF v_has_stripe_price_id THEN
+    -- Column exists - update with stripe_price_id
+    UPDATE public.parents
+    SET 
+      subscription_type = p_subscription_type,
+      allowed_children = p_allowed_children,
+      subscription_status = 'active',
+      subscription_started_at = COALESCE(subscription_started_at, NOW()),
+      subscription_expires_at = CASE 
+        WHEN p_subscription_type LIKE '%annual%' OR p_subscription_type LIKE '%year%' THEN NOW() + INTERVAL '1 year'
+        WHEN p_subscription_type LIKE '%month%' THEN NOW() + INTERVAL '1 month'
+        ELSE NULL
+      END,
+      stripe_customer_id = COALESCE(p_stripe_customer_id, stripe_customer_id),
+      stripe_subscription_id = COALESCE(p_stripe_subscription_id, stripe_subscription_id),
+      stripe_price_id = COALESCE(p_stripe_price_id, stripe_price_id),
+      stripe_payment_link_id = COALESCE(p_stripe_payment_link_id, stripe_payment_link_id),
+      stripe_checkout_session_id = COALESCE(p_stripe_checkout_session_id, stripe_checkout_session_id)
+    WHERE id = v_parent_id;
+  ELSE
+    -- Column doesn't exist - update without stripe_price_id
+    UPDATE public.parents
+    SET 
+      subscription_type = p_subscription_type,
+      allowed_children = p_allowed_children,
+      subscription_status = 'active',
+      subscription_started_at = COALESCE(subscription_started_at, NOW()),
+      subscription_expires_at = CASE 
+        WHEN p_subscription_type LIKE '%annual%' OR p_subscription_type LIKE '%year%' THEN NOW() + INTERVAL '1 year'
+        WHEN p_subscription_type LIKE '%month%' THEN NOW() + INTERVAL '1 month'
+        ELSE NULL
+      END,
+      stripe_customer_id = COALESCE(p_stripe_customer_id, stripe_customer_id),
+      stripe_subscription_id = COALESCE(p_stripe_subscription_id, stripe_subscription_id),
+      stripe_payment_link_id = COALESCE(p_stripe_payment_link_id, stripe_payment_link_id),
+      stripe_checkout_session_id = COALESCE(p_stripe_checkout_session_id, stripe_checkout_session_id)
+    WHERE id = v_parent_id;
+  END IF;
   
   -- Record the checkout session as used (if provided and table exists)
   IF p_stripe_checkout_session_id IS NOT NULL THEN

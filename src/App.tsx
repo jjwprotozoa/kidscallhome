@@ -96,7 +96,7 @@ const ParentHome = lazy(parentHomeImport);
 const ParentChildrenList = lazy(() => import("./pages/ParentChildrenList"));
 const ParentCallScreen = lazy(parentCallScreenImport);
 const DeviceManagement = lazy(() => import("./pages/DeviceManagement/index"));
-const Upgrade = lazy(() => import("./pages/Upgrade"));
+const Upgrade = lazy(() => import("./pages/Upgrade/Upgrade"));
 const AccountSettings = lazy(() => import("./pages/AccountSettings"));
 const ChildLogin = lazy(() => import("./pages/ChildLogin"));
 const ChildDashboard = lazy(() => import("./pages/ChildDashboard"));

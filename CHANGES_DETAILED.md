@@ -4,7 +4,1445 @@
 
 ---
 
-## Latest Changes (2025-12-28)
+## Latest Changes (2024-12-29)
+
+### 1. Network Quality Badge - Green for Good Reception & Keyboard Shortcut Fix
+
+#### Purpose
+
+Improve network quality badge user experience by showing green (good) color for 4G/LTE connections with good reception, and fix keyboard shortcut conflict that prevented network testing in development mode.
+
+#### Issues Fixed
+
+1. **4G/LTE Showing Yellow Instead of Green**: 4G/LTE connections were showing yellow (moderate quality) even when reception was good, making it appear like a poor connection. This was confusing for users who expected green for good 4G reception.
+
+2. **Keyboard Shortcut Conflict**: The debug keyboard shortcut `Ctrl+Shift+N` conflicted with the browser's default incognito/private window shortcut, preventing developers from testing different network types in development mode.
+
+#### Complete File List
+
+**Component Files Modified:**
+
+- `src/components/NetworkQualityBadge.tsx`
+  - Updated 4G quality detection logic
+  - Changed keyboard shortcut from `Ctrl+Shift+N` to `Ctrl+Alt+N`
+  - Updated all tooltip help text and code comments
+  - ~438 lines total
+
+#### Implementation Details
+
+**1. Network Quality Detection Updates:**
+
+**Previous Behavior:**
+- 4G connections required >10 Mbps to show as "good" (green)
+- 4G connections without speed data defaulted to "moderate" (yellow)
+- Only 4G with >30 Mbps showed as "excellent"
+
+**New Behavior:**
+- 4G connections with >5 Mbps show as "good" (green) - lowered threshold from 10 Mbps
+- 4G connections without speed data default to "good" (green) instead of "moderate" (yellow)
+- 4G only shows yellow (moderate) when speed is confirmed to be <2 Mbps
+- 4G with >30 Mbps still shows as "excellent" (bright green)
+
+**Code Changes:**
+```typescript
+// Before:
+} else if (downlink && downlink > 10) {
+  connectionType = "4g";
+  qualityLevel = "good";
+} else {
+  connectionType = "4g";
+  qualityLevel = "moderate"; // Default was moderate
+}
+
+// After:
+} else if (downlink && downlink > 5) {
+  // Lower threshold: 5+ Mbps is good for 4G
+  connectionType = "4g";
+  qualityLevel = "good";
+} else if (downlink && downlink < 2) {
+  // Only show moderate if we have evidence of very slow speeds
+  connectionType = "4g";
+  qualityLevel = "moderate";
+} else {
+  // Default 4G to good (green) - 4G is generally good reception
+  connectionType = "4g";
+  qualityLevel = "good"; // Default is now good
+}
+```
+
+**2. Keyboard Shortcut Fix:**
+
+**Previous Behavior:**
+- Debug shortcut was `Ctrl+Shift+N`
+- This conflicted with browser's incognito mode shortcut
+- Pressing the shortcut opened an incognito window instead of cycling network types
+
+**New Behavior:**
+- Debug shortcut changed to `Ctrl+Alt+N`
+- No longer conflicts with browser shortcuts
+- Network testing works properly in development mode
+
+**Code Changes:**
+```typescript
+// Before:
+if (e.ctrlKey && e.shiftKey && e.key === "N") {
+
+// After:
+if (e.ctrlKey && e.altKey && e.key === "N") {
+```
+
+**Updated References:**
+- Code comment: `// DEBUG: Keyboard shortcut to cycle through connection types (Ctrl+Alt+N)`
+- Debug mode tooltip: `🔧 DEBUG MODE (Ctrl+Alt+N to cycle)`
+- Help text tooltip: `Ctrl+Alt+N to test different networks`
+- File header comment: `// Or press Ctrl+Alt+N to cycle through connection types`
+
+#### Testing Recommendations
+
+**Network Quality Badge Testing:**
+1. Test on actual 4G/LTE connection - should show green badge
+2. Test on WiFi connection - should show appropriate quality (green for good WiFi)
+3. Test offline mode - should show red "Offline" badge
+4. Test with slow connection - should show yellow if speed <2 Mbps
+5. Verify badge updates dynamically when connection changes
+
+**Keyboard Shortcut Testing (Development Mode Only):**
+1. Press `Ctrl+Alt+N` in development mode
+2. Verify network type cycles through: WiFi → 5G → 4G → 3G → 2G → Offline → Auto-detect
+3. Verify no incognito window opens
+4. Check console for debug messages: `🔧 [DEBUG] Network override: [type]`
+5. Verify tooltip shows correct shortcut in help text
+
+**Browser Compatibility:**
+- Test in Chrome/Edge (Ctrl+Alt+N should not conflict)
+- Test in Firefox (Ctrl+Alt+N should not conflict)
+- Test in Safari (Ctrl+Alt+N should not conflict)
+
+#### Impact
+
+**User Experience:**
+- **Better Visual Feedback**: 4G/LTE connections now show green (good) by default, accurately reflecting good reception
+- **Reduced Confusion**: Users no longer see yellow badges for good 4G connections, eliminating confusion about connection quality
+- **Accurate Status**: Badge color now better matches actual connection quality expectations
+
+**Developer Experience:**
+- **Working Debug Tool**: Network testing shortcut now works without browser conflicts
+- **Easier Testing**: Developers can easily test different network conditions in development
+- **Better Development Workflow**: No need to work around browser shortcut conflicts
+
+**Technical:**
+- **Lower Threshold**: More 4G connections qualify as "good" (5 Mbps vs 10 Mbps)
+- **Better Defaults**: 4G defaults to "good" when speed data unavailable
+- **No Breaking Changes**: Existing functionality preserved, only quality thresholds adjusted
+
+#### Files Modified
+
+- `src/components/NetworkQualityBadge.tsx`
+  - Updated `detectNetworkInfo()` function for 4G quality thresholds (lines 103-117)
+  - Changed keyboard event handler from `Ctrl+Shift+N` to `Ctrl+Alt+N` (line 283)
+  - Updated code comment (line 278)
+  - Updated debug mode tooltip message (line 358)
+  - Updated help text tooltip (line 380)
+  - Updated file header comment (line 232)
+
+---
+
+### 2. Upgrade Page UI Improvements - Wording Updates & Button Refinements
+
+#### Purpose
+
+Improve user experience on upgrade page with clearer wording, dynamic button labels based on subscription status, and better error handling for subscription management. Remove redundant UI elements and provide more accurate messaging about plan changes.
+
+#### Issues Addressed
+
+1. **Misleading Downgrade Note**: Downgrade note incorrectly stated "will reduce your child limit" when both monthly and annual plans support 5 children. Only billing frequency changes, not child limits.
+
+2. **Static Button Label**: Dashboard "Upgrade Plan" button always showed "Upgrade Plan" regardless of user's current subscription. Users on annual plan should see "Downgrade Plan" option.
+
+3. **Redundant Manage Button**: "Manage" button on upgrade page was redundant since users can already select plans directly from pricing cards below. Button opened Stripe Customer Portal which is useful for canceling/updating payment methods, but not needed on upgrade page.
+
+4. **Poor Error Messages**: Generic error messages when subscription management edge function (`create-customer-portal-session`) wasn't deployed. Users got unhelpful 404 errors without context.
+
+#### Complete File List
+
+**Files Modified:**
+
+- `src/pages/Upgrade/PricingPlans.tsx`
+  - Updated downgrade note text from "Note: Downgrading will reduce your child limit" to "You'll be switching to monthly billing."
+  - Line 129: Changed note text to accurately reflect billing change only
+
+- `src/pages/ParentDashboard/DashboardHeader.tsx`
+  - Added `subscriptionType` prop to component interface
+  - Added logic to determine button text: "Downgrade Plan" if on annual, "Upgrade Plan" otherwise
+  - Imported `SubscriptionTier` type from upgrade types
+  - Lines 8-12: Added subscriptionType to props
+  - Lines 23-25: Added button text logic
+
+- `src/pages/ParentDashboard/ParentDashboard.tsx`
+  - Added `useSubscriptionData` hook import
+  - Added subscription data fetching: `const { subscriptionData } = useSubscriptionData();`
+  - Passed `subscriptionType` prop to `DashboardHeader`
+  - Lines 16: Added import
+  - Lines 76-77: Added subscription data hook
+  - Lines 222-226: Updated DashboardHeader props
+
+- `src/pages/Upgrade/Upgrade.tsx`
+  - Changed heading from "Upgrade Your Plan" to "Manage Plan" in both native and PWA views
+  - Removed `isManagingSubscription` and `onManageSubscription` props from `CurrentPlanDisplay` (both instances)
+  - Lines 164, 257: Changed heading text
+  - Lines 170-177, 263-270: Removed manage subscription props
+
+- `src/pages/Upgrade/usePaymentHandlers.ts`
+  - Enhanced error handling in `handleManageSubscription` function
+  - Added comprehensive 404 detection (status codes, PGRST codes, error messages)
+  - Added user-friendly error messages for different scenarios
+  - Lines 327-359: Updated error handling logic
+
+- `src/pages/Upgrade/CurrentPlanDisplay.tsx`
+  - Removed "Manage" button and all related functionality
+  - Removed unused imports: `Button`, `Loader2`, `ExternalLink`
+  - Removed props: `isManagingSubscription`, `onManageSubscription`
+  - Simplified component to display-only (shows current plan info)
+  - Lines 4-6: Removed button-related imports
+  - Lines 15-16: Removed manage subscription props
+  - Lines 25-26: Removed props from destructuring
+  - Lines 39-66: Removed button and simplified layout
+
+#### Implementation Details
+
+**1. Downgrade Note Update:**
+
+The downgrade note was misleading because it suggested child limits would be reduced. However, both `family-bundle-monthly` and `family-bundle-annual` plans support 5 children according to `constants.ts`. The only difference is billing frequency. Updated note to accurately reflect this:
+
+```typescript
+// Before:
+"Note: Downgrading will reduce your child limit"
+
+// After:
+"You'll be switching to monthly billing."
+```
+
+**2. Dynamic Dashboard Button:**
+
+Added subscription type detection to show appropriate button text. Annual plan is considered "higher" tier, so users on annual see "Downgrade Plan", while users on free or monthly see "Upgrade Plan":
+
+```typescript
+const buttonText = subscriptionType === "family-bundle-annual" 
+  ? "Downgrade Plan" 
+  : "Upgrade Plan";
+```
+
+**3. Error Handling Improvements:**
+
+Enhanced error detection follows patterns established in `auditLog.ts` and `deviceTrackingLog.ts`. Checks multiple error indicators:
+
+```typescript
+const isFunctionNotFound = 
+  errorObj?.status === 404 ||
+  errorObj?.code === 'PGRST301' ||
+  errorObj?.code === 'PGRST202' ||
+  errorObj?.message?.includes("404") ||
+  errorObj?.message?.includes("Not Found") ||
+  errorObj?.message?.includes("Edge Function returned a non-2xx status code");
+```
+
+Provides context-specific error messages:
+- Function not deployed: Explains feature is being set up
+- No Stripe customer: Directs user to subscribe first
+- Other errors: Shows actual error message
+
+**4. Component Simplification:**
+
+Removed redundant "Manage" button from upgrade page. Users can:
+- Select plans directly from pricing cards (upgrade/downgrade)
+- Button was only useful for canceling or updating payment methods
+- Those actions are better suited for account settings page
+
+#### Testing Recommendations
+
+**1. Downgrade Note:**
+- Verify note appears when viewing monthly plan while on annual
+- Verify note text is accurate and clear
+- Test on both monthly and annual plan views
+
+**2. Dashboard Button:**
+- Test with free tier: Should show "Upgrade Plan"
+- Test with monthly plan: Should show "Upgrade Plan"
+- Test with annual plan: Should show "Downgrade Plan"
+- Verify button navigates to upgrade page correctly
+
+**3. Error Handling:**
+- Test with edge function not deployed: Should show helpful message
+- Test with no Stripe customer: Should show appropriate message
+- Test with valid subscription: Should work normally (once function is deployed)
+
+**4. Current Plan Display:**
+- Verify plan info displays correctly without button
+- Verify layout is clean and not broken
+- Test with active subscription and free tier
+
+#### Impact
+
+- **User Clarity**: Users understand downgrade only affects billing, not features
+- **Better Navigation**: Dashboard button accurately reflects available actions
+- **Reduced Redundancy**: Removed duplicate functionality improves UX
+- **Better Error Feedback**: Users get helpful context when features aren't available
+- **Code Consistency**: Error handling follows established patterns
+- **Simplified Component**: CurrentPlanDisplay is now focused on display only
+
+---
+
+### 2. Stripe Subscription Upgrade Synchronization - Database Sync & Error Fixes
+
+#### Purpose
+
+Fix subscription upgrade flow to ensure database updates immediately after Stripe subscription changes, fix webhook subscription type mapping, resolve frontend module import and async/await errors, update test mode Price IDs, and handle missing database columns gracefully.
+
+#### Issues Fixed
+
+1. **Subscription Sync Delay**: After upgrading subscription in Stripe (e.g., monthly to annual), the database wasn't updating immediately. The UI would still show the old plan and allow duplicate upgrades because it was waiting for the webhook to fire, which could be delayed.
+
+2. **Webhook Missing Subscription Type**: The webhook handler was updating `subscription_status` and `subscription_expires_at` but wasn't extracting or updating `subscription_type` from the Stripe Price ID, so the database didn't know which plan the user was on.
+
+3. **Module Import Error**: The Upgrade page was failing to load with error: `Failed to fetch dynamically imported module: http://localhost:8080/src/pages/Upgrade/index.ts`. The `index.ts` file was using `'./Upgrade.tsx'` with the file extension, which caused module resolution issues.
+
+4. **Async/Await Syntax Error**: The `useEffect` callback in `Upgrade.tsx` was using `await` but wasn't an async function, causing build errors: `await isn't allowed in non-async function`.
+
+5. **Wrong Test Price ID**: The test mode annual Price ID was incorrect - it was pointing to a monthly product instead of annual. User provided correct Price ID: `price_1SjUiEIIyqCwTeH2xnxCVAAT` (Product: `prod_TgsTXNnGbFFFKS`).
+
+6. **Missing Column Error**: The `upgrade_family_subscription` function was trying to update `stripe_price_id` column which doesn't exist in the database, causing error: `column "stripe_price_id" does not exist` when clicking "I already paid" button.
+
+#### Complete File List
+
+**Edge Functions Modified:**
+
+- `supabase/functions/create-stripe-subscription/index.ts`
+  - Added immediate database update after successful subscription update
+  - Updates `subscription_type`, `allowed_children`, `subscription_status`, `subscription_expires_at`, `stripe_subscription_id` immediately
+  - Maps subscription type to allowed children (5 for family plans)
+  - Logs database update success/failure
+  - Still returns redirect URL for frontend
+
+- `supabase/functions/stripe-webhook/index.ts`
+  - Added `mapPriceIdToSubscriptionType()` helper function
+  - Maps test mode Price IDs: `price_1SjULhIIyqCwTeH2GmBL1jVk` → `family-bundle-monthly`, `price_1SjUiEIIyqCwTeH2xnxCVAAT` → `family-bundle-annual`
+  - Checks environment variables for live mode Price IDs
+  - Updated `handleSubscriptionUpdate()` to extract Price ID from subscription line items
+  - Updates database with `subscription_type` and `allowed_children` when webhook fires
+  - Falls back to metadata if Price ID not available
+
+**Frontend Files Modified:**
+
+- `src/pages/Upgrade/Upgrade.tsx`
+  - Fixed refresh logic: calls `refreshSubscriptionInfo()` immediately and again after 2 seconds
+  - Changed from `await refreshSubscriptionInfo()` to `refreshSubscriptionInfo().then(...)` to fix async/await syntax error
+  - Removed `isPWA()` check that was preventing refreshes
+  - Handles both `session_id` (checkout) and `upgraded=true` (direct update) query parameters
+
+- `src/pages/Upgrade/index.ts`
+  - Fixed import path: changed from `'./Upgrade.tsx'` to `'./Upgrade'` (removed file extension)
+
+- `src/App.tsx`
+  - Changed lazy import from `import("./pages/Upgrade")` to `import("./pages/Upgrade/Upgrade")`
+  - Bypasses barrel export to avoid module resolution issues
+
+**Database Migration Modified:**
+
+- `supabase/migrations/20250122000011_fix_function_overload.sql`
+  - Added check for `stripe_price_id` column existence using `information_schema.columns`
+  - Conditional UPDATE: includes `stripe_price_id` only if column exists
+  - Prevents "column does not exist" errors
+  - Backward compatible with databases that don't have the column
+
+#### Implementation Details
+
+**1. Immediate Database Update in Edge Function:**
+
+When a subscription is updated directly (not through checkout), the Edge Function now updates the database immediately:
+
+```typescript
+// After successful Stripe subscription update
+const updatedSubscription = await updateResponse.json();
+
+// Update database immediately
+const { error: updateError } = await supabaseClient
+  .from("parents")
+  .update({
+    subscription_type: subscriptionType,
+    allowed_children: allowedChildren,
+    subscription_status: "active",
+    subscription_expires_at: new Date(updatedSubscription.current_period_end * 1000).toISOString(),
+    stripe_subscription_id: updatedSubscription.id,
+  })
+  .eq("id", user.id);
+```
+
+**2. Webhook Price ID Mapping:**
+
+The webhook now extracts the Price ID from the subscription and maps it to subscription type:
+
+```typescript
+function mapPriceIdToSubscriptionType(priceId: string | undefined): string {
+  // Test mode Price IDs
+  if (priceId === "price_1SjULhIIyqCwTeH2GmBL1jVk") return "family-bundle-monthly";
+  if (priceId === "price_1SjUiEIIyqCwTeH2xnxCVAAT") return "family-bundle-annual";
+  
+  // Live mode Price IDs from environment
+  const liveMonthly = Deno.env.get("STRIPE_PRICE_FAMILY_BUNDLE_MONTHLY");
+  const liveAnnual = Deno.env.get("STRIPE_PRICE_FAMILY_BUNDLE_ANNUAL");
+  
+  if (priceId === liveMonthly) return "family-bundle-monthly";
+  if (priceId === liveAnnual) return "family-bundle-annual";
+  
+  return "free";
+}
+```
+
+**3. Conditional Column Update in Database Function:**
+
+The function checks if the column exists before trying to update it:
+
+```sql
+-- Check if stripe_price_id column exists
+SELECT EXISTS(
+  SELECT 1 FROM information_schema.columns 
+  WHERE table_schema = 'public' 
+  AND table_name = 'parents' 
+  AND column_name = 'stripe_price_id'
+) INTO v_has_stripe_price_id;
+
+-- Update conditionally
+IF v_has_stripe_price_id THEN
+  UPDATE public.parents SET ..., stripe_price_id = COALESCE(...) WHERE id = v_parent_id;
+ELSE
+  UPDATE public.parents SET ... (without stripe_price_id) WHERE id = v_parent_id;
+END IF;
+```
+
+**4. Frontend Refresh Strategy:**
+
+The Upgrade page now refreshes subscription data:
+- Immediately when returning from upgrade
+- Again after 2 seconds to catch any webhook updates
+- Uses `.then()` instead of `await` to avoid async/await syntax errors
+
+#### Testing Recommendations
+
+1. **Test Subscription Upgrade Flow:**
+   - Start with monthly subscription
+   - Upgrade to annual via Stripe
+   - Verify database updates immediately
+   - Verify UI shows annual plan
+   - Verify can't upgrade again to same plan
+
+2. **Test Webhook Sync:**
+   - Manually trigger webhook from Stripe Dashboard
+   - Verify `subscription_type` updates correctly
+   - Verify `allowed_children` updates to 5 for family plans
+
+3. **Test "I Already Paid" Button:**
+   - Click "I already paid" button
+   - Verify no "column does not exist" errors
+   - Verify subscription updates correctly
+
+4. **Test Module Loading:**
+   - Navigate to `/parent/upgrade`
+   - Verify page loads without module import errors
+   - Verify no async/await syntax errors in console
+
+5. **Test Price ID Mapping:**
+   - Create test subscription with test mode Price IDs
+   - Verify webhook correctly identifies subscription type
+   - Verify database has correct `subscription_type`
+
+#### Impact
+
+- **Immediate Sync**: Subscription changes now reflect in database immediately, improving user experience
+- **Reliability**: Dual update strategy (Edge Function + Webhook) ensures data consistency
+- **Error Prevention**: Function handles missing columns gracefully, preventing runtime errors
+- **User Experience**: Upgrade page correctly shows current plan, prevents duplicate upgrades
+- **Test Mode**: Correct Price IDs ensure test mode subscriptions work properly
+- **Backward Compatibility**: Function works with or without `stripe_price_id` column
+
+#### Deployment Notes
+
+1. **Deploy Edge Functions:**
+   ```bash
+   supabase functions deploy create-stripe-subscription
+   supabase functions deploy stripe-webhook
+   ```
+
+2. **Apply Database Migration:**
+   ```bash
+   supabase migration up
+   ```
+   Or apply `20250122000011_fix_function_overload.sql` via Supabase Dashboard
+
+3. **Update Environment Variables:**
+   - Verify test mode Price IDs are correct in Edge Function code
+   - Verify live mode Price IDs are set in Supabase Dashboard → Edge Functions → Secrets
+
+4. **Test After Deployment:**
+   - Test upgrade flow end-to-end
+   - Verify webhook processes correctly
+   - Verify "I already paid" button works
+
+---
+
+### 2. Domain Nameserver Issue - Cloudflare Detection & Troubleshooting Guide
+
+#### Purpose
+
+Document critical domain nameserver issue where Cloudflare detected that `kidscallhome.com` is no longer using Cloudflare nameservers and is pointing to DNS parking nameservers. Provide comprehensive troubleshooting guide for immediate resolution and prevention of future issues.
+
+#### Issues Detected
+
+1. **Domain Nameserver Change**: Cloudflare detected domain is using DNS parking nameservers (`ns1.dns-parking.com`, `ns2.dns-parking.com`) instead of expected Cloudflare nameservers (`bruce.ns.cloudflare.com`, `kay.ns.cloudflare.com`)
+2. **Potential Domain Expiration**: DNS parking nameservers typically indicate domain registration expired at registrar (Hostinger) or nameservers were manually changed
+3. **Cloudflare Auto-Deletion Risk**: Cloudflare will automatically delete domain from account after 7 days if nameservers aren't restored (unless domain has active paid subscription)
+4. **Website Availability Risk**: Domain may be unreachable or showing parking pages if DNS records in Cloudflare are no longer active
+5. **SSL Certificate Risk**: SSL certificates may fail if domain DNS configuration is incorrect
+
+#### Complete File List
+
+**Documentation Files Created:**
+
+- `docs/troubleshooting/DOMAIN_NAMESERVER_ISSUE.md`
+  - Comprehensive troubleshooting guide for domain nameserver issues
+  - Problem description and impact analysis
+  - Root cause analysis (domain expiration, nameserver changes, account issues)
+  - Step-by-step resolution instructions
+  - Verification steps using nslookup and online DNS checker tools
+  - Cloudflare account information (Zone ID, Account ID, Dashboard links)
+  - Prevention measures (auto-renewal, domain lock, monitoring)
+  - Timeline and action items
+  - Support contact information for Hostinger, Cloudflare, and Vercel
+  - Instructions for re-adding domain to Cloudflare if deleted
+  - ~300+ lines
+
+#### Implementation Details
+
+**1. Problem Analysis:**
+
+The issue was detected when Cloudflare sent notification that `kidscallhome.com` stopped using Cloudflare nameservers. Current nameservers detected:
+- `ns1.dns-parking.com`
+- `ns2.dns-parking.com`
+- `[not set]` (3 additional empty slots)
+
+Expected nameservers:
+- `bruce.ns.cloudflare.com`
+- `kay.ns.cloudflare.com`
+
+**2. Root Cause Scenarios Documented:**
+
+- **Domain Registration Expired** (Most Common): Domain registration expired at Hostinger, registrar automatically points to parking nameservers
+- **Nameservers Changed at Registrar**: Someone manually changed nameservers at Hostinger, or nameservers were reset to default/parking
+- **Domain Transfer**: Domain was transferred to another registrar, nameservers reset during transfer
+- **Account/Billing Issue**: Hostinger account issue, payment failure, or account suspended
+
+**3. Resolution Steps Documented:**
+
+**Step 1: Check Domain Status at Hostinger**
+- Log into Hostinger account: https://hpanel.hostinger.com
+- Navigate to Domains → `kidscallhome.com`
+- Check domain status (Active, Expired, Redemption Period, Pending Delete)
+- Verify expiration date
+
+**Step 2: Restore Cloudflare Nameservers**
+- If domain is active: Select "Use custom nameservers" in Hostinger
+- Enter Cloudflare nameservers:
+  - `bruce.ns.cloudflare.com`
+  - `kay.ns.cloudflare.com`
+- Save changes
+
+**Step 3: If Domain Expired**
+- Renew domain immediately in Hostinger
+- Complete payment if needed
+- Wait 5-10 minutes for renewal to process
+- Then restore Cloudflare nameservers (Step 2)
+
+**Step 4: Verify Propagation**
+- Wait 15-30 minutes for DNS propagation
+- Check using https://dnschecker.org
+- Search for `kidscallhome.com` with record type NS
+- Verify all locations show Cloudflare nameservers
+
+**Step 5: Verify in Cloudflare**
+- Log into Cloudflare: https://dash.cloudflare.com
+- Navigate to domain: `kidscallhome.com`
+- Check status (should show "Active" instead of "Moved")
+
+**4. Verification Methods Documented:**
+
+**Command Line:**
+```bash
+nslookup -type=NS kidscallhome.com
+# Expected output:
+# kidscallhome.com nameserver = bruce.ns.cloudflare.com
+# kidscallhome.com nameserver = kay.ns.cloudflare.com
+```
+
+**Online Tools:**
+- https://dnschecker.org (check NS records globally)
+- https://whatsmydns.net (check NS records)
+
+**5. Cloudflare Account Information Documented:**
+
+- **Zone ID**: `47da5b94667c38fe40fe90419402ac78`
+- **Account ID**: `b1a8f1b6b9e7c3969413a8c1db5dbdc8`
+- **Dashboard**: https://dash.cloudflare.com/b1a8f1b6b9e7c3969413a8c1db5dbdc8/kidscallhome.com
+- **Expected DNS Records** (after nameservers restored):
+  - `@` (root) → CNAME → `2f47c9cb96396e48.vercel-dns-017.com` (Proxied)
+  - `www` → CNAME → `2f47c9cb96396e48.vercel-dns-017.com` (Proxied)
+
+**6. Prevention Measures Documented:**
+
+- **Enable Auto-Renewal**: Enable auto-renewal for `kidscallhome.com` in Hostinger, add payment method, set renewal reminder (30 days before expiration)
+- **Monitor Domain Expiration**: Set calendar reminder 60 days before expiration, check domain status monthly
+- **Lock Domain**: Enable domain lock at Hostinger (prevents unauthorized transfers), enable 2FA on Hostinger account
+- **Backup DNS Configuration**: Document all DNS records, keep Cloudflare Zone ID and Account ID in secure location
+
+**7. Recovery Instructions (If Domain Deleted from Cloudflare):**
+
+- Re-add domain to Cloudflare (Add a Site)
+- Update nameservers at Hostinger
+- Reconfigure DNS records (CNAME to Vercel)
+- Verify Vercel configuration
+
+#### Testing Recommendations
+
+**Immediate Verification:**
+1. Check domain status at Hostinger dashboard
+2. Verify domain expiration date
+3. Check current nameservers using nslookup or DNS checker tools
+4. Verify Cloudflare domain status in dashboard
+
+**After Resolution:**
+1. Test website accessibility: `curl -I https://kidscallhome.com`
+2. Test www subdomain: `curl -I https://www.kidscallhome.com`
+3. Verify SSL certificates are working
+4. Test from multiple locations using DNS checker tools
+5. Verify all DNS records are correct in Cloudflare
+
+**Prevention Verification:**
+1. Confirm auto-renewal is enabled at Hostinger
+2. Set calendar reminder for domain expiration
+3. Enable domain lock at Hostinger
+4. Document DNS configuration in secure location
+
+#### Impact
+
+- **Documentation**: Comprehensive troubleshooting guide for resolving domain nameserver issues
+- **Timeline Awareness**: Clear 7-day deadline for Cloudflare auto-deletion highlighted
+- **Prevention**: Detailed steps to prevent future domain expiration issues
+- **Recovery**: Complete instructions for restoring domain if deleted from Cloudflare
+- **Verification**: Multiple methods to verify nameserver propagation and domain status
+- **Support**: Contact information for all relevant services (Hostinger, Cloudflare, Vercel)
+
+#### Related Documentation
+
+- `docs/setup/DNS_QUICK_REFERENCE.md` - DNS configuration quick reference
+- `docs/setup/CLOUDFLARE_DNS_CONFIG.md` - Cloudflare DNS configuration details
+- `docs/troubleshooting/DOMAIN_NOT_REACHABLE.md` - General domain troubleshooting
+- `docs/troubleshooting/ROOT_DOMAIN_LOADING_ISSUE.md` - Root domain loading issues
+
+---
+
+## Previous Changes (2025-01-28)
+
+### 1. Subscription System Updates - Pricing Alignment, Platform Detection Fixes & Existing Subscription Handling
+
+#### Purpose
+
+Align upgrade page pricing with info page, fix critical platform detection bugs preventing payments on web, handle existing subscriptions properly, and add company information for transparency. Ensures users see consistent pricing, can successfully complete payments, and understand billing company name.
+
+#### Issues Fixed
+
+1. **Pricing Mismatch**: Upgrade page showed different pricing than info page (`$149.99` vs `$149`, different plan names)
+2. **Too Many Plans**: Upgrade page showed 5 plans (Additional Kid Monthly/Annual, Family Bundle Monthly/Annual, $99 Annual) but info page only shows 2 (Family Plan Monthly/Annual)
+3. **Platform Detection Bug**: Code incorrectly detected localhost/web as native app, causing "Product ID not available for this platform" errors when trying to pay
+4. **Existing Subscription Handling**: No logic to handle users with active subscriptions trying to upgrade/change plans - would create duplicate subscriptions
+5. **Missing Company Info**: Users saw "Fluid Investment Group LLC" on Stripe payment receipts but no explanation in app, causing confusion
+6. **Misleading Sync Messaging**: "Your subscription syncs across all your devices" didn't clarify it requires signing in with same account
+
+#### Complete File List
+
+**Source Code Files Modified:**
+
+- `src/pages/Upgrade/constants.ts`
+  - Removed `additional-kid-monthly` plan
+  - Removed `additional-kid-annual` plan
+  - Removed `annual-family-plan` ($99 plan)
+  - Updated `family-bundle-monthly`:
+    - Name: "Family Bundle Monthly" → "Family Plan Monthly"
+    - Price: "$14.99" → "US$14.99"
+  - Updated `family-bundle-annual`:
+    - Name: "Family Bundle Annual" → "Family Plan Annual"
+    - Price: "$149.99" → "US$149"
+    - Added `recommended: true`
+  - Updated Stripe Payment Links:
+    - Monthly: `https://buy.stripe.com/4gM3cw17hc7I1HB4Yabsc00`
+    - Annual: `https://buy.stripe.com/14A28sg2b6Noeun8ambsc01`
+  - Lines 6-32: Complete plan array rewrite
+
+- `src/pages/Upgrade/types.ts`
+  - Updated `SubscriptionTier` type to remove deleted plan types
+  - Kept for backward compatibility: `"additional-kid-monthly" | "additional-kid-annual" | "annual-family-plan"` (existing users may have these)
+  - Line 20: Type definition update
+
+- `src/pages/Upgrade/usePaymentHandlers.ts`
+  - Added existing subscription detection and Customer Portal redirect
+  - Improved error message extraction from edge function responses
+  - Added handling for `hasExistingSubscription` and `redirectToPortal` flags
+  - Lines 65-93: Enhanced error handling with context extraction
+  - Lines 89-99: Added Customer Portal redirect logic for existing subscriptions
+
+- `src/pages/Upgrade/PricingPlans.tsx`
+  - Simplified upgrade/downgrade detection logic (removed references to deleted plans)
+  - Updated grid layout: `md:grid-cols-2 lg:grid-cols-4` → `md:grid-cols-2` (only 2 plans now)
+  - Removed logic checking for `annual-family-plan` and `additional-kid-*` plans
+  - Lines 27-42: Simplified `getButtonText` function
+  - Lines 47: Updated grid className
+  - Lines 50-57: Simplified upgrade/downgrade detection
+
+- `src/pages/Upgrade/CurrentPlanDisplay.tsx`
+  - Removed reference to `annual-family-plan` unlimited children text
+  - Line 37: Removed conditional text for deleted plan
+
+- `src/pages/Upgrade/usePaymentHandlers.ts` (processUpgrade function)
+  - Removed logic for `annual-family-plan` (UNLIMITED_CHILDREN)
+  - Removed logic for `additional-kid-monthly` and `additional-kid-annual`
+  - Simplified to only handle `family-bundle-monthly` and `family-bundle-annual` (both set to 5 children)
+  - Lines 101-113: Simplified allowed children calculation
+
+- `src/pages/Upgrade/Upgrade.tsx`
+  - Added Fluid Investment Group LLC note in "How It Works" section
+  - Updated subscription sync messaging with clarification footnote
+  - Lines 271-275: Added company information note
+  - Lines 177-182: Updated sync messaging with clarification
+
+- `src/utils/platformDetection.ts`
+  - Fixed `isNativeApp()` to check if Capacitor is functional, not just present
+  - Added localhost fallback: Always returns `true` for PWA on localhost/127.0.0.1
+  - Added try-catch blocks for safe Capacitor checks
+  - Lines 8-29: Complete rewrite of `isNativeApp()` with functional checks
+  - Lines 35-45: Added localhost fallback to `isPWA()`
+
+- `src/utils/nativePurchases.ts`
+  - Added safe checks for Capacitor before calling methods
+  - Added try-catch blocks to prevent errors when Capacitor not available
+  - Lines 43-64: Added safe checks to `isAndroid()` and `isIOS()`
+
+- `src/components/info/PricingSection.tsx`
+  - Added Fluid Investment Group LLC note below pricing details
+  - Lines 116-120: Added company information note
+
+- `src/components/info/TermsSection.tsx`
+  - Added "Company Information" section explaining Fluid Investment Group LLC
+  - Lines 57-62: Added new section before footer
+
+- `supabase/functions/create-stripe-subscription/index.ts`
+  - Added check for existing active subscriptions before creating checkout
+  - Improved error messages with environment variable names
+  - Added better error logging in catch blocks
+  - Documented Stripe Product IDs and Price IDs in comments
+  - Lines 20-36: Added documentation comments with Product/Price IDs
+  - Lines 195-232: Added existing subscription check
+  - Lines 163-179: Improved error message for missing Price IDs
+  - Lines 294-310: Enhanced catch block error handling
+
+- `docs/QUICK_START.md`
+  - Updated with correct Stripe Product IDs and Price IDs
+  - Updated environment variables section (removed old plans)
+  - Lines 32-38: Updated Product/Price ID documentation
+  - Lines 63-68: Updated environment variables list
+
+#### Implementation Details
+
+**1. Pricing Alignment:**
+
+The upgrade page now exactly matches the info page pricing:
+- **Family Plan Monthly**: US$14.99/month (was $14.99, name was "Family Bundle Monthly")
+- **Family Plan Annual**: US$149/year (was $149.99, name was "Family Bundle Annual", now marked as recommended)
+
+Removed plans that weren't on info page:
+- Additional Kid Monthly ($4.99/month)
+- Additional Kid Annual ($49.99/year)
+- Annual Family Plan ($99/year, up to 10 kids)
+
+**2. Platform Detection Fixes:**
+
+**Problem**: Code was calling `Capacitor.getPlatform()` without checking if Capacitor exists, causing errors on web/localhost.
+
+**Solution**:
+```typescript
+// Before (unsafe):
+export function isAndroid(): boolean {
+  return Capacitor.getPlatform() === "android"; // Crashes if Capacitor not available
+}
+
+// After (safe):
+export function isAndroid(): boolean {
+  try {
+    if (typeof window === "undefined" || !(window as any).Capacitor) {
+      return false;
+    }
+    return Capacitor.getPlatform() === "android";
+  } catch {
+    return false;
+  }
+}
+```
+
+**Localhost Fallback**:
+```typescript
+export function isPWA(): boolean {
+  // If we're on localhost, we're definitely in PWA mode (web development)
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return true;
+    }
+  }
+  return !isNativeApp();
+}
+```
+
+**3. Existing Subscription Handling:**
+
+**Edge Function Check**:
+```typescript
+// Check if customer already has an active subscription
+if (stripeCustomerId) {
+  const subscriptionsResponse = await fetch(
+    `${stripeApiUrl}/subscriptions?customer=${stripeCustomerId}&status=active`,
+    { headers: { Authorization: `Bearer ${stripeSecretKey}` } }
+  );
+  
+  if (subscriptionsResponse.ok) {
+    const subscriptionsData = await subscriptionsResponse.json();
+    if (subscriptionsData.data && subscriptionsData.data.length > 0) {
+      // Redirect to Customer Portal for plan changes
+      return new Response(JSON.stringify({
+        success: false,
+        error: "You already have an active subscription. Please use the Customer Portal to change your plan.",
+        hasExistingSubscription: true,
+        redirectToPortal: true,
+      }), { status: 400, headers: corsHeaders });
+    }
+  }
+}
+```
+
+**Frontend Handling**:
+```typescript
+if (!checkoutData?.success) {
+  // If user has existing subscription, redirect to Customer Portal
+  if (checkoutData?.hasExistingSubscription && checkoutData?.redirectToPortal) {
+    toast({
+      title: "Active Subscription Found",
+      description: "You already have an active subscription. Opening Customer Portal to manage your plan...",
+    });
+    await handleManageSubscription(); // Opens Stripe Customer Portal
+    return;
+  }
+}
+```
+
+**4. Company Information:**
+
+Added Fluid Investment Group LLC information in three places:
+- **Terms Section**: New "Company Information" subsection explaining the holding company
+- **Pricing Section**: Note below pricing explaining billing company name
+- **Upgrade Page**: Note in "How It Works" section
+
+**5. Subscription Sync Messaging:**
+
+Updated from:
+- "Your subscription syncs across all your devices"
+
+To:
+- "Your subscription syncs across all your devices (Requires signing in with the same account on each device)"
+
+Clarifies that sync is account-based (backend is source of truth), not store-based.
+
+**6. Error Handling Improvements:**
+
+**Edge Function**:
+- Returns specific error messages with environment variable names when Price IDs are missing
+- Better error logging in catch blocks with stack traces
+- Structured error responses with `success`, `error`, and `details` fields
+
+**Frontend**:
+- Extracts error messages from error context objects
+- Handles different error scenarios (missing env vars, existing subscriptions, etc.)
+- Better user feedback with specific error messages
+
+#### Testing Recommendations
+
+**Manual Testing:**
+
+1. **Pricing Display**:
+   - Navigate to `/parent/upgrade` → verify only 2 plans shown (Monthly and Annual)
+   - Verify pricing matches info page: US$14.99/month and US$149/year
+   - Verify Annual plan shows "Best Value" badge
+
+2. **Platform Detection**:
+   - Test on localhost → verify payments use Stripe (not native purchases)
+   - Test on web domain → verify payments use Stripe
+   - Verify no "Product ID not available" errors
+
+3. **Existing Subscription Handling**:
+   - Create test subscription (monthly)
+   - Try to upgrade to annual → should redirect to Customer Portal
+   - Verify Customer Portal opens with plan change options
+
+4. **Company Information**:
+   - Check `/info#terms` → verify "Company Information" section exists
+   - Check `/info#pricing` → verify Fluid Investment Group LLC note exists
+   - Check `/parent/upgrade` → verify note in "How It Works" section
+
+5. **Error Handling**:
+   - Remove environment variable in Supabase → verify helpful error message
+   - Test with invalid Price ID → verify specific error about missing env var
+
+**Edge Function Testing:**
+
+1. **Deployment Verification**:
+   - Verify all 3 functions deployed: `create-stripe-subscription`, `stripe-webhook`, `create-customer-portal-session`
+   - Check Supabase Dashboard → Edge Functions → verify all show "Active"
+
+2. **Environment Variables**:
+   - Verify `STRIPE_SECRET_KEY` is set
+   - Verify `STRIPE_PRICE_FAMILY_BUNDLE_MONTHLY` = `price_1SUVdqIIyqCwTeH2zggZpPAK`
+   - Verify `STRIPE_PRICE_FAMILY_BUNDLE_ANNUAL` = `price_1SjSkPIIyqCwTeH2QMbl0SCA`
+   - Verify `STRIPE_WEBHOOK_SECRET` is set
+
+3. **Webhook Configuration**:
+   - Verify webhook endpoint: `https://itmhojbjfacocrpmslmt.supabase.co/functions/v1/stripe-webhook`
+   - Verify webhook listening to 7 events
+   - Test webhook with Stripe Dashboard → "Send test webhook"
+
+#### Impact
+
+- **Pricing Consistency**: Users see same pricing everywhere, reducing confusion
+- **Simplified Decision**: Only 2 plans instead of 5 reduces decision fatigue
+- **Payment Success**: Fixed critical bug preventing payments on web/localhost
+- **Subscription Management**: Users can change plans via Customer Portal instead of creating duplicates
+- **Transparency**: Users understand billing company name, reducing support questions
+- **Better Errors**: Specific error messages help debug configuration issues faster
+- **Account-Based Sync**: Clear messaging prevents confusion about how sync works
+
+---
+
+## Previous Changes (2025-01-22)
+
+### 2. Funnel Optimization - Trust-Gated Decision Funnel with Intent Tracking
+
+#### Purpose
+
+Implement production-grade funnel tracking system optimized for trust-gated decision making. Addresses the need for systematic conversion tracking, intent normalization, confidence signal detection, and AI-optimized CTA placement. Designed specifically for trust-sensitive parents who convert when uncertainty is removed, not when excited.
+
+#### Issues Fixed
+
+1. **No Conversion Tracking**: No systematic way to track user journey from discovery to signup
+2. **Generic CTAs**: CTAs used generic "Sign up" language instead of trust-building alternatives like "Create a family space"
+3. **No Intent Normalization**: Couldn't distinguish between exploration, comparison, trust-building, and commitment stages
+4. **Missing Confidence Signals**: No way to track unspoken "yes" signals from hesitant parents (scroll depth, FAQ engagement, time on page)
+5. **AI Traffic Blind Spots**: CTAs not optimized for AI referrals landing mid-page (they don't scroll like humans)
+6. **No Copy Alignment Metrics**: No way to measure if trust content successfully bridges to action (CER metric)
+
+#### Complete File List
+
+**Source Code Files Created:**
+
+- `src/utils/funnelTracking.ts`
+  - Core funnel tracking utility with minimal event taxonomy
+  - Intent type normalization (`explore`, `compare`, `trust`, `commit`)
+  - Confidence signal tracking with session debouncing
+  - Google Analytics integration (gtag) with graceful fallback
+  - Type-safe event types and metadata
+  - ~154 lines
+
+- `docs/FUNNEL_OPTIMIZATION.md`
+  - Complete funnel documentation
+  - Health metrics guide (weekly review targets)
+  - Confidence Efficiency Ratio (CER) interpretation
+  - Intent type analysis guidance
+  - Green light indicators for funnel stability
+  - What NOT to add yet (exit popups, email capture, etc.)
+  - ~167 lines
+
+**Source Code Files Modified:**
+
+- `src/pages/Index.tsx`
+  - Updated hero CTA copy: "Create a family space" (was "Get Started Free")
+  - Added page view tracking (`view_home`)
+  - Added intent type "explore" to hero CTA
+  - Lines ~7-8: Added funnelTracking import
+  - Lines ~88-92: Added page view tracking useEffect
+  - Lines ~360-381: Updated hero CTA with new copy and intent tracking
+
+- `src/components/info/ComparisonSection.tsx`
+  - Added contextual CTAs after comparison content
+  - Primary CTA: "Switch safely" (intent: "compare")
+  - Secondary CTA: "See how it works" (intent: "compare")
+  - Added IntersectionObserver for viewport visibility tracking
+  - Lines ~5-9: Added imports (Button, trackComparisonClick, trackPrimaryCTA, useRef, useEffect)
+  - Lines ~12-13: Added navigate and sectionRef
+  - Lines ~15-35: Added IntersectionObserver for CTA visibility
+  - Lines ~61-62: Added ref to section element
+  - Lines ~123-149: Added contextual CTAs with tracking
+
+- `src/components/info/TrustSignalsSection.tsx`
+  - Added contextual CTA: "Create a family space" (intent: "trust")
+  - Added scroll-based confidence signal tracking (IntersectionObserver)
+  - Tracks when user scrolls past section (unspoken yes)
+  - Lines ~5-7: Added imports (Button, trackTrustClick, trackPrimaryCTA, trackConfidenceSignal, useRef, useEffect)
+  - Lines ~12-13: Added navigate, sectionRef, hasTrackedScroll
+  - Lines ~15-33: Added IntersectionObserver for scroll tracking
+  - Lines ~47-48: Added ref to section element
+  - Lines ~89-102: Added contextual CTA with tracking
+
+- `src/components/info/ExpandedFAQ.tsx`
+  - Added contextual CTAs: "Get started" + "Try it with one device" (intent: "trust")
+  - Added FAQ depth tracking (fires confidence signal at ≥3 questions opened)
+  - Made FAQ items clickable with hover states
+  - Lines ~5-7: Added imports (Button, trackFAQClick, trackPrimaryCTA, trackConfidenceSignal, useState, useRef)
+  - Lines ~80-81: Added navigate, openedQuestions state, hasTrackedConfidence ref
+  - Lines ~83-96: Added handleQuestionClick with depth tracking
+  - Lines ~94-107: Updated FAQ items to be clickable
+  - Lines ~110-136: Added contextual CTAs with tracking
+
+- `src/pages/Info.tsx`
+  - Added page view tracking (`view_info`)
+  - Added time-based confidence signal (fires after 90 seconds)
+  - Lines ~26: Added trackPageView, trackConfidenceSignal imports
+  - Lines ~194-203: Added page view and time-based confidence tracking
+
+- `src/pages/ParentAuth/authHandlers.ts`
+  - Added signup start tracking with source context
+  - Tracks referral vs direct signups
+  - Lines ~3: Added trackSignupStart import
+  - Lines ~264: Added signup tracking before audit log
+
+#### Implementation Details
+
+**1. Funnel Tracking Utility (`funnelTracking.ts`):**
+
+```typescript
+// Event taxonomy - minimal set for trust-gated decision funnel
+export type FunnelEventType =
+  | "view_home"
+  | "view_info"
+  | "click_comparison"
+  | "click_trust"
+  | "click_faq"
+  | "click_primary_cta"
+  | "start_signup"
+  | "confidence_signal";
+
+// Intent type normalization
+export type IntentType = "explore" | "compare" | "trust" | "commit";
+
+// Confidence signal with session debouncing
+export function trackConfidenceSignal(trigger: "scroll_trust" | "faq_depth" | "time_on_page"): void {
+  const sessionKey = "kch_confidence_fired";
+  const hasFired = sessionStorage.getItem(sessionKey);
+  
+  if (hasFired) {
+    return; // Binary confidence, not frequency
+  }
+
+  sessionStorage.setItem(sessionKey, "true");
+  trackFunnelEvent("confidence_signal", {
+    trigger,
+    first_trigger: trigger, // Most valuable data
+  });
+}
+```
+
+**Features:**
+- Type-safe event tracking with TypeScript interfaces
+- Google Analytics integration (gtag) with graceful fallback
+- Session-based debouncing for confidence signals
+- Intent type normalization for all CTAs
+- Dev-mode logging for debugging
+
+**2. Intent Type Mapping:**
+
+- **Hero CTA** (`Index.tsx`): `intent_type: "explore"` - Early discovery stage
+- **Comparison CTAs** (`ComparisonSection.tsx`): `intent_type: "compare"` - Evaluating alternatives
+- **Trust/Privacy CTAs** (`TrustSignalsSection.tsx`, `ExpandedFAQ.tsx`): `intent_type: "trust"` - Seeking reassurance
+- **Signup Start** (`authHandlers.ts`): Implicit `intent_type: "commit"` - Ready to act
+
+**3. Confidence Signal Triggers:**
+
+- **Scroll Trust** (`TrustSignalsSection.tsx`): IntersectionObserver detects when user scrolls past section
+- **FAQ Depth** (`ExpandedFAQ.tsx`): State tracking counts opened questions, fires at ≥3
+- **Time on Page** (`Info.tsx`): Timer fires after 90 seconds on `/info`
+
+**4. Session Debouncing:**
+
+- Uses `sessionStorage` flag: `kch_confidence_fired`
+- Fires only once per session (binary confidence, not frequency)
+- Still logs which trigger fired first (most valuable data)
+- Prevents skew when users open many FAQs or scroll repeatedly
+
+**5. AI-Optimized CTA Placement:**
+
+- IntersectionObserver tracks when CTAs become visible in viewport
+- CTAs positioned to be visible when section is in viewport
+- Critical for AI referrals landing mid-page (they scan and decide fast, don't scroll like humans)
+
+**6. Confidence Efficiency Ratio (CER):**
+
+Derived metric computed weekly:
+```
+CER = (confidence_signal → click_primary_cta) / confidence_signal
+```
+
+Interpretation:
+- **<15%**: Trust content reassures but doesn't activate (copy needs more action-oriented language)
+- **20-30%**: Healthy trust → action bridge (optimal range)
+- **>35%**: Users are over-qualified; CTA might be too weak or late (consider stronger CTAs or earlier placement)
+
+#### Testing Recommendations
+
+**Manual Testing:**
+1. Navigate to homepage → verify `view_home` event fires
+2. Navigate to `/info` → verify `view_info` event fires
+3. Click comparison section CTA → verify `click_comparison` and `click_primary_cta` with `intent_type: "compare"`
+4. Scroll past trust section → verify `confidence_signal` with `trigger: "scroll_trust"` fires once
+5. Open 3 FAQ questions → verify `confidence_signal` with `trigger: "faq_depth"` fires once
+6. Stay on `/info` for 90 seconds → verify `confidence_signal` with `trigger: "time_on_page"` fires once
+7. Try multiple confidence triggers → verify only first one fires (session debouncing)
+8. Start signup → verify `start_signup` event fires
+
+**Analytics Verification:**
+1. Check Google Analytics for funnel events with `event_category: "funnel"`
+2. Verify intent types are correctly attributed to CTAs
+3. Verify confidence signals include `first_trigger` metadata
+4. Compute CER ratio weekly and compare to targets
+
+#### Impact
+
+- **Conversion Tracking**: Complete funnel visibility from discovery to signup with normalized intent types
+- **Intent Analysis**: Can now answer "Are people ready to commit or still seeking reassurance?" and "Which pages generate premature commitment clicks?"
+- **Copy Alignment**: CER metric provides single best indicator of copy effectiveness (trust → action bridge)
+- **AI Traffic Optimization**: CTAs visible in viewport for mid-page AI landings (they don't scroll like humans)
+- **Trust Building**: Low-commitment CTAs ("Try it with one device") reduce psychological barriers for hesitant parents
+- **Data Quality**: Session debouncing prevents frequency skew, binary confidence signals more actionable than frequency counts
+- **Weekly Health Checks**: Defined metrics for core funnel (≥25% home→CTA, ≥40% info→CTA) and trust health (≥30% confidence signals, 20-30% CER)
+- **Production Ready**: Minimal, focused tracking system designed for trust-gated decision funnels, not growth-hack SaaS funnels
+
+#### Related Documentation
+
+- `docs/FUNNEL_OPTIMIZATION.md` - Complete funnel documentation with health metrics, CER guide, and green light indicators
+
+---
+
+### 2. SEO Content Improvements - Info Page Refactoring & Distinct Content Sections
+
+#### Purpose
+
+Refactor `/info` page to eliminate duplicate content from homepage and add distinct, SEO-optimized sections that improve search engine and AI discovery. Addresses SEO penalties from duplicate content, adds user intent questions, comparison content, and structured trust signals.
+
+#### Issues Fixed
+
+1. **Duplicate Content**: `/info` page duplicated homepage FAQ and product description, causing SEO penalties and no unique value
+2. **No User Intent Questions**: FAQ lacked questions matching real search queries like "Is Kids Call Home accessible on iPads/tablets?"
+3. **Missing Comparison Content**: No content addressing "Is Kids Call Home safer than FaceTime/WhatsApp?" queries
+4. **Unstructured Trust Signals**: Privacy commitments not structured for search/AI discovery
+5. **Redundant Navigation**: Info page navigation didn't reflect unique content sections
+
+#### Complete File List
+
+**Source Code Files Created:**
+
+- `src/components/info/AboutMissionSection.tsx`
+  - Explains why Kids Call Home exists
+  - Founder story and mission narrative
+  - Problem/solution framework
+  - Trust indicators (Safety First, Family Focused, Parent Peace of Mind)
+  - ~85 lines
+
+- `src/components/info/ComparisonSection.tsx`
+  - Compares Kids Call Home vs. WhatsApp, FaceTime, Messenger Kids
+  - Structured pros/cons for each alternative
+  - Funnel tracking integration (comparison clicks, CTA tracking)
+  - Intersection Observer for viewport visibility (AI traffic detection)
+  - Contextual CTAs ("Switch safely", "See how it works")
+  - ~130 lines
+
+- `src/components/info/TrustSignalsSection.tsx`
+  - 6 structured trust signals with icons
+  - Privacy commitments (encryption, minimal data, no selling, no ads, parent controls)
+  - "What We Don't Collect" list
+  - Funnel tracking integration (trust clicks, confidence signals, CTA tracking)
+  - Scroll tracking for confidence signals
+  - Contextual CTA ("Create a family space")
+  - ~120 lines
+
+- `src/components/info/ExpandedFAQ.tsx`
+  - 15 FAQ questions (expanded from 8)
+  - Questions target real user intent queries
+  - Funnel tracking integration (FAQ clicks, depth tracking)
+  - Confidence signal tracking (≥3 questions opened)
+  - Interactive question tracking
+  - Contextual CTAs ("Get started", "Try it with one device")
+  - ~180 lines
+
+**Source Code Files Modified:**
+
+- `src/pages/Info.tsx`
+  - Removed duplicate FAQ content (was inline, now uses ExpandedFAQ component)
+  - Removed duplicate product description from header
+  - Updated header intro to link to homepage for overview
+  - Added imports for new sections (AboutMissionSection, ComparisonSection, TrustSignalsSection, ExpandedFAQ)
+  - Reordered sections: About/Mission first, then Comparison, Trust, Overview, FAQ
+  - Removed unused imports (Card, HelpCircle)
+  - Lines ~1-20: Updated imports
+  - Lines ~247-260: Updated header intro
+  - Lines ~274-285: Added new sections in order
+
+- `src/data/infoSections.ts`
+  - Added "About & Mission" section (id: "about", label: "About & Mission")
+  - Added "How We Compare" section (id: "comparison", label: "How We Compare")
+  - Added "Privacy & Safety" section (id: "trust", label: "Privacy & Safety")
+  - Reordered sections to prioritize unique content
+  - Lines ~9-23: Updated section definitions
+
+- `index.html`
+  - Updated FAQPage JSON-LD schema with 7 new FAQ questions
+  - Total of 15 FAQ questions in structured data (was 8)
+  - New questions added:
+    - "Is Kids Call Home accessible on iPads/tablets?"
+    - "How do approved contacts work?"
+    - "How does encryption protect my family?"
+    - "Can my child call relatives internationally?"
+    - "Is Kids Call Home safer than FaceTime?"
+    - "What data does Kids Call Home collect?"
+    - "Can grandparents use Kids Call Home?"
+  - Lines ~157-229: FAQPage schema (original 8 questions)
+  - Lines ~219-229: Added 7 new questions
+
+#### Implementation Details
+
+**1. AboutMissionSection Component:**
+
+```typescript
+// Location: src/components/info/AboutMissionSection.tsx
+export const AboutMissionSection = () => {
+  return (
+    <section id="about" className="mb-8 scroll-mt-20">
+      <Card className="p-6">
+        <h2>Why Kids Call Home Exists</h2>
+        {/* Mission, problem/solution, trust indicators */}
+      </Card>
+    </section>
+  );
+};
+```
+
+**Features:**
+- Founder story narrative
+- Problem/solution framework
+- 3 trust indicator cards (Safety First, Family Focused, Parent Peace of Mind)
+- Visual hierarchy with icons and structured layout
+
+**2. ComparisonSection Component:**
+
+```typescript
+// Location: src/components/info/ComparisonSection.tsx
+export const ComparisonSection = () => {
+  const navigate = useNavigate();
+  const sectionRef = useRef<HTMLElement>(null);
+  
+  // Intersection Observer for CTA visibility tracking
+  useEffect(() => {
+    const observer = new IntersectionObserver(/* ... */);
+    // Tracks when CTA becomes visible for AI traffic
+  }, []);
+  
+  // Comparison data structure
+  const comparisons = [
+    { app: "WhatsApp", issues: [...], ourSolution: [...] },
+    { app: "FaceTime", issues: [...], ourSolution: [...] },
+    { app: "Messenger Kids", issues: [...], ourSolution: [...] }
+  ];
+  
+  // Funnel tracking on CTA clicks
+  onClick={() => {
+    trackComparisonClick("cta");
+    trackPrimaryCTA("Switch safely", "compare", "comparison");
+    navigate("/parent/auth");
+  }}
+};
+```
+
+**Features:**
+- Side-by-side comparison (Challenges vs. How We Help)
+- Visual indicators (XCircle for challenges, CheckCircle2 for solutions)
+- Funnel tracking for comparison interactions
+- Contextual CTAs with tracking
+- Intersection Observer for AI traffic detection
+
+**3. TrustSignalsSection Component:**
+
+```typescript
+// Location: src/components/info/TrustSignalsSection.tsx
+export const TrustSignalsSection = () => {
+  const navigate = useNavigate();
+  const sectionRef = useRef<HTMLElement>(null);
+  const hasTrackedScroll = useRef(false);
+  
+  // Track confidence signal when user scrolls past section
+  useEffect(() => {
+    const observer = new IntersectionObserver((entries) => {
+      // If section scrolled past viewport, track confidence signal
+      if (!entry.isIntersecting && entry.boundingClientRect.top < 0) {
+        trackConfidenceSignal("scroll_trust");
+      }
+    });
+  }, []);
+  
+  // 6 trust signals with icons
+  const trustSignals = [
+    { icon: Shield, title: "Encrypted Communication", ... },
+    { icon: Eye, title: "Minimal Data Collection", ... },
+    // ... 4 more
+  ];
+};
+```
+
+**Features:**
+- 6 structured trust signals in grid layout
+- Icon-based visual hierarchy
+- "What We Don't Collect" list
+- Scroll tracking for confidence signals
+- Funnel tracking on CTA clicks
+
+**4. ExpandedFAQ Component:**
+
+```typescript
+// Location: src/components/info/ExpandedFAQ.tsx
+export const ExpandedFAQ = () => {
+  const navigate = useNavigate();
+  const [openedQuestions, setOpenedQuestions] = useState<Set<number>>(new Set());
+  const hasTrackedConfidence = useRef(false);
+  
+  const handleQuestionClick = (index: number) => {
+    // Track FAQ click
+    trackFAQClick(faqItems[index].question);
+    
+    // Track confidence signal when ≥3 questions opened
+    if (newOpened.size >= 3 && !hasTrackedConfidence.current) {
+      trackConfidenceSignal("faq_depth");
+    }
+  };
+  
+  // 15 FAQ items (expanded from 8)
+  const faqItems: FAQItem[] = [
+    // Original 8 questions
+    // + 7 new user intent questions
+  ];
+};
+```
+
+**Features:**
+- 15 FAQ questions (8 original + 7 new)
+- Interactive question tracking
+- Confidence signal tracking (depth ≥3)
+- Funnel tracking on CTA clicks
+- Contextual CTAs for hesitant parents
+
+**5. JSON-LD Structured Data Updates:**
+
+```json
+// Location: index.html, lines ~157-229
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    // Original 8 questions
+    // + 7 new questions:
+    {
+      "@type": "Question",
+      "name": "Is Kids Call Home accessible on iPads/tablets?",
+      "acceptedAnswer": { /* ... */ }
+    },
+    // ... 6 more new questions
+  ]
+}
+```
+
+**New Questions Added:**
+1. "Is Kids Call Home accessible on iPads/tablets?"
+2. "How do approved contacts work?"
+3. "How does encryption protect my family?"
+4. "Can my child call relatives internationally?"
+5. "Is Kids Call Home safer than FaceTime?"
+6. "What data does Kids Call Home collect?"
+7. "Can grandparents use Kids Call Home?"
+
+#### Testing Recommendations
+
+**SEO Testing:**
+1. Verify no duplicate content between homepage and `/info` page
+2. Check structured data validation (Google Rich Results Test)
+3. Verify FAQ schema renders correctly in search results
+4. Test JSON-LD syntax with JSON-LD Playground
+
+**Funnel Tracking Testing:**
+1. Verify comparison clicks tracked correctly
+2. Verify trust section scroll tracking works
+3. Verify FAQ depth tracking (≥3 questions)
+4. Verify CTA clicks tracked with correct parameters
+5. Check Intersection Observer for AI traffic detection
+
+**Content Testing:**
+1. Verify all new sections render correctly
+2. Check navigation links work (scroll to sections)
+3. Verify CTAs navigate correctly
+4. Test responsive design on mobile/tablet/desktop
+5. Verify accessibility (screen readers, keyboard navigation)
+
+**User Experience Testing:**
+1. Verify info page provides unique value vs. homepage
+2. Check that comparison section helps hesitant parents
+3. Verify trust signals build confidence
+4. Test FAQ answers user questions effectively
+
+#### Impact
+
+**SEO Benefits:**
+- **No Duplicate Content Penalties**: Info page now has unique content
+- **Better Keyword Coverage**: New sections target comparison and trust queries
+- **Enhanced Structured Data**: 15 FAQ questions improve rich snippet eligibility
+- **AI Discovery**: Structured content helps LLMs understand and cite the app
+
+**Conversion Benefits:**
+- **Funnel Tracking**: Insights into user behavior and conversion paths
+- **Confidence Signals**: Track user engagement depth
+- **Contextual CTAs**: Multiple conversion points throughout page
+- **Trust Building**: Structured trust signals help hesitant parents make decisions
+
+**User Experience Benefits:**
+- **Clear Value Proposition**: About/Mission section explains why app exists
+- **Comparison Clarity**: Side-by-side comparison helps parents understand differences
+- **Trust Building**: Structured privacy commitments build confidence
+- **Comprehensive FAQ**: 15 questions answer real user queries
+
+**Technical Benefits:**
+- **Component Architecture**: Modular, reusable components
+- **Type Safety**: Proper TypeScript interfaces
+- **Performance**: No impact on page load (components lazy-loaded)
+- **Maintainability**: Clear separation of concerns
+
+---
+
+## Previous Changes (2025-12-28)
 
 ### 1. Call Reconnection Improvements & Diagnostics Panel Fixes
 

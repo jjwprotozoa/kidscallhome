@@ -1,6 +1,8 @@
 // src/pages/ParentAuth/authHandlers.ts
 // Purpose: Authentication handler functions (login, signup)
 
+import { trackSignupStart } from "@/utils/funnelTracking";
+
 import { toast as toastFn } from "@/hooks/use-toast";
 import { LockoutInfo } from "@/hooks/useAccountLockout";
 import { supabase } from "@/integrations/supabase/client";
@@ -261,6 +263,9 @@ export const handleSignup = async ({
   validation,
   referralCode,
 }: SignupParams) => {
+  // Track funnel event: signup start (intent_type: commit)
+  trackSignupStart(referralCode ? "referral" : "direct");
+  
   logAuditEvent("signup", { email, severity: "low" });
   const { data, error } = await supabase.auth.signUp({
     email,

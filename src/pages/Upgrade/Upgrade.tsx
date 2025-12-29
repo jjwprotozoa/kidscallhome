@@ -60,6 +60,7 @@ const Upgrade = () => {
     const urlParams = new URLSearchParams(window.location.search);
     const sessionId = urlParams.get("session_id");
     const canceled = urlParams.get("canceled");
+    const upgraded = urlParams.get("upgraded");
     
     if (sessionId) {
       toast({
@@ -68,13 +69,32 @@ const Upgrade = () => {
         variant: "default",
       });
       
-      setTimeout(async () => {
-        if (isPWA()) {
-          await refreshSubscriptionInfo();
-        }
-        setShowSuccessDialog(true);
-        setSuccessMessage("Your subscription has been activated successfully!");
-      }, 2000);
+      // Refresh immediately and again after delay to ensure webhook has processed
+      refreshSubscriptionInfo().then(() => {
+        setTimeout(async () => {
+          await refreshSubscriptionInfo(); // Refresh again to catch webhook updates
+          setShowSuccessDialog(true);
+          setSuccessMessage("Your subscription has been activated successfully!");
+        }, 2000);
+      });
+      
+      window.history.replaceState({}, "", "/parent/upgrade");
+    } else if (upgraded) {
+      toast({
+        title: "Subscription Updated!",
+        description: "Your subscription plan has been successfully updated.",
+        variant: "default",
+      });
+      
+      // Refresh subscription info immediately and again after a short delay
+      // to ensure database has been updated
+      refreshSubscriptionInfo().then(() => {
+        setTimeout(async () => {
+          await refreshSubscriptionInfo(); // Refresh again to catch any webhook updates
+          setShowSuccessDialog(true);
+          setSuccessMessage("Your subscription has been updated successfully!");
+        }, 2000);
+      });
       
       window.history.replaceState({}, "", "/parent/upgrade");
     } else if (canceled) {
@@ -141,7 +161,7 @@ const Upgrade = () => {
         >
           <div className="max-w-6xl mx-auto">
             <div className="mt-4 mb-8">
-              <h1 className="text-3xl font-bold mb-2">Upgrade Your Plan</h1>
+              <h1 className="text-3xl font-bold mb-2">Manage Plan</h1>
               <p className="text-muted-foreground">
                 Choose a plan that fits your family's needs
               </p>
@@ -152,8 +172,6 @@ const Upgrade = () => {
               subscriptionType={subscriptionData?.subscriptionType || "free"}
               currentChildrenCount={subscriptionData?.currentChildrenCount || 0}
               allowedChildren={subscriptionData?.allowedChildren || 1}
-              isManagingSubscription={isManagingSubscription}
-              onManageSubscription={handleManageSubscription}
             />
 
             <PricingPlans
@@ -174,7 +192,12 @@ const Upgrade = () => {
                   <ul className="text-sm text-blue-800 dark:text-blue-200 space-y-1 list-disc list-inside">
                     <li>Purchases are processed through your device's app store</li>
                     <li>Subscriptions are managed through your app store account</li>
-                    <li>Your subscription syncs across all your devices</li>
+                    <li>
+                      Your subscription syncs across all your devices
+                      <span className="text-xs text-blue-700 dark:text-blue-300 block mt-0.5 ml-4">
+                        (Requires signing in with the same account on each device)
+                      </span>
+                    </li>
                     <li>Start adding more children right away!</li>
                   </ul>
                 </div>
@@ -240,8 +263,6 @@ const Upgrade = () => {
             subscriptionType={subscriptionData.subscriptionType}
             currentChildrenCount={subscriptionData.currentChildrenCount}
             allowedChildren={subscriptionData.allowedChildren}
-            isManagingSubscription={isManagingSubscription}
-            onManageSubscription={handleManageSubscription}
           />
 
           <PricingPlans
@@ -263,8 +284,18 @@ const Upgrade = () => {
                   <li>Select a plan and complete payment through Stripe</li>
                   <li>Enter your family account email to link the subscription</li>
                   <li>Your account will be upgraded automatically</li>
+                  <li>
+                    Your subscription works across all devices
+                    <span className="text-xs text-blue-700 dark:text-blue-300 block mt-0.5 ml-4">
+                      (Sign in with the same account on any device to access your subscription)
+                    </span>
+                  </li>
                   <li>Start adding more children right away!</li>
                 </ul>
+                <p className="text-xs text-blue-700 dark:text-blue-300 mt-3 pt-3 border-t border-blue-200 dark:border-blue-800">
+                  <strong>Note:</strong> Payments are processed by Fluid Investment Group LLC. 
+                  You will see "Fluid Investment Group LLC" on your payment receipts and billing statements.
+                </p>
               </div>
             </div>
           </Card>

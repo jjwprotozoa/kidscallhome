@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import { getUserRole } from "@/utils/userRole";
+import { trackPageView, trackPrimaryCTA } from "@/utils/funnelTracking";
 import {
   ArrowRight,
   Baby,
@@ -86,6 +87,13 @@ const Index = () => {
 
     checkAuthAndRedirect();
   }, [navigate, searchParams]);
+
+  // Track page view
+  useEffect(() => {
+    if (!isCheckingAuth) {
+      trackPageView("home");
+    }
+  }, [isCheckingAuth]);
 
   if (isCheckingAuth) {
     return (
@@ -357,26 +365,28 @@ const Index = () => {
               </div>
             </div>
 
-            {/* Parent CTA */}
+            {/* Parent CTA - Trust-gated, low-commitment copy */}
             <div className="pt-2 sm:pt-4 md:pt-6 space-y-2 sm:space-y-3 flex flex-col items-center">
               <Button
                 size="lg"
                 className="text-sm sm:text-base md:text-lg lg:text-xl px-5 sm:px-6 md:px-8 lg:px-10 py-5 sm:py-6 md:py-7 lg:py-8 shadow-lg hover:shadow-xl transition-all w-full sm:w-auto min-h-[44px] sm:min-h-[48px]"
-                onClick={() => navigate("/parent/auth")}
-                aria-label="Parents and family members sign in or create account"
+                onClick={() => {
+                  trackPrimaryCTA("Create a family space", "explore", "hero");
+                  navigate("/parent/auth");
+                }}
+                aria-label="Create a family space - Set up Kids Call Home"
               >
                 <Users
                   className="mr-2 h-4 w-4 sm:h-5 sm:w-5 md:h-6 md:w-6"
                   aria-hidden="true"
                 />
                 <span className="whitespace-nowrap">
-                  Parents &amp; Family — Get Started Free
+                  Create a family space
                 </span>
               </Button>
 
               <p className="text-xs sm:text-sm md:text-base text-muted-foreground max-w-lg mx-auto leading-relaxed">
-                Free plan includes 1 child. No credit card required for signup
-                (required to upgrade).
+                Free plan includes 1 child. No credit card required to get started.
               </p>
             </div>
           </div>

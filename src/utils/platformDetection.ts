@@ -6,25 +6,43 @@
  * Native apps use in-app purchases, PWAs use Stripe payment links
  */
 export function isNativeApp(): boolean {
-  // Check for Capacitor
-  if (typeof window !== 'undefined' && (window as any).Capacitor) {
-    return true;
+  if (typeof window === 'undefined') {
+    return false;
   }
-  // Check for Cordova
-  if (typeof window !== 'undefined' && (window as any).cordova) {
-    return true;
-  }
-  // Check for React Native WebView
-  if (typeof window !== 'undefined' && (window as any).ReactNativeWebView) {
-    return true;
-  }
-  // Check user agent for native app indicators
-  if (typeof window !== 'undefined') {
-    const ua = navigator.userAgent.toLowerCase();
-    if (ua.includes('capacitor') || ua.includes('cordova') || ua.includes('ionic')) {
+
+  try {
+    // Check for Capacitor - must be functional, not just present
+    const Capacitor = (window as any).Capacitor;
+    if (Capacitor && typeof Capacitor.getPlatform === 'function') {
+      const platform = Capacitor.getPlatform();
+      // Only consider it native if platform is actually android or ios
+      if (platform === 'android' || platform === 'ios') {
+        return true;
+      }
+    }
+    
+    // Check for Cordova
+    if ((window as any).cordova && typeof (window as any).cordova.exec === 'function') {
       return true;
     }
+    
+    // Check for React Native WebView
+    if ((window as any).ReactNativeWebView && typeof (window as any).ReactNativeWebView.postMessage === 'function') {
+      return true;
+    }
+    
+    // Check user agent for native app indicators (but be more strict)
+    const ua = navigator.userAgent.toLowerCase();
+    // Only match if it's clearly a native app user agent, not just mentions the word
+    if (ua.includes('capacitor/') || ua.includes('cordova/') || ua.includes('ionic/')) {
+      return true;
+    }
+  } catch (error) {
+    // If any check fails, assume web/PWA
+    console.debug('Platform detection error:', error);
+    return false;
   }
+  
   return false;
 }
 
@@ -33,6 +51,15 @@ export function isNativeApp(): boolean {
  * PWAs should show Stripe payment links, native apps use in-app purchases
  */
 export function isPWA(): boolean {
+  // If we're on localhost, we're definitely in PWA mode (web development)
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return true;
+    }
+  }
+  
+  // Otherwise, check if we're NOT a native app
   return !isNativeApp();
 }
 
