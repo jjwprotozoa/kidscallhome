@@ -67,10 +67,9 @@ self.addEventListener('push', (event) => {
 });
 
 // Handle notification clicks (including action button clicks)
+// Optimized to prevent message handler violations by breaking up work
 self.addEventListener('notificationclick', (event) => {
-  console.log('[SW] Notification clicked:', event);
-  console.log('[SW] Action:', event.action);
-  
+  // Close notification immediately (non-blocking)
   event.notification.close();
 
   const notificationData = event.notification.data || {};
@@ -86,53 +85,99 @@ self.addEventListener('notificationclick', (event) => {
     messageType = 'NOTIFICATION_ACTION_DECLINE';
   }
 
+  // Use waitUntil to keep service worker alive, but break up work to prevent blocking
   event.waitUntil(
+    // Step 1: Find clients (async, non-blocking)
     clients.matchAll({
       type: 'window',
       includeUncontrolled: true
     }).then((clientList) => {
-      // Find any existing window from our app
-      for (let i = 0; i < clientList.length; i++) {
-        const client = clientList[i];
-        // Check if this is a window from our app (same origin)
-        if ('focus' in client) {
-          // Focus existing window and send message
-          client.focus();
-          client.postMessage({
-            type: messageType,
-            callId: callId,
-            url: urlToOpen,
-            action: action
-          });
-          
-          // For answer action, also navigate to call URL
-          if (action === 'answer' && urlToOpen !== '/') {
-            client.navigate(urlToOpen);
-          }
-          return;
-        }
-      }
-      
-      // If no window is open, open a new one
-      if (clients.openWindow) {
-        // For decline action, we don't need to open a window, just send message
-        // But we need a window to handle the decline...
-        const targetUrl = action === 'decline' ? '/' : urlToOpen;
-        
-        return clients.openWindow(targetUrl).then((client) => {
-          if (client) {
-            // Send message after window opens
-            setTimeout(() => {
-              client.postMessage({
-                type: messageType,
-                callId: callId,
-                url: urlToOpen,
-                action: action
+      // Step 2: Process client operations asynchronously to prevent blocking
+      return new Promise(function(resolve) {
+        // Use setTimeout to yield to event loop and prevent blocking
+        setTimeout(function() {
+          // Find any existing window from our app
+          for (let i = 0; i < clientList.length; i++) {
+            const client = clientList[i];
+            // Check if this is a window from our app (same origin)
+            if ('focus' in client) {
+              // Use requestIdleCallback if available, otherwise setTimeout
+              var scheduleWork = function(callback) {
+                if ('requestIdleCallback' in self) {
+                  self.requestIdleCallback(callback, { timeout: 100 });
+                } else {
+                  setTimeout(callback, 0);
+                }
+              };
+              
+              // Defer focus and navigation to prevent blocking
+              scheduleWork(function() {
+                try {
+                  client.focus();
+                } catch (e) {
+                  // Ignore focus errors
+                }
               });
-            }, 500);
+              
+              // Send message immediately (lightweight operation)
+              try {
+                client.postMessage({
+                  type: messageType,
+                  callId: callId,
+                  url: urlToOpen,
+                  action: action
+                });
+              } catch (e) {
+                // Ignore postMessage errors
+              }
+              
+              // Defer navigation to prevent blocking
+              if (action === 'answer' && urlToOpen !== '/') {
+                scheduleWork(function() {
+                  try {
+                    client.navigate(urlToOpen);
+                  } catch (e) {
+                    // Ignore navigation errors
+                  }
+                });
+              }
+              
+              resolve();
+              return;
+            }
           }
-        });
-      }
+          
+          // If no window is open, open a new one (async operation)
+          if (clients.openWindow) {
+            var targetUrl = action === 'decline' ? '/' : urlToOpen;
+            
+            clients.openWindow(targetUrl).then(function(client) {
+              if (client) {
+                // Send message after window opens (defer to prevent blocking)
+                setTimeout(function() {
+                  try {
+                    client.postMessage({
+                      type: messageType,
+                      callId: callId,
+                      url: urlToOpen,
+                      action: action
+                    });
+                  } catch (e) {
+                    // Ignore postMessage errors
+                  }
+                }, 100); // Reduced from 500ms to 100ms
+              }
+              resolve();
+            }).catch(function() {
+              resolve(); // Resolve even on error
+            });
+          } else {
+            resolve();
+          }
+        }, 0); // Yield to event loop immediately
+      });
+    }).catch(function() {
+      // Silently handle errors to prevent unhandled rejections
     })
   );
 });

@@ -113,10 +113,11 @@ export function pickInitialQualityFromNetwork(
       return "moderate";
 
     default:
-      // For unknown or better connections (5G, WiFi), start with good
+      // STABILITY FIRST: Start conservative (moderate) for unknown connections
       // The adaptive quality controller will upgrade if bandwidth allows
-      safeLog.log("📊 [MEDIA] Good network detected, using good quality");
-      return "good";
+      // Starting lower reduces initial stalls and improves stability
+      safeLog.log("📊 [MEDIA] Unknown/good network detected, starting conservative (moderate) for stability");
+      return "moderate";
   }
 }
 

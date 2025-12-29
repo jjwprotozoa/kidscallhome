@@ -1,6 +1,7 @@
 // src/features/calls/webrtc/codecPreferences.ts
 // Video codec preference management for WebRTC
-// Prioritizes AV1 → VP9 → H.264 for better compression and quality
+// Prioritizes stability and smoothness: H.264 → VP9 → AV1
+// H.264 is preferred for hardware acceleration and stability
 
 import { safeLog } from "@/utils/security";
 
@@ -9,6 +10,7 @@ import { safeLog } from "@/utils/security";
  */
 export interface CodecPreferenceOptions {
   allowAV1: boolean;  // Whether to allow AV1 codec (requires modern hardware)
+  allowVP9: boolean;  // Whether to allow VP9 codec (better compression but higher CPU than H.264)
 }
 
 /**
@@ -51,25 +53,31 @@ export function getPreferredVideoCodecs(
     }
   }
 
-  // Build preference list: AV1 → VP9 → H.264 → others
+  // Build preference list: H.264 → VP9 → AV1 → others
+  // PRIORITY: Stability and smoothness over quality
+  // H.264 is preferred for hardware acceleration, lower CPU, and better stability
   const preferred: RTCRtpCodecCapability[] = [];
 
-  // AV1 first (if allowed and available)
-  if (opts.allowAV1 && av1Codecs.length > 0) {
-    preferred.push(...av1Codecs);
-    safeLog.log("✅ [CODEC] AV1 codec available and enabled");
-  }
-
-  // VP9 second (better compression than H.264)
-  if (vp9Codecs.length > 0) {
-    preferred.push(...vp9Codecs);
-    safeLog.log("✅ [CODEC] VP9 codec available");
-  }
-
-  // H.264 third (widely supported fallback)
+  // H.264 FIRST (most stable, hardware-accelerated, lowest CPU)
+  // This is the default choice for stability and smoothness
   if (h264Codecs.length > 0) {
     preferred.push(...h264Codecs);
-    safeLog.log("✅ [CODEC] H.264 codec available (fallback)");
+    safeLog.log("✅ [CODEC] H.264 codec preferred (hardware-accelerated, most stable)");
+  }
+
+  // VP9 second (better compression but higher CPU, use only if H.264 not available)
+  // Only include if allowed (may be restricted on mobile/1080p)
+  if (opts.allowVP9 && vp9Codecs.length > 0) {
+    preferred.push(...vp9Codecs);
+    safeLog.log("✅ [CODEC] VP9 codec available (fallback if H.264 unavailable)");
+  } else if (vp9Codecs.length > 0) {
+    safeLog.log("ℹ️ [CODEC] VP9 codec available but disabled (preferring H.264 for stability)");
+  }
+
+  // AV1 last (best compression but highest CPU, use only if others unavailable)
+  if (opts.allowAV1 && av1Codecs.length > 0) {
+    preferred.push(...av1Codecs);
+    safeLog.log("✅ [CODEC] AV1 codec available (last resort, highest CPU)");
   }
 
   // Other codecs last
@@ -91,10 +99,12 @@ export function getPreferredVideoCodecs(
  * Apply video codec preferences to a peer connection
  * @param pc RTCPeerConnection to apply codec preferences to
  * @param allowAV1 Whether to allow AV1 codec
+ * @param allowVP9 Whether to allow VP9 codec (default: true, but may be restricted on mobile/1080p)
  */
 export function applyVideoCodecPreferences(
   pc: RTCPeerConnection,
-  allowAV1: boolean
+  allowAV1: boolean,
+  allowVP9: boolean = true
 ): void {
   try {
     // Get video codec capabilities
@@ -105,7 +115,7 @@ export function applyVideoCodecPreferences(
     }
 
     // Get preferred codecs
-    const preferredCodecs = getPreferredVideoCodecs(capabilities, { allowAV1 });
+    const preferredCodecs = getPreferredVideoCodecs(capabilities, { allowAV1, allowVP9 });
 
     if (preferredCodecs.length === 0) {
       safeLog.warn("⚠️ [CODEC] No preferred codecs to apply");
@@ -168,33 +178,104 @@ export function isAV1Supported(): boolean {
 
 /**
  * Determine if AV1 should be allowed based on device capabilities
+ * PRIORITY: Stability over quality - AV1 is disabled by default for stability
  * @param qualityLevel Current quality level
- * @returns true if AV1 should be allowed
+ * @param videoWidth Current video width (to check if 1080p)
+ * @returns true if AV1 should be allowed (rarely, for stability we prefer H.264)
  */
-export function shouldAllowAV1(qualityLevel: string): boolean {
+export function shouldAllowAV1(qualityLevel: string, videoWidth?: number): boolean {
+  // STABILITY FIRST: Disable AV1 by default - prefer H.264 for stability
+  // Only enable AV1 if explicitly needed and H.264/VP9 unavailable
+  safeLog.log("📊 [CODEC] AV1 disabled by default (preferring H.264 for stability)");
+  return false;
+  
+  // Legacy code below (disabled for stability):
+  /*
   // Only allow AV1 on good/excellent/premium quality levels
-  // AV1 encoding/decoding requires more CPU, so only use on high-quality connections
   const highQualityLevels = ["good", "excellent", "premium"];
   if (!highQualityLevels.includes(qualityLevel)) {
     return false;
   }
 
-  // Check if AV1 is actually supported
   if (!isAV1Supported()) {
     return false;
   }
 
-  // Heuristic: Allow AV1 on desktop or high-end mobile devices
   const isDesktop = !/Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
     navigator.userAgent
   );
 
-  // For mobile, check if it's a recent device (rough heuristic based on user agent)
-  const isHighEndMobile =
-    /iPhone (1[3-9]|2[0-9])|iPad Pro|Samsung.*Galaxy S(2[0-9]|3[0-9])|Pixel [4-9]/.test(
-      navigator.userAgent
-    );
+  const isMobile = !isDesktop;
+  const is1080p = videoWidth && videoWidth >= 1920;
+  
+  if (isMobile && is1080p) {
+    return false;
+  }
 
-  return isDesktop || isHighEndMobile;
+  return isDesktop;
+  */
+}
+
+/**
+ * Check if VP9 codec is supported
+ * @returns true if VP9 is supported
+ */
+export function isVP9Supported(): boolean {
+  try {
+    const capabilities = RTCRtpSender.getCapabilities("video");
+    if (!capabilities || !capabilities.codecs) {
+      return false;
+    }
+
+    return capabilities.codecs.some(
+      (codec) =>
+        codec.mimeType?.toLowerCase().includes("vp9") ||
+        codec.mimeType?.toLowerCase().includes("vp09")
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Determine if VP9 should be allowed based on device capabilities
+ * PRIORITY: Stability over quality - prefer H.264 for stability
+ * VP9 has better compression but higher CPU and less stability than H.264
+ * @param qualityLevel Current quality level
+ * @param videoWidth Current video width (to check if 1080p)
+ * @returns true if VP9 should be allowed (disabled by default for stability)
+ */
+export function shouldAllowVP9(qualityLevel: string, videoWidth?: number): boolean {
+  // STABILITY FIRST: Disable VP9 by default - prefer H.264 for stability
+  // VP9 has higher CPU overhead and less hardware acceleration than H.264
+  safeLog.log("📊 [CODEC] VP9 disabled by default (preferring H.264 for stability and smoothness)");
+  return false;
+  
+  // Legacy code below (disabled for stability):
+  /*
+  if (!isVP9Supported()) {
+    return false;
+  }
+
+  const isDesktop = !/Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+    navigator.userAgent
+  );
+
+  const isMobile = !isDesktop;
+  const is1080p = videoWidth && videoWidth >= 1920;
+  
+  if (isMobile && is1080p) {
+    return false;
+  }
+
+  if (isMobile && !isDesktop) {
+    const highResLevels = ["excellent", "premium"];
+    if (highResLevels.includes(qualityLevel)) {
+      return false;
+    }
+  }
+
+  return isDesktop;
+  */
 }
 

@@ -53,6 +53,7 @@ import {
   UserCheck,
   Users,
   X,
+  Shuffle,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -112,6 +113,8 @@ const Navigation = () => {
   const [loading, setLoading] = useState(false);
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
+  // Triple confirmation state for child logout
+  const [childLogoutStep, setChildLogoutStep] = useState<0 | 1 | 2 | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [pendingConnectionsCount, setPendingConnectionsCount] = useState(0);
   const [newReportsCount, setNewReportsCount] = useState(0);
@@ -384,6 +387,20 @@ const Navigation = () => {
       navigate(
         userType === "family_member" ? "/family-member/auth" : "/parent/auth"
       );
+    }
+  };
+
+  const handleChildLogout = async () => {
+    // Triple confirmation completed - proceed with logout
+    if (childLogoutStep === 2) {
+      const { clearChildSession } = await import("@/lib/childSession");
+      clearChildSession();
+      
+      // Reset badge store on logout
+      useBadgeStore.getState().reset();
+      toast({ title: "Logged out" });
+      setChildLogoutStep(null);
+      navigate("/child/login");
     }
   };
 
@@ -977,6 +994,32 @@ const Navigation = () => {
                     <div className="h-px bg-border my-2" />
                     
                     <MobileNavItemChild to="/info" icon={Info} label="App Information" />
+                    
+                    <div className="h-px bg-border my-2" />
+                    
+                    <button
+                      onClick={() => {
+                        setMobileMenuOpen(false);
+                        navigate("/parent/auth");
+                      }}
+                      className="flex items-center gap-3 w-full px-4 py-3 rounded-lg text-base font-medium text-primary hover:bg-primary/10 transition-colors"
+                    >
+                      <Shuffle className="h-5 w-5" />
+                      <span>Switch to Parent</span>
+                    </button>
+                    
+                    <div className="h-px bg-border my-2" />
+                    
+                    <button
+                      onClick={() => {
+                        setMobileMenuOpen(false);
+                        setChildLogoutStep(0);
+                      }}
+                      className="flex items-center gap-3 w-full px-4 py-3 rounded-lg text-base font-medium text-destructive hover:bg-destructive/10 transition-colors"
+                    >
+                      <LogOut className="h-5 w-5" />
+                      <span>Logout</span>
+                    </button>
                   </div>
                 </SheetContent>
               </Sheet>
@@ -1029,6 +1072,19 @@ const Navigation = () => {
                       <Info className="mr-2 h-4 w-4" />
                       <span>App Information</span>
                     </DropdownMenuItem>
+                    <div className="h-px bg-border my-1" />
+                    <DropdownMenuItem onClick={() => navigate("/parent/auth")}>
+                      <Shuffle className="mr-2 h-4 w-4" />
+                      <span>Switch to Parent</span>
+                    </DropdownMenuItem>
+                    <div className="h-px bg-border my-1" />
+                    <DropdownMenuItem 
+                      onClick={() => setChildLogoutStep(0)}
+                      className="text-destructive focus:text-destructive"
+                    >
+                      <LogOut className="mr-2 h-4 w-4" />
+                      <span>Logout</span>
+                    </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
@@ -1058,6 +1114,76 @@ const Navigation = () => {
 
         {/* Share Modal */}
         <ShareModal open={showShareModal} onOpenChange={setShowShareModal} />
+
+        {/* Triple Confirmation Dialog for Child Logout */}
+        <AlertDialog 
+          open={childLogoutStep !== null} 
+          onOpenChange={(open) => {
+            if (!open) {
+              setChildLogoutStep(null);
+            }
+          }}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                {childLogoutStep === 0 && "Are you sure you want to log out?"}
+                {childLogoutStep === 1 && "Are you really sure?"}
+                {childLogoutStep === 2 && "Final confirmation"}
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                {childLogoutStep === 0 && (
+                  <>
+                    Logging out will require you to enter your login code again to access your account.
+                    <br /><br />
+                    Are you sure you want to continue?
+                  </>
+                )}
+                {childLogoutStep === 1 && (
+                  <>
+                    This will log you out completely. You'll need to enter your family code and login code again.
+                    <br /><br />
+                    Are you absolutely sure?
+                  </>
+                )}
+                {childLogoutStep === 2 && (
+                  <>
+                    <strong>Last chance!</strong> Clicking "Yes, Logout" will log you out immediately.
+                    <br /><br />
+                    You'll need to enter your full login code to get back in.
+                  </>
+                )}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setChildLogoutStep(null)}>
+                Cancel
+              </AlertDialogCancel>
+              {childLogoutStep !== null && childLogoutStep < 2 && (
+                <AlertDialogAction
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setChildLogoutStep((childLogoutStep + 1) as 1 | 2);
+                  }}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  Yes, Continue
+                </AlertDialogAction>
+              )}
+              {childLogoutStep === 2 && (
+                <AlertDialogAction
+                  onClick={async (e) => {
+                    e.preventDefault();
+                    await handleChildLogout();
+                  }}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  Yes, Logout
+                </AlertDialogAction>
+              )}
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </>
     );
   }

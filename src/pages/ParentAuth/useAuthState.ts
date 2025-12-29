@@ -9,6 +9,7 @@ import { FamilyRole } from "./SignupForm";
 export const useAuthState = () => {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
+  const [confirmEmail, setConfirmEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [name, setName] = useState("");
@@ -38,6 +39,8 @@ export const useAuthState = () => {
     setIsLogin,
     email,
     setEmail,
+    confirmEmail,
+    setConfirmEmail,
     password,
     setPassword,
     confirmPassword,

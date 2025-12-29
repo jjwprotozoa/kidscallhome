@@ -4,7 +4,8 @@
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { colors, animals } from "@/data/childLoginConstants";
-import { Smile } from "lucide-react";
+import { Smile, Shuffle } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 interface ColorAnimalSelectorProps {
   familyCode: string;
@@ -21,6 +22,8 @@ export const ColorAnimalSelector = ({
   onOptionSelect,
   onBack,
 }: ColorAnimalSelectorProps) => {
+  const navigate = useNavigate();
+  
   return (
     <div className="min-h-[100dvh] flex items-center justify-center bg-primary/5 p-4">
       <Card className="w-full max-w-2xl p-8 space-y-6">
@@ -28,6 +31,14 @@ export const ColorAnimalSelector = ({
           <Button variant="ghost" onClick={onBack} className="absolute top-4 left-4">
             ← Back
           </Button>
+          <button
+            onClick={() => navigate("/parent/auth")}
+            className="absolute top-4 right-4 p-2 rounded-full hover:bg-muted transition-colors"
+            aria-label="Switch to Parent"
+            title="Switch to Parent Login"
+          >
+            <Shuffle className="h-5 w-5 text-muted-foreground hover:text-primary transition-colors" />
+          </button>
           <Smile className="h-20 w-20 text-primary mx-auto" />
           <h1 className="text-4xl font-bold text-primary">Hi There!</h1>
           <p className="text-xl">

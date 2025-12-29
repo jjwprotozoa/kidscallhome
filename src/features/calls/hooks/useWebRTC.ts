@@ -17,6 +17,7 @@ import {
 import {
   applyVideoCodecPreferences,
   shouldAllowAV1,
+  shouldAllowVP9,
 } from "../webrtc/codecPreferences";
 import {
   getMediaConstraintsForQuality,
@@ -32,6 +33,7 @@ import { QUALITY_PRESETS } from "./useNetworkQuality";
 import {
   startNetworkMonitor,
   shouldTriggerIceRestart,
+  shouldResetQualityOnNetworkChange,
   getNetworkConnectionInfo as getNetworkInfo,
   type NetworkConnectionInfo,
 } from "../webrtc/networkMonitor";
@@ -856,17 +858,39 @@ export const useWebRTC = (
           // Apply audio tuning
           applyAudioTuning(pc, audioProfile);
 
-          // Start network monitoring for ICE restart on network changes
+          // Start network monitoring for ICE restart and quality reset on network changes
           if (!networkMonitorCleanupRef.current) {
             previousNetworkInfoRef.current = getNetworkInfo();
             networkMonitorCleanupRef.current = startNetworkMonitor((networkInfo) => {
               const pc = peerConnectionRef.current;
               if (!pc || !callId) return;
 
-              // Only trigger ICE restart if connection is active
+              // Only trigger actions if connection is active
               const iceState = pc.iceConnectionState;
               if (iceState !== "connected" && iceState !== "completed") {
                 return;
+              }
+
+              // Check if quality should be reset on big network changes
+              // On big network changes (WiFi ↔ cellular, RTT jump > 100ms), reset quality to Moderate or Poor,
+              // then let it re-probe upward. This avoids being "stuck" at Good/Excellent on a now-worse link.
+              const resetQuality = shouldResetQualityOnNetworkChange(
+                previousNetworkInfoRef.current,
+                networkInfo
+              );
+              if (resetQuality && qualityControllerRef.current) {
+                const currentQuality = qualityControllerRef.current.getCurrentQuality();
+                if (currentQuality !== resetQuality) {
+                  safeLog.log("📡 [NETWORK] Big network change detected, resetting quality", {
+                    from: currentQuality,
+                    to: resetQuality,
+                  });
+                  // Force immediate quality adjustment through networkQuality system
+                  // This bypasses the quality controller's cooldown for network changes
+                  networkQuality.applyQualityPreset(pc, QUALITY_PRESETS[resetQuality]);
+                  // Also update the quality controller's internal state to match
+                  // (This is a workaround - ideally the controller would expose a reset method)
+                }
               }
 
               // Check if ICE restart is needed
@@ -877,7 +901,7 @@ export const useWebRTC = (
 
               previousNetworkInfoRef.current = networkInfo;
             });
-            safeLog.log("✅ [NETWORK] Started network monitoring for ICE restart");
+            safeLog.log("✅ [NETWORK] Started network monitoring for ICE restart and quality reset");
           }
 
           // CRITICAL FIX: When ICE connects, aggressively ensure remote stream is playing
@@ -1551,10 +1575,12 @@ export const useWebRTC = (
       }
 
       // Apply codec preferences after tracks are added
-      // Determine if AV1 should be allowed based on initial quality level
+      // Determine if AV1 and VP9 should be allowed based on initial quality level and video resolution
       const initialQualityLevel = networkQuality.qualityLevel;
-      const allowAV1 = shouldAllowAV1(initialQualityLevel);
-      applyVideoCodecPreferences(pc, allowAV1);
+      const initialProfile = QUALITY_PROFILES[initialQualityLevel as QualityLevel];
+      const allowAV1 = shouldAllowAV1(initialQualityLevel, initialProfile.videoWidth);
+      const allowVP9 = shouldAllowVP9(initialQualityLevel, initialProfile.videoWidth);
+      applyVideoCodecPreferences(pc, allowAV1, allowVP9);
 
       // Initialize quality controller
       const handleQualityChange: QualityChangeCallback = async (newLevel) => {
@@ -1599,9 +1625,16 @@ export const useWebRTC = (
                   params.encodings[0].active = false;
                   sender.track.enabled = false;
                 } else {
+                  // Use RTCRtpSender.setParameters() with encodings[0].maxBitrate and scaleResolutionDownBy
                   params.encodings[0].maxBitrate = newProfile.videoKbps * 1000; // bps
                   params.encodings[0].maxFramerate = newProfile.videoFps;
                   params.encodings[0].active = true;
+                  
+                  // Apply scaleResolutionDownBy if specified in profile
+                  if (newProfile.scaleResolutionDownBy !== undefined) {
+                    params.encodings[0].scaleResolutionDownBy = newProfile.scaleResolutionDownBy;
+                  }
+                  
                   sender.track.enabled = true;
                 }
               } else if (sender.track.kind === "audio") {

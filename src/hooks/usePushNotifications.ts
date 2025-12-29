@@ -43,30 +43,48 @@ export const usePushNotifications = () => {
         });
 
       // Listen for messages from service worker (notification clicks)
+      // Optimized to prevent message handler violations by deferring heavy work
       const handleServiceWorkerMessage = (event: MessageEvent) => {
-        console.log("📨 [PUSH] Message from service worker:", event.data);
-        
+        // Extract data immediately (lightweight)
         const { type, callId, url, action } = event.data || {};
         
-        if (type === "NOTIFICATION_ACTION_ANSWER") {
-          // User clicked Answer button on notification
-          console.log("📞 [PUSH] Answer action from notification");
-          if (notificationAnswerHandlerRef.current) {
-            notificationAnswerHandlerRef.current({ callId, url, action: 'answer' });
+        // Defer handler execution to prevent blocking the message handler
+        // Use requestIdleCallback if available, otherwise setTimeout
+        const scheduleHandler = (handler: () => void) => {
+          if ('requestIdleCallback' in window) {
+            requestIdleCallback(handler, { timeout: 50 });
+          } else {
+            setTimeout(handler, 0);
           }
-        } else if (type === "NOTIFICATION_ACTION_DECLINE") {
-          // User clicked Decline button on notification
-          console.log("📞 [PUSH] Decline action from notification");
-          if (notificationDeclineHandlerRef.current) {
-            notificationDeclineHandlerRef.current({ callId, url, action: 'decline' });
+        };
+        
+        scheduleHandler(() => {
+          if (type === "NOTIFICATION_ACTION_ANSWER") {
+            // User clicked Answer button on notification
+            if (import.meta.env.DEV) {
+              console.log("📞 [PUSH] Answer action from notification");
+            }
+            if (notificationAnswerHandlerRef.current) {
+              notificationAnswerHandlerRef.current({ callId, url, action: 'answer' });
+            }
+          } else if (type === "NOTIFICATION_ACTION_DECLINE") {
+            // User clicked Decline button on notification
+            if (import.meta.env.DEV) {
+              console.log("📞 [PUSH] Decline action from notification");
+            }
+            if (notificationDeclineHandlerRef.current) {
+              notificationDeclineHandlerRef.current({ callId, url, action: 'decline' });
+            }
+          } else if (type === "NOTIFICATION_CLICKED") {
+            // User clicked notification body (not action buttons)
+            if (import.meta.env.DEV) {
+              console.log("📞 [PUSH] Notification body clicked");
+            }
+            if (notificationClickHandlerRef.current) {
+              notificationClickHandlerRef.current({ callId, url, action: '' });
+            }
           }
-        } else if (type === "NOTIFICATION_CLICKED") {
-          // User clicked notification body (not action buttons)
-          console.log("📞 [PUSH] Notification body clicked");
-          if (notificationClickHandlerRef.current) {
-            notificationClickHandlerRef.current({ callId, url, action: '' });
-          }
-        }
+        });
       };
 
       navigator.serviceWorker.addEventListener("message", handleServiceWorkerMessage);

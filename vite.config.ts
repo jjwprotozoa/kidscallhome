@@ -179,10 +179,12 @@ export default defineConfig(({ mode }) => {
               : ["**/*.{js,css,html,ico,png,svg,woff,woff2}"],
           globIgnores: [
             "**/node_modules/**/*",
-            "**/src/**/*",
+            "**/src/**/*", // Exclude all source files
             "**/@vite/**/*",
             "**/@react-refresh/**/*",
             "**/*.map",
+            "**/*.ts", // Exclude TypeScript source files
+            "**/*.tsx", // Exclude TSX source files
             "**/kids-video-calling-kindle.html", // Exclude files that return 403
             "**/*-kindle.html", // Exclude kindle-specific pages
             "**/date-fns/**/*", // Exclude date-fns from PWA precaching to avoid build issues
@@ -193,16 +195,23 @@ export default defineConfig(({ mode }) => {
           skipWaiting: true,
           clientsClaim: true,
           cleanupOutdatedCaches: true,
+          // Suppress Workbox warnings for expected cases
+          // This prevents console spam from source files and API requests
+          mode: mode === "development" ? "development" : "production",
           // Navigation fallback to root instead of index.html
           navigateFallback: "/",
           navigateFallbackDenylist: [
             /^\/api\//,
             /^\/_next-live\//,
-            /\.(?:json|xml|txt)$/,
+            /^\/src\//, // Exclude source files from navigation fallback
+            /\.(?:json|xml|txt|ts|tsx)$/, // Exclude source files and data files
           ],
           // Import custom notification handlers into the generated service worker
           // This file contains push notification and notificationclick event handlers
           importScripts: ["/notification-handlers.js"],
+          // Suppress Workbox warnings for expected cases (source files, API requests)
+          // This prevents console spam in development
+          disableDevLogs: mode === "development",
           // Runtime caching rules for external resources
           runtimeCaching: [
             {
@@ -382,6 +391,12 @@ export default defineConfig(({ mode }) => {
             // Radix UI components - all used UI primitives, stable component library
             if (id.includes("@radix-ui")) {
               return "radix-vendor";
+            }
+            
+            // WebRTC-related code - separate chunk for better code splitting
+            // This helps reduce initial bundle size since WebRTC is only needed during calls
+            if (id.includes("useWebRTC") || id.includes("webrtc") || id.includes("WebRTC")) {
+              return "webrtc-vendor";
             }
             
             // Default: let Vite handle other chunks

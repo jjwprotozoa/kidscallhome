@@ -12,7 +12,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Info, UserPlus } from "lucide-react";
+import { Info, UserPlus, AlertTriangle } from "lucide-react";
+import { normalizeEmail, isValidEmailBasic } from "@/utils/emailValidation";
+import { isLikelyRestrictedEmail, getEmailDomain } from "@/utils/emailRestrictions";
+import { logAppEvent } from "@/utils/appEventLogging";
+import { Checkbox } from "@/components/ui/checkbox";
+import { useState, useEffect, useRef } from "react";
+import { useLocation } from "react-router-dom";
 
 export type FamilyRole = "parent" | "grandparent" | "aunt" | "uncle" | "cousin" | "other";
 
@@ -30,6 +36,8 @@ interface SignupFormProps {
   onNameChange: (name: string) => void;
   email: string;
   onEmailChange: (email: string) => void;
+  confirmEmail: string;
+  onConfirmEmailChange: (email: string) => void;
   password: string;
   onPasswordChange: (password: string) => void;
   confirmPassword: string;
@@ -38,6 +46,7 @@ interface SignupFormProps {
   disabled: boolean;
   familyRole?: FamilyRole;
   onFamilyRoleChange?: (role: FamilyRole) => void;
+  onOverrideAccepted?: (email: string) => void;
 }
 
 export const SignupForm = ({
@@ -45,6 +54,8 @@ export const SignupForm = ({
   onNameChange,
   email,
   onEmailChange,
+  confirmEmail,
+  onConfirmEmailChange,
   password,
   onPasswordChange,
   confirmPassword,
@@ -53,9 +64,71 @@ export const SignupForm = ({
   disabled,
   familyRole = "parent",
   onFamilyRoleChange,
+  onOverrideAccepted,
 }: SignupFormProps) => {
   const isParent = familyRole === "parent";
   const selectedRole = roleOptions.find((r) => r.value === familyRole);
+  const location = useLocation();
+  const [isRestrictedEmail, setIsRestrictedEmail] = useState(false);
+  const [overrideChecked, setOverrideChecked] = useState(false);
+  const emailInputRef = useRef<HTMLInputElement>(null);
+
+  // Check if email validation passes for button disable state
+  const emailValid = isValidEmailBasic(email);
+  const emailsMatch =
+    normalizeEmail(email) === normalizeEmail(confirmEmail) || !confirmEmail;
+  
+  // Check if email is restricted (only when emails match to avoid double friction)
+  const normalizedEmail = normalizeEmail(email);
+  const normalizedConfirmEmail = normalizeEmail(confirmEmail);
+  const emailsMatchForRestriction = normalizedEmail === normalizedConfirmEmail;
+  const isRestricted = 
+    emailsMatchForRestriction && 
+    emailValid && 
+    isLikelyRestrictedEmail(email);
+
+  // Update restricted email state
+  useEffect(() => {
+    setIsRestrictedEmail(isRestricted);
+    
+    // Log detection on first render of panel (per session using sessionStorage)
+    if (isRestricted) {
+      const domain = getEmailDomain(email);
+      const route = location.pathname;
+      const logKey = `restricted_email_detected:${domain}:${route}`;
+      
+      if (!sessionStorage.getItem(logKey)) {
+        logAppEvent("restricted_email_detected", { domain, route });
+        sessionStorage.setItem(logKey, "true");
+      }
+    }
+    
+    // Reset override when email changes
+    if (!isRestricted) {
+      setOverrideChecked(false);
+    }
+  }, [isRestricted, email, location.pathname]);
+
+  // Block submit if restricted and override not checked
+  const isFormValid = emailValid && emailsMatch && (!isRestricted || overrideChecked);
+
+  const handleUseDifferentEmail = () => {
+    onEmailChange("");
+    onConfirmEmailChange("");
+    setOverrideChecked(false);
+    // Focus email input after clearing
+    setTimeout(() => {
+      emailInputRef.current?.focus();
+    }, 0);
+  };
+
+  const handleOverrideChange = (checked: boolean) => {
+    setOverrideChecked(checked);
+    // Log override acceptance when checked (will be used on submit)
+    if (checked && onOverrideAccepted) {
+      onOverrideAccepted(email);
+    }
+  };
 
   return (
     <>
@@ -97,6 +170,11 @@ export const SignupForm = ({
             email={email}
             onChange={onEmailChange}
             isLogin={false}
+            confirmEmail={confirmEmail}
+            onConfirmEmailChange={onConfirmEmailChange}
+            showConfirmEmail={true}
+            onRestrictedEmailDetected={setIsRestrictedEmail}
+            emailInputRef={emailInputRef}
           />
 
           <p className="text-xs text-muted-foreground">
@@ -113,10 +191,60 @@ export const SignupForm = ({
             onConfirmPasswordChange={onConfirmPasswordChange}
           />
 
+          {/* Restricted email warning panel */}
+          {isRestrictedEmail && emailsMatchForRestriction && emailValid && (
+            <div className="p-4 bg-amber-50 dark:bg-amber-950 rounded-md border border-amber-200 dark:border-amber-800 space-y-3">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+                <div className="flex-1 space-y-2">
+                  <h3 className="text-sm font-semibold text-amber-900 dark:text-amber-100">
+                    Email may be restricted
+                  </h3>
+                  <p className="text-sm text-amber-800 dark:text-amber-200">
+                    It looks like this email is managed by a school or child account.
+                    These accounts often can't receive verification or security emails.
+                  </p>
+                  <p className="text-sm text-amber-800 dark:text-amber-200">
+                    Please use a personal parent email (Gmail, Outlook, etc.), or check with your school provider about allowing external emails.
+                  </p>
+                  <p className="text-sm text-amber-800 dark:text-amber-200">
+                    This helps ensure you can receive password resets and important security messages.
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-col gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleUseDifferentEmail}
+                  className="w-full"
+                  aria-label="Use a different email address"
+                >
+                  Use a different email
+                </Button>
+                <div className="flex items-start gap-2">
+                  <Checkbox
+                    id="restricted-email-override"
+                    checked={overrideChecked}
+                    onCheckedChange={handleOverrideChange}
+                    aria-label="I understand this email may not receive verification or security emails"
+                  />
+                  <label
+                    htmlFor="restricted-email-override"
+                    className="text-sm text-amber-800 dark:text-amber-200 cursor-pointer leading-tight"
+                  >
+                    I understand this email may not receive verification or security emails.
+                  </label>
+                </div>
+              </div>
+            </div>
+          )}
+
           <Button
             type="submit"
             className="w-full"
-            disabled={disabled || loading}
+            disabled={disabled || loading || !isFormValid}
           >
             {loading ? (
               "Processing..."

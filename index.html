@@ -1,22 +1,19 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <!-- Google tag (gtag.js) -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-5EY72BLX1X"></script>
-    <script>
-      window.dataLayer = window.dataLayer || [];
-      function gtag() { dataLayer.push(arguments); }
-      gtag('js', new Date());
-
-      gtag('config', 'G-5EY72BLX1X');
-    </script>
+    <!-- Google tag (gtag.js) - Optimized for performance -->
+    <!-- Preconnect to Google Tag Manager for faster connection -->
+    <link rel="preconnect" href="https://www.googletagmanager.com" crossorigin />
+    <link rel="dns-prefetch" href="https://www.googletagmanager.com" />
     <meta charset="UTF-8" />
     <meta
       name="viewport"
       content="width=device-width, initial-scale=1, viewport-fit=cover"
     />
     <!-- Resource hints for performance optimization -->
+    <!-- Preconnect to self-origin for faster asset loading -->
     <link rel="preconnect" href="https://www.kidscallhome.com" crossorigin />
+    <!-- Preconnect to Supabase (will be replaced by vite plugin with actual URL) -->
     <link rel="dns-prefetch" href="https://supabase.co" />
     <link rel="preconnect" href="https://supabase.co" crossorigin />
 
@@ -48,8 +45,8 @@
       content="Safe video calling and messaging app for kids. Family-only contacts controlled by parents. Works on most phones and tablets over Wi‑Fi or mobile data, no phone number or SIM card required. No ads, no strangers, no filters, no data tracking."
     />
     <meta name="author" content="Kids Call Home" />
-    <meta name="robots" content="index, follow" />
-    <link rel="canonical" href="https://www.kidscallhome.com" />
+    <meta name="robots" content="index,follow,max-image-preview:large" />
+    <link rel="canonical" href="https://www.kidscallhome.com/" />
 
     <!-- Open Graph / Facebook -->
     <meta property="og:type" content="website" />
@@ -64,11 +61,11 @@
     />
     <meta
       property="og:image"
-      content="https://www.kidscallhome.com/og-image.png"
+      content="https://www.kidscallhome.com/og/kidscallhome-og.png"
     />
     <meta
       property="og:image:secure_url"
-      content="https://www.kidscallhome.com/og-image.png"
+      content="https://www.kidscallhome.com/og/kidscallhome-og.png"
     />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
@@ -93,7 +90,7 @@
     />
     <meta
       name="twitter:image"
-      content="https://www.kidscallhome.com/og-image.png"
+      content="https://www.kidscallhome.com/og/kidscallhome-og.png"
     />
     <meta name="twitter:site" content="@KidsCallHome" />
     <meta name="twitter:creator" content="@KidsCallHome" />
@@ -149,7 +146,7 @@
           "No ads, no filters, no data tracking",
           "Magic link login for kids (no passwords to remember)"
         ],
-        "screenshot": "https://www.kidscallhome.com/og-image.png",
+        "screenshot": "https://www.kidscallhome.com/og/kidscallhome-og.png",
         "softwareVersion": "1.0"
       }
     </script>
@@ -463,6 +460,7 @@
         height: 80px;
         margin: 0 auto 1rem;
         animation: pulse 2s ease-in-out infinite;
+        border-radius: 1.5rem; /* rounded-3xl - matches Index page */
       }
       #app-loading .app-title {
         font-size: 1.5rem;
@@ -768,6 +766,52 @@
                 };
             </script>
             <script defer src="/_vercel/speed-insights/script.js"></script>
+
+    <!-- Google Analytics - Deferred initialization to prevent blocking -->
+    <!-- Loaded after page content to avoid setTimeout violations -->
+    <script>
+      // Initialize dataLayer immediately (lightweight, no blocking)
+      window.dataLayer = window.dataLayer || [];
+      function gtag() { dataLayer.push(arguments); }
+      
+      // Defer Google Analytics initialization until after page load
+      // This prevents setTimeout violations and improves page performance
+      if (document.readyState === 'complete') {
+        // Page already loaded, initialize immediately
+        initializeGA();
+      } else {
+        // Wait for page load, then use requestIdleCallback for non-blocking init
+        window.addEventListener('load', function() {
+          if ('requestIdleCallback' in window) {
+            // Use requestIdleCallback to initialize when browser is idle
+            requestIdleCallback(initializeGA, { timeout: 2000 });
+          } else {
+            // Fallback for browsers without requestIdleCallback
+            setTimeout(initializeGA, 100);
+          }
+        });
+      }
+      
+      function initializeGA() {
+        // Load gtag.js script asynchronously
+        var script = document.createElement('script');
+        script.async = true;
+        script.src = 'https://www.googletagmanager.com/gtag/js?id=G-5EY72BLX1X';
+        script.onload = function() {
+          // Initialize GA after script loads
+          gtag('js', new Date());
+          gtag('config', 'G-5EY72BLX1X', {
+            // Optimize performance settings
+            send_page_view: true,
+            // Reduce data collection overhead
+            anonymize_ip: true,
+            // Use minimal cookie settings
+            cookie_flags: 'SameSite=None;Secure'
+          });
+        };
+        document.head.appendChild(script);
+      }
+    </script>
 
   </body>
 </html>

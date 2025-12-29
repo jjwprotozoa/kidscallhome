@@ -25,6 +25,7 @@ export interface QualityControllerStats {
   inboundPacketLoss: number;    // percentage (0-100)
   roundTripTime: number;         // milliseconds
   jitter: number;               // milliseconds
+  nackCount?: number;           // Number of NACK packets (retransmission requests)
 }
 
 /**
@@ -53,6 +54,7 @@ export class QualityController {
   private isRunning: boolean = false;
   private batteryStatus: BatteryStatus | null = null;
   private batteryUnsubscribe: (() => void) | null = null;
+  private previousNackCount: number = 0;
 
   constructor(
     initialQuality: QualityLevel,
@@ -148,6 +150,7 @@ export class QualityController {
     this.consecutivePoorSamples = 0;
     this.consecutiveGoodSamples = 0;
     this.batteryStatus = null;
+    this.previousNackCount = 0;
 
     safeLog.log("🛑 [QUALITY CONTROLLER] Stopped quality monitoring");
   }
@@ -189,6 +192,12 @@ export class QualityController {
       }
 
       const controllerStats = this.extractStats(stats, timeDelta);
+      
+      // Reduce FPS on high NACKs before analyzing quality
+      if (controllerStats.nackCount && controllerStats.nackCount > 10) {
+        this.reduceFpsOnHighNacks(controllerStats.nackCount);
+      }
+      
       this.analyzeAndAdjustQuality(controllerStats);
 
       // Store stats for next comparison
@@ -278,6 +287,26 @@ export class QualityController {
         const remoteReport = report as RTCRemoteInboundRtpStreamStats;
         outboundPacketLoss = (remoteReport.fractionLost || 0) * 100;
       }
+
+      // NACK count from outbound-rtp (retransmission requests indicate packet loss)
+      if (report.type === "outbound-rtp" && report.kind === "video") {
+        const outboundReport = report as RTCOutboundRtpStreamStats;
+        // nackCount is cumulative, so we track the delta
+        const currentNackCount = outboundReport.nackCount || 0;
+        // We'll calculate the delta in analyzeAndAdjustQuality
+      }
+    });
+
+    // Calculate NACK delta
+    let nackCount = 0;
+    stats.forEach((report) => {
+      if (report.type === "outbound-rtp" && report.kind === "video") {
+        const outboundReport = report as RTCOutboundRtpStreamStats;
+        const currentNackCount = outboundReport.nackCount || 0;
+        nackCount = currentNackCount - this.previousNackCount;
+        // Update for next iteration
+        this.previousNackCount = currentNackCount;
+      }
     });
 
     return {
@@ -287,6 +316,7 @@ export class QualityController {
       inboundPacketLoss,
       roundTripTime,
       jitter,
+      nackCount,
     };
   }
 
@@ -322,9 +352,42 @@ export class QualityController {
       }
     }
 
-    // Check for severe conditions (force critical/audio-only)
+    // Calculate average packet loss
     const avgPacketLoss =
       (stats.outboundPacketLoss + stats.inboundPacketLoss) / 2;
+
+    // HARD BRAKE: Immediate action for severe conditions
+    // Drop fps and/or resolution immediately when RTT > 400ms or loss > 10%
+    if (stats.roundTripTime > 400 || avgPacketLoss > 10) {
+      if (this.currentQuality !== "critical") {
+        // If at excellent/premium, drop to good (720p)
+        if (this.currentQuality === "excellent" || this.currentQuality === "premium") {
+          safeLog.log("🚨 [QUALITY CONTROLLER] HARD BRAKE: Severe conditions, dropping to 720p", {
+            packetLoss: avgPacketLoss.toFixed(1) + "%",
+            rtt: stats.roundTripTime.toFixed(0) + "ms",
+            from: this.currentQuality,
+            to: "good",
+          });
+          this.changeQuality("good");
+          this.consecutivePoorSamples = 0;
+          this.consecutiveGoodSamples = 0;
+          return;
+        }
+        // If at good or below, consider dropping further
+        if (this.currentQuality === "good" && (avgPacketLoss > 15 || stats.roundTripTime > 500)) {
+          safeLog.log("🚨 [QUALITY CONTROLLER] HARD BRAKE: Critical conditions, forcing audio-only", {
+            packetLoss: avgPacketLoss.toFixed(1) + "%",
+            rtt: stats.roundTripTime.toFixed(0) + "ms",
+          });
+          this.changeQuality("critical");
+          this.consecutivePoorSamples = 0;
+          this.consecutiveGoodSamples = 0;
+          return;
+        }
+      }
+    }
+
+    // Check for severe conditions (force critical/audio-only)
     if (avgPacketLoss > 15 || stats.roundTripTime > 500) {
       if (this.currentQuality !== "critical") {
         safeLog.log("📊 [QUALITY CONTROLLER] Severe conditions detected, forcing critical", {
@@ -332,6 +395,8 @@ export class QualityController {
           rtt: stats.roundTripTime.toFixed(0) + "ms",
         });
         this.changeQuality("critical");
+        this.consecutivePoorSamples = 0;
+        this.consecutiveGoodSamples = 0;
         return;
       }
     }
@@ -341,17 +406,19 @@ export class QualityController {
     const minBitrate = currentProfile.videoKbps * 0.8; // 80% of target
 
     // Check if we should downgrade
+    // More aggressive thresholds: packet loss > 3-5% triggers downgrade
     const shouldDowngrade =
       stats.outboundBitrate < minBitrate ||
-      avgPacketLoss > 5 ||
-      stats.roundTripTime > 300;
+      avgPacketLoss > 3 ||  // Lowered from 5% to 3% for faster response
+      stats.roundTripTime > 300 ||
+      (stats.nackCount && stats.nackCount > 10); // High NACK count indicates packet loss
 
     if (shouldDowngrade) {
       this.consecutivePoorSamples++;
       this.consecutiveGoodSamples = 0;
 
-      // Downgrade quickly (2 consecutive poor samples)
-      if (this.consecutivePoorSamples >= 2 && currentIndex > 0) {
+      // Downgrade faster: 1-2 consecutive poor samples (2-4 seconds)
+      if (this.consecutivePoorSamples >= 1 && currentIndex > 0) {
         const newLevel = levels[currentIndex - 1];
         safeLog.log("📊 [QUALITY CONTROLLER] Downgrading quality", {
           from: this.currentQuality,
@@ -360,6 +427,7 @@ export class QualityController {
             bitrate: stats.outboundBitrate.toFixed(0) + " kbps",
             packetLoss: avgPacketLoss.toFixed(1) + "%",
             rtt: stats.roundTripTime.toFixed(0) + "ms",
+            nackCount: stats.nackCount || 0,
           },
         });
         this.changeQuality(newLevel);
@@ -376,16 +444,18 @@ export class QualityController {
         this.consecutiveGoodSamples++;
         this.consecutivePoorSamples = 0;
 
-        // Upgrade slowly (5-6 consecutive good samples)
+        // STABILITY FIRST: Upgrade very slowly - 8-10 consecutive good samples (16-20 seconds)
+        // This prevents overshooting on flaky connections and prioritizes stability
         if (
-          this.consecutiveGoodSamples >= 5 &&
+          this.consecutiveGoodSamples >= 8 &&
           currentIndex < levels.length - 1
         ) {
           const nextLevel = levels[currentIndex + 1];
           const nextProfile = QUALITY_PROFILES[nextLevel];
-          const hasEnoughBandwidth = stats.outboundBitrate >= nextProfile.videoKbps * 0.9;
+          const hasEnoughBandwidth = stats.outboundBitrate >= nextProfile.videoKbps * 0.95; // Require 95% (was 90%)
 
-          if (hasEnoughBandwidth && avgPacketLoss < 2 && stats.roundTripTime < 200) {
+          // Very strict upgrade requirements: keep loss < 1% and RTT < 150ms
+          if (hasEnoughBandwidth && avgPacketLoss < 1.0 && stats.roundTripTime < 150) {
             safeLog.log("📊 [QUALITY CONTROLLER] Upgrading quality", {
               from: this.currentQuality,
               to: nextLevel,
@@ -451,6 +521,55 @@ export class QualityController {
         batteryLevel: this.batteryStatus ? (this.batteryStatus.level * 100).toFixed(0) + "%" : "unknown",
       });
       this.changeQuality(adjustment);
+    }
+  }
+
+  /**
+   * Reduce FPS on high NACK count to reduce packet loss
+   * When hitting repeated NACKs, lower both bitrate and fps (e.g. 30 → 20 → 15)
+   * Reducing frame rate is often more effective at hiding loss on constrained mobile networks
+   */
+  private async reduceFpsOnHighNacks(nackCount: number): Promise<void> {
+    if (!this.pc || nackCount <= 10) {
+      return; // Only reduce if NACK count is significant
+    }
+
+    const senders = this.pc.getSenders();
+    const videoSenders = senders.filter(
+      (sender) => sender.track && sender.track.kind === "video"
+    );
+
+    for (const sender of videoSenders) {
+      try {
+        const params = sender.getParameters();
+        if (!params.encodings || params.encodings.length === 0) {
+          continue;
+        }
+
+        const currentFps = params.encodings[0].maxFramerate || 30;
+        
+        // Progressive FPS reduction: 30 → 20 → 15 → 12
+        let newFps = currentFps;
+        if (nackCount > 20 && currentFps > 20) {
+          newFps = 20;
+        } else if (nackCount > 15 && currentFps > 15) {
+          newFps = 15;
+        } else if (nackCount > 12 && currentFps > 12) {
+          newFps = 12;
+        }
+
+        if (newFps !== currentFps) {
+          params.encodings[0].maxFramerate = newFps;
+          await sender.setParameters(params);
+          safeLog.log("📊 [QUALITY CONTROLLER] Reduced FPS due to high NACKs", {
+            from: currentFps,
+            to: newFps,
+            nackCount,
+          });
+        }
+      } catch (error) {
+        safeLog.warn("⚠️ [QUALITY CONTROLLER] Failed to reduce FPS:", error);
+      }
     }
   }
 

@@ -32,6 +32,7 @@ interface SignupParams {
   name: string;
   validation: AuthValidationResult;
   referralCode?: string | null;
+  familyRole?: "parent" | "grandparent" | "aunt" | "uncle" | "cousin" | "other";
 }
 
 export const handleLogin = async ({
@@ -262,6 +263,7 @@ export const handleSignup = async ({
   name,
   validation,
   referralCode,
+  familyRole = "parent",
 }: SignupParams) => {
   // Track funnel event: signup start (intent_type: commit)
   trackSignupStart(referralCode ? "referral" : "direct");
@@ -271,7 +273,11 @@ export const handleSignup = async ({
     email,
     password,
     options: {
-      data: { name: validation.sanitized.name || name, role: "parent" },
+      data: { 
+        name: validation.sanitized.name || name, 
+        role: "parent",
+        familyRole: familyRole, // Store familyRole in metadata for later use
+      },
       emailRedirectTo: `${window.location.origin}/parent/children`,
     },
   });
@@ -316,6 +322,51 @@ export const handleSignup = async ({
     } catch (refError) {
       // Don't fail signup if referral tracking fails
       safeLog.warn("Referral tracking error:", sanitizeError(refError));
+    }
+  }
+
+  // Create or update adult_profiles record with relationship_type
+  // Note: For parents, relationship_type is null. For family members, it would be set via invitation.
+  // We store it here for consistency, even though parents don't use relationship_type
+  if (data.user) {
+    try {
+      // Determine role and relationship_type
+      const role = familyRole === "parent" ? "parent" : "family_member";
+      const relationshipType = familyRole === "parent" ? null : familyRole;
+
+      // Get family_id (for parents, it's their own user_id initially)
+      const familyId = data.user.id;
+
+      // Insert or update adult_profiles
+      const { error: profileError } = await supabase
+        .from("adult_profiles")
+        .upsert(
+          {
+            user_id: data.user.id,
+            family_id: familyId,
+            role: role,
+            relationship_type: relationshipType,
+            name: validation.sanitized.name || name,
+            email: email,
+          },
+          {
+            onConflict: "user_id,family_id,role",
+          }
+        );
+
+      if (profileError) {
+        safeLog.warn("Failed to create/update adult_profiles:", sanitizeError(profileError));
+        // Don't fail signup if profile creation fails - it might be created by trigger
+      } else {
+        safeLog.log("Adult profile created/updated successfully", {
+          userId: data.user.id,
+          role,
+          relationshipType,
+        });
+      }
+    } catch (profileError) {
+      // Don't fail signup if profile creation fails
+      safeLog.warn("Error creating adult profile:", sanitizeError(profileError));
     }
   }
 

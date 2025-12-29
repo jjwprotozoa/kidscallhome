@@ -1,8 +1,4 @@
-# https://www.kidscallhome.com robots.txt
-
 User-agent: *
 Allow: /
-Disallow: /api/
 
-# Sitemap
 Sitemap: https://www.kidscallhome.com/sitemap.xml

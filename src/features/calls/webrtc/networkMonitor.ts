@@ -171,6 +171,61 @@ export function shouldTriggerIceRestart(
 }
 
 /**
+ * Determine if quality controller should be reset on big network changes
+ * On big network changes (WiFi ↔ cellular, RTT jump > 100ms), reset quality to Moderate or Poor,
+ * then let it re-probe upward. This avoids being "stuck" at Good/Excellent on a now-worse link.
+ * @param previousInfo Previous network connection info
+ * @param nextInfo Next network connection info
+ * @returns Recommended quality level to reset to, or null if no reset needed
+ */
+export function shouldResetQualityOnNetworkChange(
+  previousInfo: NetworkConnectionInfo | null,
+  nextInfo: NetworkConnectionInfo | null
+): "moderate" | "poor" | null {
+  if (!previousInfo || !nextInfo) {
+    return null;
+  }
+
+  // Network type changed (WiFi ↔ cellular) - reset to moderate
+  if (hasNetworkTypeChanged(previousInfo, nextInfo)) {
+    safeLog.log("📡 [NETWORK] Network type changed, resetting quality to moderate");
+    return "moderate";
+  }
+
+  // RTT jump > 100ms - reset to poor if RTT increased significantly
+  const prevRTT = previousInfo.rtt || 0;
+  const nextRTT = nextInfo.rtt || 0;
+  if (prevRTT > 0 && nextRTT > 0) {
+    const rttIncrease = nextRTT - prevRTT;
+    if (rttIncrease > 100) {
+      safeLog.log("📡 [NETWORK] RTT increased significantly, resetting quality to poor", {
+        prevRTT: prevRTT.toFixed(0) + "ms",
+        nextRTT: nextRTT.toFixed(0) + "ms",
+        increase: rttIncrease.toFixed(0) + "ms",
+      });
+      return "poor";
+    }
+  }
+
+  // Bandwidth dropped significantly - reset to moderate
+  const prevDownlink = previousInfo.downlinkMax || previousInfo.downlink || 0;
+  const nextDownlink = nextInfo.downlinkMax || nextInfo.downlink || 0;
+  if (prevDownlink > 0 && nextDownlink > 0) {
+    const bandwidthDrop = (prevDownlink - nextDownlink) / prevDownlink;
+    if (bandwidthDrop > 0.5) { // >50% drop
+      safeLog.log("📡 [NETWORK] Bandwidth dropped significantly, resetting quality to moderate", {
+        prevDownlink: prevDownlink.toFixed(2) + " Mbps",
+        nextDownlink: nextDownlink.toFixed(2) + " Mbps",
+        drop: (bandwidthDrop * 100).toFixed(0) + "%",
+      });
+      return "moderate";
+    }
+  }
+
+  return null;
+}
+
+/**
  * Callback for network changes
  */
 export type NetworkChangeCallback = (info: NetworkConnectionInfo) => void;

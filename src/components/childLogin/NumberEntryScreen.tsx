@@ -4,7 +4,8 @@
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { colors, animals } from "@/data/childLoginConstants";
-import { Delete } from "lucide-react";
+import { Delete, Shuffle } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 interface NumberEntryScreenProps {
   selectedOption: string;
@@ -29,6 +30,7 @@ export const NumberEntryScreen = ({
   onDelete,
   onLogin,
 }: NumberEntryScreenProps) => {
+  const navigate = useNavigate();
   const selectedItem =
     codeType === "color"
       ? colors.find((c) => c.name === selectedOption)
@@ -41,6 +43,14 @@ export const NumberEntryScreen = ({
           <Button variant="ghost" onClick={onBack} className="absolute top-4 left-4">
             ← Back
           </Button>
+          <button
+            onClick={() => navigate("/parent/auth")}
+            className="absolute top-4 right-4 p-2 rounded-full hover:bg-muted transition-colors"
+            aria-label="Switch to Parent"
+            title="Switch to Parent Login"
+          >
+            <Shuffle className="h-5 w-5 text-muted-foreground hover:text-primary transition-colors" />
+          </button>
           <div className="flex items-center justify-center gap-3">
             {codeType === "color" && selectedItem && "color" in selectedItem ? (
               <div

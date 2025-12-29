@@ -115,6 +115,12 @@ const VideoCall = lazy(() => import("./pages/VideoCall"));
 const Chat = lazy(() => import("./pages/Chat"));
 const Info = lazy(() => import("./pages/Info"));
 const Beta = lazy(() => import("./pages/Beta"));
+const VerifyEmail = lazy(() => import("./pages/VerifyEmail"));
+const Pricing = lazy(() => import("./pages/Pricing"));
+const Privacy = lazy(() => import("./pages/Privacy"));
+const Terms = lazy(() => import("./pages/Terms"));
+const Security = lazy(() => import("./pages/Security"));
+const SupportedDevices = lazy(() => import("./pages/SupportedDevices"));
 
 // Loading fallback component - minimal to avoid double spinner effect
 // The initial HTML loading screen handles the first load, this is for route transitions
@@ -380,6 +386,7 @@ const App = () => {
                 <Routes>
                   <Route path="/" element={<Index />} />
                   <Route path="/parent/auth" element={<ParentAuth />} />
+                  <Route path="/verify-email" element={<VerifyEmail />} />
                   <Route path="/parent" element={<ParentHome />} />
                   <Route
                     path="/parent/children"
@@ -434,6 +441,11 @@ const App = () => {
                   <Route path="/chat/:childId" element={<Chat />} />
                   <Route path="/info" element={<Info />} />
                   <Route path="/beta" element={<Beta />} />
+                  <Route path="/pricing" element={<Pricing />} />
+                  <Route path="/privacy" element={<Privacy />} />
+                  <Route path="/terms" element={<Terms />} />
+                  <Route path="/security" element={<Security />} />
+                  <Route path="/supported-devices" element={<SupportedDevices />} />
                   {/* Error pages */}
                   <Route path="/error/server" element={<ServerError />} />
                   <Route path="/error/network" element={<NetworkError />} />

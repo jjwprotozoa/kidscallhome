@@ -46,18 +46,33 @@ export function trackFunnelEvent(
   };
 
   // Send to Google Analytics if available
+  // Uses dataLayer pattern so events are queued even if gtag hasn't loaded yet
   if (typeof window !== "undefined") {
-    const gtag = (window as { gtag?: (command: string, event: string, params?: Record<string, unknown>) => void }).gtag;
-    if (gtag) {
-      try {
+    try {
+      // Ensure dataLayer exists (initialized in index.html)
+      const dataLayer = (window as { dataLayer?: unknown[] }).dataLayer || [];
+      (window as { dataLayer?: unknown[] }).dataLayer = dataLayer;
+      
+      // Use gtag if available (preferred), otherwise queue in dataLayer
+      const gtag = (window as { gtag?: (...args: unknown[]) => void }).gtag;
+      if (gtag && typeof gtag === 'function') {
+        // gtag is loaded, use it directly
         gtag("event", event, {
           event_category: "funnel",
           ...metadata,
         });
-      } catch (error) {
-        // Silently fail - analytics shouldn't break the app
-        console.warn("Funnel tracking error:", error);
+      } else {
+        // gtag not loaded yet, queue in dataLayer - will be processed once gtag loads
+        // This pattern ensures no events are lost during deferred GA initialization
+        dataLayer.push({
+          event: event,
+          event_category: "funnel",
+          ...metadata,
+        });
       }
+    } catch (error) {
+      // Silently fail - analytics shouldn't break the app
+      console.warn("Funnel tracking error:", error);
     }
   }
 

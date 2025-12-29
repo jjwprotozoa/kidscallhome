@@ -13,8 +13,11 @@ import { detectBot, initBehaviorTracking } from "@/utils/botDetection";
 import { getCSRFToken } from "@/utils/csrf";
 import { getRateLimitKey, recordRateLimit } from "@/utils/rateLimiting";
 import { safeLog, sanitizeError } from "@/utils/security";
-import { useEffect, useMemo } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { normalizeEmail, isValidEmailBasic } from "@/utils/emailValidation";
+import { getEmailDomain } from "@/utils/emailRestrictions";
+import { logAppEvent } from "@/utils/appEventLogging";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import { LoginForm } from "./LoginForm";
 import { SignupForm } from "./SignupForm";
 import {
@@ -31,6 +34,7 @@ import { useAuthState } from "./useAuthState";
 
 const ParentAuth = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const { toast } = useToast();
   const authState = useAuthState();
@@ -103,6 +107,30 @@ const ParentAuth = () => {
           variant: "destructive",
         });
         return;
+      }
+
+      // Check email confirmation for signup
+      if (!authState.isLogin) {
+        const normalizedEmail = normalizeEmail(authState.email);
+        const normalizedConfirmEmail = normalizeEmail(authState.confirmEmail);
+        
+        if (!isValidEmailBasic(authState.email)) {
+          toast({
+            title: "Invalid email",
+            description: "Enter a valid email address",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        if (normalizedEmail !== normalizedConfirmEmail) {
+          toast({
+            title: "Emails don't match",
+            description: "Please make sure both emails match",
+            variant: "destructive",
+          });
+          return;
+        }
       }
 
       const sanitizedEmail = validation.sanitized.email || authState.email;
@@ -193,6 +221,12 @@ const ParentAuth = () => {
     });
   };
 
+  const [restrictedEmailOverride, setRestrictedEmailOverride] = useState<string | null>(null);
+
+  const handleRestrictedEmailOverride = (email: string) => {
+    setRestrictedEmailOverride(email);
+  };
+
   const handleSignup = async (
     email: string,
     password: string,
@@ -204,12 +238,33 @@ const ParentAuth = () => {
       name: authState.name,
       validation,
       referralCode,
+      familyRole: authState.familyRole,
     });
+    
+    // Log override if user accepted restricted email warning
+    if (restrictedEmailOverride && restrictedEmailOverride === email) {
+      const domain = getEmailDomain(email);
+      const route = location.pathname;
+      logAppEvent("restricted_email_override", { domain, route });
+      setRestrictedEmailOverride(null);
+    }
+    
     if (result.needsFamilySetup && result.user) {
       authState.setUserId(result.user.id);
-      authState.setNeedsFamilySetup(true);
       // Clear stored referral code after successful signup
       localStorage.removeItem("kch_referral_code");
+      
+      // Check if email confirmation is required
+      // If user is not verified, redirect to verify-email screen
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (currentUser && !currentUser.email_confirmed_at) {
+        // User needs email verification - redirect to verify-email screen
+        navigate(`/verify-email?email=${encodeURIComponent(email)}`, { replace: true });
+        return;
+      }
+      
+      // User is verified or doesn't need verification - proceed with family setup
+      authState.setNeedsFamilySetup(true);
     }
   };
 
@@ -265,6 +320,8 @@ const ParentAuth = () => {
               onNameChange={authState.setName}
               email={authState.email}
               onEmailChange={authState.setEmail}
+              confirmEmail={authState.confirmEmail}
+              onConfirmEmailChange={authState.setConfirmEmail}
               password={authState.password}
               onPasswordChange={authState.setPassword}
               confirmPassword={authState.confirmPassword}
@@ -273,6 +330,7 @@ const ParentAuth = () => {
               disabled={false}
               familyRole={authState.familyRole}
               onFamilyRoleChange={authState.setFamilyRole}
+              onOverrideAccepted={handleRestrictedEmailOverride}
             />
           )}
         </form>

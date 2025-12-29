@@ -4,9 +4,11 @@
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { KEYPAD_BLOCKS } from "@/data/childLoginConstants";
-import { ChevronLeft, ChevronRight, Delete, Smile, HelpCircle, Sparkles } from "lucide-react";
+import { ChevronLeft, ChevronRight, Delete, Smile, HelpCircle, Sparkles, Keyboard, Grid3x3, Shuffle } from "lucide-react";
 import { useRef, useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { KeypadOnboardingHints, useFirstTimeUser } from "./KeypadOnboardingHints";
+import { Input } from "@/components/ui/input";
 
 interface FamilyCodeKeypadProps {
   familyCode: string;
@@ -27,6 +29,7 @@ export const FamilyCodeKeypad = ({
   onDelete,
   onSubmit,
 }: FamilyCodeKeypadProps) => {
+  const navigate = useNavigate();
   const keypadRef = useRef<HTMLDivElement>(null);
   const touchStartX = useRef<number>(0);
   const touchEndX = useRef<number>(0);
@@ -40,6 +43,8 @@ export const FamilyCodeKeypad = ({
   const [showHints, setShowHints] = useState(false);
   const [hasInteracted, setHasInteracted] = useState(false);
   const [showHelpTooltip, setShowHelpTooltip] = useState(false);
+  const [useDeviceKeyboard, setUseDeviceKeyboard] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   // Show hints after a brief delay for first-time users
   useEffect(() => {
@@ -48,6 +53,13 @@ export const FamilyCodeKeypad = ({
       return () => clearTimeout(timer);
     }
   }, [isFirstTime, hasInteracted]);
+
+  // Focus input when switching to device keyboard
+  useEffect(() => {
+    if (useDeviceKeyboard && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [useDeviceKeyboard]);
 
   // Handle first interaction
   const handleFirstInteraction = useCallback(() => {
@@ -118,14 +130,36 @@ export const FamilyCodeKeypad = ({
   return (
     <div className="min-h-[100dvh] flex items-center justify-center bg-primary/5 p-4">
       <Card className="w-full max-w-md p-6 space-y-3 relative overflow-visible">
-        {/* Help button */}
-        <button
-          onClick={() => setShowHelpTooltip(!showHelpTooltip)}
-          className="absolute top-4 right-4 p-2 rounded-full hover:bg-muted transition-colors"
-          aria-label="Help"
-        >
-          <HelpCircle className="h-5 w-5 text-muted-foreground hover:text-primary transition-colors" />
-        </button>
+        {/* Help, Keyboard toggle, and Switch to Parent buttons */}
+        <div className="absolute top-4 right-4 flex items-center gap-2">
+          <button
+            onClick={() => navigate("/parent/auth")}
+            className="p-2 rounded-full hover:bg-muted transition-colors"
+            aria-label="Switch to Parent"
+            title="Switch to Parent Login"
+          >
+            <Shuffle className="h-5 w-5 text-muted-foreground hover:text-primary transition-colors" />
+          </button>
+          <button
+            onClick={() => setUseDeviceKeyboard(!useDeviceKeyboard)}
+            className="p-2 rounded-full hover:bg-muted transition-colors"
+            aria-label={useDeviceKeyboard ? "Use on-screen keypad" : "Use device keyboard"}
+            title={useDeviceKeyboard ? "Switch to on-screen keypad" : "Switch to device keyboard"}
+          >
+            {useDeviceKeyboard ? (
+              <Grid3x3 className="h-5 w-5 text-muted-foreground hover:text-primary transition-colors" />
+            ) : (
+              <Keyboard className="h-5 w-5 text-muted-foreground hover:text-primary transition-colors" />
+            )}
+          </button>
+          <button
+            onClick={() => setShowHelpTooltip(!showHelpTooltip)}
+            className="p-2 rounded-full hover:bg-muted transition-colors"
+            aria-label="Help"
+          >
+            <HelpCircle className="h-5 w-5 text-muted-foreground hover:text-primary transition-colors" />
+          </button>
+        </div>
 
         {/* Help tooltip */}
         {showHelpTooltip && (
@@ -174,17 +208,48 @@ export const FamilyCodeKeypad = ({
         </div>
 
         <div className="space-y-2">
-          <div className="bg-muted p-4 rounded-2xl">
-            <div className="flex justify-center">
-              <div className="w-full max-w-sm h-16 rounded-xl bg-card flex items-center justify-center border-2 border-primary/20 px-4">
-                <span className="text-2xl sm:text-3xl font-bold text-primary font-mono tracking-wider whitespace-nowrap">
-                  {familyCode.padEnd(6, "_")}
-                </span>
+          {useDeviceKeyboard ? (
+            /* Device keyboard input */
+            <div className="bg-muted p-4 rounded-2xl">
+              <Input
+                ref={inputRef}
+                type="text"
+                value={familyCode}
+                onChange={(e) => {
+                  const cleaned = e.target.value
+                    .toUpperCase()
+                    .replace(/[^A-Z0-9]/g, "")
+                    .slice(0, 6);
+                  onFamilyCodeChange(cleaned);
+                }}
+                placeholder="Enter 6-character code"
+                className="text-2xl sm:text-3xl font-bold text-primary font-mono tracking-wider text-center h-16 border-2 border-primary/20"
+                maxLength={6}
+                autoFocus
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="characters"
+                spellCheck="false"
+              />
+              <p className="text-xs text-muted-foreground text-center mt-2">
+                Use your device keyboard to type
+              </p>
+            </div>
+          ) : (
+            /* On-screen keypad display */
+            <div className="bg-muted p-4 rounded-2xl">
+              <div className="flex justify-center">
+                <div className="w-full max-w-sm h-16 rounded-xl bg-card flex items-center justify-center border-2 border-primary/20 px-4">
+                  <span className="text-2xl sm:text-3xl font-bold text-primary font-mono tracking-wider whitespace-nowrap">
+                    {familyCode.padEnd(6, "_")}
+                  </span>
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
-          {/* Block Navigation */}
+          {/* Block Navigation - only show with on-screen keypad */}
+          {!useDeviceKeyboard && (
           <div className="flex items-center justify-between gap-2">
             <Button
               onClick={() => handleBlockChange(currentBlock - 1)}
@@ -238,26 +303,29 @@ export const FamilyCodeKeypad = ({
               <ChevronRight className="h-5 w-5" />
             </Button>
           </div>
+          )}
 
-          {/* Current block indicator for better visibility */}
-          <div className="text-center -mt-1">
-            <p className="text-xs font-medium text-muted-foreground">
-              {isFirstTime && !hasInteracted ? (
-                <span className="text-primary">
-                  ← Use arrows to find more letters →
-                </span>
-              ) : (
-                <>Now showing: <span className="text-primary font-bold">{currentBlockData.label}</span></>
-              )}
-            </p>
-          </div>
+          {!useDeviceKeyboard && (
+            <>
+              {/* Current block indicator for better visibility */}
+              <div className="text-center -mt-1">
+                <p className="text-xs font-medium text-muted-foreground">
+                  {isFirstTime && !hasInteracted ? (
+                    <span className="text-primary">
+                      ← Use arrows to find more letters →
+                    </span>
+                  ) : (
+                    <>Now showing: <span className="text-primary font-bold">{currentBlockData.label}</span></>
+                  )}
+                </p>
+              </div>
 
-          {/* Keypad Block */}
-          <div
-            ref={keypadRef}
-            className="relative overflow-hidden"
-            style={{ touchAction: "pan-x" }}
-          >
+              {/* Keypad Block */}
+              <div
+                ref={keypadRef}
+                className="relative overflow-hidden"
+                style={{ touchAction: "pan-x" }}
+              >
             {/* Onboarding hints overlay */}
             {showHints && (
               <KeypadOnboardingHints
@@ -375,6 +443,8 @@ export const FamilyCodeKeypad = ({
               ))}
             </div>
           </div>
+            </>
+          )}
 
           {/* Delete and Next Buttons */}
           <div className="space-y-2 -mt-1">
