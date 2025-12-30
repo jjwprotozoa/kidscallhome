@@ -69,9 +69,9 @@ export default function middleware(request: Request) {
   const url = new URL(request.url);
   const path = url.pathname;
 
-  // CRITICAL: Skip middleware entirely for static files
-  // These should NEVER be processed by middleware - let Vercel serve them directly
-  // The matcher should exclude these, but if middleware runs, return immediately
+  // CRITICAL: Check for static files FIRST - before any other processing
+  // This ensures we never interfere with static file serving
+  // Even if the matcher somehow allows this to run, we exit immediately
   const staticFilePatterns = [
     '/manifest.json',
     '/sw.js',
@@ -81,16 +81,31 @@ export default function middleware(request: Request) {
     '/robots.txt',
     '/favicon.ico',
     '/assets/',
+    '.png',
+    '.jpg',
+    '.jpeg',
+    '.gif',
+    '.svg',
+    '.ico',
+    '.woff',
+    '.woff2',
+    '.ttf',
+    '.eot',
+    '.css',
+    '.js',
+    '.json',
   ];
 
-  // If this is a static file, the middleware shouldn't have run (matcher excludes it)
-  // But if it did run, we must not interfere - return immediately
-  // The matcher config should prevent this code from executing for static files
-  if (staticFilePatterns.some(pattern => path.includes(pattern))) {
-    // This should never execute if matcher is working correctly
-    // But if it does, return a response that allows Vercel to serve the file
-    // Don't add any headers or do any processing that might cause 401
-    return new Response(null, { status: 200 });
+  // If this looks like a static file, exit immediately without any processing
+  // This prevents any authentication checks or other logic from interfering
+  if (staticFilePatterns.some(pattern => path.includes(pattern) || path.endsWith(pattern))) {
+    // For static files, we need to let Vercel serve them directly
+    // Return a minimal response that won't interfere
+    // The matcher should prevent this from running, but if it does, this ensures no auth issues
+    return new Response(null, {
+      status: 200,
+      // No headers that might trigger authentication
+    });
   }
 
   // SECURITY: CORS headers (adjust for your domain)
@@ -195,10 +210,12 @@ export default function middleware(request: Request) {
 
 // Configure which routes to run middleware on
 // Note: Vercel Edge Middleware uses this config
-// Only run middleware on API/auth endpoints, not on HTML pages or static assets
+// CRITICAL: Only run middleware on API/auth endpoints
 // Static files like manifest.json are NOT in the matcher, so middleware won't run for them
+// The early return check in the middleware function is a safety net
 export const config = {
   matcher: [
+    // Only match API/auth endpoints - static files are automatically excluded
     '/auth/:path*',
     '/rest/:path*',
     '/functions/:path*',
