@@ -71,6 +71,7 @@ export default function middleware(request: Request) {
 
   // CRITICAL: Skip middleware entirely for static files
   // These should NEVER be processed by middleware - let Vercel serve them directly
+  // The matcher should exclude these, but if middleware runs, return immediately
   const staticFilePatterns = [
     '/manifest.json',
     '/sw.js',
@@ -82,12 +83,14 @@ export default function middleware(request: Request) {
     '/assets/',
   ];
 
-  // If this is a static file, the middleware shouldn't have run at all
-  // But if it did, we need to pass through without any processing
-  // In Vercel Edge Middleware, returning undefined passes through to origin
+  // If this is a static file, the middleware shouldn't have run (matcher excludes it)
+  // But if it did run, we must not interfere - return immediately
+  // The matcher config should prevent this code from executing for static files
   if (staticFilePatterns.some(pattern => path.includes(pattern))) {
-    // Type assertion to satisfy TypeScript - this tells Vercel to pass through
-    return undefined as unknown as Response;
+    // This should never execute if matcher is working correctly
+    // But if it does, return a response that allows Vercel to serve the file
+    // Don't add any headers or do any processing that might cause 401
+    return new Response(null, { status: 200 });
   }
 
   // SECURITY: CORS headers (adjust for your domain)
