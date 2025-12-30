@@ -1,5 +1,5 @@
 // middleware.ts
-// Purpose: Vercel Edge Middleware for rate limiting, security headers, and scraper detection
+// Purpose: Vercel Edge Middleware for rate limiting and security headers
 
 // Note: This uses Vercel Edge Runtime API
 // For Vite/React apps, this runs on Vercel Edge Network
@@ -65,69 +65,10 @@ function checkRateLimit(key: string, path: string): { allowed: boolean; resetAt?
   return { allowed: true };
 }
 
-// Detect known scrapers by User-Agent
-function isScraper(userAgent: string): boolean {
-  const scraperPatterns = [
-    'WhatsApp',
-    'facebookexternalhit',
-    'Facebot',
-    'Twitterbot',
-    'Slackbot',
-    'LinkedInBot',
-    'TelegramBot',
-    'Discordbot',
-    'SkypeUriPreview',
-    'Applebot',
-    'Googlebot',
-    'bingbot',
-    'Slurp',
-    'DuckDuckBot',
-    'Baiduspider',
-    'YandexBot',
-    'Sogou',
-    'Exabot',
-    'facebot',
-    'ia_archiver',
-  ];
-  
-  const ua = userAgent.toLowerCase();
-  return scraperPatterns.some(pattern => ua.includes(pattern.toLowerCase()));
-}
-
-export default async function middleware(request: Request) {
+export default function middleware(request: Request) {
   const url = new URL(request.url);
   const path = url.pathname;
-  const userAgent = request.headers.get('user-agent') || '';
-  
-  // SEO/OG: Serve static HTML to scrapers for marketing routes
-  // This ensures scrapers see proper OG tags without loading the React app
-  if (isScraper(userAgent) && (path === '/' || path === '/info')) {
-    const staticPath = path === '/' ? '/og/index.html' : '/og/info.html';
-    
-    // Fetch the static HTML file
-    try {
-      const baseUrl = url.origin;
-      const staticUrl = new URL(staticPath, baseUrl);
-      const staticResponse = await fetch(staticUrl.toString());
-      
-      if (staticResponse.ok) {
-        const html = await staticResponse.text();
-        return new Response(html, {
-          status: 200,
-          headers: {
-            'Content-Type': 'text/html; charset=utf-8',
-            'Cache-Control': 'public, max-age=3600, s-maxage=3600',
-            'X-Content-Type-Options': 'nosniff',
-            'X-Frame-Options': 'SAMEORIGIN',
-          },
-        });
-      }
-    } catch (error) {
-      // If static file fetch fails, fall through to normal handling
-      console.error('Failed to fetch static HTML for scraper:', error);
-    }
-  }
-  
+
   // Skip middleware for static files (manifest, service worker, icons, etc.)
   const staticFilePatterns = [
     '/manifest.json',
@@ -139,12 +80,12 @@ export default async function middleware(request: Request) {
     '/favicon.ico',
     '/assets/',
   ];
-  
+
   if (staticFilePatterns.some(pattern => path.includes(pattern))) {
-    // Let Vercel serve static files normally - don't return anything to pass through
-    return;
+    // Let Vercel serve static files normally
+    return new Response(null, { status: 200 });
   }
-  
+
   // SECURITY: CORS headers (adjust for your domain)
   const origin = request.headers.get('origin');
   const allowedOrigins = [
@@ -186,7 +127,8 @@ export default async function middleware(request: Request) {
     }
   }
 
-  // SECURITY: Block known malicious bot user agents (but allow legitimate scrapers)
+  // SECURITY: Block known bot user agents
+  const userAgent = request.headers.get('user-agent') || '';
   const botPatterns = [
     'headless',
     'phantom',
@@ -195,14 +137,17 @@ export default async function middleware(request: Request) {
     'puppeteer',
     'playwright',
     'scrapy',
+    'bot',
+    'crawler',
+    'spider',
   ];
 
-  const isMaliciousBot = botPatterns.some((pattern) =>
+  const isBot = botPatterns.some((pattern) =>
     userAgent.toLowerCase().includes(pattern)
   );
 
-  // Block malicious bots from auth endpoints
-  if (isMaliciousBot && (path.includes('/auth/') || path.includes('/api/'))) {
+  // Block bots from auth endpoints
+  if (isBot && (path.includes('/auth/') || path.includes('/api/'))) {
     return new Response(
       JSON.stringify({ error: 'Forbidden', message: 'Automated access not allowed' }),
       { 
@@ -227,18 +172,25 @@ export default async function middleware(request: Request) {
   }
 
   // For Vercel Edge Middleware with Vite/React apps, we need to pass through
-  // Security headers are already configured in vercel.json
-  // Don't return anything - let Vercel handle the request normally and serve the React app
-  // Returning undefined or nothing allows Vercel to continue with normal request handling
+  // Headers will be added via vercel.json headers configuration
+  // Don't return an empty response - let Vercel handle the request normally
+  return new Response(null, {
+    status: 200,
+    headers: {
+      'X-Content-Type-Options': 'nosniff',
+      'X-Frame-Options': 'DENY',
+      'X-XSS-Protection': '1; mode=block',
+      'Referrer-Policy': 'strict-origin-when-cross-origin',
+      'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), interest-cohort=()',
+    },
+  });
 }
 
 // Configure which routes to run middleware on
 // Note: Vercel Edge Middleware uses this config
-// Now includes marketing routes for scraper detection
+// Only run middleware on API/auth endpoints, not on HTML pages or static assets
 export const config = {
   matcher: [
-    '/',
-    '/info',
     '/auth/:path*',
     '/rest/:path*',
     '/functions/:path*',
