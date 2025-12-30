@@ -69,8 +69,8 @@ export default function middleware(request: Request) {
   const url = new URL(request.url);
   const path = url.pathname;
 
-  // Skip middleware for static files (manifest, service worker, icons, etc.)
-  // These should be handled by Vercel's static file serving, not intercepted
+  // CRITICAL: Skip middleware entirely for static files
+  // These should NEVER be processed by middleware - let Vercel serve them directly
   const staticFilePatterns = [
     '/manifest.json',
     '/sw.js',
@@ -82,11 +82,12 @@ export default function middleware(request: Request) {
     '/assets/',
   ];
 
+  // If this is a static file, the middleware shouldn't have run at all
+  // But if it did, we need to pass through without any processing
+  // In Vercel Edge Middleware, returning undefined passes through to origin
   if (staticFilePatterns.some(pattern => path.includes(pattern))) {
-    // Pass through to Vercel's static file handler
-    // In Vercel Edge Middleware, we fetch the original request and return it
-    // This allows Vercel to serve the static file normally
-    return fetch(request);
+    // Type assertion to satisfy TypeScript - this tells Vercel to pass through
+    return undefined as unknown as Response;
   }
 
   // SECURITY: CORS headers (adjust for your domain)

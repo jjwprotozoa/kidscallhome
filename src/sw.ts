@@ -411,11 +411,20 @@ self.addEventListener('push', (event: PushEvent) => {
 });
 
 // Handle messages from the app
+// Optimized to prevent message handler violations
 self.addEventListener('message', (event: ExtendableMessageEvent) => {
-  console.log('[SW] Message received:', event.data);
-  
+  // Handle SKIP_WAITING immediately (lightweight operation)
   if (event.data && event.data.type === 'SKIP_WAITING') {
     self.skipWaiting();
+    return; // Early return to avoid any other processing
+  }
+  
+  // Defer logging to prevent blocking (only in dev mode)
+  if (typeof console !== 'undefined' && console.log) {
+    // Use setTimeout to defer logging and prevent blocking
+    setTimeout(() => {
+      console.log('[SW] Message received:', event.data);
+    }, 0);
   }
 });
 

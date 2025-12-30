@@ -3,6 +3,7 @@
 // Handles notification permissions, sending notifications, and responding to notification clicks
 
 import { useEffect, useRef, useCallback } from "react";
+import { deferTask } from "../utils/inpOptimization";
 
 interface NotificationOptions {
   title: string;
@@ -43,28 +44,22 @@ export const usePushNotifications = () => {
         });
 
       // Listen for messages from service worker (notification clicks)
-      // Optimized to prevent message handler violations by deferring heavy work
+      // Optimized to prevent message handler violations by aggressively deferring all work
       const handleServiceWorkerMessage = (event: MessageEvent) => {
-        // Extract data immediately (lightweight)
+        // Extract data immediately (lightweight, synchronous)
         const { type, callId, url, action } = event.data || {};
         
-        // Defer handler execution to prevent blocking the message handler
-        // Use requestIdleCallback if available, otherwise setTimeout
-        const scheduleHandler = (handler: () => void) => {
-          if ('requestIdleCallback' in window) {
-            requestIdleCallback(handler, { timeout: 50 });
-          } else {
-            setTimeout(handler, 0);
-          }
-        };
-        
-        scheduleHandler(() => {
+        // CRITICAL: Defer ALL handler execution to prevent blocking the message handler
+        // Use scheduler.postTask (Chrome 94+) for better scheduling, falls back to setTimeout
+        // This ensures the message handler completes quickly (< 50ms)
+        deferTask(() => {
           if (type === "NOTIFICATION_ACTION_ANSWER") {
             // User clicked Answer button on notification
             if (import.meta.env.DEV) {
               console.log("📞 [PUSH] Answer action from notification");
             }
             if (notificationAnswerHandlerRef.current) {
+              // Handler might do heavy work, but it's already deferred
               notificationAnswerHandlerRef.current({ callId, url, action: 'answer' });
             }
           } else if (type === "NOTIFICATION_ACTION_DECLINE") {
@@ -84,6 +79,8 @@ export const usePushNotifications = () => {
               notificationClickHandlerRef.current({ callId, url, action: '' });
             }
           }
+        }, 'user-visible').catch(() => {
+          // Silently handle errors to prevent unhandled rejections
         });
       };
 
