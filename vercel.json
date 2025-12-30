@@ -28,18 +28,6 @@
   ],
   "redirects": [
     {
-      "source": "/(.*)",
-      "destination": "https://www.kidscallhome.com/$1",
-      "permanent": true,
-      "statusCode": 301,
-      "has": [
-        {
-          "type": "host",
-          "value": "kidscallhome.com"
-        }
-      ]
-    },
-    {
       "source": "/_next-live/(.*)",
       "destination": "/index.html",
       "permanent": false
