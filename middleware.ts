@@ -99,13 +99,11 @@ export default function middleware(request: Request) {
   // If this looks like a static file, exit immediately without any processing
   // This prevents any authentication checks or other logic from interfering
   if (staticFilePatterns.some(pattern => path.includes(pattern) || path.endsWith(pattern))) {
-    // For static files, we need to let Vercel serve them directly
-    // Return a minimal response that won't interfere
-    // The matcher should prevent this from running, but if it does, this ensures no auth issues
-    return new Response(null, {
-      status: 200,
-      // No headers that might trigger authentication
-    });
+    // CRITICAL: For static files, we must NOT return a Response that intercepts
+    // In Vercel Edge Middleware, returning undefined tells Vercel to pass through
+    // This allows Vercel to serve the static file normally without any middleware interference
+    // Type assertion needed because TypeScript requires a return value
+    return undefined as unknown as Response;
   }
 
   // SECURITY: CORS headers (adjust for your domain)
@@ -212,7 +210,7 @@ export default function middleware(request: Request) {
 // Note: Vercel Edge Middleware uses this config
 // CRITICAL: Only run middleware on API/auth endpoints
 // Static files like manifest.json are NOT in the matcher, so middleware won't run for them
-// The early return check in the middleware function is a safety net
+// The early return with undefined in the middleware function is a safety net for pass-through
 export const config = {
   matcher: [
     // Only match API/auth endpoints - static files are automatically excluded
