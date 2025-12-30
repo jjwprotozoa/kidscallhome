@@ -38,3 +38,5 @@ export function logAppEvent(
   // In production, this could be sent to analytics service or Supabase
 }
 
+
+

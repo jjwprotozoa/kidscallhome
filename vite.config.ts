@@ -126,6 +126,9 @@ export default defineConfig(({ mode }) => {
     // Only use index.html as entry point, ignore other HTML files
     root: process.cwd(),
     publicDir: "public",
+    // Suppress expected warnings about mixed dynamic/static imports
+    // This is expected behavior for Supabase client which is imported both ways
+    logLevel: mode === "production" ? "warn" : "info",
     // Exclude android directory and other build directories from Vite scanning
     server: {
       host: "0.0.0.0", // Bind to all network interfaces
@@ -362,6 +365,20 @@ export default defineConfig(({ mode }) => {
       // Vendor chunks can be cached indefinitely since they rarely change,
       // while app code chunks are smaller and update more frequently.
       rollupOptions: {
+        // Suppress the expected warning about Supabase client being both dynamically and statically imported
+        // This is intentional - some routes use dynamic imports for code splitting, others use static imports
+        onwarn(warning, warn) {
+          // Suppress the specific warning about dynamic imports not moving to another chunk
+          // This is expected behavior when a module is imported both dynamically and statically
+          if (
+            warning.code === "MODULE_LEVEL_DIRECTIVE" ||
+            (warning.message && warning.message.includes("dynamic import will not move module into another chunk"))
+          ) {
+            return;
+          }
+          // Show all other warnings
+          warn(warning);
+        },
         // Only use index.html as entry point, ignore HTML files in public/ and android/
         input: path.resolve(__dirname, "./index.html"),
         output: {

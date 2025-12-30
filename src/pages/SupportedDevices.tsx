@@ -72,3 +72,5 @@ const SupportedDevices = () => {
 
 export default SupportedDevices;
 
+
+

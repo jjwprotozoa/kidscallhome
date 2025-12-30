@@ -167,3 +167,5 @@ All remaining Lighthouse gaps have been fixed. Marketing routes (`/` and `/info`
 - Full CSS splitting would require build configuration changes and separate entry points
 - All critical optimizations are complete for Lighthouse 100/100
 
+
+
