@@ -96,14 +96,19 @@ export default function middleware(request: Request) {
     '.json',
   ];
 
-  // If this looks like a static file, exit immediately without any processing
-  // This prevents any authentication checks or other logic from interfering
+  // If this looks like a static file, return immediately without any processing
+  // The matcher should prevent this from running, but if it does, we need to pass through
+  // In Vercel Edge Middleware, we can't truly "pass through" but we can return a response
+  // that doesn't interfere. However, the REAL fix is ensuring the matcher works correctly.
   if (staticFilePatterns.some(pattern => path.includes(pattern) || path.endsWith(pattern))) {
-    // CRITICAL: For static files, we must NOT return a Response that intercepts
-    // In Vercel Edge Middleware, returning undefined tells Vercel to pass through
-    // This allows Vercel to serve the static file normally without any middleware interference
-    // Type assertion needed because TypeScript requires a return value
-    return undefined as unknown as Response;
+    // Return a response that tells Vercel to continue processing
+    // This should allow Vercel to serve the static file from the public directory
+    // We return 200 with no body to indicate "handled but continue"
+    return new Response(null, {
+      status: 200,
+      // Don't add any headers that might trigger authentication
+      // Let Vercel handle the file serving
+    });
   }
 
   // SECURITY: CORS headers (adjust for your domain)
