@@ -70,6 +70,7 @@ export default function middleware(request: Request) {
   const path = url.pathname;
 
   // Skip middleware for static files (manifest, service worker, icons, etc.)
+  // These should be handled by Vercel's static file serving, not intercepted
   const staticFilePatterns = [
     '/manifest.json',
     '/sw.js',
@@ -82,8 +83,10 @@ export default function middleware(request: Request) {
   ];
 
   if (staticFilePatterns.some(pattern => path.includes(pattern))) {
-    // Let Vercel serve static files normally
-    return new Response(null, { status: 200 });
+    // Pass through to Vercel's static file handler
+    // In Vercel Edge Middleware, we fetch the original request and return it
+    // This allows Vercel to serve the static file normally
+    return fetch(request);
   }
 
   // SECURITY: CORS headers (adjust for your domain)
@@ -189,6 +192,7 @@ export default function middleware(request: Request) {
 // Configure which routes to run middleware on
 // Note: Vercel Edge Middleware uses this config
 // Only run middleware on API/auth endpoints, not on HTML pages or static assets
+// Static files like manifest.json are NOT in the matcher, so middleware won't run for them
 export const config = {
   matcher: [
     '/auth/:path*',
