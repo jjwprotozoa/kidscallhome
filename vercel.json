@@ -3,17 +3,6 @@
   "trailingSlash": false,
   "rewrites": [
     {
-      "source": "/manifest.json",
-      "destination": "/manifest.json",
-      "has": [
-        {
-          "type": "header",
-          "key": "accept",
-          "value": "application/manifest\\+json"
-        }
-      ]
-    },
-    {
       "source": "/_next-live/(.*)",
       "destination": "/index.html"
     },

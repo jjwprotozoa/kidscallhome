@@ -388,20 +388,11 @@ export default defineConfig(({ mode }) => {
               return "date-fns-vendor";
             }
             
-            // Split React core from React DOM for better code splitting
-            // React core is smaller and needed earlier, React DOM can load later
-            if (id.includes("react/") && !id.includes("react-dom")) {
-              return "react-core-vendor";
-            }
-            
-            // React DOM - larger, can be loaded separately
-            if (id.includes("react-dom")) {
-              return "react-dom-vendor";
-            }
-            
-            // React Router - separate chunk since it's only needed for routing
-            if (id.includes("react-router")) {
-              return "react-router-vendor";
+            // React core libraries - keep together since React DOM depends on React
+            // Splitting them causes "Cannot set properties of undefined" errors
+            // React, React DOM, and React Router are tightly coupled
+            if (id.includes("react") || id.includes("react-dom") || id.includes("react-router")) {
+              return "react-vendor";
             }
             
             // TanStack Query - data fetching library, stable API
