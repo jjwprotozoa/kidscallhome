@@ -497,7 +497,8 @@ export const useIncomingCallState = () => {
                     call.caller_type === "family_member") &&
                   call.child_id === childData.id &&
                   call.status === "ringing",
-              });
+                });
+              }
               // Accept calls from parent OR family member
               if (
                 (call.caller_type === "parent" ||
