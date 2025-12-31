@@ -2,7 +2,7 @@
 // Purpose: Main orchestrator component for global incoming calls (max 250 lines)
 // CRITICAL: Preserves all WebRTC functionality - do not modify call handling logic
 
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { endCall as endCallUtil } from "@/features/calls/utils/callEnding";
@@ -15,7 +15,9 @@ import { ChildIncomingCallUI } from "./ChildIncomingCallUI";
 import { IncomingCall } from "./types";
 import { setUserStartedCall } from "@/utils/userInteraction";
 
-export const GlobalIncomingCall = () => {
+// Wrapper component to safely use router hooks
+// This prevents errors when the Router context isn't fully initialized during lazy loading
+const GlobalIncomingCallInner = () => {
   const { incomingCall, setIncomingCall, stopIncomingCall } = useIncomingCallState();
   const isAnsweringRef = useRef(false);
   const navigate = useNavigate();
@@ -238,5 +240,48 @@ export const GlobalIncomingCall = () => {
       )}
     </>
   );
+};
+
+// Outer component that safely renders after Router context is initialized
+// This prevents "Cannot destructure property 'basename'" errors during lazy loading
+// The issue occurs when lazy-loaded components try to use router hooks before
+// the Router context is fully initialized during the lazy loading process
+export const GlobalIncomingCall = () => {
+  const [isReady, setIsReady] = useState(false);
+
+  // Delay rendering until Router context is fully initialized
+  // This is necessary because lazy-loaded components can render before Router context is available
+  useEffect(() => {
+    // Use multiple frames to ensure Router is fully mounted and context is propagated
+    // This gives React Router time to initialize its context after lazy loading
+    let frameId1: number;
+    let frameId2: number;
+    let timeoutId: NodeJS.Timeout;
+    
+    // First frame: ensure DOM is ready
+    frameId1 = requestAnimationFrame(() => {
+      // Second frame: ensure React has finished rendering Router
+      frameId2 = requestAnimationFrame(() => {
+        // Small additional delay to ensure Router context is fully propagated
+        timeoutId = setTimeout(() => {
+          setIsReady(true);
+        }, 10);
+      });
+    });
+    
+    return () => {
+      if (frameId1) cancelAnimationFrame(frameId1);
+      if (frameId2) cancelAnimationFrame(frameId2);
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, []);
+
+  // Only render when Router context is confirmed ready
+  // This prevents the "Cannot destructure property 'basename'" error
+  if (!isReady) {
+    return null;
+  }
+
+  return <GlobalIncomingCallInner />;
 };
 

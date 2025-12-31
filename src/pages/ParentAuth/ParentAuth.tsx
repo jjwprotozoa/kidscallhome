@@ -16,7 +16,7 @@ import { safeLog, sanitizeError } from "@/utils/security";
 import { normalizeEmail, isValidEmailBasic } from "@/utils/emailValidation";
 import { getEmailDomain } from "@/utils/emailRestrictions";
 import { logAppEvent } from "@/utils/appEventLogging";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import { LoginForm } from "./LoginForm";
 import { SignupForm } from "./SignupForm";
@@ -56,6 +56,18 @@ const ParentAuth = () => {
     // Check if there's a stored referral code
     return localStorage.getItem("kch_referral_code");
   }, [searchParams]);
+
+  // Auto-switch to signup mode when referral code is present in URL
+  // This ensures new users with referral links see the signup form, not login
+  const hasSwitchedToSignup = useRef(false);
+  useEffect(() => {
+    const refFromUrl = searchParams.get("ref");
+    if (refFromUrl && authState.isLogin && !hasSwitchedToSignup.current) {
+      // If referral code is in URL, switch to signup mode for new user registration
+      authState.setIsLogin(false);
+      hasSwitchedToSignup.current = true;
+    }
+  }, [searchParams, authState.isLogin, authState.setIsLogin]);
 
   // Initialize security features
   useEffect(() => {

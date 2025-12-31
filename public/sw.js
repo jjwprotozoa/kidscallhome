@@ -217,14 +217,14 @@ self.addEventListener('fetch', (event) => {
     'fonts.gstatic.com'
   ];
   
-  if (knownExternalAPIs.some(api => url.hostname.includes(api))) {
-    return; // Don't intercept - let browser handle CORS errors normally
-  }
-  
-  // Skip Google Fonts requests to avoid CSP violations
-  // The browser will handle these directly and respect CSP properly
+  // CRITICAL: Skip Google Fonts FIRST to prevent CSP violations
+  // The service worker must not intercept these requests at all
   if (googleFontsDomains.some(domain => url.hostname.includes(domain))) {
     return; // Don't intercept - let browser handle Google Fonts directly
+  }
+  
+  if (knownExternalAPIs.some(api => url.hostname.includes(api))) {
+    return; // Don't intercept - let browser handle CORS errors normally
   }
 
   // In development, completely bypass service worker for most requests
@@ -233,9 +233,14 @@ self.addEventListener('fetch', (event) => {
   
   if (isDevelopment) {
     // Only intercept static assets that are explicitly cached
-    // Skip all other requests including API calls, HMR, and navigation
+    // Skip all other requests including API calls, HMR, navigation, and Google Fonts
     if (!url.pathname.match(/\.(png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot)$/)) {
       return; // Don't intercept - let browser handle normally
+    }
+    
+    // Double-check: Never intercept Google Fonts even in development
+    if (googleFontsDomains.some(domain => url.hostname.includes(domain))) {
+      return;
     }
     
     // For static assets in dev, try cache first but don't fail if network fails
@@ -261,6 +266,11 @@ self.addEventListener('fetch', (event) => {
   }
 
   // Production: use cache-first strategy with network fallback
+  // Double-check: Never intercept Google Fonts (should already be skipped above)
+  if (googleFontsDomains.some(domain => url.hostname.includes(domain))) {
+    return;
+  }
+  
   event.respondWith(
     caches.match(event.request).then((response) => {
       // Return cached version if available

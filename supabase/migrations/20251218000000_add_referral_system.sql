@@ -137,6 +137,19 @@ BEGIN
     );
   END IF;
   
+  -- Ensure the new user's parent record exists (should be created by trigger, but check to be safe)
+  -- If it doesn't exist, create it (fallback in case trigger fails)
+  INSERT INTO public.parents (id, email, name, family_code, privacy_cookie_accepted, email_updates_opt_in)
+  VALUES (
+    p_new_user_id,
+    p_new_user_email,
+    '',
+    public.generate_unique_family_code(),
+    false,
+    false
+  )
+  ON CONFLICT (id) DO NOTHING;
+  
   -- Update the new user's referred_by field
   UPDATE public.parents
   SET referred_by = v_referrer_id
@@ -335,6 +348,10 @@ $$;
 -- STEP 9: Enable RLS on referrals table
 -- =====================================================
 ALTER TABLE public.referrals ENABLE ROW LEVEL SECURITY;
+
+-- Drop existing policies if they exist (for idempotency)
+DROP POLICY IF EXISTS "Parents can view own referrals" ON public.referrals;
+DROP POLICY IF EXISTS "System can manage referrals" ON public.referrals;
 
 -- Parents can view their own referrals
 CREATE POLICY "Parents can view own referrals"

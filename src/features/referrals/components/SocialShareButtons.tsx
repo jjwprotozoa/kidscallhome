@@ -166,7 +166,23 @@ export const SocialShareButtons = ({
   };
 
   const openShareWindow = (url: string) => {
-    window.open(url, "_blank", "width=600,height=500,noopener,noreferrer");
+    try {
+      const shareWindow = window.open(url, "_blank", "width=600,height=500,noopener,noreferrer");
+      // Check if popup was blocked
+      if (!shareWindow || shareWindow.closed || typeof shareWindow.closed === 'undefined') {
+        toast({
+          title: "Popup blocked",
+          description: "Please allow popups for this site to use social sharing, or copy the link manually.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Share failed",
+        description: "Could not open share window. Please try copying the link instead.",
+        variant: "destructive",
+      });
+    }
   };
 
   const shareToWhatsApp = () => {
