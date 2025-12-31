@@ -709,7 +709,7 @@ const Navigation = () => {
                     <MobileNavItem
                       to="/parent/dashboard"
                       icon={LayoutDashboard}
-                      label="Dashboard"
+                      label="Family"
                       badge={missedCallCount}
                     />
                     <MobileNavItem
@@ -774,7 +774,7 @@ const Navigation = () => {
                     <LayoutDashboard className="h-4 w-4" />
                     <Badge count={missedCallCount} />
                   </div>
-                  <span>Dashboard</span>
+                  <span>Family</span>
                 </NavLink>
                 <button
                   onClick={() => navigate("/parent/dashboard?tab=connections")}

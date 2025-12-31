@@ -48,6 +48,8 @@ const ParentHome = () => {
         }
       }
       hasCheckedAuth.current = true;
+      // Redirect to children list as the default landing page
+      navigate("/parent/children", { replace: true });
     };
     checkAuth();
   }, [navigate]);

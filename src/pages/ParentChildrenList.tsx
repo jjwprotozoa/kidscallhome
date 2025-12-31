@@ -3,19 +3,24 @@
 // CLS: Loading skeleton matches final layout structure. Badges reserve space with invisible class when count is 0.
 
 import AddChildDialog from "@/components/AddChildDialog";
+import { ChildActionsSheet } from "@/components/ChildActionsSheet";
 import Navigation from "@/components/Navigation";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { CodeManagementDialogs } from "@/components/CodeManagementDialogs";
 import { HelpBubble } from "@/features/onboarding/HelpBubble";
 import { OnboardingTour } from "@/features/onboarding/OnboardingTour";
 import { StatusIndicator } from "@/features/presence/StatusIndicator";
 import { useChildrenPresence } from "@/features/presence/useChildrenPresence";
+import { useParentData } from "@/hooks/useParentData";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useUnreadBadgeForChild } from "@/stores/badgeStore";
-import { MessageCircle, Phone, Plus } from "lucide-react";
+import { MessageCircle, MoreVertical, Phone, Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useCodeHandlers } from "@/pages/ParentDashboard/useCodeHandlers";
+import { useChildHandlers } from "@/pages/ParentDashboard/useChildHandlers";
 
 interface Child {
   id: string;
@@ -24,74 +29,82 @@ interface Child {
   avatar_color: string;
 }
 
-// Component for child card with call and message buttons
+// Compact child card component - 1-row contact-list style
 const ChildCard = ({
   child,
   onCall,
   onChat,
+  onMore,
   isOnline,
+  fullLoginCode,
   "data-tour": dataTour,
 }: {
   child: Child;
   onCall: (childId: string) => void;
   onChat: (childId: string) => void;
+  onMore: () => void;
   isOnline: boolean;
+  fullLoginCode: string;
   "data-tour"?: string;
 }) => {
   const unreadMessageCount = useUnreadBadgeForChild(child.id);
 
   return (
-    <Card className="p-6" data-tour={dataTour}>
-      <div className="flex items-start justify-between flex-col sm:flex-row gap-4">
-        <div className="flex items-start space-x-4 flex-1">
-          {/* CLS: Use aspect-square to ensure consistent avatar sizing */}
+    <Card className="p-4" data-tour={dataTour}>
+      <div className="flex items-center justify-between gap-3">
+        {/* Left: Avatar + Name + Status */}
+        <div className="flex items-center gap-3 flex-1 min-w-0">
           <div
-            className="aspect-square w-12 rounded-full flex items-center justify-center text-white font-bold text-lg leading-none select-none flex-shrink-0"
+            className="aspect-square w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-base leading-none select-none flex-shrink-0"
             style={{ backgroundColor: child.avatar_color || "#6366f1" }}
           >
             <span className="leading-none">
               {child.name.charAt(0).toUpperCase()}
             </span>
           </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <h3 className="text-xl font-semibold">{child.name}</h3>
-              <StatusIndicator
-                isOnline={isOnline}
-                size="md"
-                showPulse={isOnline}
-              />
-            </div>
-            <p className="text-sm text-muted-foreground">
-              Code: {child.login_code}
-            </p>
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <h3 className="text-lg font-semibold truncate">{child.name}</h3>
+            <StatusIndicator
+              isOnline={isOnline}
+              size="sm"
+              showPulse={isOnline}
+            />
           </div>
         </div>
-        <div className="flex gap-2 w-full sm:w-auto">
+        {/* Right: Call, Message, More buttons */}
+        <div className="flex items-center gap-2 flex-shrink-0">
           <Button
             onClick={() => onCall(child.id)}
             variant="secondary"
-            className="flex-1 sm:flex-none relative"
+            size="sm"
+            className="relative"
             data-tour={dataTour ? "parent-children-list-call" : undefined}
           >
-            <Phone className="mr-2 h-4 w-4" />
-            Call
+            <Phone className="h-4 w-4" />
           </Button>
           <Button
             onClick={() => onChat(child.id)}
-            className="flex-1 sm:flex-none relative bg-chat-accent text-chat-accent-foreground hover:bg-chat-accent/90"
+            size="sm"
+            className="relative bg-chat-accent text-chat-accent-foreground hover:bg-chat-accent/90"
             data-tour={dataTour ? "parent-children-list-message" : undefined}
           >
-            <MessageCircle className="mr-2 h-4 w-4" />
-            Message
+            <MessageCircle className="h-4 w-4" />
             {/* CLS: Reserve space for badge to prevent layout shift */}
             <span
-              className={`ml-2 bg-destructive text-destructive-foreground text-xs font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 ${
+              className={`absolute -top-1 -right-1 bg-destructive text-destructive-foreground text-xs font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 ${
                 unreadMessageCount === 0 ? "invisible" : ""
               }`}
             >
               {unreadMessageCount > 99 ? "99+" : unreadMessageCount}
             </span>
+          </Button>
+          <Button
+            onClick={onMore}
+            variant="ghost"
+            size="sm"
+            className="h-9 w-9 p-0"
+          >
+            <MoreVertical className="h-4 w-4" />
           </Button>
         </div>
       </div>
@@ -103,8 +116,13 @@ const ParentChildrenList = () => {
   const [children, setChildren] = useState<Child[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddChild, setShowAddChild] = useState(false);
+  const [selectedChild, setSelectedChild] = useState<Child | null>(null);
+  const [showActionsSheet, setShowActionsSheet] = useState(false);
+  const [showCodeDialog, setShowCodeDialog] = useState<{ child: Child } | null>(null);
+  const [printViewChild, setPrintViewChild] = useState<Child | null>(null);
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { familyCode } = useParentData();
 
   // Track children's online presence (real-time via Supabase Realtime)
   const childIds = useMemo(() => children.map((child) => child.id), [children]);
@@ -213,11 +231,112 @@ const ParentChildrenList = () => {
     checkAuth();
   }, [navigate, fetchChildren]);
 
-  const handleCall = (childId: string) => {
-    navigate(`/parent/call/${childId}`);
+  // Optimistic update function for child login code
+  const updateChildLoginCode = useCallback((childId: string, newCode: string) => {
+    setChildren(prevChildren => 
+      prevChildren.map(child => 
+        child.id === childId 
+          ? { ...child, login_code: newCode }
+          : child
+      )
+    );
+  }, []);
+
+  // Code handlers (reused from ParentDashboard)
+  const {
+    getFullLoginCode,
+    handleCopyCode,
+    handleCopyMagicLink,
+  } = useCodeHandlers(familyCode, updateChildLoginCode);
+
+  // Child handlers (reused from ParentDashboard)
+  const { handleDelete: handleDeleteChild, handleCall } = useChildHandlers(fetchChildren);
+
+  const handleMore = (child: Child) => {
+    setSelectedChild(child);
+    setShowActionsSheet(true);
   };
 
-  const handleChat = async (childId: string) => {
+  const handleViewQR = (child: Child) => {
+    setShowCodeDialog({ child });
+  };
+
+  const handlePrintCode = (child: Child) => {
+    setPrintViewChild(child);
+  };
+
+  const handleDelete = async (child: Child) => {
+    await handleDeleteChild(child);
+    setSelectedChild(null);
+    setShowActionsSheet(false);
+  };
+
+  const handleCallWrapper = (childId: string) => {
+    handleCall(childId);
+  };
+
+  // Keep original handleChat logic for conversation resolution
+  const handleChatWrapper = async (childId: string) => {
+    try {
+      // Get current user
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        toast({
+          title: "Error",
+          description: "Not authenticated. Please log in again.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Resolve profile IDs
+      const { getCurrentAdultProfileId, getChildProfileId } = await import(
+        "@/utils/conversations"
+      );
+      const childProfileId = await getChildProfileId(childId);
+      const adultProfileId = await getCurrentAdultProfileId(
+        user.id,
+        user.id,
+        "parent"
+      );
+
+      if (!childProfileId || !adultProfileId) {
+        toast({
+          title: "Error",
+          description: "Could not resolve profile IDs.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Get or create conversation
+      const { getOrCreateConversation } = await import("@/utils/conversations");
+      const conversationId = await getOrCreateConversation(
+        adultProfileId,
+        "parent",
+        childProfileId
+      );
+
+      if (conversationId) {
+        navigate(`/chat/${childId}?conversation=${conversationId}`);
+      } else {
+        toast({
+          title: "Error",
+          description: "Could not create conversation.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Error in handleChat:", error);
+      toast({
+        title: "Error",
+        description: "Failed to open chat.",
+        variant: "destructive",
+      });
+    }
+  };
     try {
       // Get current user
       const {
@@ -295,20 +414,18 @@ const ParentChildrenList = () => {
               <div className="h-9 w-48 bg-muted rounded animate-pulse mb-2" />
               <div className="h-6 w-64 bg-muted rounded animate-pulse" />
             </div>
-            <div className="grid gap-4">
+            <div className="grid gap-3">
               {[1, 2, 3].map((i) => (
-                <Card key={i} className="p-6">
-                  <div className="flex items-start justify-between flex-col sm:flex-row gap-4">
-                    <div className="flex items-start space-x-4 flex-1">
-                      <div className="w-12 h-12 rounded-full bg-muted animate-pulse flex-shrink-0" />
-                      <div className="flex-1 min-w-0 space-y-2">
-                        <div className="h-6 w-32 bg-muted rounded animate-pulse" />
-                        <div className="h-4 w-24 bg-muted rounded animate-pulse" />
-                      </div>
+                <Card key={i} className="p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 flex-1">
+                      <div className="w-10 h-10 rounded-full bg-muted animate-pulse flex-shrink-0" />
+                      <div className="h-5 w-32 bg-muted rounded animate-pulse" />
                     </div>
-                    <div className="flex gap-2 w-full sm:w-auto">
-                      <div className="h-10 w-20 bg-muted rounded animate-pulse flex-1 sm:flex-none" />
-                      <div className="h-10 w-24 bg-muted rounded animate-pulse flex-1 sm:flex-none" />
+                    <div className="flex gap-2 flex-shrink-0">
+                      <div className="h-9 w-9 bg-muted rounded animate-pulse" />
+                      <div className="h-9 w-9 bg-muted rounded animate-pulse" />
+                      <div className="h-9 w-9 bg-muted rounded animate-pulse" />
                     </div>
                   </div>
                 </Card>
@@ -369,14 +486,16 @@ const ParentChildrenList = () => {
               </Button>
             </Card>
           ) : (
-            <div className="grid gap-4">
+            <div className="grid gap-3">
               {children.map((child, index) => (
                 <ChildCard
                   key={child.id}
                   child={child}
-                  onCall={handleCall}
-                  onChat={handleChat}
+                  onCall={handleCallWrapper}
+                  onChat={handleChatWrapper}
+                  onMore={() => handleMore(child)}
                   isOnline={isChildOnline(child.id)}
+                  fullLoginCode={getFullLoginCode(child)}
                   data-tour={
                     index === 0 ? "parent-children-list-card" : undefined
                   }
@@ -391,6 +510,39 @@ const ParentChildrenList = () => {
         open={showAddChild}
         onOpenChange={setShowAddChild}
         onChildAdded={fetchChildren}
+      />
+
+      {selectedChild && (
+        <ChildActionsSheet
+          child={selectedChild}
+          open={showActionsSheet}
+          onOpenChange={setShowActionsSheet}
+          fullLoginCode={getFullLoginCode(selectedChild)}
+          onCopyCode={handleCopyCode}
+          onCopyMagicLink={handleCopyMagicLink}
+          onViewQR={handleViewQR}
+          onPrintCode={handlePrintCode}
+          onDelete={handleDelete}
+        />
+      )}
+
+      <CodeManagementDialogs
+        showCodeDialog={showCodeDialog}
+        onCloseCodeDialog={() => setShowCodeDialog(null)}
+        getFullLoginCode={getFullLoginCode}
+        onCopyCode={handleCopyCode}
+        onCopyMagicLink={handleCopyMagicLink}
+        onPrintCode={handlePrintCode}
+        childToEditCode={null}
+        onCloseEditCode={() => {}}
+        onUpdateLoginCode={() => {}}
+        isUpdatingCode={false}
+        childToDelete={null}
+        onCloseDelete={() => {}}
+        onDeleteChild={() => {}}
+        printViewChild={printViewChild}
+        onClosePrintView={() => setPrintViewChild(null)}
+        onPrintFromModal={() => window.print()}
       />
     </div>
   );
