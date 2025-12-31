@@ -251,28 +251,30 @@ export const GlobalIncomingCall = () => {
 
   // Delay rendering until Router context is fully initialized
   // This is necessary because lazy-loaded components can render before Router context is available
+  // Production builds may have different timing, so we use a longer delay
   useEffect(() => {
-    // Use multiple frames to ensure Router is fully mounted and context is propagated
-    // This gives React Router time to initialize its context after lazy loading
-    let frameId1: number;
-    let frameId2: number;
-    let timeoutId: NodeJS.Timeout;
-    
-    // First frame: ensure DOM is ready
-    frameId1 = requestAnimationFrame(() => {
-      // Second frame: ensure React has finished rendering Router
-      frameId2 = requestAnimationFrame(() => {
-        // Small additional delay to ensure Router context is fully propagated
-        timeoutId = setTimeout(() => {
+    // Use a longer delay for production builds where lazy loading takes more time
+    // The Router context must be fully initialized before we can use router hooks
+    // Production builds with code splitting may need more time
+    // We use a combination of requestIdleCallback (if available) and setTimeout for maximum compatibility
+    const scheduleRender = () => {
+      if ('requestIdleCallback' in window) {
+        requestIdleCallback(() => {
+          setTimeout(() => {
+            setIsReady(true);
+          }, 200);
+        }, { timeout: 500 });
+      } else {
+        setTimeout(() => {
           setIsReady(true);
-        }, 10);
-      });
-    });
+        }, 500); // Fallback delay for browsers without requestIdleCallback
+      }
+    };
+    
+    const timeoutId = setTimeout(scheduleRender, 0);
     
     return () => {
-      if (frameId1) cancelAnimationFrame(frameId1);
-      if (frameId2) cancelAnimationFrame(frameId2);
-      if (timeoutId) clearTimeout(timeoutId);
+      clearTimeout(timeoutId);
     };
   }, []);
 

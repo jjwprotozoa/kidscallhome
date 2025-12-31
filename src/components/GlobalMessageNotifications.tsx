@@ -21,7 +21,8 @@ interface Message {
   read_at?: string | null;
 }
 
-export const GlobalMessageNotifications = () => {
+// Wrapper to safely use router hooks
+const GlobalMessageNotificationsInner = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -522,4 +523,39 @@ export const GlobalMessageNotifications = () => {
   }, [navigate, toast, session, children, realtimeStatus]); // Include session, children, and realtimeStatus in dependencies
 
   return null; // This component doesn't render anything
+};
+
+// Outer wrapper to safely render after Router context is initialized
+export const GlobalMessageNotifications = () => {
+  const [isReady, setIsReady] = useState(false);
+
+  useEffect(() => {
+    // Wait for Router context to be ready (same pattern as GlobalIncomingCall)
+    // Use a longer delay for production builds
+    const scheduleRender = () => {
+      if ('requestIdleCallback' in window) {
+        requestIdleCallback(() => {
+          setTimeout(() => {
+            setIsReady(true);
+          }, 200);
+        }, { timeout: 500 });
+      } else {
+        setTimeout(() => {
+          setIsReady(true);
+        }, 500); // Fallback delay for browsers without requestIdleCallback
+      }
+    };
+    
+    const timeoutId = setTimeout(scheduleRender, 0);
+    
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }, []);
+
+  if (!isReady) {
+    return null;
+  }
+
+  return <GlobalMessageNotificationsInner />;
 };
