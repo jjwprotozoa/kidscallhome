@@ -12,6 +12,7 @@ import {
   validatePasswordWithBreachCheck,
 } from "@/utils/passwordBreachCheck";
 import { safeLog, sanitizeError } from "@/utils/security";
+import { getEmailRedirectUrl } from "@/utils/siteUrl";
 import { Loader2, Lock, Mail, MailCheck, User } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
@@ -160,7 +161,7 @@ const FamilyMemberInvite = () => {
               invitation_token: token,
               role: "family_member",
             },
-            emailRedirectTo: `${window.location.origin}/family-member/dashboard`,
+            emailRedirectTo: getEmailRedirectUrl("/family-member/dashboard"),
           },
         }
       );

@@ -16,6 +16,9 @@ import { NetworkStatusBadge } from "./NetworkStatusBadge";
 import { DiagnosticContainer } from "./DiagnosticPanel";
 import { VideoPlaceholder } from "./VideoPlaceholder";
 import { BatteryNotification } from "./BatteryNotification";
+import { usePictureInPicture } from "../hooks/usePictureInPicture";
+import { useToast } from "@/hooks/use-toast";
+import { setupScreenshotProtection, getScreenshotBlockedMessage } from "@/utils/screenshotProtection";
 import type { NetworkQualityLevel, ConnectionType, NetworkStats } from "../hooks/useNetworkQuality";
 import type { BatteryStatus } from "../webrtc/qualityController";
 
@@ -79,13 +82,32 @@ export const VideoCallUI = ({
   const audioEnabledRef = useRef(getUserHasStartedCall());
   // Ref to a hidden audio element for audio-only playback (mobile workaround)
   const audioElementRef = useRef<HTMLAudioElement | null>(null);
-  // Volume state - uses Web Audio API gain node for volume control (0-10 scale)
-  const [volume, setVolume] = useState(5); // Default to 5 (middle volume)
+  // Audio gain node for routing audio through Web Audio API
   const gainNodeRef = useRef<GainNode | null>(null);
   const audioDestinationConnectedRef = useRef(false);
   
   // Use transition for non-urgent state updates to improve INP
   const [isPending, startTransition] = useTransition();
+
+  // Picture-in-Picture support - keeps call active when switching apps
+  const pip = usePictureInPicture(remoteVideoRef);
+  const { toast } = useToast();
+
+  // Screenshot protection - protects children's privacy during calls
+  useEffect(() => {
+    const cleanup = setupScreenshotProtection(() => {
+      // Show clear, short message when screenshot is detected
+      const message = getScreenshotBlockedMessage();
+      toast({
+        title: message.title,
+        description: message.description,
+        variant: "destructive",
+        duration: 3000,
+      });
+    });
+
+    return cleanup;
+  }, [toast]);
 
   // Set volume via ref (volume is not a valid HTML prop)
   useEffect(() => {
@@ -816,14 +838,14 @@ export const VideoCallUI = ({
     
     // 6. CRITICAL: Route audio directly through Web Audio API to speakers
     // This bypasses video/audio element playback entirely
-    // Use current boost state
-    routeAudioViaWebAudioAPI(volume);
+    // Use fixed gain for normal volume
+    routeAudioViaWebAudioAPI();
   };
 
   // CRITICAL: Route remote audio directly through Web Audio API to speakers
   // This bypasses video/audio element playback entirely
-  // Supports volume control via gain node (0-10 scale maps to 0.0-3.0 gain)
-  const routeAudioViaWebAudioAPI = (vol: number = volume) => {
+  // Uses fixed gain of 1.0 for normal volume
+  const routeAudioViaWebAudioAPI = () => {
     if (!remoteStream) {
       console.error("❌ [AUDIO] No remote stream to route");
       return;
@@ -851,12 +873,8 @@ export const VideoCallUI = ({
         });
       }
       
-      // If already connected, just update gain
+      // If already connected, no need to reconnect
       if (audioDestinationConnectedRef.current && gainNodeRef.current) {
-        // Map volume 0-10 to gain 0.0-3.0 (0 = mute, 10 = 3x boost)
-        const gainValue = (vol / 10) * 3.0;
-        gainNodeRef.current.gain.setValueAtTime(gainValue, audioCtx.currentTime);
-        console.warn(`🔊 [AUDIO] Updated gain to ${gainValue.toFixed(2)}x (volume: ${vol}/10)`);
         return;
       }
       
@@ -873,11 +891,9 @@ export const VideoCallUI = ({
       const source = audioCtx.createMediaStreamSource(remoteStream);
       audioSourceRef.current = source;
       
-      // Create gain node for volume control
+      // Create gain node (fixed at 1.0 for normal volume)
       const gainNode = audioCtx.createGain();
-      // Map volume 0-10 to gain 0.0-3.0 (0 = mute, 10 = 3x boost)
-      const gainValue = (vol / 10) * 3.0;
-      gainNode.gain.value = gainValue;
+      gainNode.gain.value = 1.0;
       gainNodeRef.current = gainNode;
       
       // Connect: source -> gain -> analyser (for monitoring) -> destination
@@ -893,7 +909,7 @@ export const VideoCallUI = ({
       
       audioDestinationConnectedRef.current = true;
       
-      console.warn(`🔊 [AUDIO] Routed remote audio through Web Audio API (gain: ${gainValue}x)!`);
+      console.warn("🔊 [AUDIO] Routed remote audio through Web Audio API (gain: 1.0x)!");
       console.warn("🔊 [AUDIO] AudioContext state:", audioCtx.state, "Sample rate:", audioCtx.sampleRate);
       
       // Check audio level to verify data is flowing
@@ -914,34 +930,6 @@ export const VideoCallUI = ({
     }
   };
 
-  // Set volume - controls audio gain for variable volume (0-10 scale)
-  const handleVolumeChange = (newVolume: number) => {
-    setVolume(newVolume);
-    
-    // Map volume 0-10 to gain 0.0-3.0 (0 = mute, 10 = 3x boost)
-    const gainValue = (newVolume / 10) * 3.0;
-    
-    console.warn(`🔊 [VOLUME] Setting volume to ${newVolume}/10 (gain: ${gainValue.toFixed(2)}x)`);
-    
-    // Update gain node if already routing
-    if (gainNodeRef.current && audioContextRef.current) {
-      gainNodeRef.current.gain.setValueAtTime(gainValue, audioContextRef.current.currentTime);
-    }
-    
-    // Also update video/audio element volumes (HTML volume is 0.0-1.0)
-    // Keep HTML elements at max, we control volume via Web Audio API gain
-    if (remoteVideoRef.current) {
-      remoteVideoRef.current.volume = newVolume > 0 ? 1.0 : 0.0;
-    }
-    if (audioElementRef.current) {
-      audioElementRef.current.volume = newVolume > 0 ? 1.0 : 0.0;
-    }
-    
-    // If not yet routing through Web Audio API, start now
-    if (!audioDestinationConnectedRef.current && remoteStream) {
-      routeAudioViaWebAudioAPI(newVolume);
-    }
-  };
 
   const handleVideoClick = () => {
     if (!remoteVideoRef.current || !remoteVideoRef.current.srcObject) return;
@@ -1430,8 +1418,9 @@ export const VideoCallUI = ({
           onToggleMute={onToggleMute}
           onToggleVideo={onToggleVideo}
           onEndCall={onEndCall}
-          volume={volume}
-          onVolumeChange={handleVolumeChange}
+          isPictureInPictureSupported={pip.isPictureInPictureSupported}
+          isPictureInPictureActive={pip.isPictureInPictureActive}
+          onTogglePictureInPicture={pip.togglePictureInPicture}
         />
       </div>
     </div>

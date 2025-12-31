@@ -8,6 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { normalizeEmail, isValidEmailBasic } from "@/utils/emailValidation";
+import { getEmailRedirectUrl } from "@/utils/siteUrl";
 import {
   isLikelyRestrictedEmail,
   getEmailDomain,
@@ -32,6 +33,7 @@ const VerifyEmail = () => {
   const [isRestrictedNewEmail, setIsRestrictedNewEmail] = useState(false);
   const [overrideChecked, setOverrideChecked] = useState(false);
   const [resendingEmail, setResendingEmail] = useState(false);
+  const [checkingVerification, setCheckingVerification] = useState(false);
 
   // Check session and get user email
   useEffect(() => {
@@ -66,9 +68,89 @@ const VerifyEmail = () => {
     };
 
     checkSession();
-  }, [searchParams, navigate]);
+
+    // Listen for auth state changes (e.g., when user clicks email verification link)
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
+        if (session?.user?.email_confirmed_at) {
+          // User just verified their email - redirect to app
+          navigate("/parent/children", { replace: true });
+        } else if (session?.user) {
+          // User signed in but not verified yet - update email
+          setHasSession(true);
+          setUserEmail(session.user.email || null);
+        }
+      }
+    });
+
+    // Poll for email verification status (frictionless - auto-detects when verified)
+    // This allows users to verify via email link in another tab/window and auto-redirect
+    let pollInterval: NodeJS.Timeout | null = null;
+    
+    if (hasSession || userEmail) {
+      pollInterval = setInterval(async () => {
+        try {
+          const { data: { session: currentSession } } = await supabase.auth.getSession();
+          if (currentSession?.user?.email_confirmed_at) {
+            // Email verified! Redirect immediately
+            navigate("/parent/children", { replace: true });
+          }
+        } catch (error) {
+          // Silently handle errors - polling is non-critical
+          console.debug("Polling check error (non-critical):", error);
+        }
+      }, 3000); // Check every 3 seconds
+    }
+
+    return () => {
+      subscription.unsubscribe();
+      if (pollInterval) {
+        clearInterval(pollInterval);
+      }
+    };
+  }, [searchParams, navigate, hasSession, userEmail]);
 
   const isRestricted = userEmail ? isLikelyRestrictedEmail(userEmail) : false;
+
+  // Manual check for verification status
+  const handleCheckVerification = async () => {
+    setCheckingVerification(true);
+    try {
+      // Refresh session to get latest verification status
+      const { data: { session }, error } = await supabase.auth.refreshSession();
+      
+      if (error) {
+        // If refresh fails, try getting session directly
+        const { data: { session: currentSession } } = await supabase.auth.getSession();
+        if (currentSession?.user?.email_confirmed_at) {
+          navigate("/parent/children", { replace: true });
+          return;
+        }
+      } else if (session?.user?.email_confirmed_at) {
+        // Email verified! Redirect immediately
+        navigate("/parent/children", { replace: true });
+        return;
+      }
+      
+      // Not verified yet
+      toast({
+        title: "Not verified yet",
+        description: "Please check your email and click the verification link. We'll automatically detect when you verify.",
+        duration: 5000,
+      });
+    } catch (error) {
+      console.error("Error checking verification:", error);
+      toast({
+        title: "Error checking status",
+        description: "Unable to check verification status. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setCheckingVerification(false);
+    }
+  };
 
   const handleResendEmail = async () => {
     if (!userEmail) {
@@ -87,7 +169,7 @@ const VerifyEmail = () => {
         type: "signup",
         email: normalizedEmail,
         options: {
-          emailRedirectTo: `${window.location.origin}/parent/children`,
+          emailRedirectTo: getEmailRedirectUrl("/parent/children"),
         },
       });
 
@@ -168,7 +250,7 @@ const VerifyEmail = () => {
             type: "signup",
             email: normalizedNewEmail,
             options: {
-              emailRedirectTo: `${window.location.origin}/parent/children`,
+              emailRedirectTo: getEmailRedirectUrl("/parent/children"),
             },
           });
 
@@ -264,11 +346,34 @@ const VerifyEmail = () => {
             ) : (
               "your email address"
             )}
-            . Please click the link to verify your account.
+            . Click the link in your email to verify your account.
+          </p>
+          <p className="text-sm text-muted-foreground mt-2">
+            💡 <strong>Tip:</strong> We'll automatically detect when you verify your email. You can keep this page open while checking your inbox.
           </p>
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-3">
+          <Button
+            type="button"
+            variant="default"
+            className="w-full"
+            onClick={handleCheckVerification}
+            disabled={checkingVerification}
+          >
+            {checkingVerification ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Checking...
+              </>
+            ) : (
+              <>
+                <MailCheck className="mr-2 h-4 w-4" />
+                I've Verified My Email
+              </>
+            )}
+          </Button>
+          
           <Button
             type="button"
             variant="outline"

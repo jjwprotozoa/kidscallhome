@@ -637,7 +637,7 @@ const FamilyMemberAuth = () => {
         type: "signup",
         email: normalizedEmail,
         options: {
-          emailRedirectTo: `${window.location.origin}/family-member/dashboard`,
+          emailRedirectTo: getEmailRedirectUrl("/family-member/dashboard"),
         },
       });
 

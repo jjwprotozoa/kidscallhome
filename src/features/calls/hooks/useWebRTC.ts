@@ -3182,6 +3182,101 @@ export const useWebRTC = (
     }
   }, [remoteStream, remoteVideoRef]);
 
+  // CRITICAL: Handle visibility changes to keep call active when switching apps
+  // This prevents the call from freezing/disconnecting when the tab goes to background
+  useEffect(() => {
+    const pc = peerConnectionRef.current;
+    if (!pc || !callId) return;
+
+    const handleVisibilityChange = () => {
+      const isHidden = document.hidden;
+      const isPiPActive = document.pictureInPictureElement !== null;
+
+      safeLog.log("👁️ [VISIBILITY] Tab visibility changed:", {
+        isHidden,
+        isPiPActive,
+        callId,
+        iceConnectionState: pc.iceConnectionState,
+        connectionState: pc.connectionState,
+      });
+
+      // If tab is hidden but PiP is active, keep everything running
+      if (isHidden && isPiPActive) {
+        safeLog.log("📺 [VISIBILITY] Tab hidden but PiP active - keeping call active");
+        return;
+      }
+
+      // If tab becomes visible again, check connection and recover if needed
+      if (!isHidden) {
+        const iceState = pc.iceConnectionState;
+        const connState = pc.connectionState;
+
+        // If connection is disconnected/failed, try to recover
+        if (
+          (iceState === "disconnected" || iceState === "failed") &&
+          connState !== "closed" &&
+          callId
+        ) {
+          safeLog.warn("🔄 [VISIBILITY] Connection lost while backgrounded, attempting recovery", {
+            iceState,
+            connState,
+            callId,
+          });
+
+          // Trigger ICE restart to recover connection
+          if (!iceRestartAttemptedRef.current) {
+            triggerIceRestart(pc, callId);
+          }
+        }
+
+        // Ensure media tracks are still active
+        if (localStreamRef.current) {
+          localStreamRef.current.getTracks().forEach((track) => {
+            if (track.readyState === "live" && !track.enabled) {
+              // Track was disabled, re-enable if user wants it
+              const shouldEnable =
+                (track.kind === "audio" && !userMutedRef.current) ||
+                (track.kind === "video" && !userVideoOffRef.current);
+              if (shouldEnable) {
+                track.enabled = true;
+                safeLog.log(`✅ [VISIBILITY] Re-enabled ${track.kind} track after visibility change`);
+              }
+            }
+          });
+        }
+      } else if (isHidden && !isPiPActive) {
+        // Tab is hidden and PiP is not active
+        // Keep tracks active but reduce activity to prevent throttling
+        safeLog.log("⏸️ [VISIBILITY] Tab hidden - keeping connection alive but reducing activity");
+      }
+    };
+
+    // Listen for visibility changes
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    // Also listen for page focus/blur as fallback
+    const handleFocus = () => {
+      if (!document.hidden) {
+        handleVisibilityChange();
+      }
+    };
+
+    const handleBlur = () => {
+      if (document.hidden) {
+        handleVisibilityChange();
+      }
+    };
+
+    window.addEventListener("focus", handleFocus);
+    window.addEventListener("blur", handleBlur);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("focus", handleFocus);
+      window.removeEventListener("blur", handleBlur);
+    };
+  }, [callId, triggerIceRestart]);
+
   // Functions to update user's mute/video state (called by media controls)
   const setUserMuted = useCallback((muted: boolean) => {
     userMutedRef.current = muted;

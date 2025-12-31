@@ -12,6 +12,7 @@ import { clearFailedLogins, recordFailedLogin } from "@/utils/rateLimiting";
 import { safeLog, sanitizeError } from "@/utils/security";
 import { validateTurnstileToken } from "@/utils/turnstileValidation";
 import { getUserRole } from "@/utils/userRole";
+import { getEmailRedirectUrl } from "@/utils/siteUrl";
 import { AuthValidationResult } from "./types";
 
 type ToastOptions = Parameters<typeof toastFn>[0];
@@ -116,6 +117,25 @@ export const handleLogin = async ({
       });
       // Don't increment failed login attempts for this configuration error
       throw new Error("SUPABASE_CAPTCHA_CONFLICT: Please disable Supabase CAPTCHA protection in project settings (Authentication > Bot and Abuse Protection)");
+    }
+
+    // Check if this is an "email not confirmed" error
+    const isEmailNotConfirmed = 
+      error.message?.toLowerCase().includes("email not confirmed") ||
+      error.message?.toLowerCase().includes("email_not_confirmed") ||
+      error.code === "email_not_confirmed";
+    
+    if (isEmailNotConfirmed) {
+      // Don't increment failed login attempts for unverified email
+      safeLog.warn("Login blocked: Email not confirmed", { email });
+      logAuditEvent("login_blocked_unverified_email", {
+        email,
+        severity: "low",
+      });
+      // Throw a special error that ParentAuth can catch and handle
+      const emailNotConfirmedError = new Error("EMAIL_NOT_CONFIRMED");
+      (emailNotConfirmedError as any).email = email;
+      throw emailNotConfirmedError;
     }
 
     const failedLogin = recordFailedLogin(email);
@@ -278,7 +298,7 @@ export const handleSignup = async ({
         role: "parent",
         familyRole: familyRole, // Store familyRole in metadata for later use
       },
-      emailRedirectTo: `${window.location.origin}/parent/children`,
+      emailRedirectTo: getEmailRedirectUrl("/parent/children"),
     },
   });
 

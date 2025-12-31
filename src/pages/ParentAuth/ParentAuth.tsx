@@ -2,7 +2,9 @@
 // Purpose: Main page orchestrator for parent authentication (max 200 lines)
 
 import { Card } from "@/components/ui/card";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Link } from "react-router-dom";
 import { FamilySetupSelection } from "@/features/onboarding/components/FamilySetupSelection";
 import { useToast } from "@/hooks/use-toast";
 import { useAccountLockout } from "@/hooks/useAccountLockout";
@@ -14,6 +16,7 @@ import { getCSRFToken } from "@/utils/csrf";
 import { getRateLimitKey, recordRateLimit } from "@/utils/rateLimiting";
 import { safeLog, sanitizeError } from "@/utils/security";
 import { normalizeEmail, isValidEmailBasic } from "@/utils/emailValidation";
+import { getEmailRedirectUrl } from "@/utils/siteUrl";
 import { getEmailDomain } from "@/utils/emailRestrictions";
 import { logAppEvent } from "@/utils/appEventLogging";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -203,6 +206,31 @@ const ParentAuth = () => {
     } catch (error: unknown) {
       const sanitizedError = sanitizeError(error);
       safeLog.error("Auth operation failed:", sanitizedError);
+      
+      // Handle email not confirmed error
+      if (error instanceof Error && error.message === "EMAIL_NOT_CONFIRMED") {
+        setShowResendEmail(true);
+        const isDevelopment = import.meta.env.DEV;
+        if (isDevelopment) {
+          toast({
+            title: "Email not verified",
+            description:
+              "In development, disable email confirmation in Supabase Dashboard → Authentication → Settings → Email Auth → 'Enable email confirmations' (turn OFF). Or verify manually in Authentication → Users.",
+            variant: "destructive",
+            duration: 10000,
+          });
+        } else {
+          toast({
+            title: "Email not verified",
+            description:
+              "Please check your email and click the verification link before logging in. If you didn't receive the email, you can resend it below or visit the verification page.",
+            variant: "destructive",
+            duration: 8000,
+          });
+        }
+        return; // Don't show generic error toast
+      }
+      
       if (!(error instanceof Error && error.message.includes("locked"))) {
         toast({
           title: "Error",
@@ -222,6 +250,7 @@ const ParentAuth = () => {
   };
 
   const handleLogin = async (email: string, password: string, captchaToken?: string | null) => {
+    setShowResendEmail(false); // Reset resend option on new login attempt
     await loginHandler({
       email,
       password,
@@ -234,9 +263,56 @@ const ParentAuth = () => {
   };
 
   const [restrictedEmailOverride, setRestrictedEmailOverride] = useState<string | null>(null);
+  const [showResendEmail, setShowResendEmail] = useState(false);
+  const [resendingEmail, setResendingEmail] = useState(false);
 
   const handleRestrictedEmailOverride = (email: string) => {
     setRestrictedEmailOverride(email);
+  };
+
+  const handleResendVerificationEmail = async () => {
+    if (!authState.email) {
+      toast({
+        title: "Email required",
+        description: "Please enter your email address first.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setResendingEmail(true);
+    try {
+      const normalizedEmail = normalizeEmail(authState.email);
+      const { error } = await supabase.auth.resend({
+        type: "signup",
+        email: normalizedEmail,
+        options: {
+          emailRedirectTo: getEmailRedirectUrl("/parent/children"),
+        },
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      toast({
+        title: "Verification email sent",
+        description: "Please check your email (including spam folder) and click the verification link.",
+        duration: 8000,
+      });
+    } catch (error: unknown) {
+      console.error("Error resending email:", error);
+      toast({
+        title: "Failed to send email",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Unable to resend verification email. Please try again later.",
+        variant: "destructive",
+      });
+    } finally {
+      setResendingEmail(false);
+    }
   };
 
   const handleSignup = async (
@@ -268,50 +344,8 @@ const ParentAuth = () => {
       // Clear signup draft after successful signup
       authState.clearSignupDraft();
       
-      // Check if email confirmation is required
-      // If user is not verified, redirect to verify-email screen
-      const { data: { user: currentUser }, error: getUserError } = await supabase.auth.getUser();
-      
-      if (getUserError || !currentUser) {
-        // User is not authenticated - wait a moment and retry
-        console.warn("User not authenticated after signup, retrying...", getUserError);
-        await new Promise(resolve => setTimeout(resolve, 500));
-        const { data: { user: retryUser } } = await supabase.auth.getUser();
-        if (!retryUser) {
-          toast({
-            title: "Authentication Error",
-            description: "Please refresh the page and try again.",
-            variant: "destructive",
-          });
-          return;
-        }
-      }
-      
-      if (currentUser && !currentUser.email_confirmed_at) {
-        // User needs email verification - redirect to verify-email screen
-        navigate(`/verify-email?email=${encodeURIComponent(email)}`, { replace: true });
-        return;
-      }
-      
-      // Ensure user is authenticated before proceeding with family setup
-      // This is critical for RLS policies to work
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        console.warn("No session found after signup, waiting for session...");
-        // Wait a bit longer for session to be established
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        const { data: { session: retrySession } } = await supabase.auth.getSession();
-        if (!retrySession) {
-          toast({
-            title: "Session Error",
-            description: "Please refresh the page and try again.",
-            variant: "destructive",
-          });
-          return;
-        }
-      }
-      
-      // User is verified and authenticated - proceed with family setup
+      // Show family setup immediately - household selection happens BEFORE email verification
+      // The FamilySetupSelection component handles unauthenticated users via RPC function
       authState.setNeedsFamilySetup(true);
     }
   };
@@ -383,10 +417,48 @@ const ParentAuth = () => {
           )}
         </form>
 
+        {/* Resend verification email option (shown when email not confirmed) */}
+        {authState.isLogin && showResendEmail && (
+          <div className="space-y-3 p-4 bg-muted/50 rounded-lg border border-muted">
+            <p className="text-sm text-muted-foreground">
+              Your email hasn't been verified yet. You can:
+            </p>
+            <div className="flex flex-col gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleResendVerificationEmail}
+                disabled={resendingEmail}
+                className="w-full"
+              >
+                {resendingEmail ? "Sending..." : "Resend Verification Email"}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                asChild
+                className="w-full"
+              >
+                <Link to={`/verify-email?email=${encodeURIComponent(authState.email)}`}>
+                  Go to Verification Page
+                </Link>
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Check your spam folder if you don't see the email. The verification link expires after 24 hours.
+            </p>
+          </div>
+        )}
+
         <div className="text-center">
           <button
             type="button"
-            onClick={() => authState.setIsLogin(!authState.isLogin)}
+            onClick={() => {
+              authState.setIsLogin(!authState.isLogin);
+              setShowResendEmail(false); // Reset resend option when switching modes
+            }}
             className="text-sm text-primary hover:underline"
           >
             {authState.isLogin
@@ -401,67 +473,50 @@ const ParentAuth = () => {
         onOpenChange={() => {}}
       >
         <DialogContent className="w-[95vw] max-w-lg sm:max-w-xl p-4 sm:p-6">
+          <DialogTitle className="sr-only">Family Setup</DialogTitle>
           <FamilySetupSelection
             userId={authState.userId!}
             onComplete={async (householdType) => {
               try {
-                const {
-                  data: { user },
-                } = await supabase.auth.getUser();
-                if (!user) throw new Error("User not found");
-                
-                // Get parent profile to find family_id
-                const { data: parentProfile, error: profileError } = await supabase
-                  .from("adult_profiles")
-                  .select("family_id")
-                  .eq("user_id", user.id)
-                  .eq("role", "parent")
-                  .single();
-                
-                // Determine family_id (use fallback if profile doesn't exist)
-                const familyId = parentProfile?.family_id || user.id;
-                
-                // Update family with household type
-                // Note: FamilySetupSelection already updates this, but we do it here
-                // as a safety measure in case the component's update didn't complete
-                const { error: updateError } = await supabase
-                  .from("families")
-                  .update({ household_type })
-                  .eq("id", familyId);
-                
-                if (updateError) {
-                  // Provide more specific error messages
-                  if (updateError.code === "PGRST116") {
-                    throw new Error(
-                      "Family record not found. Please refresh the page and try again."
-                    );
-                  } else if (updateError.code === "42501") {
-                    throw new Error(
-                      "Permission denied. Please refresh the page and try again."
-                    );
-                  } else {
-                    console.error("Family update error details:", {
-                      code: updateError.code,
-                      message: updateError.message,
-                      details: updateError.details,
-                      hint: updateError.hint,
-                    });
-                    throw updateError;
-                  }
-                }
+                // FamilySetupSelection component already handles the household_type update
+                // (using RPC function if not authenticated, or direct UPDATE if authenticated)
+                // So we just need to handle the post-setup flow here
                 
                 authState.setNeedsFamilySetup(false);
-                toast({ title: "Family setup complete! Welcome!" });
-                navigate("/parent");
+                
+                // Check if email confirmation is required AFTER household selection
+                // Get the email from current user or fallback to authState.email
+                const { data: { user }, error: getUserError } = await supabase.auth.getUser();
+                const userEmail = user?.email || authState.email;
+                
+                // If user is not authenticated OR email is not confirmed, go to verify-email
+                if (!user || getUserError || !user.email_confirmed_at) {
+                  // User needs email verification - redirect to verify-email screen
+                  toast({ 
+                    title: "Family setup complete!", 
+                    description: "Please verify your email to continue." 
+                  });
+                  navigate(`/verify-email?email=${encodeURIComponent(userEmail)}`, { replace: true });
+                } else {
+                  // Email is confirmed - proceed to app
+                  toast({ title: "Family setup complete! Welcome!" });
+                  navigate("/parent/children", { replace: true });
+                }
               } catch (error) {
-                console.error("Error saving family setup:", error);
-                toast({
-                  title: "Error",
-                  description: error instanceof Error 
-                    ? error.message 
-                    : "Failed to save family setup. Please try again.",
-                  variant: "destructive",
-                });
+                console.error("Error after family setup:", error);
+                // On error, still try to redirect to verify-email as fallback
+                const userEmail = authState.email;
+                if (userEmail) {
+                  navigate(`/verify-email?email=${encodeURIComponent(userEmail)}`, { replace: true });
+                } else {
+                  toast({
+                    title: "Error",
+                    description: error instanceof Error 
+                      ? error.message 
+                      : "An error occurred. Please try again.",
+                    variant: "destructive",
+                  });
+                }
               }
             }}
           />

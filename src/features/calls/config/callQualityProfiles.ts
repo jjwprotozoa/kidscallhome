@@ -61,40 +61,40 @@ export const QUALITY_PROFILES: Record<QualityLevel, QualityProfile> = {
   },
   // High quality for good connections (LTE+)
   // 720p is the default "Good" ceiling for face video on mobile
-  // STABILITY: Reduced bitrate and FPS for smoother performance
+  // QUALITY: Increased bitrate and FPS for better clarity and smoothness
   good: {
     name: "High Quality (LTE+/Good)",
-    videoKbps: 800,             // 750-850 kbps video (reduced for stability)
+    videoKbps: 1000,            // 1000 kbps video (increased from 800 for better clarity)
     videoWidth: 1280,
     videoHeight: 720,
-    videoFps: 24,               // 24 fps for smoother performance (reduced from 30)
-    videoMaxFps: 24,
+    videoFps: 30,               // 30 fps for smoother video (increased from 24)
+    videoMaxFps: 30,
     enableVideo: true,
     audioKbps: 36,              // 32-40 kbps audio
     scaleResolutionDownBy: 1,
   },
   // HD quality for excellent connections (5G/WiFi)
-  // STABILITY: Reduced bitrate and FPS for smoother performance
+  // QUALITY: Increased bitrate and FPS for better clarity and smoothness
   excellent: {
     name: "HD Quality (5G/WiFi)",
-    videoKbps: 1400,            // 1300-1500 kbps video (reduced for stability)
+    videoKbps: 1800,            // 1800 kbps video (increased from 1400 for better clarity)
     videoWidth: 1920,
     videoHeight: 1080,
-    videoFps: 24,               // 24 fps for smoother performance (reduced from 30)
-    videoMaxFps: 24,
+    videoFps: 30,               // 30 fps for smoother video (increased from 24)
+    videoMaxFps: 30,
     enableVideo: true,
     audioKbps: 44,             // 40-48 kbps audio
     scaleResolutionDownBy: 1,
   },
   // Premium quality for fiber/premium connections
-  // STABILITY: Reduced bitrate and FPS for smoother performance
+  // QUALITY: Increased bitrate and FPS for better clarity and smoothness
   premium: {
     name: "Full HD Quality (Fiber/Premium)",
-    videoKbps: 1600,            // 1500-1700 kbps video (reduced for stability)
+    videoKbps: 2000,            // 2000 kbps video (increased from 1600 for better clarity)
     videoWidth: 1920,
     videoHeight: 1080,
-    videoFps: 24,               // 24 fps for smoother performance (reduced from 30)
-    videoMaxFps: 24,
+    videoFps: 30,               // 30 fps for smoother video (increased from 24)
+    videoMaxFps: 30,
     enableVideo: true,
     audioKbps: 56,             // 48-64 kbps audio
     scaleResolutionDownBy: 1,
