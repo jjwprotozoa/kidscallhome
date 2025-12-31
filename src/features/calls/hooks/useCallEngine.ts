@@ -1042,19 +1042,37 @@ export const useCallEngine = ({
   // This is a fallback in case the screen doesn't handle it
   useEffect(() => {
     if (state === "ended") {
+      // CRITICAL: Ensure role is correctly identified before redirecting
+      // Log the role and current path to help debug navigation issues
+      const currentPath = window.location.pathname;
       // eslint-disable-next-line no-console
       console.log("🔄 [CALL STATE] Call ended, redirecting immediately", {
         callId,
         role,
+        currentPath,
         timestamp: new Date().toISOString(),
       });
+      
       // Immediate redirect - no delay
-      const homePath =
-        role === "parent"
-          ? "/parent/children"
-          : role === "family_member"
-          ? "/family-member/dashboard"
-          : "/child/parent";
+      // CRITICAL: Use explicit role check to ensure correct navigation
+      let homePath: string;
+      if (role === "parent") {
+        homePath = "/parent/children";
+      } else if (role === "family_member") {
+        homePath = "/family-member/dashboard";
+      } else {
+        // Default to child page (role === "child")
+        homePath = "/child/parent";
+      }
+      
+      // eslint-disable-next-line no-console
+      console.log("🔄 [CALL STATE] Navigating to:", {
+        homePath,
+        role,
+        currentPath,
+        callId,
+      });
+      
       navigate(homePath, { replace: true });
     }
   }, [state, navigate, role, callId]);

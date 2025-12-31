@@ -246,34 +246,115 @@ const GlobalIncomingCallInner = () => {
 // This prevents "Cannot destructure property 'basename'" errors during lazy loading
 // The issue occurs when lazy-loaded components try to use router hooks before
 // the Router context is fully initialized during the lazy loading process
+// On slower devices (like Samsung A31), Router context initialization takes longer
 export const GlobalIncomingCall = () => {
   const [isReady, setIsReady] = useState(false);
 
   // Delay rendering until Router context is fully initialized
   // This is necessary because lazy-loaded components can render before Router context is available
   // Production builds may have different timing, so we use a longer delay
+  // On slower devices (like Samsung A31), we need significantly more time for Router context to initialize
   useEffect(() => {
-    // Use a longer delay for production builds where lazy loading takes more time
-    // The Router context must be fully initialized before we can use router hooks
-    // Production builds with code splitting may need more time
-    // We use a combination of requestIdleCallback (if available) and setTimeout for maximum compatibility
-    const scheduleRender = () => {
-      if ('requestIdleCallback' in window) {
-        requestIdleCallback(() => {
-          setTimeout(() => {
+    let mounted = true;
+    let timeoutId: NodeJS.Timeout;
+    
+    // Use a more reliable initialization strategy for slower devices
+    const initialize = () => {
+      if (!mounted) return;
+      
+      // Strategy: Wait for multiple conditions to be met
+      // 1. Document must be ready
+      // 2. Window and location must be available
+      // 3. Body must have content (indicating React has rendered)
+      // 4. Additional delay to ensure Router context is fully initialized
+      
+      const checkReady = () => {
+        return (
+          typeof window !== 'undefined' &&
+          window.location &&
+          document.readyState === 'complete' &&
+          document.body &&
+          document.body.children.length > 0
+        );
+      };
+      
+      // If already ready, wait additional time for Router context
+      if (checkReady()) {
+        // Use a longer delay for slower devices - Router context needs time to initialize
+        // Samsung A31 and similar devices may need up to 1.5 seconds
+        timeoutId = setTimeout(() => {
+          if (mounted) {
             setIsReady(true);
-          }, 200);
-        }, { timeout: 500 });
-      } else {
-        setTimeout(() => {
-          setIsReady(true);
-        }, 500); // Fallback delay for browsers without requestIdleCallback
+          }
+        }, 1500); // Increased from 500ms to 1500ms for slower devices
+        return;
       }
+      
+      // Wait for document to be ready first
+      if (document.readyState === 'loading') {
+        const onDOMContentLoaded = () => {
+          document.removeEventListener('DOMContentLoaded', onDOMContentLoaded);
+          // After DOM is ready, wait for Router context
+          timeoutId = setTimeout(() => {
+            if (mounted && checkReady()) {
+              // Additional delay to ensure Router context is fully initialized
+              setTimeout(() => {
+                if (mounted) {
+                  setIsReady(true);
+                }
+              }, 1000); // Additional 1 second delay for Router context
+            } else if (mounted) {
+              // If still not ready, set ready anyway after max wait
+              setTimeout(() => {
+                if (mounted) {
+                  setIsReady(true);
+                }
+              }, 2000);
+            }
+          }, 500);
+        };
+        document.addEventListener('DOMContentLoaded', onDOMContentLoaded);
+        return;
+      }
+      
+      // Document is ready, but check if Router context is ready
+      // Use a polling approach with a maximum wait time
+      let pollCount = 0;
+      const maxPolls = 15; // 15 * 200ms = 3 seconds max
+      
+      const pollInterval = setInterval(() => {
+        pollCount++;
+        if (mounted && checkReady()) {
+          clearInterval(pollInterval);
+          // Additional delay to ensure Router context is fully initialized
+          timeoutId = setTimeout(() => {
+            if (mounted) {
+              setIsReady(true);
+            }
+          }, 1000); // 1 second delay for Router context initialization
+        } else if (pollCount >= maxPolls) {
+          clearInterval(pollInterval);
+          // Maximum wait reached, render anyway
+          if (mounted) {
+            setIsReady(true);
+          }
+        }
+      }, 200);
+      
+      // Fallback: ensure we render eventually
+      timeoutId = setTimeout(() => {
+        clearInterval(pollInterval);
+        if (mounted) {
+          setIsReady(true);
+        }
+      }, 3000); // Maximum 3 second wait
     };
     
-    const timeoutId = setTimeout(scheduleRender, 0);
+    // Start initialization after a short delay to let the app start loading
+    timeoutId = setTimeout(initialize, 200);
     
     return () => {
+      mounted = false;
       clearTimeout(timeoutId);
     };
   }, []);

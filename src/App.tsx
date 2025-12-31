@@ -484,7 +484,8 @@ const App = () => {
                     path="/family-member/call/:childId"
                     element={<FamilyMemberCallScreen />}
                   />
-                  <Route path="/call/:childId" element={<VideoCall />} />
+                  {/* Legacy route - redirect to prevent incorrect user type detection */}
+                  <Route path="/call/:childId" element={<Navigate to="/parent/children" replace />} />
                   <Route path="/chat/:childId" element={<Chat />} />
                   <Route path="/info" element={<Info />} />
                   <Route path="/beta" element={<Beta />} />
