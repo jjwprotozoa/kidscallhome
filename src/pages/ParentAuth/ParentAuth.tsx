@@ -265,6 +265,8 @@ const ParentAuth = () => {
       authState.setUserId(result.user.id);
       // Clear stored referral code after successful signup
       localStorage.removeItem("kch_referral_code");
+      // Clear signup draft after successful signup
+      authState.clearSignupDraft();
       
       // Check if email confirmation is required
       // If user is not verified, redirect to verify-email screen

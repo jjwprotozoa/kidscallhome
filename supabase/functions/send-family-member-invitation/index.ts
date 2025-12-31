@@ -68,6 +68,7 @@ function getCorsHeaders(origin: string | null): Record<string, string> {
   const headers: Record<string, string> = {
     "Access-Control-Allow-Headers":
       "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Content-Type": "application/json",
   };
 
@@ -91,7 +92,10 @@ serve(async (req) => {
 
   // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response("ok", { 
+      status: 200,
+      headers: corsHeaders 
+    });
   }
 
   // SECURITY: Validate Content-Type for POST requests
