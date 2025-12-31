@@ -46,8 +46,24 @@ interface StripeEvent {
 // Type for Supabase client (simplified for Edge Functions)
 type SupabaseClient = ReturnType<typeof createClient>;
 
-const stripeSecretKey = Deno.env.get("STRIPE_SECRET_KEY");
-const webhookSecret = Deno.env.get("STRIPE_WEBHOOK_SECRET");
+// Get Stripe secret key - prefer LIVE for production, fallback to TEST or default
+function getStripeSecretKey(): string {
+  // For webhooks, we need to determine which key to use
+  // Since webhooks come from Stripe (not from a specific origin),
+  // we should prefer LIVE key if available, otherwise use TEST or default
+  const liveKey = Deno.env.get("STRIPE_SECRET_KEY_LIVE");
+  const defaultKey = Deno.env.get("STRIPE_SECRET_KEY");
+  const testKey = Deno.env.get("STRIPE_SECRET_KEY_TEST");
+  
+  // Prefer LIVE, then default, then TEST
+  return liveKey || defaultKey || testKey || "";
+}
+
+const stripeSecretKey = getStripeSecretKey();
+// Support both test and live webhook secrets
+const webhookSecretTest = Deno.env.get("STRIPE_WEBHOOK_SECRET_TEST");
+const webhookSecretLive = Deno.env.get("STRIPE_WEBHOOK_SECRET");
+const webhookSecret = webhookSecretTest || webhookSecretLive; // Fallback to live if test not set
 
 // Allowed origins for CORS (production domains only - webhooks don't need CORS but included for consistency)
 const allowedOrigins = [
@@ -126,8 +142,17 @@ function getCorsHeaders(origin: string | null): Record<string, string> {
 }
 
 serve(async (req) => {
+  // Log that webhook was called (for debugging)
+  console.warn("Webhook endpoint called:", {
+    method: req.method,
+    url: req.url,
+    hasSignature: !!req.headers.get("stripe-signature"),
+    timestamp: new Date().toISOString(),
+  });
+
   // Validate HTTP method
   if (req.method !== "POST") {
+    console.warn("Webhook called with non-POST method:", req.method);
     return new Response(JSON.stringify({ error: "Method not allowed" }), {
       status: 405,
       headers: { "Content-Type": "application/json" },
@@ -167,13 +192,15 @@ serve(async (req) => {
   try {
     const signature = req.headers.get("stripe-signature");
     if (!signature) {
+      console.error("Webhook called without stripe-signature header");
       return new Response(JSON.stringify({ error: "Missing signature" }), {
         status: 400,
         headers: { "Content-Type": "application/json" },
       });
     }
 
-    if (!webhookSecret) {
+    if (!webhookSecretTest && !webhookSecretLive) {
+      console.error("Neither STRIPE_WEBHOOK_SECRET_TEST nor STRIPE_WEBHOOK_SECRET is set!");
       return new Response(
         JSON.stringify({ error: "Webhook secret not configured" }),
         {
@@ -183,7 +210,45 @@ serve(async (req) => {
       );
     }
 
+    if (!stripeSecretKey) {
+      console.error("Stripe secret key is not configured! Check STRIPE_SECRET_KEY_LIVE or STRIPE_SECRET_KEY");
+      return new Response(
+        JSON.stringify({ error: "Stripe secret key not configured" }),
+        {
+          status: 500,
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+    }
+
     const body = await req.text();
+
+    // Try to determine if this is a test or live event by checking the raw JSON
+    // Test mode events have "livemode": false, live mode events have "livemode": true
+    let isTestMode = false;
+    try {
+      const rawEvent = JSON.parse(body);
+      isTestMode = rawEvent.livemode === false;
+      console.warn("Event livemode:", rawEvent.livemode, "isTestMode:", isTestMode);
+    } catch (e) {
+      console.warn("Could not parse event JSON to check livemode, will try both secrets");
+    }
+
+    // Select the appropriate webhook secret based on event mode
+    const selectedWebhookSecret = isTestMode 
+      ? (webhookSecretTest || webhookSecretLive) // Prefer test, fallback to live
+      : (webhookSecretLive || webhookSecretTest); // Prefer live, fallback to test
+
+    if (!selectedWebhookSecret) {
+      console.error("No webhook secret available for", isTestMode ? "test" : "live", "mode");
+      return new Response(
+        JSON.stringify({ error: "Webhook secret not configured for this mode" }),
+        {
+          status: 500,
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+    }
 
     // Verify webhook signature using Stripe's method
     // For Deno Edge Functions, we'll use the Stripe SDK approach
@@ -198,22 +263,57 @@ serve(async (req) => {
       event = stripeInstance.webhooks.constructEvent(
         body,
         signature,
-        webhookSecret
+        selectedWebhookSecret
       );
+      console.warn("Webhook signature verified successfully. Event type:", event.type, "Mode:", isTestMode ? "TEST" : "LIVE");
     } catch (err: unknown) {
-      // Log detailed error server-side only
-      const errorMessage = err instanceof Error ? err.message : String(err);
-      console.error("Webhook signature verification failed:", errorMessage);
-      // Return generic error to client to prevent information leakage
-      return new Response(
-        JSON.stringify({
-          error: "Webhook signature verification failed",
-        }),
-        {
-          status: 400,
-          headers: getCorsHeaders(req.headers.get("origin")),
+      // If first attempt failed and we have both secrets, try the other one
+      if (webhookSecretTest && webhookSecretLive && selectedWebhookSecret === webhookSecretTest) {
+        console.warn("Test secret failed, trying live secret...");
+        try {
+          event = stripeInstance.webhooks.constructEvent(
+            body,
+            signature,
+            webhookSecretLive
+          );
+          console.warn("Webhook signature verified with live secret. Event type:", event.type);
+          isTestMode = false; // Update mode based on successful verification
+        } catch (err2: unknown) {
+          const errorMessage = err instanceof Error ? err.message : String(err);
+          const errorMessage2 = err2 instanceof Error ? err2.message : String(err2);
+          console.error("Webhook signature verification failed with both secrets");
+          console.error("Test secret error:", errorMessage);
+          console.error("Live secret error:", errorMessage2);
+          console.error("Signature header:", signature?.substring(0, 20) + "...");
+          return new Response(
+            JSON.stringify({
+              error: "Webhook signature verification failed",
+            }),
+            {
+              status: 400,
+              headers: getCorsHeaders(req.headers.get("origin")),
+            }
+          );
         }
-      );
+      } else {
+        // Log detailed error server-side only
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        console.error("Webhook signature verification failed:", errorMessage);
+        console.error("Signature header:", signature?.substring(0, 20) + "...");
+        console.error("Using webhook secret for:", isTestMode ? "TEST" : "LIVE", "mode");
+        console.error("Test secret configured:", !!webhookSecretTest);
+        console.error("Live secret configured:", !!webhookSecretLive);
+        // Return generic error to client to prevent information leakage
+        return new Response(
+          JSON.stringify({
+            error: "Webhook signature verification failed",
+          }),
+          {
+            status: 400,
+            headers: getCorsHeaders(req.headers.get("origin")),
+          }
+        );
+      }
     }
 
     // Initialize Supabase admin client
@@ -223,15 +323,46 @@ serve(async (req) => {
     );
 
     // Handle different event types
+    console.warn("Processing webhook event:", event.type, "ID:", event.id);
+    
     switch (event.type) {
       case "checkout.session.completed": {
         const session = event.data.object as StripeCheckoutSession;
         // Handle checkout completion
         console.warn("Checkout session completed:", session.id);
+        console.warn("Full session object:", JSON.stringify(session, null, 2));
+        
+        // Extract user_id from metadata or client_reference_id
+        const sessionObj = session as any;
+        const userId = sessionObj.metadata?.user_id || 
+                       sessionObj.client_reference_id;
+        
+        console.warn("Extracted user_id from checkout session:", userId);
+        console.warn("Session subscription ID:", session.subscription);
+        console.warn("Session metadata:", sessionObj.metadata);
+        console.warn("Session client_reference_id:", sessionObj.client_reference_id);
+        
+        if (!userId) {
+          console.error("No user_id found in checkout session metadata or client_reference_id");
+          console.error("Session object keys:", Object.keys(sessionObj));
+          // Don't break - try to continue with subscription.created event
+          return new Response(JSON.stringify({ 
+            received: true,
+            warning: "No user_id found, waiting for subscription.created event" 
+          }), {
+            status: 200,
+            headers: getCorsHeaders(req.headers.get("origin")),
+          });
+        }
+        
+        // Always record checkout session in stripe_checkout_sessions table
+        await handleCheckoutSessionRecorded(supabaseAdmin, sessionObj, userId, stripeSecretKey);
+        
         if (session.subscription) {
           // Fetch subscription and update
+          console.warn("Fetching subscription:", session.subscription);
           const subscriptionResponse = await fetch(
-            `https://api.stripe.com/v1/subscriptions/${session.subscription}`,
+            `https://api.stripe.com/v1/subscriptions/${session.subscription}?expand[]=items.data.price`,
             {
               headers: {
                 Authorization: `Bearer ${stripeSecretKey}`,
@@ -240,8 +371,15 @@ serve(async (req) => {
           );
           if (subscriptionResponse.ok) {
             const subscription = await subscriptionResponse.json();
-            await handleSubscriptionUpdate(supabaseAdmin, subscription);
+            console.warn("Fetched subscription for checkout:", subscription.id);
+            await handleCheckoutCompleted(supabaseAdmin, subscription, userId);
+          } else {
+            const errorText = await subscriptionResponse.text();
+            console.error("Failed to fetch subscription:", errorText);
+            console.error("Subscription response status:", subscriptionResponse.status);
           }
+        } else {
+          console.warn("Checkout session has no subscription ID (payment mode, not subscription)");
         }
         break;
       }
@@ -249,6 +387,7 @@ serve(async (req) => {
       case "customer.subscription.created":
       case "customer.subscription.updated": {
         const subscription = event.data.object as StripeSubscription;
+        console.warn("Processing subscription event:", event.type, "Subscription ID:", subscription.id);
         await handleSubscriptionUpdate(supabaseAdmin, subscription);
         break;
       }
@@ -296,24 +435,170 @@ serve(async (req) => {
   }
 });
 
-// Helper function to map Price ID to subscription type
-function mapPriceIdToSubscriptionType(priceId: string | undefined): string {
-  if (!priceId) return "free";
+// Helper function to map Stripe status to database status
+function mapStripeStatusToDbStatus(stripeStatus: string): string {
+  const statusMap: Record<string, string> = {
+    trialing: "active",
+    active: "active",
+    incomplete: "incomplete",
+    incomplete_expired: "expired",
+    past_due: "past_due",
+    canceled: "cancelled",
+    unpaid: "expired",
+    paused: "active",
+  };
+
+  return statusMap[stripeStatus] || "inactive";
+}
+
+// Helper function to determine subscription_type from price ID
+function getSubscriptionTypeFromPriceId(priceId: string | null): string | null {
+  if (!priceId) return null;
   
-  // Test mode Price IDs
-  if (priceId === "price_1SjULhIIyqCwTeH2GmBL1jVk") return "family-bundle-monthly";
-  if (priceId === "price_1SjUiEIIyqCwTeH2xnxCVAAT") return "family-bundle-annual"; // Updated test annual Price ID
+  // Production price IDs
+  const isMonthlyProd = priceId === 'price_1SUVdqIIyqCwTeH2zggZpPAK';
+  const isAnnualProd = priceId === 'price_1SkPL7IIyqCwTeH2tI9TxHRB';
   
-  // Live mode Price IDs (from environment or common patterns)
-  // Check against environment variables
-  const liveMonthly = Deno.env.get("STRIPE_PRICE_FAMILY_BUNDLE_MONTHLY");
-  const liveAnnual = Deno.env.get("STRIPE_PRICE_FAMILY_BUNDLE_ANNUAL");
+  // Test price IDs
+  const isMonthlyTest = priceId === 'price_1SjULhIIyqCwTeH2GmBL1jVk';
+  const isAnnualTest = priceId === 'price_1SkQUaIIyqCwTeH2QowSbcfb';
   
-  if (priceId === liveMonthly) return "family-bundle-monthly";
-  if (priceId === liveAnnual) return "family-bundle-annual";
+  if (isMonthlyProd || isMonthlyTest) {
+    return 'family-bundle-monthly';
+  } else if (isAnnualProd || isAnnualTest) {
+    return 'family-bundle-annual';
+  }
   
-  // Fallback: check metadata
-  return "free";
+  return null;
+}
+
+// Handle checkout session recording in stripe_checkout_sessions table
+async function handleCheckoutSessionRecorded(
+  supabase: SupabaseClient,
+  session: any,
+  userId: string,
+  stripeSecretKey: string
+) {
+  const checkoutSessionId = session.id;
+  
+  // Get subscription_type from session metadata or determine from price
+  let subscriptionType = session.metadata?.subscription_type || null;
+  
+  // If not in metadata, try to determine from subscription or line items
+  if (!subscriptionType && session.subscription) {
+    try {
+      const subscriptionResponse = await fetch(
+        `https://api.stripe.com/v1/subscriptions/${session.subscription}?expand[]=items.data.price`,
+        {
+          headers: {
+            Authorization: `Bearer ${stripeSecretKey}`,
+          },
+        }
+      );
+      if (subscriptionResponse.ok) {
+        const subscription = await subscriptionResponse.json();
+        const priceId = subscription.items?.data?.[0]?.price?.id || null;
+        subscriptionType = getSubscriptionTypeFromPriceId(priceId);
+      }
+    } catch (err) {
+      console.warn("Could not fetch subscription to determine type:", err);
+    }
+  }
+  
+  // If still no subscription_type, try to get from line items in session
+  if (!subscriptionType) {
+    try {
+      const lineItemsResponse = await fetch(
+        `https://api.stripe.com/v1/checkout/sessions/${checkoutSessionId}/line_items`,
+        {
+          headers: {
+            Authorization: `Bearer ${stripeSecretKey}`,
+          },
+        }
+      );
+      if (lineItemsResponse.ok) {
+        const lineItems = await lineItemsResponse.json();
+        const priceId = lineItems.data?.[0]?.price?.id || null;
+        subscriptionType = getSubscriptionTypeFromPriceId(priceId);
+      }
+    } catch (err) {
+      console.warn("Could not fetch line items:", err);
+    }
+  }
+  
+  if (!subscriptionType) {
+    console.warn(`Could not determine subscription_type for checkout session ${checkoutSessionId}`);
+    // Still record the session, but with 'unknown' type
+  }
+  
+  console.warn("Recording checkout session:", checkoutSessionId);
+  
+  const { error } = await supabase
+    .from("stripe_checkout_sessions")
+    .upsert({
+      checkout_session_id: checkoutSessionId,
+      parent_id: userId,
+      subscription_type: subscriptionType || 'unknown',
+      used_at: new Date().toISOString(),
+      created_at: new Date().toISOString(),
+    }, {
+      onConflict: "checkout_session_id",
+    });
+  
+  if (error) {
+    console.error("Error recording checkout session:", error);
+  } else {
+    console.warn("Successfully recorded checkout session in stripe_checkout_sessions");
+  }
+}
+
+// Handle checkout.session.completed event
+async function handleCheckoutCompleted(
+  supabase: SupabaseClient,
+  subscription: StripeSubscription,
+  userId: string
+) {
+  const customerId = subscription.customer;
+  const subscriptionId = subscription.id;
+  const status = subscription.status;
+  const currentPeriodEnd = new Date(
+    subscription.current_period_end * 1000
+  ).toISOString();
+  const cancelAtPeriodEnd = subscription.cancel_at_period_end || false;
+  
+  // Get price ID from subscription items
+  const priceId = subscription.items?.data?.[0]?.price?.id || null;
+
+  console.warn("Upserting billing subscription:", {
+    user_id: userId,
+    customer_id: customerId,
+    subscription_id: subscriptionId,
+    price_id: priceId,
+    status: mapStripeStatusToDbStatus(status),
+  });
+
+  // Upsert billing_subscriptions
+  const { data, error } = await supabase
+    .from("billing_subscriptions")
+    .upsert({
+      user_id: userId,
+      stripe_customer_id: customerId,
+      stripe_subscription_id: subscriptionId,
+      stripe_price_id: priceId,
+      status: mapStripeStatusToDbStatus(status),
+      current_period_end: currentPeriodEnd,
+      cancel_at_period_end: cancelAtPeriodEnd,
+      updated_at: new Date().toISOString(),
+    }, {
+      onConflict: "user_id",
+    });
+
+  if (error) {
+    console.error("Error upserting billing subscription:", error);
+    console.error("Error details:", JSON.stringify(error, null, 2));
+  } else {
+    console.warn("Successfully upserted billing subscription for user:", userId);
+  }
 }
 
 async function handleSubscriptionUpdate(
@@ -326,114 +611,105 @@ async function handleSubscriptionUpdate(
   const currentPeriodEnd = new Date(
     subscription.current_period_end * 1000
   ).toISOString();
-
-  // Extract subscription type from Price ID or metadata
-  let subscriptionType = subscription.metadata?.subscription_type;
-  let allowedChildren = 1;
+  const cancelAtPeriodEnd = subscription.cancel_at_period_end || false;
   
-  if (!subscriptionType && subscription.items?.data?.[0]?.price?.id) {
-    const priceId = subscription.items.data[0].price.id;
-    subscriptionType = mapPriceIdToSubscriptionType(priceId);
-  }
-  
-  // Map subscription type to allowed children
-  if (subscriptionType === "family-bundle-monthly" || subscriptionType === "family-bundle-annual") {
-    allowedChildren = 5;
-  }
+  // Get price ID from subscription items
+  const priceId = subscription.items?.data?.[0]?.price?.id || null;
 
-  // Find parent by Stripe customer ID or subscription ID
-  const { data: parentData } = await supabase
-    .from("parents")
-    .select("id")
+  // Try to find user_id from subscription metadata or by looking up customer
+  let userId: string | null = null;
+  
+  // First, try to find existing billing subscription
+  const { data: billingSub, error: findError } = await supabase
+    .from("billing_subscriptions")
+    .select("user_id")
     .or(
       `stripe_customer_id.eq.${customerId},stripe_subscription_id.eq.${subscriptionId}`
     )
-    .single();
+    .maybeSingle();
 
-  if (!parentData) {
+  if (billingSub) {
+    userId = billingSub.user_id;
+  } else {
+    // If not found, try to get user_id from Stripe customer metadata
+    // Fetch customer from Stripe to get metadata
+    try {
+      const customerResponse = await fetch(
+        `https://api.stripe.com/v1/customers/${customerId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${Deno.env.get("STRIPE_SECRET_KEY") || ""}`,
+          },
+        }
+      );
+      if (customerResponse.ok) {
+        const customer = await customerResponse.json();
+        userId = customer.metadata?.user_id || customer.metadata?.parent_id || null;
+      }
+    } catch (err) {
+      console.error("Error fetching customer from Stripe:", err);
+    }
+    
+    // If still no user_id, try to find by customer_id in parents table (fallback)
+    if (!userId) {
+      const { data: parentData } = await supabase
+        .from("parents")
+        .select("id")
+        .eq("stripe_customer_id", customerId)
+        .maybeSingle();
+      if (parentData) {
+        userId = parentData.id;
+      }
+    }
+  }
+
+  if (!userId) {
     console.error(
-      "Parent not found for customer:",
-      customerId,
-      "or subscription:",
-      subscriptionId
+      "Could not determine user_id for subscription:",
+      subscriptionId,
+      "customer:",
+      customerId
     );
     return;
   }
 
-  // Map Stripe status to our database status
-  const dbStatus = mapStripeStatusToDbStatus(status);
-
-  // Update subscription in database with subscription type
-  const updateData: Record<string, unknown> = {
-    subscription_status: dbStatus,
-    subscription_expires_at: currentPeriodEnd,
-    stripe_subscription_id: subscriptionId,
-    stripe_customer_id: customerId,
-  };
-  
-  // Only update subscription_type if we found it
-  if (subscriptionType && subscriptionType !== "free") {
-    updateData.subscription_type = subscriptionType;
-    updateData.allowed_children = allowedChildren;
-  }
-
-  const { error } = await supabase.rpc("sync_stripe_subscription", {
-    p_stripe_subscription_id: subscriptionId,
-    p_stripe_customer_id: customerId,
-    p_subscription_status: dbStatus,
-    p_current_period_end: currentPeriodEnd,
-  });
+  // Upsert billing_subscriptions (create if doesn't exist, update if does)
+  const { error } = await supabase
+    .from("billing_subscriptions")
+    .upsert({
+      user_id: userId,
+      stripe_customer_id: customerId,
+      stripe_subscription_id: subscriptionId,
+      stripe_price_id: priceId,
+      status: mapStripeStatusToDbStatus(status),
+      current_period_end: currentPeriodEnd,
+      cancel_at_period_end: cancelAtPeriodEnd,
+      updated_at: new Date().toISOString(),
+    }, {
+      onConflict: "user_id",
+    });
 
   if (error) {
-    console.error("Error syncing subscription:", error);
-    // Fallback: direct update with subscription type
-    await supabase
-      .from("parents")
-      .update(updateData)
-      .eq("id", parentData.id);
+    console.error("Error upserting billing subscription:", error);
+    console.error("Error details:", JSON.stringify(error, null, 2));
   } else {
-    // If RPC succeeded, also update subscription_type separately if needed
-    if (subscriptionType && subscriptionType !== "free") {
-      await supabase
-        .from("parents")
-        .update({
-          subscription_type: subscriptionType,
-          allowed_children: allowedChildren,
-        })
-        .eq("id", parentData.id);
-    }
+    console.warn("Successfully upserted billing subscription for user:", userId);
   }
-}
-
-// Map Stripe subscription statuses to database statuses
-function mapStripeStatusToDbStatus(stripeStatus: string): string {
-  const statusMap: Record<string, string> = {
-    trialing: "active", // Allow access during trial
-    active: "active",
-    incomplete: "incomplete", // Payment pending
-    incomplete_expired: "expired", // Payment failed after 23 hours
-    past_due: "active", // Keep access, payment retrying
-    canceled: "cancelled",
-    unpaid: "expired", // Payment failed, revoke access
-    paused: "active", // Allow access during pause
-  };
-
-  return statusMap[stripeStatus] || "expired";
 }
 
 async function handleSubscriptionCancelled(
   supabase: SupabaseClient,
   subscription: StripeSubscription
 ) {
-  const customerId = subscription.customer;
   const subscriptionId = subscription.id;
 
   // Update subscription status to cancelled
   const { error } = await supabase
-    .from("parents")
+    .from("billing_subscriptions")
     .update({
-      subscription_status: "cancelled",
-      subscription_cancelled_at: new Date().toISOString(),
+      status: "cancelled",
+      cancel_at_period_end: false,
+      updated_at: new Date().toISOString(),
     })
     .eq("stripe_subscription_id", subscriptionId);
 
@@ -446,19 +722,19 @@ async function handlePaymentSucceeded(
   supabase: SupabaseClient,
   invoice: StripeInvoice
 ) {
-  const customerId = invoice.customer;
   const subscriptionId = invoice.subscription;
 
   if (!subscriptionId) return;
 
   // Ensure subscription is active
   const { error } = await supabase
-    .from("parents")
+    .from("billing_subscriptions")
     .update({
-      subscription_status: "active",
-      subscription_expires_at: new Date(
+      status: "active",
+      current_period_end: new Date(
         invoice.period_end * 1000
       ).toISOString(),
+      updated_at: new Date().toISOString(),
     })
     .eq("stripe_subscription_id", subscriptionId);
 
@@ -471,16 +747,16 @@ async function handlePaymentFailed(
   supabase: SupabaseClient,
   invoice: StripeInvoice
 ) {
-  const customerId = invoice.customer;
   const subscriptionId = invoice.subscription;
 
   if (!subscriptionId) return;
 
-  // Mark subscription as past_due but keep access
+  // Mark subscription as past_due
   const { error } = await supabase
-    .from("parents")
+    .from("billing_subscriptions")
     .update({
-      subscription_status: "past_due",
+      status: "past_due",
+      updated_at: new Date().toISOString(),
     })
     .eq("stripe_subscription_id", subscriptionId);
 
@@ -493,7 +769,6 @@ async function handlePaymentActionRequired(
   supabase: SupabaseClient,
   invoice: StripeInvoice
 ) {
-  const customerId = invoice.customer;
   const subscriptionId = invoice.subscription;
   const paymentIntent = invoice.payment_intent;
 
@@ -503,26 +778,21 @@ async function handlePaymentActionRequired(
   const clientSecret =
     typeof paymentIntent === "string" ? null : paymentIntent.client_secret;
 
-  // Find parent and notify (you could send a push notification or email here)
-  const { data: parentData } = await supabase
-    .from("parents")
-    .select("id, email")
-    .eq("stripe_subscription_id", subscriptionId)
-    .single();
+  // Update subscription status to incomplete
+  const { error } = await supabase
+    .from("billing_subscriptions")
+    .update({
+      status: "incomplete",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("stripe_subscription_id", subscriptionId);
 
-  if (parentData) {
-    // Store payment intent info for frontend to retrieve
-    await supabase
-      .from("parents")
-      .update({
-        subscription_status: "incomplete", // Payment requires action
-        // Store client secret temporarily (or use a separate table)
-      })
-      .eq("stripe_subscription_id", subscriptionId);
-
-    console.warn(
-      `Payment action required for subscription ${subscriptionId}. Client secret: ${clientSecret}`
-    );
-    // In production, send notification to user via push/email
+  if (error) {
+    console.error("Error updating subscription after payment action required:", error);
   }
+
+  console.warn(
+    `Payment action required for subscription ${subscriptionId}. Client secret: ${clientSecret}`
+  );
+  // In production, send notification to user via push/email
 }

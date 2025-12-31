@@ -123,7 +123,7 @@ const Index = () => {
               navigate("/family-member/dashboard", { replace: true });
               return;
             } else if (userRole === "parent") {
-              navigate("/parent/dashboard", { replace: true });
+              navigate("/parent/children", { replace: true });
               return;
             }
           }

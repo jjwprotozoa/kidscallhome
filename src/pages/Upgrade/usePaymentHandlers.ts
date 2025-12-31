@@ -12,7 +12,8 @@ import { isPWA } from "@/utils/platformDetection";
 
 export const usePaymentHandlers = (
   currentAllowedChildren: number,
-  refreshSubscriptionInfo: () => Promise<void>
+  refreshSubscriptionInfo: () => Promise<void>,
+  stripeCustomerId: string | null = null
 ) => {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -58,7 +59,7 @@ export const usePaymentHandlers = (
           {
             body: {
               subscriptionType: selectedPlan.id,
-              quantity: 1, // For now, quantity is 1. Can be made configurable later
+              quantity: 1,
             },
           }
         );
@@ -191,30 +192,8 @@ export const usePaymentHandlers = (
           throw new Error(`Payment setup failed: ${errorMessage}`);
         }
 
-        // Check if subscription was updated directly (no checkout session)
-        if (checkoutData?.subscriptionId && !checkoutData?.sessionId) {
-          // Subscription was updated directly - refresh and show success
-          toast({
-            title: "Subscription Updated!",
-            description: checkoutData?.message || "Your subscription has been successfully updated.",
-            variant: "default",
-          });
-          
-          // Refresh subscription info
-          await refreshSubscriptionInfo();
-          
-          // Redirect to upgrade page with success message
-          if (checkoutData?.url) {
-            window.location.href = checkoutData.url;
-          } else {
-            // Just refresh the page data
-            return { success: true, message: checkoutData?.message || "Subscription updated successfully" };
-          }
-          return;
-        }
-
         // New subscription - redirect to Stripe Checkout
-        const { url: checkoutUrl } = checkoutData;
+        const checkoutUrl = checkoutData?.url || checkoutData?.checkoutUrl;
 
         if (!checkoutUrl) {
           throw new Error("No checkout URL returned from subscription creation");
@@ -325,19 +304,60 @@ export const usePaymentHandlers = (
   };
 
   const handleManageSubscription = async () => {
+    // Check if user has a Stripe customer ID before attempting to manage subscription
+    if (!stripeCustomerId) {
+      toast({
+        title: "Subscription Required",
+        description:
+          "You need to subscribe first before you can manage your subscription. Please select a plan below to get started.",
+        variant: "default",
+      });
+      return;
+    }
+
     setIsManagingSubscription(true);
     try {
       const { data, error } = await supabase.functions.invoke(
         "create-customer-portal-session",
         {
-          body: {
-            returnUrl: `${window.location.origin}/parent/upgrade`,
-          },
+          body: {},
         }
       );
 
       if (error) {
-        throw error;
+        // Try to extract the actual error message from the response
+        let errorMessage = error.message || "Failed to open subscription management.";
+        
+        // Try to get error details from error context (Response object)
+        if (error.context) {
+          try {
+            if (error.context instanceof Response) {
+              const responseText = await error.context.clone().text();
+              const responseData = responseText ? JSON.parse(responseText) : null;
+              if (responseData?.error) {
+                errorMessage = responseData.error;
+              }
+            }
+          } catch (e) {
+            // Ignore parsing errors, use default message
+          }
+        }
+        
+        // Check for specific error cases
+        const status = error.status || (error.context instanceof Response ? error.context.status : undefined);
+        
+        if (status === 400) {
+          // 400 means business logic error (like no Stripe customer)
+          if (errorMessage.includes("No Stripe customer") || errorMessage.includes("subscribe first")) {
+            errorMessage = "No active subscription found. Please subscribe to a plan first to manage your subscription.";
+          }
+        } else if (status === 404) {
+          errorMessage = "Subscription management service is not available. Please verify the function is deployed.";
+        } else if (status === 401) {
+          errorMessage = "You need to be logged in to manage your subscription.";
+        }
+        
+        throw new Error(errorMessage);
       }
 
       if (data?.success && data?.url) {
@@ -348,26 +368,10 @@ export const usePaymentHandlers = (
     } catch (error: unknown) {
       console.error("Error opening subscription management:", error);
       
-      // Provide user-friendly error messages
-      let errorMessage = "Failed to open subscription management. Please try again.";
-      
-      // Check if it's a 404 (function not deployed) - similar to auditLog.ts pattern
-      const errorObj = error as any;
-      const isFunctionNotFound = 
-        errorObj?.status === 404 ||
-        errorObj?.code === 'PGRST301' ||
-        errorObj?.code === 'PGRST202' ||
-        errorObj?.message?.includes("404") ||
-        errorObj?.message?.includes("Not Found") ||
-        errorObj?.message?.includes("Edge Function returned a non-2xx status code");
-      
-      if (isFunctionNotFound) {
-        errorMessage = "Subscription management is not available yet. The feature is being set up. Please contact support or check back later.";
-      } else if (errorObj?.message?.includes("No Stripe customer")) {
-        errorMessage = "No active subscription found. Please subscribe to a plan first.";
-      } else if (errorObj?.message) {
-        errorMessage = errorObj.message;
-      }
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "Failed to open subscription management. Please try again.";
       
       toast({
         title: "Error",
@@ -379,12 +383,69 @@ export const usePaymentHandlers = (
     }
   };
 
+  const handleSwitchSubscription = async (
+    newPriceId: string,
+    prorationMode?: "immediate" | "next_cycle"
+  ) => {
+    setIsProcessing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke(
+        "stripe-change-subscription",
+        {
+          body: {
+            newPriceId,
+            prorationMode,
+          },
+        }
+      );
+
+      if (error) {
+        throw new Error(error.message || "Failed to change subscription");
+      }
+
+      if (data?.success) {
+        toast({
+          title: "Subscription Updated",
+          description:
+            prorationMode === "next_cycle"
+              ? "Your subscription will change at the end of your current billing period."
+              : "Your subscription has been updated successfully.",
+          variant: "default",
+        });
+        // Refresh subscription info to update UI
+        await refreshSubscriptionInfo();
+        // Refresh again after a short delay to ensure webhook has processed
+        setTimeout(async () => {
+          await refreshSubscriptionInfo();
+        }, 2000);
+        return { success: true, data };
+      } else {
+        throw new Error(data?.error || "Failed to change subscription");
+      }
+    } catch (error: unknown) {
+      console.error("Error switching subscription:", error);
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "Failed to change subscription. Please try again.";
+      toast({
+        title: "Error",
+        description: errorMessage,
+        variant: "destructive",
+      });
+      return { success: false, error: errorMessage };
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   return {
     isProcessing,
     isManagingSubscription,
     handlePayment,
     processUpgrade,
     handleManageSubscription,
+    handleSwitchSubscription,
   };
 };
 

@@ -92,9 +92,13 @@ import ServerError from "./pages/ServerError";
 // Lazy load all other pages for code splitting
 const ParentAuth = lazy(() => import("./pages/ParentAuth"));
 const ParentDashboard = lazy(() => import("./pages/ParentDashboard"));
+const ParentFamily = lazy(() => import("./pages/ParentFamily"));
+const ParentReferrals = lazy(() => import("./pages/ParentReferrals"));
 const ParentHome = lazy(parentHomeImport);
 const ParentChildrenList = lazy(() => import("./pages/ParentChildrenList"));
 const ParentCallScreen = lazy(parentCallScreenImport);
+const ParentSafety = lazy(() => import("./pages/ParentSafety"));
+const ParentConnections = lazy(() => import("./pages/ParentConnections"));
 const DeviceManagement = lazy(() => import("./pages/DeviceManagement/index"));
 const Upgrade = lazy(() => import("./pages/Upgrade/Upgrade"));
 const AccountSettings = lazy(() => import("./pages/AccountSettings"));
@@ -242,8 +246,8 @@ const WidgetIntentHandler = () => {
         }
         navigate(`/parent/call/${widgetData.childId}`);
       } else {
-        // Fallback to parent dashboard
-        navigate("/parent/dashboard");
+        // Fallback to parent children list
+        navigate("/parent/children");
       }
     };
 
@@ -408,7 +412,7 @@ const App = () => {
                   <Route path="/" element={<Index />} />
                   <Route path="/parent/auth" element={<ParentAuth />} />
                   <Route path="/verify-email" element={<VerifyEmail />} />
-                  <Route path="/parent" element={<ParentHome />} />
+                  <Route path="/parent" element={<Navigate to="/parent/children" replace />} />
                   <Route
                     path="/parent/children"
                     element={<ParentChildrenList />}
@@ -419,7 +423,23 @@ const App = () => {
                   />
                   <Route
                     path="/parent/dashboard"
-                    element={<ParentDashboard />}
+                    element={<Navigate to="/parent/family" replace />}
+                  />
+                  <Route
+                    path="/parent/family"
+                    element={<ParentFamily />}
+                  />
+                  <Route
+                    path="/parent/safety"
+                    element={<ParentSafety />}
+                  />
+                  <Route
+                    path="/parent/connections"
+                    element={<ParentConnections />}
+                  />
+                  <Route
+                    path="/parent/referrals"
+                    element={<ParentReferrals />}
                   />
                   <Route
                     path="/parent/devices"

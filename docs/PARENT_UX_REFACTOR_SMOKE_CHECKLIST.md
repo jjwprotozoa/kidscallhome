@@ -15,10 +15,11 @@ This document provides manual testing steps for the parent UX consolidation refa
 ## Manual Smoke Tests
 
 ### 1. Routing & Navigation
-- [ ] Navigate to `/parent` → Should automatically redirect to `/parent/children`
+- [ ] Navigate to `/parent` → Should automatically redirect to `/parent/children` (no UI flash, minimal loader only)
 - [ ] Navigate to `/parent/children` → Should load children list directly
 - [ ] Navigate to `/parent/dashboard` → Should still work (backwards compatibility)
 - [ ] Menu item "Family" → Should navigate to `/parent/dashboard` (label changed, route unchanged)
+- [ ] Menu ordering → Should be: Home, Children, Family, Connections, Safety, More (Devices/Settings)
 
 ### 2. ParentChildrenList - Compact Layout
 - [ ] Children list displays in compact 1-row format
@@ -72,6 +73,13 @@ This document provides manual testing steps for the parent UX consolidation refa
 ### 8. Backwards Compatibility
 - [ ] Old bookmarks to `/parent` still work (redirects)
 - [ ] Old bookmarks to `/parent/dashboard` still work
+- [ ] Navigate to `/parent/dashboard?tab=safety` → Should redirect to `/parent/safety` (replace: true)
+- [ ] Navigate to `/parent/dashboard?tab=connections` → Should redirect to `/parent/connections` (replace: true)
+- [ ] Menu links match destinations:
+  - [ ] "Children" menu item → Routes to `/parent/children`
+  - [ ] "Family" menu item → Routes to `/parent/dashboard`
+  - [ ] "Connections" menu item → Routes to `/parent/connections`
+  - [ ] "Safety" menu item → Routes to `/parent/safety`
 - [ ] No broken links or 404 errors
 
 ---

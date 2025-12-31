@@ -1,7 +1,7 @@
 // src/pages/AccountSettings.tsx
 // Account settings page with upgrade link
 
-import Navigation from "@/components/Navigation";
+import { ParentLayout } from "@/components/layout/ParentLayout";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -19,6 +19,7 @@ import { OnboardingTour } from "@/features/onboarding/OnboardingTour";
 import { useToast } from "@/hooks/use-toast";
 import { useFamilyMemberRedirect } from "@/hooks/useFamilyMemberRedirect";
 import { supabase } from "@/integrations/supabase/client";
+import type { Database } from "@/integrations/supabase/types";
 import { isPWA } from "@/utils/platformDetection";
 import {
   ArrowRight,
@@ -30,8 +31,20 @@ import {
   Star,
   X,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+
+type ParentData = Pick<
+  Database["public"]["Tables"]["parents"]["Row"],
+  | "name"
+  | "email"
+  | "family_code"
+  | "subscription_type"
+  | "subscription_status"
+  | "subscription_expires_at"
+  | "allowed_children"
+  | "stripe_customer_id"
+>;
 
 const AccountSettings = () => {
   // Redirect family members away from parent routes
@@ -50,16 +63,11 @@ const AccountSettings = () => {
   >(null);
   const [allowedChildren, setAllowedChildren] = useState(1);
   const [currentChildrenCount, setCurrentChildrenCount] = useState(0);
+  const [stripeCustomerId, setStripeCustomerId] = useState<string | null>(null);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
-  const [isManagingSubscription, setIsManagingSubscription] = useState(false);
 
-  useEffect(() => {
-    checkAuth();
-    loadAccountInfo();
-  }, []);
-
-  const checkAuth = async () => {
+  const checkAuth = useCallback(async () => {
     const {
       data: { session },
     } = await supabase.auth.getSession();
@@ -67,9 +75,9 @@ const AccountSettings = () => {
       navigate("/parent/auth");
       return;
     }
-  };
+  }, [navigate]);
 
-  const loadAccountInfo = async () => {
+  const loadAccountInfo = useCallback(async () => {
     try {
       const {
         data: { user },
@@ -79,7 +87,7 @@ const AccountSettings = () => {
       const { data: parentData, error: parentError } = await supabase
         .from("parents")
         .select(
-          "name, email, family_code, subscription_type, subscription_status, subscription_expires_at, allowed_children"
+          "name, email, family_code, subscription_type, subscription_status, subscription_expires_at, allowed_children, stripe_customer_id"
         )
         .eq("id", user.id)
         .single();
@@ -96,9 +104,10 @@ const AccountSettings = () => {
           );
           // Set defaults if migration hasn't been run
           if (parentData) {
-            setParentName((parentData as any)?.name || null);
-            setEmail((parentData as any)?.email || null);
-            setFamilyCode((parentData as any)?.family_code || null);
+            const partialData = parentData as Partial<ParentData>;
+            setParentName(partialData?.name || null);
+            setEmail(partialData?.email || null);
+            setFamilyCode(partialData?.family_code || null);
           }
           setSubscriptionType("free");
           setAllowedChildren(1);
@@ -115,17 +124,15 @@ const AccountSettings = () => {
         return;
       }
 
-      setParentName((parentData as any)?.name || null);
-      setEmail((parentData as any)?.email || null);
-      setFamilyCode((parentData as any)?.family_code || null);
-      setSubscriptionType((parentData as any)?.subscription_type || "free");
-      setSubscriptionStatus(
-        (parentData as any)?.subscription_status || "active"
-      );
-      setSubscriptionExpiresAt(
-        (parentData as any)?.subscription_expires_at || null
-      );
-      setAllowedChildren((parentData as any)?.allowed_children || 1);
+      const typedData = parentData as ParentData;
+      setParentName(typedData.name || null);
+      setEmail(typedData.email || null);
+      setFamilyCode(typedData.family_code || null);
+      setSubscriptionType(typedData.subscription_type || "free");
+      setSubscriptionStatus(typedData.subscription_status || "active");
+      setSubscriptionExpiresAt(typedData.subscription_expires_at || null);
+      setAllowedChildren(typedData.allowed_children || 1);
+      setStripeCustomerId(typedData.stripe_customer_id || null);
 
       // Get current children count
       const { data: childrenData } = await supabase
@@ -146,52 +153,18 @@ const AccountSettings = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast]);
 
-  const handleManageSubscription = async () => {
-    if (!isPWA()) {
-      toast({
-        title: "Not Available",
-        description:
-          "Subscription management is only available in the web app.",
-        variant: "default",
-      });
-      return;
-    }
+  useEffect(() => {
+    checkAuth();
+    loadAccountInfo();
+  }, [checkAuth, loadAccountInfo]);
 
-    setIsManagingSubscription(true);
-    try {
-      const { data, error } = await supabase.functions.invoke(
-        "create-customer-portal-session",
-        {
-          body: {
-            returnUrl: `${window.location.origin}/parent/settings`,
-          },
-        }
-      );
-
-      if (error) {
-        throw error;
-      }
-
-      if (data?.success && data?.url) {
-        // Redirect to Stripe Customer Portal
-        window.location.href = data.url;
-      } else {
-        throw new Error(data?.error || "Failed to create portal session");
-      }
-    } catch (error: any) {
-      console.error("Error opening subscription management:", error);
-      toast({
-        title: "Error",
-        description:
-          error.message ||
-          "Failed to open subscription management. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsManagingSubscription(false);
-    }
+  const handleManageSubscription = () => {
+    // Navigate to upgrade page which handles subscription management
+    // The upgrade page has the full subscription management UI including
+    // upgrade, downgrade, and manage subscription via Stripe Customer Portal
+    navigate("/parent/upgrade");
   };
 
   const handleCancelSubscription = async () => {
@@ -209,37 +182,46 @@ const AccountSettings = () => {
         return;
       }
 
-      const { data, error } = await (supabase.rpc as any)(
-        "cancel_subscription",
-        {
-          p_parent_id: user.id,
-          p_cancel_reason: "User requested cancellation",
-        }
-      );
+      const { data, error } = await supabase.rpc("cancel_subscription", {
+        p_parent_id: user.id,
+        p_cancel_reason: "User requested cancellation",
+      });
 
       if (error) {
         throw error;
       }
 
-      if (data?.success) {
+      type CancelSubscriptionResponse =
+        | { success: true; message?: string }
+        | { success?: false; error?: string }
+        | null;
+
+      const response = (data as unknown) as CancelSubscriptionResponse;
+
+      if (response && typeof response === "object" && "success" in response && response.success === true) {
         toast({
           title: "Subscription Cancelled",
           description:
-            data.message ||
+            response.message ||
             "Your subscription has been cancelled. Access will continue until expiration.",
         });
         setShowCancelDialog(false);
         await loadAccountInfo(); // Refresh subscription info
       } else {
-        throw new Error(data?.error || "Failed to cancel subscription");
+        const errorResponse = response as { error?: string } | null;
+        throw new Error(
+          errorResponse?.error || "Failed to cancel subscription"
+        );
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error("Error cancelling subscription:", error);
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "Failed to cancel subscription. Please contact support.";
       toast({
         title: "Cancellation Failed",
-        description:
-          error.message ||
-          "Failed to cancel subscription. Please contact support.",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {
@@ -249,33 +231,26 @@ const AccountSettings = () => {
 
   if (loading) {
     return (
-      <div className="min-h-[100dvh] bg-background w-full overflow-x-hidden">
-        <Navigation />
+      <ParentLayout>
         <div className="flex items-center justify-center min-h-[60vh]">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
-      </div>
+      </ParentLayout>
     );
   }
 
   return (
-    <div className="min-h-[100dvh] bg-background w-full overflow-x-hidden">
-      <Navigation />
+    <ParentLayout>
       <OnboardingTour role="parent" pageKey="parent_settings" />
       <HelpBubble role="parent" pageKey="parent_settings" />
-      <div
-        className="px-4 pb-4"
-        style={{
-          paddingTop: "calc(0.5rem + 64px + var(--safe-area-inset-top) * 0.15)",
-        }}
-      >
-        <div className="max-w-4xl mx-auto">
-          <div className="mt-4 mb-8">
-            <div className="flex items-center gap-3 mb-2">
+      <div className="p-4">
+        <div className="max-w-4xl mx-auto space-y-6">
+          <div className="mt-2">
+            <div className="flex items-center gap-3">
               <Settings className="h-6 w-6" />
               <h1 className="text-3xl font-bold">Account Settings</h1>
             </div>
-            <p className="text-muted-foreground">
+            <p className="text-muted-foreground mt-2">
               Manage your account and subscription
             </p>
           </div>
@@ -356,20 +331,10 @@ const AccountSettings = () => {
                       <Button
                         variant="default"
                         onClick={handleManageSubscription}
-                        disabled={isManagingSubscription}
                         className="w-full"
                       >
-                        {isManagingSubscription ? (
-                          <>
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            Opening...
-                          </>
-                        ) : (
-                          <>
-                            <ExternalLink className="mr-2 h-4 w-4" />
-                            Manage Subscription
-                          </>
-                        )}
+                        <ExternalLink className="mr-2 h-4 w-4" />
+                        Manage Subscription
                       </Button>
                     )}
                     <Button
@@ -444,7 +409,7 @@ const AccountSettings = () => {
             </div>
           </Card>
         </div>
-      </div>
+        </div>
 
       {/* Cancel Subscription Dialog */}
       <AlertDialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
@@ -489,7 +454,7 @@ const AccountSettings = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </ParentLayout>
   );
 };
 

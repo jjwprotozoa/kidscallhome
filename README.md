@@ -42,6 +42,87 @@ Parents can view and manage all devices authorized to access their family accoun
 
 See `docs/DEVICE_MANAGEMENT.md` for detailed documentation.
 
+## Billing
+
+KidsCallHome uses Stripe for subscription billing with monthly and annual plans. The billing system is integrated with Supabase Edge Functions and uses a dedicated `billing_subscriptions` table as the source of truth for access/entitlements.
+
+**Key Features:**
+- Stripe Checkout for new subscriptions
+- Stripe Customer Portal for self-serve management
+- In-app subscription switching (Monthly ↔ Annual) with automatic proration
+- Webhook-based subscription state synchronization
+
+**Price IDs:**
+- Monthly: `price_1SUVdqIIyqCwTeH2zggZpPAK`
+- Annual: `price_1SkPL7IIyqCwTeH2tI9TxHRB`
+
+See `docs/BILLING.md` for complete billing integration documentation, including:
+- Database schema
+- Edge function APIs
+- Testing with Stripe CLI
+- Deployment checklist
+- Troubleshooting guide
+
+### Local Webhook Testing
+
+For local development, use the Stripe CLI to forward webhooks to a local server:
+
+1. **Install dependencies** (if not already installed):
+   ```sh
+   npm install
+   ```
+
+2. **Set environment variables**:
+   ```sh
+   # Required for webhook server
+   export STRIPE_SECRET_KEY=sk_test_...
+   export STRIPE_WEBHOOK_SECRET=whsec_...
+   
+   # Optional: For database updates
+   export SUPABASE_URL=https://your-project.supabase.co
+   export SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+   ```
+   
+   On Windows PowerShell:
+   ```powershell
+   $env:STRIPE_SECRET_KEY="sk_test_..."
+   $env:STRIPE_WEBHOOK_SECRET="whsec_..."
+   
+   # Optional: For database updates
+   $env:SUPABASE_URL="https://your-project.supabase.co"
+   $env:SUPABASE_SERVICE_ROLE_KEY="your-service-role-key"
+   ```
+
+3. **Start the local webhook server**:
+   
+   **Option A: Automatic setup (recommended)** - Sets environment variables automatically:
+   ```powershell
+   npm run stripe:webhook:start
+   ```
+   
+   **Option B: Manual setup** - Set environment variables first, then run:
+   ```powershell
+   $env:STRIPE_SECRET_KEY="sk_test_..."
+   $env:STRIPE_WEBHOOK_SECRET="whsec_..."
+   $env:SUPABASE_URL="https://itmhojbjfacocrpmslmt.supabase.co"
+   $env:SUPABASE_SERVICE_ROLE_KEY="your-service-role-key"
+   npm run stripe:webhook
+   ```
+   
+   The server will listen on `http://127.0.0.1:4242/webhook`
+
+4. **Forward webhooks with Stripe CLI** (in a separate terminal):
+   ```sh
+   stripe listen --forward-to http://127.0.0.1:4242/webhook
+   ```
+
+5. **Test webhook events**:
+   ```sh
+   stripe trigger checkout.session.completed
+   ```
+
+The webhook server logs all received events and verifies Stripe signatures. Database updates will be added in a future update.
+
 ## How can I edit this code?
 
 There are several ways of editing your application.

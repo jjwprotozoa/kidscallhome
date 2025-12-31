@@ -29,7 +29,7 @@ export interface FamilyMember {
   reportCount?: number;
 }
 
-export type ValidTab = "children" | "family" | "connections" | "safety" | "setup" | "referrals";
+export type ValidTab = "family" | "setup" | "referrals";
 
 
 

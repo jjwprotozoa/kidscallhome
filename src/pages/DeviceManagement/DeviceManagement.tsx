@@ -6,7 +6,7 @@ import { DeviceFilters } from "@/components/devices/DeviceFilters";
 import { DeviceHistoryPagination } from "@/components/devices/DeviceHistoryPagination";
 import { DeviceRemovalDialog } from "@/components/devices/DeviceRemovalDialog";
 import { DeviceRenameDialog } from "@/components/devices/DeviceRenameDialog";
-import Navigation from "@/components/Navigation";
+import { ParentLayout } from "@/components/layout/ParentLayout";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -249,16 +249,10 @@ const DeviceManagement = () => {
   };
 
   return (
-    <div className="min-h-[100dvh] bg-background w-full overflow-x-hidden">
-      <Navigation />
+    <ParentLayout>
       <OnboardingTour role="parent" pageKey="parent_devices" />
       <HelpBubble role="parent" pageKey="parent_devices" />
-      <div
-        className="px-4 pb-4"
-        style={{
-          paddingTop: "calc(0.5rem + 64px + var(--safe-area-inset-top) * 0.15)",
-        }}
-      >
+      <div className="p-4">
         <div className="max-w-4xl mx-auto space-y-6">
           <div className="mt-2">
             <h1 className="text-3xl font-bold">Device Management</h1>
@@ -472,7 +466,7 @@ const DeviceManagement = () => {
             </TabsContent>
           </Tabs>
         </div>
-      </div>
+        </div>
 
       <DeviceRemovalDialog
         device={deviceToRemove}
@@ -495,7 +489,7 @@ const DeviceManagement = () => {
         onOpenChange={(open) => !open && setDeviceToRename(null)}
         onRename={onRenameDevice}
       />
-    </div>
+    </ParentLayout>
   );
 };
 

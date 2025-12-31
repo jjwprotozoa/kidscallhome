@@ -54,49 +54,11 @@ const ParentHome = () => {
     checkAuth();
   }, [navigate]);
 
+  // Show minimal loader only - redirect happens immediately, no UI flash
   return (
-    <div className="min-h-[100dvh] bg-background">
-      <Navigation />
-      <OnboardingTour role="parent" pageKey="parent_home" />
-      <HelpBubble role="parent" pageKey="parent_home" />
-      <div
-        className="p-4"
-        style={{
-          paddingTop: "calc(1rem + 64px + var(--safe-area-inset-top) * 0.15)",
-        }}
-      >
-        <div className="max-w-4xl mx-auto">
-          <div className="mb-8 mt-8">
-            <h1 className="text-3xl font-bold">Parent Home</h1>
-            <p className="text-muted-foreground mt-2">
-              Quick access to your children and calls
-            </p>
-          </div>
-
-          <Card className="p-6">
-            <div className="space-y-4">
-              <h2 className="text-xl font-semibold">Quick Actions</h2>
-              <Button
-                className="w-full"
-                size="lg"
-                onClick={() => navigate("/parent/children")}
-                data-tour="parent-home-view-children"
-              >
-                <Users className="mr-2 h-5 w-5" />
-                View Children
-              </Button>
-              <Button
-                className="w-full"
-                size="lg"
-                variant="outline"
-                onClick={() => navigate("/parent/dashboard")}
-                data-tour="parent-home-dashboard"
-              >
-                Go to Dashboard
-              </Button>
-            </div>
-          </Card>
-        </div>
+    <div className="min-h-[100dvh] bg-background flex items-center justify-center">
+      <div className="text-center">
+        <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]" />
       </div>
     </div>
   );

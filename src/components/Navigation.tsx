@@ -54,8 +54,10 @@ import {
   Users,
   X,
   Shuffle,
+  Gift,
+  Crown,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useLayoutEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 const Navigation = () => {
@@ -119,10 +121,49 @@ const Navigation = () => {
   const [pendingConnectionsCount, setPendingConnectionsCount] = useState(0);
   const [newReportsCount, setNewReportsCount] = useState(0);
   const [blockedContactsCount, setBlockedContactsCount] = useState(0);
+  const navRef = useRef<HTMLElement>(null);
 
   // Get badge counts from store (derived, no DB reads)
   const unreadMessageCount = useTotalUnreadBadge();
   const missedCallCount = useTotalMissedBadge();
+
+  // Measure navbar height and set CSS variable for global layout spacing
+  useLayoutEffect(() => {
+    const updateNavbarHeight = () => {
+      if (navRef.current) {
+        const height = navRef.current.offsetHeight;
+        document.documentElement.style.setProperty(
+          "--kch-topnav-h",
+          `${height}px`
+        );
+      } else {
+        // Fallback to 64px (h-16) if nav not rendered
+        document.documentElement.style.setProperty("--kch-topnav-h", "64px");
+      }
+    };
+
+    // Initial measurement
+    updateNavbarHeight();
+
+    // Use ResizeObserver to track height changes
+    const resizeObserver = navRef.current
+      ? new ResizeObserver(updateNavbarHeight)
+      : null;
+
+    if (navRef.current && resizeObserver) {
+      resizeObserver.observe(navRef.current);
+    }
+
+    // Fallback: also listen to window resize
+    window.addEventListener("resize", updateNavbarHeight);
+
+    return () => {
+      if (resizeObserver && navRef.current) {
+        resizeObserver.unobserve(navRef.current);
+      }
+      window.removeEventListener("resize", updateNavbarHeight);
+    };
+  }, [userType, loading]); // Re-measure when nav visibility changes
 
   useEffect(() => {
     const checkUserType = async () => {
@@ -434,10 +475,12 @@ const Navigation = () => {
   const getNavLinkClassName = (path: string) => {
     // For exact matches (like "/parent" or "/child"), only match exactly or with trailing slash
     // For deeper paths (like "/parent/dashboard"), match the path and its sub-paths
+    // Special handling for /parent/children - only match exactly, not /parent
     const isActive =
       location.pathname === path ||
       location.pathname === path + "/" ||
       (path !== "/parent" && path !== "/child" && path !== "/family-member" &&
+       path !== "/parent/children" && // Children should only match exactly
        location.pathname.startsWith(path + "/"));
     return cn(
       "flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors relative",
@@ -501,7 +544,10 @@ const Navigation = () => {
 
     return (
       <>
-        <nav className="fixed top-0 left-0 right-0 z-50 border-b bg-background w-full overflow-x-hidden safe-area-top">
+        <nav
+          ref={navRef}
+          className="fixed top-0 left-0 right-0 z-50 border-b bg-background w-full overflow-x-hidden safe-area-top"
+        >
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
             <div className="flex items-center justify-between h-16 min-w-0">
               {/* Mobile hamburger menu */}
@@ -645,11 +691,24 @@ const Navigation = () => {
       badge?: number;
       onClick?: () => void;
     }) => {
-      const isActive = to
-        ? location.pathname === to ||
-          location.pathname === to + "/" ||
-          (to !== "/parent" && location.pathname.startsWith(to + "/"))
-        : false;
+      // Special active state logic:
+      // - Children only active for exact /parent/children match
+      // - Family active for /parent/dashboard and any /parent/dashboard?tab=...
+      let isActive = false;
+      if (to) {
+        if (to === "/parent/children") {
+          // Children: only match exactly
+          isActive = location.pathname === to || location.pathname === to + "/";
+        } else if (to === "/parent/family") {
+          // Family: match /parent/family exactly
+          isActive = location.pathname === to || location.pathname === to + "/";
+        } else {
+          // Other routes: standard matching
+          isActive = location.pathname === to ||
+            location.pathname === to + "/" ||
+            (to !== "/parent" && location.pathname.startsWith(to + "/"));
+        }
+      }
 
       const handleClick = () => {
         setMobileMenuOpen(false);
@@ -685,7 +744,10 @@ const Navigation = () => {
 
     return (
       <>
-        <nav className="fixed top-0 left-0 right-0 z-50 border-b bg-background w-full overflow-x-hidden safe-area-top">
+        <nav
+          ref={navRef}
+          className="fixed top-0 left-0 right-0 z-50 border-b bg-background w-full overflow-x-hidden safe-area-top"
+        >
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
             <div className="flex items-center justify-between h-16 min-w-0">
               {/* Mobile hamburger menu */}
@@ -705,30 +767,39 @@ const Navigation = () => {
                     <SheetTitle className="text-left">Menu</SheetTitle>
                   </SheetHeader>
                   <div className="flex flex-col gap-1 p-4" data-tour="parent-menu-mobile">
-                    <MobileNavItem to="/parent" icon={Home} label="Home" />
-                    <MobileNavItem
-                      to="/parent/dashboard"
-                      icon={LayoutDashboard}
-                      label="Family"
-                      badge={missedCallCount}
-                    />
-                    <MobileNavItem
-                      icon={UserCheck}
-                      label="Connections"
-                      badge={pendingConnectionsCount}
-                      onClick={() => navigate("/parent/dashboard?tab=connections")}
-                    />
-                    <MobileNavItem
-                      icon={Shield}
-                      label="Safety"
-                      badge={newReportsCount + blockedContactsCount}
-                      onClick={() => navigate("/parent/dashboard?tab=safety")}
-                    />
                     <MobileNavItem
                       to="/parent/children"
                       icon={Users}
                       label="Children"
                       badge={unreadMessageCount}
+                    />
+                    <MobileNavItem
+                      to="/parent/family"
+                      icon={LayoutDashboard}
+                      label="Family"
+                      badge={missedCallCount}
+                    />
+                    <MobileNavItem
+                      to="/parent/connections"
+                      icon={UserCheck}
+                      label="Connections"
+                      badge={pendingConnectionsCount}
+                    />
+                    <MobileNavItem
+                      to="/parent/safety"
+                      icon={Shield}
+                      label="Safety"
+                      badge={newReportsCount + blockedContactsCount}
+                    />
+                    <MobileNavItem
+                      to="/parent/referrals"
+                      icon={Gift}
+                      label="Referrals"
+                    />
+                    <MobileNavItem
+                      to="/parent/upgrade"
+                      icon={Crown}
+                      label="Subscription"
                     />
                     
                     <div className="h-px bg-border my-2" />
@@ -760,57 +831,6 @@ const Navigation = () => {
                 data-tour="parent-menu"
               >
                 <NavLink
-                  to="/parent"
-                  className={getNavLinkClassName("/parent")}
-                >
-                  <Home className="h-4 w-4" />
-                  <span>Home</span>
-                </NavLink>
-                <NavLink
-                  to="/parent/dashboard"
-                  className={getNavLinkClassName("/parent/dashboard")}
-                >
-                  <div className="relative flex items-center justify-center">
-                    <LayoutDashboard className="h-4 w-4" />
-                    <Badge count={missedCallCount} />
-                  </div>
-                  <span>Family</span>
-                </NavLink>
-                <button
-                  onClick={() => navigate("/parent/dashboard?tab=connections")}
-                  className={cn(
-                    "flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors relative",
-                    location.pathname === "/parent/dashboard" &&
-                      location.search.includes("tab=connections")
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                  )}
-                  title="Connections"
-                >
-                  <div className="relative flex items-center justify-center">
-                    <UserCheck className="h-4 w-4" />
-                    <Badge count={pendingConnectionsCount} />
-                  </div>
-                  <span className="hidden lg:inline">Connections</span>
-                </button>
-                <button
-                  onClick={() => navigate("/parent/dashboard?tab=safety")}
-                  className={cn(
-                    "flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors relative",
-                    location.pathname === "/parent/dashboard" &&
-                      location.search.includes("tab=safety")
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                  )}
-                  title="Safety"
-                >
-                  <div className="relative flex items-center justify-center">
-                    <Shield className="h-4 w-4" />
-                    <Badge count={newReportsCount + blockedContactsCount} />
-                  </div>
-                  <span className="hidden lg:inline">Safety</span>
-                </button>
-                <NavLink
                   to="/parent/children"
                   className={getNavLinkClassName("/parent/children")}
                 >
@@ -820,6 +840,50 @@ const Navigation = () => {
                   </div>
                   <span className="hidden lg:inline">Children</span>
                 </NavLink>
+                <NavLink
+                  to="/parent/family"
+                  className={getNavLinkClassName("/parent/family")}
+                >
+                  <div className="relative flex items-center justify-center">
+                    <LayoutDashboard className="h-4 w-4" />
+                    <Badge count={missedCallCount} />
+                  </div>
+                  <span>Family</span>
+                </NavLink>
+                <NavLink
+                  to="/parent/connections"
+                  className={getNavLinkClassName("/parent/connections")}
+                >
+                  <div className="relative flex items-center justify-center">
+                    <UserCheck className="h-4 w-4" />
+                    <Badge count={pendingConnectionsCount} />
+                  </div>
+                  <span className="hidden lg:inline">Connections</span>
+                </NavLink>
+                <NavLink
+                  to="/parent/safety"
+                  className={getNavLinkClassName("/parent/safety")}
+                >
+                  <div className="relative flex items-center justify-center">
+                    <Shield className="h-4 w-4" />
+                    <Badge count={newReportsCount + blockedContactsCount} />
+                  </div>
+                  <span className="hidden lg:inline">Safety</span>
+                </NavLink>
+                <NavLink
+                  to="/parent/referrals"
+                  className={getNavLinkClassName("/parent/referrals")}
+                >
+                  <Gift className="h-4 w-4" />
+                  <span className="hidden lg:inline">Referrals</span>
+                </NavLink>
+                <NavLink
+                  to="/parent/upgrade"
+                  className={getNavLinkClassName("/parent/upgrade")}
+                >
+                  <Crown className="h-4 w-4" />
+                  <span className="hidden lg:inline">Subscription</span>
+                </NavLink>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <button
@@ -827,7 +891,8 @@ const Navigation = () => {
                         "flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors",
                         location.pathname === "/parent/devices" ||
                           location.pathname === "/parent/settings" ||
-                          location.pathname === "/info"
+                          location.pathname === "/info" ||
+                          location.pathname === "/beta"
                           ? "bg-accent text-accent-foreground"
                           : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                       )}
@@ -967,7 +1032,10 @@ const Navigation = () => {
 
     return (
       <>
-        <nav className="fixed top-0 left-0 right-0 z-50 border-b bg-background w-full overflow-x-hidden safe-area-top">
+        <nav
+          ref={navRef}
+          className="fixed top-0 left-0 right-0 z-50 border-b bg-background w-full overflow-x-hidden safe-area-top"
+        >
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
             <div className="flex items-center justify-between h-16 min-w-0">
               {/* Mobile hamburger menu */}
@@ -1068,7 +1136,8 @@ const Navigation = () => {
                     <button
                       className={cn(
                         "flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors",
-                        location.pathname === "/info"
+                        location.pathname === "/info" ||
+                          location.pathname === "/parent/auth"
                           ? "bg-accent text-accent-foreground"
                           : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                       )}

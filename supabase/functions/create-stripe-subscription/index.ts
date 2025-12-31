@@ -34,7 +34,7 @@ function isTestMode(origin: string | null): boolean {
 // TEST mode (localhost) - Use test mode Price IDs
 const STRIPE_PRICE_IDS_TEST = {
   "family-bundle-monthly": "price_1SjULhIIyqCwTeH2GmBL1jVk", // Test mode monthly
-  "family-bundle-annual": "price_1SjUiEIIyqCwTeH2xnxCVAAT", // Test mode annual (prod_TgsTXNnGbFFFKS)
+  "family-bundle-annual": "price_1SkQUaIIyqCwTeH2QowSbcfb", // Test mode annual (prod_Tgs5NIzPSgWahP)
 };
 
 // LIVE mode (production) - Use live mode Price IDs from environment variables
@@ -491,11 +491,15 @@ serve(async (req) => {
       "line_items[0][price]": priceId,
       "line_items[0][quantity]": quantityNum.toString(),
       mode: "subscription",
-      success_url: `${validatedOrigin}/parent/upgrade?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${validatedOrigin}/parent/upgrade?canceled=true`,
-      "metadata[parent_id]": user.id,
+      locale: "auto", // Auto-detect browser language, prevents locale module errors
+      success_url: `${validatedOrigin}/parent/upgrade?success=1&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${validatedOrigin}/parent/upgrade?canceled=1`,
+      client_reference_id: user.id, // This is the primary way to identify the user
+      "metadata[user_id]": user.id, // Also set in metadata for webhook
+      "metadata[parent_id]": user.id, // Keep for backward compatibility
       "metadata[subscription_type]": subscriptionType,
       // subscription_data.metadata also needs to be individual fields
+      "subscription_data[metadata][user_id]": user.id,
       "subscription_data[metadata][parent_id]": user.id,
       "subscription_data[metadata][subscription_type]": subscriptionType,
     });

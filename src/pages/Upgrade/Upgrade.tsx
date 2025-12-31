@@ -1,7 +1,7 @@
 // src/pages/Upgrade/Upgrade.tsx
 // Purpose: Main orchestrator for Upgrade page
 
-import Navigation from "@/components/Navigation";
+import { ParentLayout } from "@/components/layout/ParentLayout";
 import { OnboardingTour } from "@/features/onboarding/OnboardingTour";
 import { HelpBubble } from "@/features/onboarding/HelpBubble";
 import { Card } from "@/components/ui/card";
@@ -10,8 +10,8 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useFamilyMemberRedirect } from "@/hooks/useFamilyMemberRedirect";
 import { Loader2, Sparkles } from "lucide-react";
-import { useEffect, useState, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useState, useCallback, useMemo } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { isPWA } from "@/utils/platformDetection";
 import { useSubscriptionData } from "./useSubscriptionData";
 import { usePaymentHandlers } from "./usePaymentHandlers";
@@ -25,17 +25,25 @@ const Upgrade = () => {
   // Redirect family members away from parent routes
   useFamilyMemberRedirect();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { toast } = useToast();
   const { loading, subscriptionData, refreshSubscriptionInfo } = useSubscriptionData();
+  
+  // Check if we're waiting for subscription activation (just returned from checkout)
+  const isWaitingForActivation = useMemo(() => {
+    return searchParams.has("session_id") || searchParams.get("success") === "1";
+  }, [searchParams]);
   const {
     isProcessing,
     isManagingSubscription,
     handlePayment,
     processUpgrade,
     handleManageSubscription,
+    handleSwitchSubscription,
   } = usePaymentHandlers(
     subscriptionData?.allowedChildren || 1,
-    refreshSubscriptionInfo
+    refreshSubscriptionInfo,
+    subscriptionData?.stripeCustomerId || null
   );
 
   const [showEmailDialog, setShowEmailDialog] = useState(false);
@@ -57,25 +65,41 @@ const Upgrade = () => {
     checkAuth();
     
     // Check for Stripe Checkout return
-    const urlParams = new URLSearchParams(window.location.search);
-    const sessionId = urlParams.get("session_id");
-    const canceled = urlParams.get("canceled");
-    const upgraded = urlParams.get("upgraded");
+    const sessionId = searchParams.get("session_id");
+    const success = searchParams.get("success");
+    const canceled = searchParams.get("canceled");
+    const upgraded = searchParams.get("upgraded");
     
-    if (sessionId) {
+    if (sessionId || success === "1") {
       toast({
         title: "Payment Successful!",
         description: "Your subscription is being activated. Please wait a moment...",
         variant: "default",
       });
       
-      // Refresh immediately and again after delay to ensure webhook has processed
-      refreshSubscriptionInfo().then(() => {
-        setTimeout(async () => {
-          await refreshSubscriptionInfo(); // Refresh again to catch webhook updates
-          setShowSuccessDialog(true);
-          setSuccessMessage("Your subscription has been activated successfully!");
-        }, 2000);
+      // Refresh multiple times to ensure webhook has processed
+      // Webhooks can take a few seconds to process
+      const refreshWithRetries = async (retries = 5) => {
+        for (let i = 0; i < retries; i++) {
+          await refreshSubscriptionInfo();
+          
+          // Check if subscription is now active
+          // We'll check this after a few refreshes
+          if (i >= 2) {
+            // Force a re-render by checking subscription data
+            // The component will re-render when subscriptionData changes
+          }
+          
+          // Wait before next refresh (except on last iteration)
+          if (i < retries - 1) {
+            await new Promise(resolve => setTimeout(resolve, 2000));
+          }
+        }
+      };
+      
+      refreshWithRetries().then(() => {
+        setShowSuccessDialog(true);
+        setSuccessMessage("Your subscription has been activated successfully!");
       });
       
       window.history.replaceState({}, "", "/parent/upgrade");
@@ -104,9 +128,10 @@ const Upgrade = () => {
         variant: "default",
       });
       
-      window.history.replaceState({}, "", "/parent/upgrade");
+      // Clear URL params after processing
+      navigate("/parent/upgrade", { replace: true });
     }
-  }, [toast, refreshSubscriptionInfo, checkAuth]);
+  }, [toast, refreshSubscriptionInfo, checkAuth, navigate, searchParams]);
 
   useEffect(() => {
     if (subscriptionData?.email) {
@@ -114,7 +139,7 @@ const Upgrade = () => {
     }
   }, [subscriptionData]);
 
-  const handlePlanSelect = (plan: SubscriptionPlan) => {
+  const handlePlanSelect = async (plan: SubscriptionPlan) => {
     if (
       subscriptionData?.hasActiveSubscription &&
       subscriptionData.subscriptionType === plan.id
@@ -127,6 +152,34 @@ const Upgrade = () => {
       return;
     }
 
+    // If user has active subscription, try to switch using the change-subscription endpoint
+    if (subscriptionData?.hasActiveSubscription && subscriptionData?.stripeCustomerId) {
+      const priceIdMap: Record<string, string> = {
+        "family-bundle-monthly": "price_1SUVdqIIyqCwTeH2zggZpPAK",
+        "family-bundle-annual": "price_1SkPL7IIyqCwTeH2tI9TxHRB",
+      };
+      
+      const newPriceId = priceIdMap[plan.id];
+      if (newPriceId) {
+        // Determine proration mode: Monthly -> Annual: immediate, Annual -> Monthly: next_cycle
+        const prorationMode =
+          subscriptionData.subscriptionType === "family-bundle-monthly" &&
+          plan.id === "family-bundle-annual"
+            ? "immediate"
+            : subscriptionData.subscriptionType === "family-bundle-annual" &&
+              plan.id === "family-bundle-monthly"
+            ? "next_cycle"
+            : "immediate";
+
+        const result = await handleSwitchSubscription(newPriceId, prorationMode);
+        if (result?.success) {
+          return;
+        }
+        // If switch fails, fall back to checkout flow
+      }
+    }
+
+    // For new subscriptions or if switch fails, use checkout flow
     setSelectedPlan(plan);
     setShowEmailDialog(true);
   };
@@ -149,20 +202,14 @@ const Upgrade = () => {
   // Show native purchase UI for native apps
   if (!isPWA()) {
     return (
-      <div className="min-h-[100dvh] bg-background w-full overflow-x-hidden">
-        <Navigation />
+      <ParentLayout>
         <OnboardingTour role="parent" pageKey="parent_upgrade" />
         <HelpBubble role="parent" pageKey="parent_upgrade" />
-        <div
-          className="px-4 pb-4"
-          style={{
-            paddingTop: "calc(0.5rem + 64px + var(--safe-area-inset-top) * 0.15)",
-          }}
-        >
-          <div className="max-w-6xl mx-auto">
-            <div className="mt-4 mb-8">
-              <h1 className="text-3xl font-bold mb-2">Manage Plan</h1>
-              <p className="text-muted-foreground">
+        <div className="p-4">
+          <div className="max-w-6xl mx-auto space-y-6">
+            <div className="mt-2">
+              <h1 className="text-3xl font-bold">Manage Plan</h1>
+              <p className="text-muted-foreground mt-2">
                 Choose a plan that fits your family's needs
               </p>
             </div>
@@ -222,38 +269,32 @@ const Upgrade = () => {
           open={showSuccessDialog}
           onOpenChange={setShowSuccessDialog}
           message={successMessage}
-          onNavigateToDashboard={() => navigate("/parent/dashboard")}
+          onNavigateToDashboard={() => navigate("/parent/family")}
         />
-      </div>
+      </ParentLayout>
     );
   }
 
+  // Show loading state while fetching subscription data
   if (loading || !subscriptionData) {
     return (
-      <div className="min-h-[100dvh] bg-background w-full overflow-x-hidden">
-        <Navigation />
+      <ParentLayout>
         <div className="flex items-center justify-center min-h-[60vh]">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
-      </div>
+      </ParentLayout>
     );
   }
 
   return (
-    <div className="min-h-[100dvh] bg-background w-full overflow-x-hidden">
-      <Navigation />
+    <ParentLayout>
       <OnboardingTour role="parent" pageKey="parent_upgrade" />
       <HelpBubble role="parent" pageKey="parent_upgrade" />
-      <div
-        className="px-4 pb-4"
-        style={{
-          paddingTop: "calc(0.5rem + 64px + var(--safe-area-inset-top) * 0.15)",
-        }}
-      >
-        <div className="max-w-6xl mx-auto">
-          <div className="mt-4 mb-8">
-            <h1 className="text-3xl font-bold mb-2">Upgrade Your Plan</h1>
-            <p className="text-muted-foreground">
+      <div className="p-4">
+        <div className="max-w-6xl mx-auto space-y-6">
+          <div className="mt-2">
+            <h1 className="text-3xl font-bold">Upgrade Your Plan</h1>
+            <p className="text-muted-foreground mt-2">
               Choose a plan that fits your family's needs
             </p>
           </div>
@@ -263,7 +304,26 @@ const Upgrade = () => {
             subscriptionType={subscriptionData.subscriptionType}
             currentChildrenCount={subscriptionData.currentChildrenCount}
             allowedChildren={subscriptionData.allowedChildren}
+            onManageSubscription={handleManageSubscription}
+            isManagingSubscription={isManagingSubscription}
+            hasStripeCustomer={!!subscriptionData.stripeCustomerId}
           />
+          
+          {isWaitingForActivation && !subscriptionData.hasActiveSubscription && (
+            <Card className="p-4 mb-6 bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
+              <div className="flex items-center gap-3">
+                <Loader2 className="h-5 w-5 animate-spin text-blue-600 dark:text-blue-400" />
+                <div>
+                  <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                    Activating your subscription...
+                  </p>
+                  <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
+                    Please wait while we process your payment. This may take a few seconds.
+                  </p>
+                </div>
+              </div>
+            </Card>
+          )}
 
           <PricingPlans
             subscriptionType={subscriptionData.subscriptionType}
@@ -318,9 +378,9 @@ const Upgrade = () => {
         open={showSuccessDialog}
         onOpenChange={setShowSuccessDialog}
         message={successMessage}
-        onNavigateToDashboard={() => navigate("/parent/dashboard")}
+        onNavigateToDashboard={() => navigate("/parent/family")}
       />
-    </div>
+    </ParentLayout>
   );
 };
 

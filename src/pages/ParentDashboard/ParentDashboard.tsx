@@ -12,6 +12,7 @@ import { clearAllNotifications } from "@/utils/clearAllNotifications";
 import { safeLog } from "@/utils/security";
 import { useFamilyMemberRedirect } from "@/hooks/useFamilyMemberRedirect";
 import Navigation from "@/components/Navigation";
+import { PageContentLayout } from "@/components/layout/PageContentLayout";
 import { OnboardingTour } from "@/features/onboarding/OnboardingTour";
 import { HelpBubble } from "@/features/onboarding/HelpBubble";
 import AddChildDialog from "@/components/AddChildDialog";
@@ -26,7 +27,6 @@ import { useIncomingCallHandlers } from "./useIncomingCallHandlers";
 import { DashboardHeader } from "./DashboardHeader";
 import { DashboardTabs } from "./DashboardTabs";
 import { Child, IncomingCall, FamilyMember, ValidTab } from "./types";
-import { useSubscriptionData } from "@/pages/Upgrade/useSubscriptionData";
 
 const ParentDashboard = () => {
   // Redirect family members away from parent routes
@@ -48,24 +48,29 @@ const ParentDashboard = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const { toast } = useToast();
 
-  const validTabs = useMemo(() => ["children", "family", "connections", "safety", "setup", "referrals"] as const, []);
+  const validTabs = useMemo(() => ["family", "setup", "referrals"] as const, []);
   const tabFromUrl = searchParams.get("tab");
   const [activeTab, setActiveTab] = useState<ValidTab>(() => {
-    return tabFromUrl && validTabs.includes(tabFromUrl as ValidTab) ? tabFromUrl as ValidTab : "children";
+    return tabFromUrl && validTabs.includes(tabFromUrl as ValidTab) ? tabFromUrl as ValidTab : "family";
   });
 
+  // Backwards compatibility: redirect old tab query params to new routes
   useEffect(() => {
     const urlTab = searchParams.get("tab");
-    const validUrlTab = urlTab && validTabs.includes(urlTab as ValidTab) ? urlTab as ValidTab : "children";
+    if (urlTab === "safety") {
+      navigate("/parent/safety", { replace: true });
+      return;
+    }
+    if (urlTab === "connections") {
+      navigate("/parent/connections", { replace: true });
+      return;
+    }
+    // Handle valid tabs
+    const validUrlTab = urlTab && validTabs.includes(urlTab as ValidTab) ? urlTab as ValidTab : "family";
     if (validUrlTab !== activeTab) {
       setActiveTab(validUrlTab);
     }
-  }, [searchParams, activeTab, validTabs]);
-
-  const handleTabChange = useCallback((value: string) => {
-    setActiveTab(value as ValidTab);
-    setSearchParams({ tab: value }, { replace: true });
-  }, [setSearchParams]);
+  }, [searchParams, activeTab, validTabs, navigate]);
 
   const {
     parentName,
@@ -76,11 +81,10 @@ const ParentDashboard = () => {
     refreshCanAddMoreChildren,
   } = useParentData();
 
-  // Get subscription data for button text
-  const { subscriptionData } = useSubscriptionData();
-
   const { fetchChildren, fetchFamilyMembers } = useDashboardData(refreshCanAddMoreChildren);
 
+  // NOTE: Children data is loaded for presence tracking and code management dialogs,
+  // not for direct rendering in DashboardTabs. Loading is async and non-blocking.
   const childIds = useMemo(() => children.map((child) => child.id), [children]);
   const { isChildOnline } = useChildrenPresence({
     childIds,
@@ -223,45 +227,25 @@ const ParentDashboard = () => {
       <OnboardingTour role="parent" pageKey="parent_dashboard" />
       <HelpBubble role="parent" pageKey="parent_dashboard" />
       
-      <DashboardHeader
-        parentName={parentName}
-        familyCode={familyCode}
-        subscriptionType={subscriptionData?.subscriptionType}
-        onUpgradeClick={() => navigate("/parent/upgrade")}
-      />
+      <PageContentLayout>
+        <DashboardHeader
+          parentName={parentName}
+          familyCode={familyCode}
+        />
 
-      <div className="p-4">
-        <div className="max-w-4xl mx-auto space-y-6">
-          <DashboardTabs
-            activeTab={activeTab}
-            onTabChange={handleTabChange}
-            children={children}
-            loading={loading}
-            canAddMoreChildren={canAddMoreChildren}
-            allowedChildren={allowedChildren}
-            hasNotifications={hasNotifications}
-            totalUnreadMessages={totalUnreadMessages}
-            totalMissedCalls={totalMissedCalls}
-            isChildOnline={isChildOnline}
-            familyMembers={familyMembers}
-            familyMembersLoading={familyMembersLoading}
-            getFullLoginCode={getFullLoginCode}
-            onAddChild={handleOpenAddChild}
-            onClearAllNotifications={handleClearAllNotifications}
-            onEditCode={setChildToEditCode}
-            onCopyCode={handleCopyCode}
-            onCopyMagicLink={handleCopyMagicLink}
-            onPrintCode={handlePrintCode}
-            onViewQR={handleViewQR}
-            onCall={handleCall}
-            onChat={handleChat}
-            onDelete={setChildToDelete}
-            onAddFamilyMember={handleOpenAddFamilyMember}
-            onSuspend={handleSuspendFamilyMember}
-            onActivate={handleActivateFamilyMember}
-            onResendInvitation={handleResendInvitation}
-            onRemove={handleRemoveFamilyMember}
-          />
+        <div className="p-4">
+          <div className="max-w-4xl mx-auto space-y-6">
+            <DashboardTabs
+              activeTab={activeTab}
+              familyMembers={familyMembers}
+              familyMembersLoading={familyMembersLoading}
+              onAddFamilyMember={handleOpenAddFamilyMember}
+              onSuspend={handleSuspendFamilyMember}
+              onActivate={handleActivateFamilyMember}
+              onResendInvitation={handleResendInvitation}
+              onRemove={handleRemoveFamilyMember}
+            />
+          </div>
         </div>
 
         <AddChildDialog
@@ -307,7 +291,7 @@ const ParentDashboard = () => {
           onDecline={handleDeclineCall}
           onOpenChange={() => {}}
         />
-      </div>
+      </PageContentLayout>
     </div>
   );
 };

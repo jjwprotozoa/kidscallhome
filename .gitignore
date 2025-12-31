@@ -63,3 +63,6 @@ pnpm-lock.yaml
 
 # LLM/AI related files (not required for app)
 public/llms.txt
+
+# Stripe configuration files with sensitive keys
+stripe/start-webhook.ps1

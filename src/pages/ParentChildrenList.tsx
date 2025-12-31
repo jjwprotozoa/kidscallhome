@@ -4,7 +4,7 @@
 
 import AddChildDialog from "@/components/AddChildDialog";
 import { ChildActionsSheet } from "@/components/ChildActionsSheet";
-import Navigation from "@/components/Navigation";
+import { ParentLayout } from "@/components/layout/ParentLayout";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { CodeManagementDialogs } from "@/components/CodeManagementDialogs";
@@ -335,14 +335,8 @@ const ParentChildrenList = () => {
   // CLS: Reserve space for loading state to match final layout structure
   if (loading) {
     return (
-      <div className="min-h-[100dvh] bg-background">
-        <Navigation />
-        <div
-          className="p-4"
-          style={{
-            paddingTop: "calc(1rem + 64px + var(--safe-area-inset-top) * 0.15)",
-          }}
-        >
+      <ParentLayout>
+        <div className="p-4">
           <div className="max-w-4xl mx-auto">
             <div className="mb-8 mt-8">
               <div className="h-9 w-48 bg-muted rounded animate-pulse mb-2" />
@@ -367,23 +361,17 @@ const ParentChildrenList = () => {
             </div>
           </div>
         </div>
-      </div>
+      </ParentLayout>
     );
   }
 
   return (
-    <div className="min-h-[100dvh] bg-background">
-      <Navigation />
+    <ParentLayout>
       <OnboardingTour role="parent" pageKey="parent_children_list" />
       <HelpBubble role="parent" pageKey="parent_children_list" />
-      <div
-        className="p-4"
-        style={{
-          paddingTop: "calc(1rem + 64px + var(--safe-area-inset-top) * 0.15)",
-        }}
-      >
-        <div className="max-w-4xl mx-auto">
-          <div className="mb-8 mt-8 flex items-center justify-between flex-wrap gap-4">
+        <div className="p-4">
+        <div className="max-w-4xl mx-auto space-y-6">
+          <div className="mt-2 flex items-center justify-between flex-wrap gap-4">
             <div>
               <h1 className="text-3xl font-bold">Your Children</h1>
               <p className="text-muted-foreground mt-2">
@@ -478,7 +466,7 @@ const ParentChildrenList = () => {
         onClosePrintView={() => setPrintViewChild(null)}
         onPrintFromModal={() => window.print()}
       />
-    </div>
+    </ParentLayout>
   );
 };
 

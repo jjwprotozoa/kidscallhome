@@ -29,6 +29,7 @@ export interface SubscriptionData {
   subscriptionExpiresAt: string | null;
   currentChildrenCount: number;
   hasActiveSubscription: boolean;
+  stripeCustomerId: string | null;
 }
 
 export interface Feature {

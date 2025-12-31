@@ -3,17 +3,24 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useToast } from "@/hooks/use-toast";
 import { SubscriptionData, SubscriptionTier } from "./types";
 import { DEFAULT_ALLOWED_CHILDREN } from "./constants";
 import type { Database } from "@/integrations/supabase/types";
 
 type ParentRow = Database["public"]["Tables"]["parents"]["Row"];
 
+// Type for billing_subscriptions table (not yet in generated types)
+type BillingSubscription = {
+  status: string;
+  stripe_price_id: string | null;
+  current_period_end: string | null;
+  cancel_at_period_end: boolean;
+  stripe_customer_id: string | null;
+};
+
 export const useSubscriptionData = () => {
   const [loading, setLoading] = useState(true);
   const [subscriptionData, setSubscriptionData] = useState<SubscriptionData | null>(null);
-  const { toast } = useToast();
 
   const loadSubscriptionInfo = useCallback(async () => {
     try {
@@ -23,61 +30,69 @@ export const useSubscriptionData = () => {
       } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Get current subscription info
-      const { data: parentData, error: parentError } = await supabase
+      // Get parent email
+      const { data: parentData } = await supabase
         .from("parents")
-        .select("email, allowed_children, subscription_type, subscription_status, subscription_expires_at")
+        .select("email")
         .eq("id", user.id)
         .single();
-
-      if (parentError) {
-        // Check if it's a column doesn't exist error (migration not run)
-        if (
-          parentError.code === "42703" ||
-          parentError.message?.includes("does not exist")
-        ) {
-          console.warn(
-            "Subscription columns don't exist yet. Migration not run:",
-            parentError
-          );
-          toast({
-            title: "Database Migration Required",
-            description:
-              "Please run the subscription migration: supabase/migrations/20250122000007_add_subscription_system.sql",
-            variant: "destructive",
-            duration: 10000,
-          });
-          // Set defaults if migration hasn't been run
-          setSubscriptionData({
-            email: (parentData as ParentRow | null)?.email || user.email || "",
-            allowedChildren: DEFAULT_ALLOWED_CHILDREN,
-            subscriptionType: "free",
-            subscriptionStatus: "active",
-            subscriptionExpiresAt: null,
-            currentChildrenCount: 0,
-            hasActiveSubscription: false,
-          });
-          setLoading(false);
-          return;
-        }
-        console.error("Error loading subscription:", parentError);
-        toast({
-          title: "Error",
-          description: "Failed to load subscription information",
-          variant: "destructive",
-        });
-        setLoading(false);
-        return;
-      }
-
-      const allowed = parentData?.allowed_children ?? DEFAULT_ALLOWED_CHILDREN;
-      const subType = parentData?.subscription_type || "free";
-      const subStatus = parentData?.subscription_status || "active";
-      const expiresAt = parentData?.subscription_expires_at;
+      
       const userEmail = parentData?.email || user.email || "";
 
+      // Get billing subscription info from billing_subscriptions table
+      // Use maybeSingle() instead of single() because user might not have a subscription yet
+      // maybeSingle() returns null for zero rows (no error), or a single object for one row
+      // Type assertion needed because billing_subscriptions is not yet in generated types
+      const { data: billingSubData, error: billingError } = await supabase
+        .from("billing_subscriptions" as never)
+        .select("status, stripe_price_id, current_period_end, cancel_at_period_end, stripe_customer_id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      
+      const billingSub = billingSubData as BillingSubscription | null;
+
+      // If there's an actual error (not just no rows), log it
+      if (billingError) {
+        console.error("Error loading billing subscription:", billingError);
+      }
+      
+      // If billingSub is null, user is on free plan (no subscription record exists)
+
+      // Determine subscription type from price ID
+      // Handle both production and test mode price IDs
+      let subType: SubscriptionTier = "free";
+      let allowed = DEFAULT_ALLOWED_CHILDREN;
+      
+      if (billingSub?.stripe_price_id) {
+        const priceId = billingSub.stripe_price_id;
+        
+        // Production price IDs
+        const isMonthlyProd = priceId === "price_1SUVdqIIyqCwTeH2zggZpPAK";
+        const isAnnualProd = priceId === "price_1SkPL7IIyqCwTeH2tI9TxHRB";
+        
+        // Test price IDs
+        const isMonthlyTest = priceId === "price_1SjULhIIyqCwTeH2GmBL1jVk";
+        const isAnnualTest = priceId === "price_1SkQUaIIyqCwTeH2QowSbcfb";
+        
+        // Map price IDs to subscription types
+        if (isMonthlyProd || isMonthlyTest) {
+          subType = "family-bundle-monthly";
+          allowed = 5;
+        } else if (isAnnualProd || isAnnualTest) {
+          subType = "family-bundle-annual";
+          allowed = 5;
+        } else {
+          // Unknown price ID - log for debugging
+          console.warn("Unknown price ID in subscription:", priceId);
+        }
+      }
+
+      const subStatus = billingSub?.status || "inactive";
+      const expiresAt = billingSub?.current_period_end || null;
+
       // Check if user has an active subscription
-      const isActive = subStatus === "active" && 
+      // Consider subscriptions active if status is "active" and not expired
+      const isActive = (subStatus === "active" || subStatus === "trialing") && 
         (expiresAt === null || new Date(expiresAt) > new Date()) &&
         subType !== "free";
 
@@ -92,18 +107,19 @@ export const useSubscriptionData = () => {
       setSubscriptionData({
         email: userEmail,
         allowedChildren: allowed,
-        subscriptionType: subType as SubscriptionTier,
+        subscriptionType: subType,
         subscriptionStatus: subStatus,
         subscriptionExpiresAt: expiresAt,
         currentChildrenCount,
         hasActiveSubscription: isActive,
+        stripeCustomerId: billingSub?.stripe_customer_id || null,
       });
     } catch (error) {
       console.error("Error loading subscription info:", error);
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, []);
 
   useEffect(() => {
     loadSubscriptionInfo();

@@ -7,15 +7,45 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const stripeSecretKey = Deno.env.get("STRIPE_SECRET_KEY");
 const stripeApiUrl = "https://api.stripe.com/v1";
+
+// Localhost origins (use TEST mode)
+const localhostOrigins = [
+  "http://localhost:8080",
+  "http://localhost:5173",
+  "http://127.0.0.1:8080",
+  "http://127.0.0.1:5173",
+];
+
+// Helper function to detect if request is from localhost (test mode)
+function isTestMode(origin: string | null): boolean {
+  if (!origin) return false;
+  return localhostOrigins.includes(origin);
+}
+
+// Function to get the correct Stripe secret key based on environment
+function getStripeSecretKey(origin: string | null): string {
+  if (isTestMode(origin)) {
+    // Use test mode key for localhost
+    return Deno.env.get("STRIPE_SECRET_KEY_TEST") || Deno.env.get("STRIPE_SECRET_KEY") || "";
+  }
+  // Use live mode key for production
+  return Deno.env.get("STRIPE_SECRET_KEY_LIVE") || Deno.env.get("STRIPE_SECRET_KEY") || "";
+}
+
+// Validate required environment variables at startup
+const defaultStripeKey = Deno.env.get("STRIPE_SECRET_KEY");
+if (!defaultStripeKey || defaultStripeKey.trim() === "") {
+  console.error("ERROR: STRIPE_SECRET_KEY environment variable is not set!");
+  console.error("For localhost testing, you can also set STRIPE_SECRET_KEY_TEST");
+  console.error("For production, you can also set STRIPE_SECRET_KEY_LIVE");
+}
 
 // Allowed origins for CORS
 const allowedOrigins = [
   "https://www.kidscallhome.com",
   "https://kidscallhome.com",
-  "http://localhost:8080", // Development only
-  "http://localhost:5173", // Development only
+  ...localhostOrigins, // Include all localhost variants
 ];
 
 // Helper function to get CORS headers
@@ -66,6 +96,16 @@ function validateContentType(req: Request): boolean {
   return contentType?.includes("application/json") || false;
 }
 
+// Type for Stripe error responses
+type StripeErrorResponse = {
+  error?: {
+    message?: string;
+    type?: string;
+  };
+  message?: string;
+  type?: string;
+};
+
 serve(async (req) => {
   const origin = req.headers.get("origin");
   const corsHeaders = getCorsHeaders(origin);
@@ -91,7 +131,7 @@ serve(async (req) => {
     if (!authHeader) {
       return new Response(
         JSON.stringify({ error: "Missing authorization header" }),
-        { status: 401, headers: { "Content-Type": "application/json" } }
+        { status: 401, headers: corsHeaders }
       );
     }
 
@@ -106,7 +146,7 @@ serve(async (req) => {
       }
     );
 
-    // Get authenticated user
+    // Get authenticated user (the logged-in parent)
     const {
       data: { user },
       error: userError,
@@ -115,35 +155,97 @@ serve(async (req) => {
     if (userError || !user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
-        headers: { "Content-Type": "application/json" },
+        headers: corsHeaders,
       });
     }
 
-    // Get parent's Stripe customer ID
-    const { data: parentData, error: parentError } = await supabaseClient
-      .from("parents")
+    // Get the logged-in user's Stripe customer ID from billing_subscriptions
+    const { data: billingSub, error: billingError } = await supabaseClient
+      .from("billing_subscriptions")
       .select("stripe_customer_id")
-      .eq("id", user.id)
-      .single();
+      .eq("user_id", user.id)
+      .maybeSingle();
 
-    if (parentError || !parentData?.stripe_customer_id) {
+    if (billingError) {
+      console.error("Error fetching billing subscription:", billingError);
       return new Response(
         JSON.stringify({
-          error: "No Stripe customer found. Please subscribe first.",
+          error: "Unable to retrieve account information. Please try again.",
         }),
-        { status: 404, headers: corsHeaders }
+        { status: 500, headers: corsHeaders }
       );
     }
 
+    if (!billingSub?.stripe_customer_id) {
+      return new Response(
+        JSON.stringify({
+          error: "No active subscription found. Please subscribe first.",
+        }),
+        { status: 400, headers: corsHeaders }
+      );
+    }
+
+    // Get environment-specific Stripe configuration
+    const stripeSecretKey = getStripeSecretKey(origin);
+    const isLocalhost = isTestMode(origin);
+    
+    // Log which mode we're using (for debugging)
+    console.warn(`Using ${isLocalhost ? "TEST" : "LIVE"} mode Stripe configuration (origin: ${origin})`);
+    
+    // Validate Stripe secret key is configured
+    if (!stripeSecretKey || stripeSecretKey.trim() === "") {
+      const mode = isLocalhost ? "TEST" : "LIVE";
+      console.error(`ERROR: STRIPE_SECRET_KEY${isLocalhost ? "_TEST" : "_LIVE"} is not configured!`);
+      return new Response(
+        JSON.stringify({
+          error: "Payment processing is not configured. Please contact support.",
+          details: `STRIPE_SECRET_KEY${isLocalhost ? "_TEST" : "_LIVE"} environment variable is missing for ${mode} mode`,
+        }),
+        { status: 500, headers: corsHeaders }
+      );
+    }
+    
+    // Detect Stripe key mode (test vs live) for validation
+    const isTestKey = stripeSecretKey.startsWith("sk_test_");
+    const isLiveKey = stripeSecretKey.startsWith("sk_live_");
+    
+    // Warn if key mode doesn't match environment
+    if (isLocalhost && !isTestKey) {
+      console.warn("WARNING: Using localhost (test mode) but Stripe key appears to be LIVE mode");
+    }
+    if (!isLocalhost && !isLiveKey) {
+      console.warn("WARNING: Using production (live mode) but Stripe key appears to be TEST mode");
+    }
+
     // Get return URL from request and validate it
-    const { returnUrl } = await req.json();
+    let returnUrl: string | null = null;
+    try {
+      const requestBody = await req.json();
+      returnUrl = requestBody?.returnUrl || null;
+    } catch (parseError) {
+      // If JSON parsing fails, use default
+      console.warn("Failed to parse request body, using default return URL:", parseError);
+    }
+    
     const defaultOrigin = origin || "http://localhost:8080";
-    const defaultReturnUrl = `${defaultOrigin}/parent/settings`;
+    const defaultReturnUrl = `${defaultOrigin}/parent/upgrade`;
     const validatedReturnUrl = validateRedirectUrl(returnUrl, defaultReturnUrl);
+
+    // Validate return URL is a proper URL
+    try {
+      new URL(validatedReturnUrl);
+    } catch (urlError) {
+      return new Response(
+        JSON.stringify({
+          error: "Invalid return URL format.",
+        }),
+        { status: 400, headers: corsHeaders }
+      );
+    }
 
     // Create Customer Portal session
     const portalParams = new URLSearchParams({
-      customer: parentData.stripe_customer_id,
+      customer: billingSub.stripe_customer_id,
       return_url: validatedReturnUrl,
     });
 
@@ -161,14 +263,33 @@ serve(async (req) => {
 
     if (!portalResponse.ok) {
       // Log detailed error server-side only
-      const error = await portalResponse.json();
-      console.error("Stripe portal session creation failed:", error);
-      // Return generic error to prevent information leakage
+      let stripeError: StripeErrorResponse = {};
+      try {
+        stripeError = (await portalResponse.json()) as StripeErrorResponse;
+      } catch (e) {
+        const errorText = await portalResponse.text();
+        stripeError = { error: { message: errorText || "Unknown error" } };
+      }
+      
+      console.error("Stripe portal session creation failed:", JSON.stringify(stripeError, null, 2));
+      
+      // Return the actual Stripe error message for debugging (safely)
+      const errorMessage = stripeError?.error?.message || stripeError?.message || "Failed to create portal session";
+      
+      // Common Stripe billing portal errors:
+      // - "This customer has no subscriptions" - customer needs a subscription first
+      // - "No such customer" - customer ID doesn't exist
+      // - "Billing portal not configured" - needs setup in Stripe Dashboard
+      
       return new Response(
         JSON.stringify({
-          error: "Failed to create portal session. Please try again.",
+          error: errorMessage,
+          details: stripeError?.error?.type || stripeError?.type || "billing_portal_error",
         }),
-        { status: 500, headers: corsHeaders }
+        { 
+          status: portalResponse.status, // Preserve Stripe's status code (400, 404, etc.)
+          headers: corsHeaders 
+        }
       );
     }
 

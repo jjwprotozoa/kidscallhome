@@ -27,7 +27,10 @@
     "cap:ios": "npx cap open ios",
     "test": "vitest",
     "test:ui": "vitest --ui",
-    "test:run": "vitest run"
+    "test:run": "vitest run",
+    "stripe:webhook": "node stripe/webhook-server.cjs",
+    "stripe:webhook:start": "pwsh -ExecutionPolicy Bypass -File stripe/start-webhook.ps1",
+    "stripe:sync": "node stripe/sync-checkout-session.cjs"
   },
   "dependencies": {
     "@capacitor/android": "^6.0.0",
@@ -94,7 +97,8 @@
     "tailwindcss-animate": "^1.0.7",
     "vaul": "^0.9.9",
     "zod": "^3.25.76",
-    "zustand": "^5.0.2"
+    "zustand": "^5.0.2",
+    "stripe": "^14.21.0"
   },
   "devDependencies": {
     "@capacitor/cli": "^6.0.0",
