@@ -285,16 +285,14 @@ const Index = () => {
                 </div>
 
                 <div className="mt-auto pt-4 md:pt-6">
-                  <Button
-                    size="lg"
-                    className="w-full text-base md:text-lg py-5 md:py-6 bg-primary hover:bg-primary/90 text-primary-foreground font-bold shadow-lg hover:shadow-xl transition-all"
-                    tabIndex={-1}
-                    aria-hidden="true"
+                  <div
+                    className="inline-flex items-center justify-center gap-2 whitespace-nowrap ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 h-11 rounded-md px-8 w-full text-base md:text-lg py-5 md:py-6 font-semibold shadow-md hover:shadow-lg transition-all bg-primary hover:bg-primary/90 text-primary-foreground font-bold shadow-lg hover:shadow-xl pointer-events-none"
+                    role="presentation"
                   >
                     <Play className="mr-2 h-5 w-5" />
                     Enter My Code
                     <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
-                  </Button>
+                  </div>
                 </div>
               </div>
             </Card>
@@ -338,17 +336,14 @@ const Index = () => {
                 </div>
 
                 <div className="mt-auto pt-4 md:pt-6">
-                  <Button
-                    size="lg"
-                    variant="secondary"
-                    className="w-full text-base md:text-lg py-5 md:py-6 font-semibold shadow-md hover:shadow-lg transition-all"
-                    tabIndex={-1}
-                    aria-hidden="true"
+                  <div
+                    className="inline-flex items-center justify-center gap-2 whitespace-nowrap ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-11 rounded-md px-8 w-full text-base md:text-lg py-5 md:py-6 font-semibold shadow-md hover:shadow-lg transition-all pointer-events-none"
+                    role="presentation"
                   >
                     <Users className="mr-2 h-5 w-5" />
                     Login / Sign Up
                     <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
-                  </Button>
+                  </div>
                 </div>
               </div>
             </Card>
