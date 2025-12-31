@@ -1062,7 +1062,7 @@ const Navigation = () => {
                     <MobileNavItemChild
                       to="/child/dashboard"
                       icon={LayoutDashboard}
-                      label="Dashboard"
+                      label="Parent"
                       badge={missedCallCount}
                     />
                     <MobileNavItemChild
@@ -1118,7 +1118,7 @@ const Navigation = () => {
                     <LayoutDashboard className="h-4 w-4" />
                     <Badge count={missedCallCount} />
                   </div>
-                  <span>Dashboard</span>
+                  <span>Parent</span>
                 </NavLink>
                 <NavLink
                   to="/child/parents"
