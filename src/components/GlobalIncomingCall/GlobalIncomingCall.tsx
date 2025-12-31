@@ -2,7 +2,7 @@
 // Purpose: Main orchestrator component for global incoming calls (max 250 lines)
 // CRITICAL: Preserves all WebRTC functionality - do not modify call handling logic
 
-import { useRef, useEffect, useState } from "react";
+import React, { useRef, useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { endCall as endCallUtil } from "@/features/calls/utils/callEnding";
@@ -280,6 +280,59 @@ const GlobalIncomingCallInner = () => {
   );
 };
 
+// Error boundary component to catch Router context errors
+class RouterContextErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean; retryCount: number }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, retryCount: 0 };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    // Check if this is the Router context error
+    const isRouterContextError =
+      error.message?.includes("basename") ||
+      error.message?.includes("useContext") ||
+      error.message?.includes("Router");
+    
+    if (isRouterContextError) {
+      return { hasError: true };
+    }
+    // Let other errors propagate
+    throw error;
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    if (import.meta.env.DEV) {
+      console.warn("⚠️ [GLOBAL INCOMING CALL] Router context error caught, will retry:", {
+        error: error.message,
+        retryCount: this.state.retryCount,
+      });
+    }
+  }
+
+  componentDidUpdate() {
+    // Auto-retry after a delay if we caught a Router context error
+    if (this.state.hasError && this.state.retryCount < 3) {
+      const retryDelay = 1000 * (this.state.retryCount + 1); // 1s, 2s, 3s
+      setTimeout(() => {
+        this.setState({ hasError: false, retryCount: this.state.retryCount + 1 });
+      }, retryDelay);
+    }
+  }
+
+  render() {
+    if (this.state.hasError) {
+      // Return null while retrying - don't show error UI for Router context errors
+      return null;
+    }
+
+    return this.props.children;
+  }
+}
+
 // Outer component that safely renders after Router context is initialized
 // This prevents "Cannot destructure property 'basename'" errors during lazy loading
 // The issue occurs when lazy-loaded components try to use router hooks before
@@ -305,27 +358,35 @@ export const GlobalIncomingCall = () => {
       // 2. Window and location must be available
       // 3. Body must have content (indicating React has rendered)
       // 4. Additional delay to ensure Router context is fully initialized
+      // 5. Wait for BrowserRouter to be fully mounted (check for route elements)
       
       const checkReady = () => {
-        return (
+        const hasBasicReady = (
           typeof window !== 'undefined' &&
           window.location &&
           document.readyState === 'complete' &&
           document.body &&
           document.body.children.length > 0
         );
+        
+        // Check if React Router has rendered by looking for common route elements
+        // This is a heuristic - if we see route-specific elements, Router is likely ready
+        const hasRouterElements = document.querySelector('[data-router]') !== null ||
+          document.querySelector('main') !== null ||
+          document.body.querySelector('div[id]') !== null;
+        
+        return hasBasicReady && hasRouterElements;
       };
       
       // If already ready, wait additional time for Router context
       if (checkReady()) {
-        // Use a longer delay for slower devices - Router context needs time to initialize
-        // Samsung A31 and similar devices may need up to 2.5 seconds
-        // We use a longer delay to ensure Router context is fully initialized
+        // Use a much longer delay for slower devices - Router context needs significant time
+        // Samsung A31 and similar devices may need up to 5 seconds
         timeoutId = setTimeout(() => {
           if (mounted) {
             setIsReady(true);
           }
-        }, 2500); // Increased from 1500ms to 2500ms for very slow devices like Samsung A31
+        }, 5000); // Increased to 5 seconds for very slow devices like Samsung A31
         return;
       }
       
@@ -337,21 +398,21 @@ export const GlobalIncomingCall = () => {
           timeoutId = setTimeout(() => {
             if (mounted && checkReady()) {
               // Additional delay to ensure Router context is fully initialized
-              // Longer delay for slower devices like Samsung A31
+              // Much longer delay for slower devices like Samsung A31
               setTimeout(() => {
                 if (mounted) {
                   setIsReady(true);
                 }
-              }, 2000); // Increased from 1000ms to 2000ms for slower devices
+              }, 4000); // Increased to 4 seconds for slower devices
             } else if (mounted) {
               // If still not ready, set ready anyway after max wait
               setTimeout(() => {
                 if (mounted) {
                   setIsReady(true);
                 }
-              }, 2000);
+              }, 4000);
             }
-          }, 500);
+          }, 1000); // Increased initial wait
         };
         document.addEventListener('DOMContentLoaded', onDOMContentLoaded);
         return;
@@ -360,19 +421,19 @@ export const GlobalIncomingCall = () => {
       // Document is ready, but check if Router context is ready
       // Use a polling approach with a maximum wait time
       let pollCount = 0;
-      const maxPolls = 15; // 15 * 200ms = 3 seconds max
+      const maxPolls = 25; // 25 * 200ms = 5 seconds max
       
       const pollInterval = setInterval(() => {
         pollCount++;
         if (mounted && checkReady()) {
           clearInterval(pollInterval);
           // Additional delay to ensure Router context is fully initialized
-          // Longer delay for slower devices like Samsung A31
+          // Much longer delay for slower devices like Samsung A31
           timeoutId = setTimeout(() => {
             if (mounted) {
               setIsReady(true);
             }
-          }, 2000); // Increased from 1000ms to 2000ms for slower devices
+          }, 4000); // Increased to 4 seconds for slower devices
         } else if (pollCount >= maxPolls) {
           clearInterval(pollInterval);
           // Maximum wait reached, render anyway
@@ -383,17 +444,17 @@ export const GlobalIncomingCall = () => {
       }, 200);
       
       // Fallback: ensure we render eventually
-      // Increased max wait for slower devices like Samsung A31
+      // Much longer max wait for slower devices like Samsung A31
       timeoutId = setTimeout(() => {
         clearInterval(pollInterval);
         if (mounted) {
           setIsReady(true);
         }
-      }, 5000); // Increased from 3000ms to 5000ms for very slow devices
+      }, 8000); // Increased to 8 seconds for very slow devices
     };
     
-    // Start initialization after a short delay to let the app start loading
-    timeoutId = setTimeout(initialize, 200);
+    // Start initialization after a longer delay to let the app start loading
+    timeoutId = setTimeout(initialize, 500); // Increased from 200ms
     
     return () => {
       mounted = false;
@@ -407,6 +468,11 @@ export const GlobalIncomingCall = () => {
     return null;
   }
 
-  return <GlobalIncomingCallInner />;
+  // Wrap in error boundary to catch any Router context errors and retry
+  return (
+    <RouterContextErrorBoundary>
+      <GlobalIncomingCallInner />
+    </RouterContextErrorBoundary>
+  );
 };
 
