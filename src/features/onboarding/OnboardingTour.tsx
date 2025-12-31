@@ -25,6 +25,11 @@ export function OnboardingTour({ role, pageKey }: OnboardingTourProps) {
   const [bubblePosition, setBubblePosition] = useState<BubblePosition | null>(null);
   const [targetElement, setTargetElement] = useState<HTMLElement | null>(null);
   const bubbleRef = useRef<HTMLDivElement>(null);
+  const topOverlayRef = useRef<HTMLDivElement>(null);
+  const bottomOverlayRef = useRef<HTMLDivElement>(null);
+  const leftOverlayRef = useRef<HTMLDivElement>(null);
+  const rightOverlayRef = useRef<HTMLDivElement>(null);
+  const fullOverlayRef = useRef<HTMLDivElement>(null);
 
   // Find and highlight target element
   useEffect(() => {
@@ -209,6 +214,27 @@ export function OnboardingTour({ role, pageKey }: OnboardingTourProps) {
     };
   }, [targetElement]);
 
+  // Set inert attribute on overlay elements via DOM to avoid React warnings
+  useEffect(() => {
+    const overlays = [
+      topOverlayRef.current,
+      bottomOverlayRef.current,
+      leftOverlayRef.current,
+      rightOverlayRef.current,
+      fullOverlayRef.current,
+    ].filter(Boolean) as HTMLElement[];
+
+    overlays.forEach((overlay) => {
+      overlay.setAttribute('inert', '');
+    });
+
+    return () => {
+      overlays.forEach((overlay) => {
+        overlay.removeAttribute('inert');
+      });
+    };
+  }, [targetRect]);
+
   // Add highlight effect to target element
   useEffect(() => {
     if (!targetElement) return;
@@ -255,6 +281,7 @@ export function OnboardingTour({ role, pageKey }: OnboardingTourProps) {
         <>
           {/* Top overlay */}
           <div
+            ref={topOverlayRef}
             className="fixed z-[10000] bg-black/50"
             style={{
               top: 0,
@@ -263,10 +290,10 @@ export function OnboardingTour({ role, pageKey }: OnboardingTourProps) {
               height: `${Math.max(0, targetRect.top - 8)}px`,
             }}
             onClick={skip}
-            inert
           />
           {/* Bottom overlay */}
           <div
+            ref={bottomOverlayRef}
             className="fixed z-[10000] bg-black/50"
             style={{
               top: `${targetRect.bottom + 8}px`,
@@ -275,10 +302,10 @@ export function OnboardingTour({ role, pageKey }: OnboardingTourProps) {
               bottom: 0,
             }}
             onClick={skip}
-            inert
           />
           {/* Left overlay */}
           <div
+            ref={leftOverlayRef}
             className="fixed z-[10000] bg-black/50"
             style={{
               top: `${Math.max(0, targetRect.top - 8)}px`,
@@ -287,10 +314,10 @@ export function OnboardingTour({ role, pageKey }: OnboardingTourProps) {
               height: `${targetRect.height + 16}px`,
             }}
             onClick={skip}
-            inert
           />
           {/* Right overlay */}
           <div
+            ref={rightOverlayRef}
             className="fixed z-[10000] bg-black/50"
             style={{
               top: `${Math.max(0, targetRect.top - 8)}px`,
@@ -299,14 +326,13 @@ export function OnboardingTour({ role, pageKey }: OnboardingTourProps) {
               height: `${targetRect.height + 16}px`,
             }}
             onClick={skip}
-            inert
           />
         </>
       ) : (
         <div
+          ref={fullOverlayRef}
           className="fixed inset-0 bg-black/50 z-[10000]"
           onClick={skip}
-          inert
         />
       )}
 
