@@ -4,6 +4,39 @@
 
 import { safeLog } from "@/utils/security";
 import { QUALITY_PROFILES, type QualityLevel } from "../config/callQualityProfiles";
+import { isAndroid, isSamsungInternet } from "@/utils/androidCompatibility";
+
+/**
+ * Get audio constraints optimized for device compatibility
+ * Samsung devices (especially older models like A31) may not support
+ * all advanced audio processing features, so we use simpler constraints
+ */
+function getAudioConstraints(): MediaTrackConstraints {
+  // Check if running on Android (Samsung devices)
+  const isAndroidDevice = typeof window !== "undefined" && isAndroid();
+  
+  if (isAndroidDevice) {
+    // Samsung/Android devices: Use simpler constraints for better compatibility
+    // Some Samsung devices don't properly support all audio processing features
+    return {
+      echoCancellation: true,
+      // Don't force noiseSuppression and autoGainControl on Samsung devices
+      // Let the browser decide what's supported
+      noiseSuppression: { ideal: true },
+      autoGainControl: { ideal: true },
+      // Lower sample rate for older devices
+      sampleRate: { ideal: 44100, max: 48000 },
+    };
+  }
+  
+  // Other devices: Use full constraints
+  return {
+    echoCancellation: true,
+    noiseSuppression: true,
+    autoGainControl: true,
+    sampleRate: { ideal: 48000 }, // 48 kHz for good quality
+  };
+}
 
 /**
  * Get media constraints for a specific quality level
@@ -15,13 +48,8 @@ export function getMediaConstraintsForQuality(
 ): MediaStreamConstraints {
   const profile = QUALITY_PROFILES[level];
 
-  // Audio constraints (same for all levels except critical)
-  const audioConstraints: MediaTrackConstraints = {
-    echoCancellation: true,
-    noiseSuppression: true,
-    autoGainControl: true,
-    sampleRate: { ideal: 48000 }, // 48 kHz for good quality
-  };
+  // Audio constraints (optimized for device compatibility)
+  const audioConstraints = getAudioConstraints();
 
   // Critical level: audio only
   if (level === "critical") {

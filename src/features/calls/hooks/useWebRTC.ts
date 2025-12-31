@@ -1146,17 +1146,25 @@ export const useWebRTC = (
 
             // CRITICAL: Only enable tracks if user hasn't explicitly disabled them
             // Respect user's mute/video-off settings
+            // CRITICAL FIX for Samsung A31: Explicitly ensure audio tracks are enabled
             audioTracks.forEach((track) => {
               // Only force enable if user hasn't muted
               if (!userMutedRef.current) {
+                // CRITICAL: Force enable audio track - Samsung devices may have it disabled
                 track.enabled = true;
+                safeLog.log("🔊 [ICE STATE] Audio track enabled after ICE connected:", {
+                  trackId: track.id,
+                  enabled: track.enabled,
+                  muted: track.muted,
+                  readyState: track.readyState,
+                });
               } else {
                 // User has muted - keep it disabled
                 track.enabled = false;
               }
               if (track.muted) {
                 safeLog.warn(
-                  "⚠️ [ICE STATE] Audio track is muted after ICE connected"
+                  "⚠️ [ICE STATE] Audio track is muted after ICE connected - this may indicate a hardware issue on Samsung devices"
                 );
               }
             });
@@ -1720,18 +1728,44 @@ export const useWebRTC = (
         .filter(Boolean);
       const audioTracks = addedTracks.filter((t) => t?.kind === "audio");
       const videoTracks = addedTracks.filter((t) => t?.kind === "video");
+      
+      // CRITICAL FIX for Samsung A31: Explicitly ensure audio tracks are enabled
+      // Some devices may have tracks disabled even if userMutedRef is false
+      // This ensures audio works on Samsung devices
+      if (audioTracks.length > 0 && !userMutedRef.current) {
+        audioTracks.forEach((track) => {
+          if (!track.enabled) {
+            safeLog.warn("⚠️ [MEDIA] Audio track was disabled, re-enabling for Samsung compatibility");
+            track.enabled = true;
+          }
+        });
+      }
+      
       safeLog.log("📊 [MEDIA] Tracks added to peer connection:", {
         totalTracks: addedTracks.length,
         audioTracks: audioTracks.length,
         videoTracks: videoTracks.length,
         audioEnabled: audioTracks.every((t) => t?.enabled),
         videoEnabled: videoTracks.every((t) => t?.enabled),
+        userMuted: userMutedRef.current,
       });
 
       if (audioTracks.length === 0) {
         safeLog.error(
           "❌ [MEDIA] CRITICAL: No audio tracks added to peer connection!"
         );
+      } else if (audioTracks.length > 0 && !audioTracks.every((t) => t?.enabled) && !userMutedRef.current) {
+        safeLog.warn(
+          "⚠️ [MEDIA] WARNING: Some audio tracks are disabled but user is not muted! This may cause no audio on Samsung devices."
+        );
+        // Force enable all audio tracks if user is not muted
+        audioTracks.forEach((track) => {
+          track.enabled = true;
+          safeLog.log("🔊 [MEDIA] Force-enabled audio track:", {
+            trackId: track.id,
+            enabled: track.enabled,
+          });
+        });
       }
 
       // DIAGNOSTIC: Verify local audio is actually capturing sound
