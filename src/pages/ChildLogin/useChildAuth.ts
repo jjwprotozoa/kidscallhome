@@ -362,7 +362,7 @@ export const useChildAuth = (skipFamilyCode: boolean) => {
 
         // Navigate after delay (show success message briefly)
         setTimeout(() => {
-          navigate("/child/dashboard", { replace: true });
+          navigate("/child/parent", { replace: true });
         }, SUCCESS_REDIRECT_DELAY_MS);
 
         // Track device (fire-and-forget)

@@ -368,7 +368,7 @@ const Chat = () => {
 
   const goBack = () => {
     if (isChild) {
-      navigate("/child/dashboard");
+      navigate("/child/parent");
     } else if (isFamilyMember) {
       navigate("/family-member");
     } else {

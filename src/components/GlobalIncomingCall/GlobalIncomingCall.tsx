@@ -200,7 +200,7 @@ export const GlobalIncomingCall = () => {
   
   // CRITICAL: Only suppress GlobalIncomingCall on ChildDashboard which has its own kid-friendly IncomingCallDialog
   // Other child pages (like /child/parents) will use the ChildIncomingCallUI below
-  const isOnChildDashboard = location.pathname === "/child/dashboard";
+  const isOnChildDashboard = location.pathname === "/child/parent";
   
   if (isChild && isOnChildDashboard) {
     // ChildDashboard has its own incoming call UI - don't show GlobalIncomingCall

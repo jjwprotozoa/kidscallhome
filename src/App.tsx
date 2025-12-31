@@ -461,7 +461,9 @@ const App = () => {
                     path="/child/call/:parentId"
                     element={<ChildCallScreen />}
                   />
-                  <Route path="/child/dashboard" element={<ChildDashboard />} />
+                  <Route path="/child/parent" element={<ChildDashboard />} />
+                  {/* Legacy route redirect for backward compatibility */}
+                  <Route path="/child/dashboard" element={<Navigate to="/child/parent" replace />} />
                   <Route
                     path="/family-member/auth"
                     element={<FamilyMemberAuth />}

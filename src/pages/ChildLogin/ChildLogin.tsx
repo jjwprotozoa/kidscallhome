@@ -150,7 +150,7 @@ const ChildLogin = () => {
           try {
             const childData = JSON.parse(sessionData);
             if (childData.id === authorizedChildId) {
-              navigate("/child/dashboard");
+              navigate("/child/parent");
               return;
             }
           } catch {

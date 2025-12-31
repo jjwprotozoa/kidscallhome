@@ -1060,7 +1060,7 @@ const Navigation = () => {
                   </SheetHeader>
                   <div className="flex flex-col gap-1 p-4" data-tour="child-help-mobile">
                     <MobileNavItemChild
-                      to="/child/dashboard"
+                      to="/child/parent"
                       icon={LayoutDashboard}
                       label="Parent"
                       badge={missedCallCount}
@@ -1111,8 +1111,8 @@ const Navigation = () => {
                 data-tour="child-help"
               >
                 <NavLink
-                  to="/child/dashboard"
-                  className={getNavLinkClassName("/child/dashboard")}
+                  to="/child/parent"
+                  className={getNavLinkClassName("/child/parent")}
                 >
                   <div className="relative flex items-center justify-center">
                     <LayoutDashboard className="h-4 w-4" />

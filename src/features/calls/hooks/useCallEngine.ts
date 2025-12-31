@@ -1054,7 +1054,7 @@ export const useCallEngine = ({
           ? "/parent/children"
           : role === "family_member"
           ? "/family-member/dashboard"
-          : "/child/dashboard";
+          : "/child/parent";
       navigate(homePath, { replace: true });
     }
   }, [state, navigate, role, callId]);

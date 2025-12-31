@@ -115,7 +115,7 @@ const ChildHome = () => {
                 className="w-full"
                 size="lg"
                 variant="outline"
-                onClick={() => navigate("/child/dashboard")}
+                onClick={() => navigate("/child/parent")}
               >
                 Go to Dashboard
               </Button>

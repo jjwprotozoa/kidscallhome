@@ -284,7 +284,7 @@ const ChildCallScreen = () => {
   useEffect(() => {
     if (callEngine.state === "ended") {
       // Redirect immediately to avoid showing calling screen
-      navigate("/child/dashboard", { replace: true });
+      navigate("/child/parent", { replace: true });
     }
   }, [callEngine.state, navigate]);
 
@@ -309,7 +309,7 @@ const ChildCallScreen = () => {
           </p>
           <button
             type="button"
-            onClick={() => navigate("/child/dashboard")}
+            onClick={() => navigate("/child/parent")}
             className="w-full max-w-sm py-5 px-8 bg-gradient-to-r from-pink-400 to-purple-500 hover:from-pink-300 hover:to-purple-400 text-white rounded-3xl shadow-lg shadow-purple-500/40 flex items-center justify-center gap-3 transition-all duration-200 active:scale-95 hover:scale-[1.02] border-2 border-white/20"
           >
             <span className="text-xl">🏠</span>

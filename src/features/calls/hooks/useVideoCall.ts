@@ -959,7 +959,7 @@ export const useVideoCall = () => {
       // If answering a call, don't navigate away - let user stay on call page to retry
       // Only navigate if it's not an incoming call answer
       if (!isAnsweringCall) {
-        navigate("/child/dashboard");
+        navigate("/child/parent");
       }
       throw error;
     }
@@ -1062,7 +1062,7 @@ export const useVideoCall = () => {
           }
 
           if (isChildUser) {
-            navigate("/child/dashboard");
+            navigate("/child/parent");
           } else if (session) {
             navigate("/parent/children");
           } else {
@@ -1312,7 +1312,7 @@ export const useVideoCall = () => {
               );
 
               if (isChildUser) {
-                navigate("/child/dashboard");
+                navigate("/child/parent");
               } else if (session) {
                 navigate("/parent/children");
               } else {
@@ -1490,7 +1490,7 @@ export const useVideoCall = () => {
 
     // Navigate based on user type - use isChild variable for consistency
     if (isChild) {
-      navigate("/child/dashboard");
+      navigate("/child/parent");
     } else {
       navigate("/parent/children");
     }
