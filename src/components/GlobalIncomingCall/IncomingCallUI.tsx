@@ -192,11 +192,17 @@ export const IncomingCallUI = ({
         {/* Bottom section - Action buttons - pointer-events-auto ensures clicks work on Android */}
         <div className="w-full max-w-sm space-y-4 pointer-events-auto relative z-20">
           {/* Answer button - big and green (matches working child UI) */}
-          {/* Uses both onClick and onTouchStart for Android/iOS compatibility */}
+          {/* Uses onClick, onTouchStart, and onTouchEnd for maximum compatibility (Samsung devices work better with onTouchEnd) */}
           <button
             type="button"
             onClick={handleAnswer}
             onTouchStart={handleAnswer}
+            onTouchEnd={(e) => {
+              // Samsung devices (especially A31) work better with onTouchEnd
+              e.preventDefault();
+              e.stopPropagation();
+              handleAnswer(e);
+            }}
             disabled={isTriggered}
             className={`w-full py-6 px-8 bg-gradient-to-r from-green-400 to-emerald-500 hover:from-green-300 hover:to-emerald-400 text-white rounded-3xl shadow-lg shadow-green-500/40 flex items-center justify-center gap-4 transition-all duration-200 active:scale-95 hover:scale-[1.02] border-2 border-white/20 ${isTriggered ? 'opacity-70' : ''}`}
             style={{ 
@@ -213,10 +219,17 @@ export const IncomingCallUI = ({
           </button>
 
           {/* Decline button */}
+          {/* Uses onClick, onTouchStart, and onTouchEnd for maximum compatibility (Samsung devices work better with onTouchEnd) */}
           <button
             type="button"
             onClick={handleDecline}
             onTouchStart={handleDecline}
+            onTouchEnd={(e) => {
+              // Samsung devices (especially A31) work better with onTouchEnd
+              e.preventDefault();
+              e.stopPropagation();
+              handleDecline(e);
+            }}
             className="w-full py-5 px-8 bg-gradient-to-r from-red-400 to-rose-500 hover:from-red-300 hover:to-rose-400 text-white rounded-3xl shadow-lg shadow-red-500/40 flex items-center justify-center gap-4 transition-all duration-200 active:scale-95 hover:scale-[1.02] border-2 border-white/20"
             style={{ 
               touchAction: "manipulation", 

@@ -115,9 +115,19 @@ export const CallControls = ({
         </button>
 
         {/* End Call Button - Larger and more prominent */}
+        {/* Uses onClick and onTouchEnd for maximum compatibility (Samsung devices work better with onTouchEnd) */}
         <button
           type="button"
-          onClick={onEndCall}
+          onClick={(e) => {
+            e.stopPropagation();
+            onEndCall();
+          }}
+          onTouchEnd={(e) => {
+            // Samsung devices (especially A31) work better with onTouchEnd
+            e.stopPropagation();
+            e.preventDefault();
+            onEndCall();
+          }}
           className="
             w-18 h-18 sm:w-20 sm:h-20 rounded-full flex items-center justify-center
             bg-gradient-to-br from-red-500 to-rose-600
@@ -125,7 +135,7 @@ export const CallControls = ({
             transition-all duration-200 active:scale-90 hover:scale-105
             border-2 border-white/20
           "
-          style={{ width: "4.5rem", height: "4.5rem", touchAction: "manipulation" }}
+          style={{ width: "4.5rem", height: "4.5rem", touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
           aria-label="End call"
         >
           <PhoneOff className="w-8 h-8 sm:w-9 sm:h-9 text-white" />

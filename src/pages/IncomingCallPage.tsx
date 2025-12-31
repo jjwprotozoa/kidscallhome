@@ -100,8 +100,14 @@ const IncomingCallPage: React.FC = () => {
   }, [incomingCall]);
 
   // Handle answering the call
-  const handleAnswerCall = async () => {
+  const handleAnswerCall = async (e?: React.MouseEvent | React.TouchEvent) => {
     if (!incomingCall) return;
+    if (isAnswering || isDeclining) return; // Prevent double-triggering
+    
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     
     setIsAnswering(true);
     
@@ -118,8 +124,14 @@ const IncomingCallPage: React.FC = () => {
   };
 
   // Handle declining the call
-  const handleDeclineCall = async () => {
+  const handleDeclineCall = async (e?: React.MouseEvent | React.TouchEvent) => {
     if (!incomingCall) return;
+    if (isDeclining) return; // Prevent double-triggering
+    
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     
     setIsDeclining(true);
     
@@ -227,23 +239,38 @@ const IncomingCallPage: React.FC = () => {
           className="flex justify-center space-x-8"
         >
           {/* Decline Button */}
+          {/* Decline Button - Uses onClick and onTouchEnd for Samsung compatibility */}
           <motion.button
             whileHover={{ scale: 1.1 }}
             whileTap={{ scale: 0.9 }}
             onClick={handleDeclineCall}
+            onTouchEnd={(e) => {
+              // Samsung devices (especially A31) work better with onTouchEnd
+              e.preventDefault();
+              e.stopPropagation();
+              handleDeclineCall(e);
+            }}
             disabled={isAnswering || isDeclining}
             className="w-16 h-16 bg-red-500 rounded-full flex items-center justify-center shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
           >
             <XMarkIcon className="w-8 h-8 text-white" />
           </motion.button>
 
-          {/* Answer Button */}
+          {/* Answer Button - Uses onClick and onTouchEnd for Samsung compatibility */}
           <motion.button
             whileHover={{ scale: 1.1 }}
             whileTap={{ scale: 0.9 }}
             onClick={handleAnswerCall}
+            onTouchEnd={(e) => {
+              // Samsung devices (especially A31) work better with onTouchEnd
+              e.preventDefault();
+              e.stopPropagation();
+              handleAnswerCall(e);
+            }}
             disabled={isAnswering || isDeclining}
             className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
           >
             {isAnswering ? (
               <div className="animate-spin w-6 h-6 border-2 border-white border-t-transparent rounded-full" />
