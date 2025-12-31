@@ -280,6 +280,7 @@ export const CodeManagementDialogs = ({
   onPrintFromModal,
 }: CodeManagementDialogsProps) => {
   const [isRefreshingFamilyCode, setIsRefreshingFamilyCode] = useState(false);
+  const [displayedFamilyCode, setDisplayedFamilyCode] = useState<string | null>(null);
 
   // Function to fetch family code from database - memoized to prevent unnecessary re-renders
   const fetchFamilyCode = useCallback(async (): Promise<string | null> => {
@@ -308,6 +309,16 @@ export const CodeManagementDialogs = ({
       return null;
     }
   }, []);
+
+  // Fetch and display family code when dialog opens
+  useEffect(() => {
+    if (showCodeDialog || printViewChild) {
+      setIsRefreshingFamilyCode(false);
+      fetchFamilyCode().then((code) => {
+        setDisplayedFamilyCode(code);
+      });
+    }
+  }, [showCodeDialog, printViewChild, fetchFamilyCode]);
 
   // Reset refreshing state when dialog opens/closes
   useEffect(() => {
@@ -349,6 +360,35 @@ export const CodeManagementDialogs = ({
             </AlertDialogHeader>
 
             <div className="grid gap-4">
+              {displayedFamilyCode && (
+                <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 p-3 sm:p-4 rounded-lg">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex-1">
+                      <p className="text-xs font-medium text-blue-900 dark:text-blue-100 mb-1">
+                        Your Family Code
+                      </p>
+                      <p className="text-xl font-mono font-bold text-blue-700 dark:text-blue-300">
+                        {displayedFamilyCode}
+                      </p>
+                      <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
+                        Share this code with all your children
+                      </p>
+                    </div>
+                    <Button
+                      onClick={() => {
+                        navigator.clipboard.writeText(displayedFamilyCode);
+                        onCopyCode(displayedFamilyCode);
+                      }}
+                      variant="outline"
+                      size="sm"
+                      className="flex-shrink-0"
+                    >
+                      <Copy className="h-4 w-4 mr-2" />
+                      Copy
+                    </Button>
+                  </div>
+                </div>
+              )}
               <div className="bg-muted p-3 sm:p-4 rounded-lg text-center">
                 <p className="text-xs text-muted-foreground mb-2">
                   Login Code
@@ -504,6 +544,35 @@ export const CodeManagementDialogs = ({
             </AlertDialogHeader>
 
             <div className="grid gap-4">
+              {displayedFamilyCode && (
+                <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 p-3 sm:p-4 rounded-lg print:border-2 print:border-gray-800">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex-1">
+                      <p className="text-xs font-medium text-blue-900 dark:text-blue-100 mb-1 print:text-gray-600">
+                        Your Family Code
+                      </p>
+                      <p className="text-xl font-mono font-bold text-blue-700 dark:text-blue-300 print:text-gray-800">
+                        {displayedFamilyCode}
+                      </p>
+                      <p className="text-xs text-blue-700 dark:text-blue-300 mt-1 print:text-gray-600">
+                        Share this code with all your children
+                      </p>
+                    </div>
+                    <Button
+                      onClick={() => {
+                        navigator.clipboard.writeText(displayedFamilyCode);
+                        onCopyCode(displayedFamilyCode);
+                      }}
+                      variant="outline"
+                      size="sm"
+                      className="flex-shrink-0 print:hidden"
+                    >
+                      <Copy className="h-4 w-4 mr-2" />
+                      Copy
+                    </Button>
+                  </div>
+                </div>
+              )}
               <div className="bg-muted p-3 sm:p-4 rounded-lg print:border-2 print:border-gray-800 text-center">
                 <p className="text-xs text-muted-foreground mb-2 print:text-gray-600">
                   Login Code

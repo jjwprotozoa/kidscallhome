@@ -4,6 +4,7 @@
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { FamilyMemberCard } from "@/components/FamilyMemberCard";
+import { FamilyCodeCard } from "./FamilyCodeCard";
 import { UserPlus, Users } from "lucide-react";
 import React from "react";
 

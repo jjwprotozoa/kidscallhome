@@ -4,6 +4,7 @@
 import { ParentLayout } from "@/components/layout/ParentLayout";
 import AddFamilyMemberDialog from "@/components/AddFamilyMemberDialog";
 import { FamilyTab } from "@/features/family/components/FamilyTab";
+import { FamilyCodeCard } from "@/features/family/components/FamilyCodeCard";
 import { HelpBubble } from "@/features/onboarding/HelpBubble";
 import { OnboardingTour } from "@/features/onboarding/OnboardingTour";
 import { useFamilyMemberRedirect } from "@/hooks/useFamilyMemberRedirect";
@@ -19,7 +20,7 @@ const ParentFamily = () => {
   const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([]);
   const [familyMembersLoading, setFamilyMembersLoading] = useState(false);
   const [showAddFamilyMember, setShowAddFamilyMember] = useState(false);
-  const { refreshCanAddMoreChildren } = useParentData();
+  const { familyCode, refreshCanAddMoreChildren } = useParentData();
   const { fetchFamilyMembers } = useDashboardData(refreshCanAddMoreChildren);
 
   const loadFamilyMembers = useCallback(async () => {
@@ -57,6 +58,9 @@ const ParentFamily = () => {
               Manage family members and invitations
             </p>
           </div>
+
+          {/* Family Code Card - prominently displayed */}
+          <FamilyCodeCard familyCode={familyCode} />
 
           <FamilyTab
             familyMembers={familyMembers}
