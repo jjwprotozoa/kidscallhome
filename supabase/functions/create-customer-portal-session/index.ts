@@ -48,6 +48,24 @@ const allowedOrigins = [
   ...localhostOrigins, // Include all localhost variants
 ];
 
+// Pattern-based origin matching (for Vercel deployments, etc.)
+const allowedOriginPatterns = [
+  /^https:\/\/.*\.vercel\.app$/, // Vercel deployment URLs
+];
+
+// Helper function to check if origin is allowed (exact match or pattern match)
+function isOriginAllowed(origin: string | null): boolean {
+  if (!origin) return false;
+  
+  // Check exact matches first
+  if (allowedOrigins.includes(origin)) {
+    return true;
+  }
+  
+  // Check pattern matches
+  return allowedOriginPatterns.some(pattern => pattern.test(origin));
+}
+
 // Helper function to get CORS headers
 function getCorsHeaders(origin: string | null): Record<string, string> {
   const headers: Record<string, string> = {
@@ -57,7 +75,7 @@ function getCorsHeaders(origin: string | null): Record<string, string> {
     "Content-Type": "application/json",
   };
 
-  if (origin && allowedOrigins.includes(origin)) {
+  if (origin && isOriginAllowed(origin)) {
     headers["Access-Control-Allow-Origin"] = origin;
     headers["Access-Control-Allow-Credentials"] = "true";
   }
@@ -79,7 +97,7 @@ function validateRedirectUrl(
     const urlObj = new URL(url);
     const urlOrigin = urlObj.origin;
 
-    if (allowedOrigins.includes(urlOrigin)) {
+    if (isOriginAllowed(urlOrigin)) {
       return url;
     }
   } catch {

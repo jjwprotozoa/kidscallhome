@@ -18,11 +18,29 @@ const allowedOrigins = [
   "http://localhost:5173", // Development only
 ];
 
+// Pattern-based origin matching (for Vercel deployments, etc.)
+const allowedOriginPatterns = [
+  /^https:\/\/.*\.vercel\.app$/, // Vercel deployment URLs
+];
+
 // Localhost origins (use TEST mode)
 const localhostOrigins = [
   "http://localhost:8080",
   "http://localhost:5173",
 ];
+
+// Helper function to check if origin is allowed (exact match or pattern match)
+function isOriginAllowed(origin: string | null): boolean {
+  if (!origin) return false;
+  
+  // Check exact matches first
+  if (allowedOrigins.includes(origin)) {
+    return true;
+  }
+  
+  // Check pattern matches
+  return allowedOriginPatterns.some(pattern => pattern.test(origin));
+}
 
 // Helper function to detect if request is from localhost (test mode)
 function isTestMode(origin: string | null): boolean {
@@ -80,7 +98,7 @@ function getCorsHeaders(origin: string | null): Record<string, string> {
     "Content-Type": "application/json",
   };
 
-  if (origin && allowedOrigins.includes(origin)) {
+  if (origin && isOriginAllowed(origin)) {
     headers["Access-Control-Allow-Origin"] = origin;
     headers["Access-Control-Allow-Credentials"] = "true";
   }
@@ -99,7 +117,7 @@ function validateRedirectUrl(url: string | null): string {
     const urlObj = new URL(url);
     const origin = urlObj.origin;
 
-    if (allowedOrigins.includes(origin)) {
+    if (isOriginAllowed(origin)) {
       return origin;
     }
   } catch {

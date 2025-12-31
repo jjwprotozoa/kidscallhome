@@ -71,6 +71,24 @@ const allowedOrigins = [
   "https://kidscallhome.com",
 ];
 
+// Pattern-based origin matching (for Vercel deployments, etc.)
+const allowedOriginPatterns = [
+  /^https:\/\/.*\.vercel\.app$/, // Vercel deployment URLs
+];
+
+// Helper function to check if origin is allowed (exact match or pattern match)
+function isOriginAllowed(origin: string | null): boolean {
+  if (!origin) return false;
+  
+  // Check exact matches first
+  if (allowedOrigins.includes(origin)) {
+    return true;
+  }
+  
+  // Check pattern matches
+  return allowedOriginPatterns.some(pattern => pattern.test(origin));
+}
+
 // Rate limiting storage (in-memory - for production, use Redis/Upstash)
 const rateLimitStore = new Map<string, { count: number; resetAt: number }>();
 
@@ -133,7 +151,7 @@ function getCorsHeaders(origin: string | null): Record<string, string> {
     "Content-Type": "application/json",
   };
 
-  if (origin && allowedOrigins.includes(origin)) {
+  if (origin && isOriginAllowed(origin)) {
     headers["Access-Control-Allow-Origin"] = origin;
     headers["Access-Control-Allow-Credentials"] = "true";
   }
