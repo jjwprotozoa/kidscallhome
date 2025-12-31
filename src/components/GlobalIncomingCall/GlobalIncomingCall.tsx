@@ -48,13 +48,15 @@ export const GlobalIncomingCall = () => {
       const parentId = currentCall.parent_id;
       const familyMemberId = currentCall.family_member_id;
       
-      console.log("📞 [GLOBAL INCOMING CALL] Answer button clicked:", {
-        callId,
-        childId,
-        parentId,
-        familyMemberId,
-        timestamp: new Date().toISOString(),
-      });
+      if (import.meta.env.DEV) {
+        console.log("📞 [GLOBAL INCOMING CALL] Answer button clicked:", {
+          callId,
+          childId,
+          parentId,
+          familyMemberId,
+          timestamp: new Date().toISOString(),
+        });
+      }
       
       // CRITICAL: Stop ringtone IMMEDIATELY before any async operations
       // This matches the child dashboard pattern and ensures ringtone stops even if navigation fails
@@ -72,11 +74,13 @@ export const GlobalIncomingCall = () => {
             const { getUserRole } = await import("@/utils/userRole");
             const userRole = await getUserRole(session.user.id);
             isFamilyMember = userRole === "family_member";
-            console.log("🔍 [GLOBAL INCOMING CALL] User role detection:", {
-              userId: session.user.id,
-              userRole,
-              isFamilyMember,
-            });
+            if (import.meta.env.DEV) {
+              console.log("🔍 [GLOBAL INCOMING CALL] User role detection:", {
+                userId: session.user.id,
+                userRole,
+                isFamilyMember,
+              });
+            }
           } catch (roleError) {
             console.error("Error getting user role, defaulting to parent:", roleError);
             // Default to parent if role check fails
@@ -84,13 +88,15 @@ export const GlobalIncomingCall = () => {
           }
         }
         
-        console.log("🔍 [GLOBAL INCOMING CALL] Routing decision:", {
-          isChild,
-          isFamilyMember,
-          hasChildId: !!childId,
-          hasParentId: !!parentId,
-          callId,
-        });
+        if (import.meta.env.DEV) {
+          console.log("🔍 [GLOBAL INCOMING CALL] Routing decision:", {
+            isChild,
+            isFamilyMember,
+            hasChildId: !!childId,
+            hasParentId: !!parentId,
+            callId,
+          });
+        }
         
         // Clear the incoming call state BEFORE navigation to ensure UI updates
         setIncomingCall(null);
@@ -99,17 +105,23 @@ export const GlobalIncomingCall = () => {
         if (childId) {
           // Adult (parent or family member) answering child's call
           if (isFamilyMember) {
-            console.log("✅ [GLOBAL INCOMING CALL] Routing family member to:", `/family-member/call/${childId}?callId=${callId}`);
+            if (import.meta.env.DEV) {
+              console.log("✅ [GLOBAL INCOMING CALL] Routing family member to:", `/family-member/call/${childId}?callId=${callId}`);
+            }
             navigate(`/family-member/call/${childId}?callId=${callId}`);
           } else {
             // Parent answering child's call - use /parent/call/ route which uses useCallEngine with role="parent"
-            console.log("✅ [GLOBAL INCOMING CALL] Routing parent to:", `/parent/call/${childId}?callId=${callId}`);
+            if (import.meta.env.DEV) {
+              console.log("✅ [GLOBAL INCOMING CALL] Routing parent to:", `/parent/call/${childId}?callId=${callId}`);
+            }
             navigate(`/parent/call/${childId}?callId=${callId}`);
           }
         } else if (parentId || familyMemberId) {
           // Child answering parent's or family member's call - navigate to child call route
           const targetId = parentId || familyMemberId;
-          console.log("✅ [GLOBAL INCOMING CALL] Routing child to:", `/child/call/${targetId}?callId=${callId}`);
+          if (import.meta.env.DEV) {
+            console.log("✅ [GLOBAL INCOMING CALL] Routing child to:", `/child/call/${targetId}?callId=${callId}`);
+          }
           navigate(`/child/call/${targetId}?callId=${callId}`);
         } else {
           console.error("❌ [GLOBAL INCOMING CALL] No child_id, parent_id, or family_member_id in incoming call:", currentCall);
@@ -136,10 +148,12 @@ export const GlobalIncomingCall = () => {
       // Store call ID locally before any async operations
       const callId = currentCall.id;
       
-      console.log("📞 [GLOBAL INCOMING CALL] Decline button clicked:", {
-        callId,
-        timestamp: new Date().toISOString(),
-      });
+      if (import.meta.env.DEV) {
+        console.log("📞 [GLOBAL INCOMING CALL] Decline button clicked:", {
+          callId,
+          timestamp: new Date().toISOString(),
+        });
+      }
       
       const { data: { session } } = await supabase.auth.getSession();
       const childSession = localStorage.getItem("childSession");

@@ -22,7 +22,7 @@ export const PWAInstallPrompt = () => {
   useEffect(() => {
     // Check if app is already installed (standalone mode)
     const isStandalone = window.matchMedia("(display-mode: standalone)").matches;
-    const isIOSInstalled = (window.navigator as any).standalone === true;
+    const isIOSInstalled = (window.navigator as { standalone?: boolean }).standalone === true;
     
     if (isStandalone || isIOSInstalled) {
       setIsInstalled(true);
@@ -37,6 +37,14 @@ export const PWAInstallPrompt = () => {
 
     // Listen for the beforeinstallprompt event
     const handleBeforeInstallPrompt = (e: Event) => {
+      // Only prevent default if we're going to show our custom prompt
+      // Check if user has dismissed before preventing default
+      const dismissed = localStorage.getItem(INSTALL_PROMPT_STORAGE_KEY);
+      if (dismissed) {
+        // User already dismissed - don't prevent default, let browser handle it
+        return;
+      }
+      
       // Prevent the default browser install prompt
       e.preventDefault();
       // Store the event for later use
@@ -84,8 +92,24 @@ export const PWAInstallPrompt = () => {
     }
   };
 
-  const handleDismiss = () => {
+  const handleDismiss = async () => {
     setShowPrompt(false);
+    
+    // If we prevented default but user dismissed, we should still call prompt()
+    // to satisfy browser requirements, but we'll let it fail silently
+    if (deferredPrompt) {
+      try {
+        // Call prompt() to satisfy browser requirement, but don't await user choice
+        // since user already dismissed our custom prompt
+        await deferredPrompt.prompt();
+        // Immediately get user choice to clear the deferred prompt
+        await deferredPrompt.userChoice;
+      } catch {
+        // Ignore errors - prompt may not be available or user may have dismissed
+      }
+      setDeferredPrompt(null);
+    }
+    
     // Store dismissal for 7 days
     localStorage.setItem(
       INSTALL_PROMPT_STORAGE_KEY,

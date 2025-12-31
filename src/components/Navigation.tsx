@@ -80,7 +80,9 @@ const Navigation = () => {
       pathname.includes("/family-member") ||
       pathname.startsWith("/family-member")
     ) {
-      console.warn("🔍 [NAVIGATION] Initial state: family_member (from route)");
+      if (import.meta.env.DEV) {
+        console.warn("🔍 [NAVIGATION] Initial state: family_member (from route)");
+      }
       return "family_member";
     }
     // If on parent route, likely a parent (but verify with auth session)
@@ -169,7 +171,9 @@ const Navigation = () => {
     const checkUserType = async () => {
       const pathname = location.pathname;
 
-      console.warn("🔍 [NAVIGATION] Checking user type for path:", pathname);
+      if (import.meta.env.DEV) {
+        console.warn("🔍 [NAVIGATION] Checking user type for path:", pathname);
+      }
 
       // Route-based detection (most reliable)
       if (pathname.includes("/child/")) {

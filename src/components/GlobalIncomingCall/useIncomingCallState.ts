@@ -89,18 +89,20 @@ export const useIncomingCallState = () => {
 
         lastCheckedCallId = call.id;
 
-        console.warn(
-          "🔍 [INCOMING CALL STATE] Processing incoming call notification:",
-          {
-            callId: call.id,
-            caller_type: call.caller_type,
-            child_id: call.child_id,
-            parent_id: call.parent_id,
-            family_member_id: call.family_member_id,
-            status: call.status,
-            isChild,
-          }
-        );
+        if (import.meta.env.DEV) {
+          console.warn(
+            "🔍 [INCOMING CALL STATE] Processing incoming call notification:",
+            {
+              callId: call.id,
+              caller_type: call.caller_type,
+              child_id: call.child_id,
+              parent_id: call.parent_id,
+              family_member_id: call.family_member_id,
+              status: call.status,
+              isChild,
+            }
+          );
+        }
 
         if (isChild) {
           // Child receiving call from parent or family member
@@ -248,14 +250,16 @@ export const useIncomingCallState = () => {
               ? `/family-member/call/${call.child_id}?callId=${call.id}`
               : `/parent/call/${call.child_id}?callId=${call.id}`;
 
-            console.warn("✅ [INCOMING CALL STATE] Routing incoming call:", {
-              callId: call.id,
-              callerName: childData.name,
-              callerId: call.child_id,
-              url,
-              isFamilyMember,
-              routeFor: isFamilyMember ? "family_member" : "parent",
-            });
+            if (import.meta.env.DEV) {
+              console.warn("✅ [INCOMING CALL STATE] Routing incoming call:", {
+                callId: call.id,
+                callerName: childData.name,
+                callerId: call.child_id,
+                url,
+                isFamilyMember,
+                routeFor: isFamilyMember ? "family_member" : "parent",
+              });
+            }
 
             handleIncomingCallRef.current({
               callId: call.id,
@@ -480,14 +484,15 @@ export const useIncomingCallState = () => {
             },
             async (payload) => {
               const call = payload.new as CallRecord;
-              console.warn("📞 [GLOBAL INCOMING CALL] INSERT event received:", {
-                callId: call.id,
-                caller_type: call.caller_type,
-                child_id: call.child_id,
-                parent_id: call.parent_id,
-                status: call.status,
-                expectedChildId: childData.id,
-                matches:
+              if (import.meta.env.DEV) {
+                console.warn("📞 [GLOBAL INCOMING CALL] INSERT event received:", {
+                  callId: call.id,
+                  caller_type: call.caller_type,
+                  child_id: call.child_id,
+                  parent_id: call.parent_id,
+                  status: call.status,
+                  expectedChildId: childData.id,
+                  matches:
                   (call.caller_type === "parent" ||
                     call.caller_type === "family_member") &&
                   call.child_id === childData.id &&
@@ -708,22 +713,26 @@ export const useIncomingCallState = () => {
           ? `recipient_type=eq.family_member`
           : `recipient_type=eq.parent`;
 
-        console.warn("🔍 [INCOMING CALL STATE] Subscription filters:", {
-          channelName,
-          insertFilter,
-          updateFilter,
-          currentIsFamilyMember,
-          cachedUserId,
-          note: "Using recipient_type filter to prevent cross-notifications",
-        });
+        if (import.meta.env.DEV) {
+          console.warn("🔍 [INCOMING CALL STATE] Subscription filters:", {
+            channelName,
+            insertFilter,
+            updateFilter,
+            currentIsFamilyMember,
+            cachedUserId,
+            note: "Using recipient_type filter to prevent cross-notifications",
+          });
+        }
 
-        console.warn("🔍 [INCOMING CALL STATE] Subscribing to channel:", {
-          channelName,
-          insertFilter,
-          updateFilter,
-          currentIsFamilyMember,
-          cachedUserId,
-        });
+        if (import.meta.env.DEV) {
+          console.warn("🔍 [INCOMING CALL STATE] Subscribing to channel:", {
+            channelName,
+            insertFilter,
+            updateFilter,
+            currentIsFamilyMember,
+            cachedUserId,
+          });
+        }
 
         // Store channelName in a const that's accessible in the callback
         const subscriptionChannelName = channelName;

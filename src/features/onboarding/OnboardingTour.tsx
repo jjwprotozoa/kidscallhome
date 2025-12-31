@@ -263,7 +263,7 @@ export function OnboardingTour({ role, pageKey }: OnboardingTourProps) {
               height: `${Math.max(0, targetRect.top - 8)}px`,
             }}
             onClick={skip}
-            aria-hidden="true"
+            inert
           />
           {/* Bottom overlay */}
           <div
@@ -275,7 +275,7 @@ export function OnboardingTour({ role, pageKey }: OnboardingTourProps) {
               bottom: 0,
             }}
             onClick={skip}
-            aria-hidden="true"
+            inert
           />
           {/* Left overlay */}
           <div
@@ -287,7 +287,7 @@ export function OnboardingTour({ role, pageKey }: OnboardingTourProps) {
               height: `${targetRect.height + 16}px`,
             }}
             onClick={skip}
-            aria-hidden="true"
+            inert
           />
           {/* Right overlay */}
           <div
@@ -299,14 +299,14 @@ export function OnboardingTour({ role, pageKey }: OnboardingTourProps) {
               height: `${targetRect.height + 16}px`,
             }}
             onClick={skip}
-            aria-hidden="true"
+            inert
           />
         </>
       ) : (
         <div
           className="fixed inset-0 bg-black/50 z-[10000]"
           onClick={skip}
-          aria-hidden="true"
+          inert
         />
       )}
 
