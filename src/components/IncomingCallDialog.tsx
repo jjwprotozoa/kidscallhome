@@ -85,7 +85,10 @@ const IncomingCallScreen = ({
       setIsTriggered(true);
 
       if (e) {
-        e.preventDefault();
+        // Only preventDefault if event is cancelable (not passive)
+        if (e.cancelable) {
+          e.preventDefault();
+        }
         e.stopPropagation();
       }
 
@@ -109,7 +112,10 @@ const IncomingCallScreen = ({
   const handleDecline = useCallback(
     (e?: React.MouseEvent | React.TouchEvent) => {
       if (e) {
-        e.preventDefault();
+        // Only preventDefault if event is cancelable (not passive)
+        if (e.cancelable) {
+          e.preventDefault();
+        }
         e.stopPropagation();
       }
       // CRITICAL: Don't block decline if answer was attempted - user should always be able to decline

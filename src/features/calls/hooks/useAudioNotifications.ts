@@ -140,6 +140,27 @@ export const useAudioNotifications = (options: UseAudioNotificationsOptions = {}
     return audioContextRef.current;
   }, [enabled]);
 
+  // Track if user has interacted with the page (required for vibration API)
+  const userInteractedRef = useRef(false);
+  
+  // Listen for user interaction events
+  useEffect(() => {
+    const handleUserInteraction = () => {
+      userInteractedRef.current = true;
+    };
+    
+    // Listen for any user interaction
+    document.addEventListener('click', handleUserInteraction, { once: true, passive: true });
+    document.addEventListener('touchstart', handleUserInteraction, { once: true, passive: true });
+    document.addEventListener('keydown', handleUserInteraction, { once: true, passive: true });
+    
+    return () => {
+      document.removeEventListener('click', handleUserInteraction);
+      document.removeEventListener('touchstart', handleUserInteraction);
+      document.removeEventListener('keydown', handleUserInteraction);
+    };
+  }, []);
+
   // Start vibration pattern (for mobile devices)
   // Matches the melodic rhythm of the ringtone: 6 notes over ~1.2s
   const startVibration = useCallback(() => {
@@ -147,48 +168,50 @@ export const useAudioNotifications = (options: UseAudioNotificationsOptions = {}
       return;
     }
 
-    try {
-      // Vibration pattern matching the melody rhythm:
-      // C-E-G-A-G-E (6 notes) with short pulses on each note
-      // Pattern: [vibrate, pause, vibrate, pause, vibrate, pause, vibrate, pause, vibrate, pause, vibrate]
-      // Each note gets ~120-180ms, with ~30ms gaps = ~1.2s total
-      const vibratePattern = () => {
-        if (isPlayingRef.current.ringtone && "vibrate" in navigator) {
-          try {
-            // Pulse pattern matching the 6-note melody:
-            // Short pulses (80-100ms) with brief pauses (20-30ms) between notes
-            // Creates a rhythmic "tap-tap-tap-tap-tap-tap" that matches the xylophone melody
-            navigator.vibrate([
-              90, 25,  // C4
-              90, 25,  // E4
-              90, 25,  // G4
-              120, 30, // A4 (slightly longer - held note)
-              90, 25,  // G4
-              150      // E4 (ending note, longer pulse)
-            ]);
-          } catch (error) {
-            // Vibration requires user interaction - silently ignore
-            // It will work once user has interacted with the page
-          }
+    // Vibration pattern matching the melody rhythm:
+    // C-E-G-A-G-E (6 notes) with short pulses on each note
+    // Pattern: [vibrate, pause, vibrate, pause, vibrate, pause, vibrate, pause, vibrate, pause, vibrate]
+    // Each note gets ~120-180ms, with ~30ms gaps = ~1.2s total
+    const vibratePattern = () => {
+      // Only vibrate if user has interacted with the page
+      // This prevents Chrome's intervention warning
+      if (!userInteractedRef.current) {
+        // Silently skip - will work once user interacts
+        return;
+      }
+      
+      if (isPlayingRef.current.ringtone && "vibrate" in navigator) {
+        try {
+          // Pulse pattern matching the 6-note melody:
+          // Short pulses (80-100ms) with brief pauses (20-30ms) between notes
+          // Creates a rhythmic "tap-tap-tap-tap-tap-tap" that matches the xylophone melody
+          navigator.vibrate([
+            90, 25,  // C4
+            90, 25,  // E4
+            90, 25,  // G4
+            120, 30, // A4 (slightly longer - held note)
+            90, 25,  // G4
+            150      // E4 (ending note, longer pulse)
+          ]);
+        } catch (error) {
+          // Silently ignore - vibration may not be supported or may have failed
+          // This is expected behavior
         }
-      };
+      }
+    };
 
-      // Start vibration immediately (may fail if no user interaction yet)
-      vibratePattern();
+    // Start vibration immediately if user has interacted
+    vibratePattern();
 
-      // Repeat vibration pattern every 2.2 seconds (matching ringtone repeat interval)
-      // This gives ~1s rest between melodic phrases, matching the audio
-      vibrationIntervalRef.current = setInterval(() => {
-        if (isPlayingRef.current.ringtone) {
-          vibratePattern();
-        }
-      }, 2200);
+    // Repeat vibration pattern every 2.2 seconds (matching ringtone repeat interval)
+    // This gives ~1s rest between melodic phrases, matching the audio
+    vibrationIntervalRef.current = setInterval(() => {
+      if (isPlayingRef.current.ringtone) {
+        vibratePattern();
+      }
+    }, 2200);
 
-      safeLog.log("📳 [AUDIO] Vibration started (melodic rhythm pattern)");
-    } catch (error) {
-      // Vibration may fail if no user interaction yet - this is expected
-      safeLog.debug("📳 [AUDIO] Vibration not available yet (requires user interaction)");
-    }
+    safeLog.log("📳 [AUDIO] Vibration started (melodic rhythm pattern)");
   }, [enabled]);
 
   // Play ringtone (looping) - Kid-friendly xylophone melody!
@@ -320,11 +343,12 @@ export const useAudioNotifications = (options: UseAudioNotificationsOptions = {}
       clearInterval(vibrationIntervalRef.current);
       vibrationIntervalRef.current = null;
     }
-    if ("vibrate" in navigator) {
+    if ("vibrate" in navigator && userInteractedRef.current) {
       try {
+        // Only stop vibration if user has interacted (prevents Chrome intervention warning)
         navigator.vibrate(0); // Stop any ongoing vibration
       } catch (error) {
-        // Vibration requires user interaction - silently ignore
+        // Silently ignore - vibration may not be supported
       }
     }
     safeLog.log("📳 [AUDIO] Vibration stopped");

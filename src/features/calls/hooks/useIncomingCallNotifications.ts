@@ -248,6 +248,7 @@ export const useIncomingCallNotifications = (
     stopIncomingCall,
     hasActiveCall: activeCallRef.current !== null,
     activeCallId: activeCallRef.current,
+    activeCallData: activeCallDataRef.current,
   };
 };
 

@@ -43,6 +43,7 @@ import {
   type BatteryStatus,
 } from "../webrtc/qualityController";
 import { applyAudioTuning } from "../webrtc/audioTuning";
+import { mediaAccessLock } from "../utils/mediaAccessLock";
 
 interface UseWebRTCReturn {
   peerConnection: RTCPeerConnection | null;
@@ -97,12 +98,17 @@ export const useWebRTC = (
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const iceCandidatesQueue = useRef<RTCIceCandidateInit[]>([]);
+  // Queue for candidates that arrive before callId is available
+  const preCallIdCandidatesQueue = useRef<RTCIceCandidateInit[]>([]);
   const remoteStreamRef = useRef<MediaStream | null>(null);
   const processedTrackIds = useRef<Set<string>>(new Set());
   const currentCallIdRef = useRef<string | null>(callId);
 
   // CRITICAL: Idempotency guard for cleanup
   const cleanupExecutedRef = useRef(false);
+  
+  // Track media access lock owner for proper cleanup
+  const mediaLockOwnerRef = useRef<string | null>(null);
 
   // IMPROVEMENT: Track ICE restart attempts to prevent infinite loops
   const iceRestartAttemptedRef = useRef(false);
@@ -124,6 +130,11 @@ export const useWebRTC = (
 
   // Track logged stream IDs to avoid duplicate logging
   const loggedStreamIdsRef = useRef<Set<string>>(new Set());
+
+  // CRITICAL: Guard to prevent concurrent initialization calls
+  // This prevents "Device in use" errors when multiple hooks try to initialize simultaneously
+  const isInitializingRef = useRef(false);
+  const initializationPromiseRef = useRef<Promise<void> | null>(null);
 
   // Network quality monitoring for adaptive bitrate
   const networkQuality = useNetworkQuality();
@@ -178,20 +189,178 @@ export const useWebRTC = (
 
   // Update callId ref when it changes so ICE candidate handler can access it
   useEffect(() => {
+    const previousCallId = currentCallIdRef.current;
     currentCallIdRef.current = callId;
-    if (callId) {
+    
+    // Clear queue if callId becomes null (call ended)
+    if (!callId && previousCallId) {
+      preCallIdCandidatesQueue.current = [];
+    }
+    
+    if (callId && callId !== previousCallId) {
       safeLog.log("📞 [CALL ID] CallId updated in useWebRTC:", callId);
       // CRITICAL: Reset cleanup flag when starting a new call
       cleanupExecutedRef.current = false;
       // IMPROVEMENT: Reset ICE restart flag for new call
       iceRestartAttemptedRef.current = false;
+      
+      // Process any candidates that were queued before callId was available
+      if (preCallIdCandidatesQueue.current.length > 0) {
+        safeLog.log(
+          `🧊 [ICE CANDIDATE] Processing ${preCallIdCandidatesQueue.current.length} queued candidates from before callId was set`
+        );
+        // Process these candidates asynchronously to avoid blocking
+        (async () => {
+          const pc = peerConnectionRef.current;
+          if (!pc) return;
+          
+          const isChildRole = isChild;
+          const candidateField = isChildRole
+            ? "child_ice_candidates"
+            : "parent_ice_candidates";
+          
+          for (const candidateJson of preCallIdCandidatesQueue.current) {
+            try {
+              // Skip null candidates (end-of-candidates marker) - they don't need to be written to DB
+              if (!candidateJson.candidate) {
+                continue;
+              }
+              
+              // Read current candidates
+              const { data: call, error: selectError } = await supabase
+                .from("calls")
+                .select(candidateField)
+                .eq("id", callId)
+                .maybeSingle();
+              
+              if (selectError || !call) {
+                safeLog.warn(
+                  `⚠️ [ICE CANDIDATE] Error reading ${candidateField} for queued candidate:`,
+                  selectError
+                );
+                continue;
+              }
+              
+              const existingCandidates = ((call[
+                candidateField as keyof typeof call
+              ] as RTCIceCandidateInit[]) ||
+                []) as unknown as RTCIceCandidateInit[];
+              
+              // Check if candidate already exists
+              const candidateExists = existingCandidates.some(
+                (c) =>
+                  c.candidate === candidateJson.candidate &&
+                  c.sdpMLineIndex === candidateJson.sdpMLineIndex &&
+                  c.sdpMid === candidateJson.sdpMid
+              );
+              
+              if (!candidateExists) {
+                const updatedCandidates = [
+                  ...existingCandidates,
+                  candidateJson,
+                ];
+                
+                const { error: updateError } = await supabase
+                  .from("calls")
+                  .update({ [candidateField]: updatedCandidates as Json })
+                  .eq("id", callId);
+                
+                if (updateError) {
+                  safeLog.warn(
+                    `⚠️ [ICE CANDIDATE] Error updating ${candidateField} for queued candidate:`,
+                    updateError
+                  );
+                } else {
+                  safeLog.log(
+                    `✅ [ICE CANDIDATE] Processed queued candidate (${updatedCandidates.length} total)`
+                  );
+                }
+              }
+            } catch (error) {
+              safeLog.warn(
+                "⚠️ [ICE CANDIDATE] Error processing queued candidate:",
+                error
+              );
+            }
+          }
+          
+          // Clear the queue after processing
+          preCallIdCandidatesQueue.current = [];
+        })();
+      }
     }
-  }, [callId]);
+  }, [callId, isChild]);
 
   const initializeConnection = useCallback(async () => {
-    try {
-      // Check if getUserMedia is available (required for iOS Safari)
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    // CRITICAL: Guard against concurrent initialization
+    // Check if already initializing - must check BEFORE any async work
+    if (isInitializingRef.current && initializationPromiseRef.current) {
+      safeLog.log("⏳ [MEDIA] Initialization already in progress, waiting...");
+      return initializationPromiseRef.current;
+    }
+
+    // CRITICAL: Don't initialize if cleanup is in progress
+    // Wait a bit for cleanup to complete if it was just executed
+    if (cleanupExecutedRef.current) {
+      safeLog.log("⏳ [MEDIA] Cleanup was recently executed, waiting before reinitializing...");
+      // Wait a bit for cleanup to complete
+      await new Promise(resolve => setTimeout(resolve, 300));
+      // Reset cleanup flag to allow new initialization
+      cleanupExecutedRef.current = false;
+    }
+
+    // CRITICAL: Guard - never acquire media in idle state
+    // Media should ONLY be acquired on explicit user actions (Call/Accept)
+    // This prevents "Device in use" errors from idle initialization
+    
+    // If we already have a stream and peer connection, no need to reinitialize
+    if (localStreamRef.current && peerConnectionRef.current) {
+      const activeTracks = localStreamRef.current.getTracks().filter(t => t.readyState === 'live');
+      if (activeTracks.length > 0) {
+        safeLog.log("✅ [MEDIA] Already have active stream and peer connection, skipping initialization");
+        return;
+      }
+    }
+    
+    // NOTE: We don't check for callId here because:
+    // 1. initializeConnection is only called from explicit user actions (startOutgoingCall/acceptIncomingCall)
+    // 2. callId may not be set yet when starting an outgoing call (it's created after media acquisition)
+    // 3. The guard above (checking for existing stream/connection) is sufficient to prevent duplicate initialization
+
+    // Check if there's an existing stream from the lock that we can reuse
+    const existingStream = mediaAccessLock.getCurrentStream();
+    if (existingStream && localStreamRef.current === null) {
+      const activeTracks = existingStream.getTracks().filter(t => t.readyState === 'live');
+      if (activeTracks.length > 0) {
+        safeLog.log("✅ [MEDIA] Reusing existing stream from lock");
+        setLocalStream(existingStream);
+        localStreamRef.current = existingStream;
+        registerActiveStream(existingStream);
+        if (localVideoRef.current) {
+          localVideoRef.current.srcObject = existingStream;
+          localVideoRef.current.play().catch((error) => {
+            safeLog.error("Error playing local video:", error);
+          });
+        }
+        // If peer connection already exists and has tracks, we're done
+        if (peerConnectionRef.current) {
+          const hasTracks = peerConnectionRef.current.getSenders().some(s => s.track !== null);
+          if (hasTracks) {
+            safeLog.log("✅ [MEDIA] Peer connection already has tracks, skipping re-initialization");
+            return;
+          }
+        }
+        // Otherwise, continue to create peer connection below
+      }
+    }
+
+    // CRITICAL: Set flag FIRST to prevent other calls from proceeding
+    // Then create promise and set ref in same synchronous block
+    isInitializingRef.current = true;
+    const initPromise = (async () => {
+      try {
+        // Check if getUserMedia is available (required for iOS Safari)
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
         const isHTTPS = window.location.protocol === "https:";
         const isLocalhost =
@@ -222,126 +391,141 @@ export const useWebRTC = (
             " Please use HTTPS or a modern browser that supports WebRTC.";
         }
 
-        throw new Error(errorMessage);
-      }
-
-      // Get media stream with proper constraints based on network conditions
-      // Handle "Device in use" errors gracefully (e.g., when testing on same device with multiple browsers)
-      let stream: MediaStream;
-      try {
-        safeLog.log("🎥 [MEDIA] Requesting camera and microphone access...");
-
-        // Determine initial quality level based on network conditions
-        const connectionInfo = getNetworkConnectionInfo();
-        const saveData = connectionInfo?.saveData ?? false;
-        let initialQuality: QualityLevel = getInitialQualityLevel();
-        
-        // Adjust for data saver mode
-        initialQuality = adjustQualityForDataSaver(initialQuality, saveData);
-        
-        safeLog.log("📊 [MEDIA] Initial quality level:", {
-          level: initialQuality,
-          saveData,
-          effectiveType: connectionInfo?.effectiveType,
-        });
-
-        // Get media constraints for the determined quality level
-        const constraints = getMediaConstraintsForQuality(initialQuality);
-        
-        stream = await navigator.mediaDevices.getUserMedia(constraints);
-
-        safeLog.log("✅ [MEDIA] Media stream obtained:", {
-          audioTracks: stream.getAudioTracks().map((t) => ({
-            id: t.id,
-            enabled: t.enabled,
-            muted: t.muted,
-            readyState: t.readyState,
-            settings: t.getSettings(),
-          })),
-          videoTracks: stream.getVideoTracks().map((t) => ({
-            id: t.id,
-            enabled: t.enabled,
-            muted: t.muted,
-            readyState: t.readyState,
-            settings: t.getSettings(),
-          })),
-        });
-
-        // [KCH] Telemetry: Log media tracks after getUserMedia
-        const role = isChild ? "child" : "parent";
-        safeLog.log("[KCH]", role, "media tracks", {
-          audio: stream.getAudioTracks().length,
-          video: stream.getVideoTracks().length,
-        });
-
-        // Verify tracks are actually working
-        stream.getAudioTracks().forEach((track) => {
-          if (track.muted) {
-            safeLog.warn("⚠️ [MEDIA] Local audio track is muted");
-          }
-        });
-        stream.getVideoTracks().forEach((track) => {
-          if (track.muted) {
-            safeLog.warn("⚠️ [MEDIA] Local video track is muted");
-          }
-        });
-      } catch (mediaError: unknown) {
-        // IMPROVEMENT: Enhanced error handling with RTCError interface
-        if (mediaError instanceof RTCError) {
-          safeLog.error("❌ [MEDIA] RTCError accessing media devices:", {
-            errorDetail: mediaError.errorDetail,
-            sdpLineNumber: mediaError.sdpLineNumber,
-            httpRequestStatusCode: mediaError.httpRequestStatusCode,
-            message: mediaError.message,
-          });
+          throw new Error(errorMessage);
         }
-        const error = mediaError as DOMException & { code?: number };
-        safeLog.error("❌ [MEDIA] Media device access error:", {
-          name: error.name,
-          message: error.message,
-          code: error.code,
-        });
 
-        if (
-          error.name === "NotReadableError" ||
-          error.name === "NotAllowedError"
-        ) {
-          safeLog.warn(
-            "⚠️ [MEDIA] Media device access denied or in use, trying audio-only fallback..."
-          );
-          // Try with audio only as fallback
+        let stream: MediaStream;
+        let lockOwner: string | null = null;
+        
+        {
+          // No pre-connection - get media using media access lock
+          // This prevents "Device in use" errors from concurrent getUserMedia calls
           try {
-            stream = await navigator.mediaDevices.getUserMedia({
-              video: false,
-              audio: {
-                echoCancellation: true,
-                noiseSuppression: true,
-                autoGainControl: true,
-              },
-            });
-            safeLog.log("✅ [MEDIA] Fell back to audio-only stream");
-          } catch (fallbackError) {
-            const fallbackErr = fallbackError as DOMException;
-            safeLog.error("❌ [MEDIA] Audio-only fallback also failed:", {
-              name: fallbackErr.name,
-              message: fallbackErr.message,
-            });
-            // If even audio fails, throw the original error
-            throw new Error(
-              `Unable to access camera/microphone: ${error.message}. ` +
-                `This may happen if the device is in use by another application or browser tab. ` +
-                `On iOS, make sure you've granted camera and microphone permissions in Settings. ` +
-                `Error details: ${error.name} - ${error.message}`
-            );
-          }
-        } else {
-          throw new Error(
-            `Media access error: ${error.name} - ${error.message}. ` +
-              `Please check your camera and microphone permissions.`
-          );
-        }
-      }
+            safeLog.log("🎥 [MEDIA] Requesting camera and microphone access...");
 
+            // Determine initial quality level based on network conditions
+            const connectionInfo = getNetworkConnectionInfo();
+            const saveData = connectionInfo?.saveData ?? false;
+            let initialQuality: QualityLevel = getInitialQualityLevel();
+            
+            // Adjust for data saver mode
+            initialQuality = adjustQualityForDataSaver(initialQuality, saveData);
+            
+            safeLog.log("📊 [MEDIA] Initial quality level:", {
+              level: initialQuality,
+              saveData,
+              effectiveType: connectionInfo?.effectiveType,
+            });
+
+            // Get media constraints for the determined quality level
+            const constraints = getMediaConstraintsForQuality(initialQuality);
+            
+            // Use media access lock to prevent concurrent access
+            lockOwner = `webrtc-${callId || "unknown"}`;
+            mediaLockOwnerRef.current = lockOwner;
+            stream = await mediaAccessLock.acquire(constraints, lockOwner);
+          } catch (mediaError: unknown) {
+            // IMPROVEMENT: Enhanced error handling with RTCError interface
+            if (mediaError instanceof RTCError) {
+              safeLog.error("❌ [MEDIA] RTCError accessing media devices:", {
+                errorDetail: mediaError.errorDetail,
+                sdpLineNumber: mediaError.sdpLineNumber,
+                message: mediaError.message,
+              });
+            }
+            const error = mediaError as DOMException & { code?: number };
+            
+            // Don't log "Device in use" errors as errors - they're expected during pre-warming
+            const isDeviceInUse = 
+              error.name === "NotReadableError" && 
+              error.message?.includes("Device in use");
+            
+            if (!isDeviceInUse) {
+              safeLog.error("❌ [MEDIA] Media device access error:", {
+                name: error.name,
+                message: error.message,
+                code: error.code,
+              });
+            } else {
+              safeLog.log("⚠️ [MEDIA] Device in use - will retry on explicit call action");
+            }
+
+            if (
+              error.name === "NotReadableError" ||
+              error.name === "NotAllowedError"
+            ) {
+              safeLog.warn(
+                "⚠️ [MEDIA] Media device access denied or in use, trying audio-only fallback..."
+              );
+              // Try with audio only as fallback using lock
+              try {
+                lockOwner = `webrtc-audio-fallback-${callId || "unknown"}`;
+                mediaLockOwnerRef.current = lockOwner;
+                stream = await mediaAccessLock.acquire(
+                  {
+                    video: false,
+                    audio: {
+                      echoCancellation: true,
+                      noiseSuppression: true,
+                      autoGainControl: true,
+                    },
+                  },
+                  lockOwner
+                );
+                safeLog.log("✅ [MEDIA] Fell back to audio-only stream");
+              } catch (fallbackError) {
+                const fallbackErr = fallbackError as DOMException;
+                safeLog.error("❌ [MEDIA] Audio-only fallback also failed:", {
+                  name: fallbackErr.name,
+                  message: fallbackErr.message,
+                });
+                // If even audio fails, throw the original error
+                throw mediaError;
+              }
+            } else {
+              throw mediaError;
+            }
+          }
+        }
+      
+      // Log media stream details
+      safeLog.log("✅ [MEDIA] Media stream obtained:", {
+        audioTracks: stream.getAudioTracks().map((t) => ({
+          id: t.id,
+          enabled: t.enabled,
+          muted: t.muted,
+          readyState: t.readyState,
+          settings: t.getSettings(),
+        })),
+        videoTracks: stream.getVideoTracks().map((t) => ({
+          id: t.id,
+          enabled: t.enabled,
+          muted: t.muted,
+          readyState: t.readyState,
+          settings: t.getSettings(),
+        })),
+      });
+
+      // [KCH] Telemetry: Log media tracks after getUserMedia
+      const role = isChild ? "child" : "parent";
+      safeLog.log("[KCH]", role, "media tracks", {
+        audio: stream.getAudioTracks().length,
+        video: stream.getVideoTracks().length,
+      });
+
+      // Verify tracks are actually working
+      stream.getAudioTracks().forEach((track) => {
+        if (track.muted) {
+          safeLog.warn("⚠️ [MEDIA] Local audio track is muted");
+        }
+      });
+      stream.getVideoTracks().forEach((track) => {
+        if (track.muted) {
+          safeLog.warn("⚠️ [MEDIA] Local video track is muted");
+        }
+      });
+      
+      // Continue with stream setup...
       setLocalStream(stream);
       localStreamRef.current = stream;
       
@@ -672,15 +856,42 @@ export const useWebRTC = (
             signalingState: signalingState,
             reason: "Connection state changed to problematic state",
             timestamp: new Date().toISOString(),
+            callId: callId || "none",
           });
+
+          // CRITICAL: Try ICE restart immediately when connection fails
+          // This can recover from transient network issues, especially on mobile
+          const activeCallId = currentCallIdRef.current;
+          if (activeCallId && (state === "failed" || iceState === "disconnected" || iceState === "failed")) {
+            // Try ICE restart if not already attempted
+            if (!iceRestartAttemptedRef.current && pc.signalingState !== "closed") {
+              safeLog.warn(
+                "🔄 [CONNECTION STATE] Attempting ICE restart to recover from connection failure",
+                {
+                  connectionState: state,
+                  iceConnectionState: iceState,
+                  callId: activeCallId,
+                }
+              );
+              triggerIceRestart(pc, activeCallId);
+            } else if (iceRestartAttemptedRef.current) {
+              safeLog.warn(
+                "⚠️ [CONNECTION STATE] ICE restart already attempted, waiting for recovery or timeout",
+                {
+                  connectionState: state,
+                  iceConnectionState: iceState,
+                  callId: activeCallId,
+                }
+              );
+            }
+          }
 
           // Auto-end call on connection failure if callId exists
           // Only if the call row isn't ended yet
-          // Only end on "failed" or "closed" - "disconnected" can be transient
-          // The database status change listener will handle explicit call ending
-          const activeCallId = currentCallIdRef.current;
-          if (activeCallId && (state === "failed" || state === "closed")) {
-            // Determine role from isChild prop
+          // Only end on "closed" - "failed" and "disconnected" can be transient
+          // CRITICAL: Give "failed" state a chance to recover via ICE restart before ending
+          if (activeCallId && state === "closed") {
+            // "closed" is terminal - always end
             const isChildUser = isChild;
             const by = isChildUser ? "child" : "parent";
 
@@ -690,6 +901,8 @@ export const useWebRTC = (
               }
             );
           }
+          // Don't end on "failed" or "disconnected" - let ICE restart try to recover
+          // The ICE restart timeout will handle ending the call if recovery fails
         }
       };
 
@@ -1235,35 +1448,31 @@ export const useWebRTC = (
         if (import.meta.env.DEV) {
           const isIOSDevice = /iPad|iPhone|iPod/.test(navigator.userAgent);
           if (isIOSDevice && (iceState === "failed" || iceState === "disconnected")) {
-            console.group("📱 [iOS CONNECTION DIAGNOSTICS]");
-            console.log("ICE State:", iceState);
-            console.log("Connection State:", connectionState);
-            console.log("Signaling State:", pc.signalingState);
-            console.log("Has Local Description:", !!pc.localDescription);
-            console.log("Has Remote Description:", !!pc.remoteDescription);
-            console.log("Local Tracks:", pc.getSenders().filter(s => s.track).length);
-            console.log("Remote Tracks:", pc.getReceivers().filter(r => r.track).length);
-            
-            // Check ICE servers
-            const config = pc.getConfiguration();
-            console.log("ICE Servers:", config.iceServers?.length || 0);
-            const hasTurn = config.iceServers?.some(server => {
-              const urls = Array.isArray(server.urls) ? server.urls : [server.urls];
-              return urls.some(url => typeof url === 'string' && url.includes('turn:'));
+            console.warn("📱 [iOS CONNECTION DIAGNOSTICS]", {
+              iceState,
+              connectionState,
+              signalingState: pc.signalingState,
+              hasLocalDescription: !!pc.localDescription,
+              hasRemoteDescription: !!pc.remoteDescription,
+              localTracks: pc.getSenders().filter(s => s.track).length,
+              remoteTracks: pc.getReceivers().filter(r => r.track).length,
+              iceServers: pc.getConfiguration().iceServers?.length || 0,
+              hasTurn: pc.getConfiguration().iceServers?.some(server => {
+                const urls = Array.isArray(server.urls) ? server.urls : [server.urls];
+                return urls.some(url => typeof url === 'string' && url.includes('turn:'));
+              }),
             });
-            console.log("Has TURN Servers:", hasTurn);
-            console.groupEnd();
           }
         }
 
         // IMPROVEMENT: ICE restart on failure recovery
         // Attempt ICE restart before ending call to recover from transient failures
         // Auto-end call after timeout if connection fails
-        // CRITICAL: "disconnected" is TRANSIENT and can recover - give it more time
+        // CRITICAL: "disconnected" is TRANSIENT and can recover - try ICE restart
         // "failed" is terminal - try ICE restart once before ending
-        if (iceState === "failed") {
+        if (iceState === "failed" || (iceState === "disconnected" && connectionState === "failed")) {
           safeLog.warn(
-            "⚠️ [CONNECTION STATE] ICE connection FAILED - attempting recovery",
+            "⚠️ [CONNECTION STATE] ICE connection problem detected - attempting recovery",
             {
               iceState,
               connectionState,
@@ -1416,8 +1625,10 @@ export const useWebRTC = (
             iceRestartTimeoutRef.current = null;
           }, 3000); // 3 seconds
 
-          // For "disconnected" state, give more time to recover (10 seconds)
-          // This is especially important on mobile networks
+          // For "disconnected" state, give more time to recover (30 seconds)
+          // This is especially important on mobile networks and during ICE restarts
+          // CRITICAL: Don't end call if ICE restart is in progress or if state is "disconnected"
+          // "disconnected" is transient and can recover, especially during network changes
           setTimeout(() => {
             const currentPC = peerConnectionRef.current;
             if (
@@ -1425,16 +1636,19 @@ export const useWebRTC = (
               currentPC.iceConnectionState !== "connected" &&
               currentPC.iceConnectionState !== "completed" &&
               currentPC.iceConnectionState !== "checking" &&
-              currentPC.signalingState !== "closed"
+              currentPC.iceConnectionState !== "disconnected" && // Don't end if still disconnected (can recover)
+              currentPC.signalingState !== "closed" &&
+              !iceRestartAttemptedRef.current // Don't end if ICE restart is in progress
             ) {
               const activeCallId = currentCallIdRef.current;
               if (activeCallId) {
                 safeLog.error(
-                  "❌ [CONNECTION STATE] Connection did not recover after 10 seconds, ending call",
+                  "❌ [CONNECTION STATE] Connection did not recover after 30 seconds, ending call",
                   {
                     iceState: currentPC.iceConnectionState,
                     connectionState: currentPC.connectionState,
                     callId: activeCallId,
+                    iceRestartInProgress: iceRestartAttemptedRef.current,
                   }
                 );
 
@@ -1444,13 +1658,13 @@ export const useWebRTC = (
                 endCallUtil({
                   callId: activeCallId,
                   by,
-                  reason: "disconnected",
+                  reason: "disconnected_timeout",
                 }).catch(() => {
                   // Ignore errors - call might already be ended
                 });
               }
             }
-          }, 10000); // 10 seconds for disconnected to recover (was 2 seconds)
+          }, 30000); // 30 seconds for disconnected to recover (increased from 10 seconds)
         }
       };
 
@@ -2231,10 +2445,24 @@ export const useWebRTC = (
         const activeCallId = currentCallIdRef.current;
 
         if (!activeCallId) {
-          safeLog.warn(
-            "⚠️ [ICE CANDIDATE] No callId available yet, candidate will be queued"
-          );
-          // Store candidate temporarily - will be sent when callId is available
+          // Handle null candidate (ICE gathering complete) - queue it too
+          if (event.candidate === null) {
+            // Store a marker for end-of-candidates
+            preCallIdCandidatesQueue.current.push({ candidate: null } as RTCIceCandidateInit);
+            safeLog.log(
+              "🧊 [ICE CANDIDATE] ICE gathering complete (null candidate) - queued until callId available"
+            );
+            return;
+          }
+          
+          // Queue actual candidate for later processing
+          if (event.candidate) {
+            const candidateJson = event.candidate.toJSON();
+            preCallIdCandidatesQueue.current.push(candidateJson);
+            safeLog.log(
+              `🧊 [ICE CANDIDATE] Candidate queued (callId not available yet): ${preCallIdCandidatesQueue.current.length} queued`
+            );
+          }
           return;
         }
 
@@ -2414,17 +2642,38 @@ export const useWebRTC = (
           // Don't throw - ICE candidate failures shouldn't break the call
         }
       };
-    } catch (error) {
-      safeLog.error("Error initializing WebRTC connection:", error);
-      throw error;
+      } catch (error) {
+        safeLog.error("Error initializing WebRTC connection:", error);
+        throw error;
+      }
+    })();
+
+    // CRITICAL: Set both flag and promise ref atomically (same synchronous block)
+    // This prevents race conditions where another call could pass the check
+    isInitializingRef.current = true;
+    initializationPromiseRef.current = initPromise;
+    
+    try {
+      await initPromise;
+    } finally {
+      // Reset flag and clear promise ref after completion
+      isInitializingRef.current = false;
+      if (initializationPromiseRef.current === initPromise) {
+        initializationPromiseRef.current = null;
+      }
     }
+  }, [
+    localVideoRef,
+    remoteVideoRef,
+    isChild,
+    callId,
     // NOTE: networkQuality is intentionally excluded from deps to prevent recreation on stats updates
     // The startMonitoring function is stable and handles quality internally
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [localVideoRef, remoteVideoRef, isChild]);
+  ]);
 
   const cleanup = useCallback(
-    (force: boolean = false) => {
+    async (force: boolean = false) => {
       // CRITICAL: Idempotency guard to prevent double cleanup
       // Allow cleanup if force=true (explicit hangup) even if already executed
       if (cleanupExecutedRef.current && !force) {
@@ -2476,6 +2725,19 @@ export const useWebRTC = (
         safeLog.log(
           "✅ [CLEANUP] Force cleanup requested (explicit hangup) - cleaning up regardless of ICE state"
         );
+      }
+
+      // Release media access lock if we own it
+      if (mediaLockOwnerRef.current) {
+        safeLog.log("🔓 [CLEANUP] Stopping and releasing media access lock:", mediaLockOwnerRef.current);
+        // Stop the stream in the lock, not just release
+        // Wait for cleanup to complete to ensure device is released
+        const lockOwner = mediaLockOwnerRef.current;
+        mediaLockOwnerRef.current = null; // Clear ref first to prevent double cleanup
+        // Fire and forget - cleanup will complete asynchronously
+        mediaAccessLock.stop(lockOwner).catch((error) => {
+          safeLog.error("❌ [CLEANUP] Error stopping media lock:", error);
+        });
       }
 
       // Stop all tracks from local stream

@@ -57,9 +57,11 @@ export const IncomingCallUI = ({
     // IMMEDIATE WORK: Prevent double-triggering, prevent default, visual feedback
     if (isTriggered || isAnsweringRef.current) return;
     
-    // Prevent default behavior immediately
+    // Prevent default behavior immediately (only if event exists and is cancelable)
     if (e) {
-      e.preventDefault();
+      if (e.cancelable) {
+        e.preventDefault();
+      }
       e.stopPropagation();
     }
     

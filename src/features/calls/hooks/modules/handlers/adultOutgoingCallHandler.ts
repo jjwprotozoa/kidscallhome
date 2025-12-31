@@ -4,6 +4,7 @@
 
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
+import { checkCalleeBusy } from "../../../utils/busyDetection";
 
 export interface AdultOutgoingCallParams {
   role: "parent" | "family_member";
@@ -22,10 +23,22 @@ export const handleAdultOutgoingCall = async ({
   remoteId,
   offer,
 }: AdultOutgoingCallParams): Promise<AdultOutgoingCallResult> => {
+  // Edge case: Check if callee (child) is busy
+  const busyCheck = await checkCalleeBusy(remoteId, "child");
+  if (busyCheck.isBusy) {
+    console.warn("📞 [ADULT OUTGOING] Callee is busy, cannot initiate call:", {
+      remoteId,
+      activeCallId: busyCheck.activeCallId,
+      reason: busyCheck.reason,
+    });
+    throw new Error("User is busy in another call");
+  }
+
+  // Step A: Create call_session with state=initiating
   const callData: Record<string, unknown> = {
     caller_type: role,
     child_id: remoteId,
-    status: "ringing",
+    status: "initiating", // Start with initiating, will transition to ringing
     offer: { type: offer.type, sdp: offer.sdp } as Json,
     ended_at: null,
     recipient_type: "child", // CRITICAL: Set recipient_type for Realtime filtering
@@ -84,6 +97,12 @@ export const handleAdultOutgoingCall = async ({
     throw error;
   }
   if (!call) throw new Error("Failed to create call");
+
+  // Step A: Update status to ringing after creation (caller UI shows "Calling...")
+  await supabase
+    .from("calls")
+    .update({ status: "ringing" })
+    .eq("id", call.id);
 
   return { callId: call.id };
 };

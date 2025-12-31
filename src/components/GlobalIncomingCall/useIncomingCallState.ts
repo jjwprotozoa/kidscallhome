@@ -837,18 +837,29 @@ export const useIncomingCallState = () => {
                 }
               );
 
-              // CRITICAL: Only process calls that are ringing - ignore active/ended calls
-              // This prevents processing calls that were already accepted
-              if (call.status !== "ringing") {
+              // CRITICAL: Accept both "initiating" and "ringing" status
+              // "initiating" means call just created, will auto-update to "ringing"
+              // Ignore active/ended calls to prevent processing calls that were already accepted
+              if (call.status === "active" || call.status === "ended") {
                 console.warn(
-                  "⚠️ [INCOMING CALL STATE] Call is not ringing - ignoring INSERT event",
+                  "⚠️ [INCOMING CALL STATE] Call is active/ended - ignoring INSERT event",
                   {
                     callId: call.id,
                     status: call.status,
-                    reason: "Only process ringing calls via INSERT events",
+                    reason: "Only process initiating/ringing calls via INSERT events",
                   }
                 );
                 return;
+              }
+
+              // If status is "initiating", update to "ringing" to notify caller
+              if (call.status === "initiating") {
+                await supabase
+                  .from("calls")
+                  .update({ status: "ringing" })
+                  .eq("id", call.id);
+                // Update the call object for processing
+                call.status = "ringing";
               }
 
               const matches = subscriptionIsFamilyMember

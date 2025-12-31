@@ -10,6 +10,20 @@ import {
   type QualityProfile,
 } from "../config/callQualityProfiles";
 
+// RTCRemoteInboundRtpStreamStats type definition
+// This type represents statistics for remote inbound RTP streams
+// Reported via RTCP Receiver Report (RR) or Extended Report (XR)
+interface RTCRemoteInboundRtpStreamStats extends RTCStats {
+  kind?: "audio" | "video";
+  ssrc: number;
+  transportId: string;
+  codecId?: string;
+  fractionLost?: number; // Fraction of packets lost (0-1)
+  packetsLost?: number;
+  jitter?: number;
+  roundTripTime?: number;
+}
+
 // Quality levels from worst to best (re-export for backward compatibility)
 export type NetworkQualityLevel = QualityLevel;
 
@@ -240,6 +254,8 @@ export const useNetworkQuality = (): UseNetworkQualityReturn => {
   const forceAudioOnlyRef = useRef(false);
   const consecutivePoorQualityRef = useRef(0);
   const consecutiveGoodQualityRef = useRef(0);
+  const isMonitoringActiveRef = useRef(false);
+  const networkChangeHandlerRef = useRef<(() => void) | null>(null);
   
   // Apply quality preset to peer connection
   const applyQualityPreset = useCallback(async (
@@ -339,6 +355,11 @@ export const useNetworkQuality = (): UseNetworkQualityReturn => {
   
   // Collect stats from peer connection
   const collectStats = useCallback(async (): Promise<void> => {
+    // CRITICAL: Check if monitoring is still active before collecting stats
+    if (!isMonitoringActiveRef.current) {
+      return;
+    }
+    
     const pc = peerConnectionRef.current;
     // Skip if no peer connection or if it's in an unusable state
     if (!pc) return;
@@ -531,6 +552,7 @@ export const useNetworkQuality = (): UseNetworkQualityReturn => {
   // Start monitoring
   const startMonitoring = useCallback((pc: RTCPeerConnection) => {
     peerConnectionRef.current = pc;
+    isMonitoringActiveRef.current = true;
     
     // Apply initial quality based on detected connection type
     const initialType = detectConnectionType();
@@ -564,7 +586,16 @@ export const useNetworkQuality = (): UseNetworkQualityReturn => {
     }).connection;
     
     if (connection) {
+      // Remove any existing handler first
+      if (networkChangeHandlerRef.current) {
+        connection.removeEventListener("change", networkChangeHandlerRef.current);
+      }
+      
       const handleChange = () => {
+        // Only process network changes if monitoring is still active
+        if (!isMonitoringActiveRef.current) {
+          return;
+        }
         const newType = detectConnectionType();
         safeLog.log("📊 [QUALITY] Network type changed:", newType);
         setConnectionType(newType);
@@ -572,16 +603,33 @@ export const useNetworkQuality = (): UseNetworkQualityReturn => {
         collectStats();
       };
       
+      networkChangeHandlerRef.current = handleChange;
       connection.addEventListener("change", handleChange);
     }
   }, [applyQualityPreset, collectStats]);
   
   // Stop monitoring
   const stopMonitoring = useCallback(() => {
+    // CRITICAL: Set flag first to prevent any pending collectStats calls from running
+    isMonitoringActiveRef.current = false;
+    
     if (monitoringIntervalRef.current) {
       clearInterval(monitoringIntervalRef.current);
       monitoringIntervalRef.current = null;
     }
+    
+    // Remove network change listener
+    const connection = (navigator as Navigator & { 
+      connection?: { 
+        removeEventListener: (type: string, listener: () => void) => void;
+      } 
+    }).connection;
+    
+    if (connection && networkChangeHandlerRef.current) {
+      connection.removeEventListener("change", networkChangeHandlerRef.current);
+      networkChangeHandlerRef.current = null;
+    }
+    
     peerConnectionRef.current = null;
     previousStatsRef.current.clear();
     safeLog.log("📊 [QUALITY] Stopped network quality monitoring");

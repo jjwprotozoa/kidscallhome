@@ -94,6 +94,8 @@ export const useVideoCall = () => {
     networkQuality, // Network quality info for adaptive streaming
     reconnecting, // ICE restart in progress
     batteryStatus, // Battery status for low-battery notifications
+    setUserMuted, // Function to sync mute state with useWebRTC
+    setUserVideoOff, // Function to sync video state with useWebRTC
   } = useWebRTC(callId, localVideoRef, remoteVideoRef, isChild);
 
   // Track if we've already attempted to play to avoid multiple calls
@@ -103,6 +105,33 @@ export const useVideoCall = () => {
   useEffect(() => {
     playAttemptedRef.current = false;
   }, [callId]);
+
+  // CRITICAL FIX: Sync video/mute state with useWebRTC IMMEDIATELY on mount and when state changes
+  // This ensures that when tracks are added to the peer connection, they respect the user's UI state
+  // Set initial state immediately (before any async operations) - use refs to avoid stale closures
+  const isMutedRef = useRef(isMuted);
+  const isVideoOffRef = useRef(isVideoOff);
+  
+  // Update refs when state changes
+  useEffect(() => {
+    isMutedRef.current = isMuted;
+    isVideoOffRef.current = isVideoOff;
+  }, [isMuted, isVideoOff]);
+
+  // Set initial state immediately on mount (before initializeConnection is called)
+  useEffect(() => {
+    setUserMuted(isMutedRef.current);
+    setUserVideoOff(isVideoOffRef.current);
+  }, [setUserMuted, setUserVideoOff]); // Run once on mount
+
+  // Also sync when state changes
+  useEffect(() => {
+    setUserMuted(isMuted);
+  }, [isMuted, setUserMuted]);
+
+  useEffect(() => {
+    setUserVideoOff(isVideoOff);
+  }, [isVideoOff, setUserVideoOff]);
 
   // Play outgoing ringtone for caller (when connecting and no remote stream yet)
   // Uses a different "waiting" tone than the incoming ringtone
@@ -1035,7 +1064,7 @@ export const useVideoCall = () => {
           if (isChildUser) {
             navigate("/child/dashboard");
           } else if (session) {
-            navigate("/parent/dashboard");
+            navigate("/parent/children");
           } else {
             navigate("/");
           }
@@ -1285,7 +1314,7 @@ export const useVideoCall = () => {
               if (isChildUser) {
                 navigate("/child/dashboard");
               } else if (session) {
-                navigate("/parent/dashboard");
+                navigate("/parent/children");
               } else {
                 // No session at all - redirect to login
                 navigate("/");
@@ -1463,7 +1492,7 @@ export const useVideoCall = () => {
     if (isChild) {
       navigate("/child/dashboard");
     } else {
-      navigate("/parent/dashboard");
+      navigate("/parent/children");
     }
   };
 

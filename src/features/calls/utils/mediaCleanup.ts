@@ -126,3 +126,8 @@ export function stopAllActiveStreams(): void {
   });
   activeStreamsRegistry.clear();
 }
+
+// Expose registry for media lock to check
+export function getActiveStreamsRegistry(): Set<MediaStream> {
+  return activeStreamsRegistry;
+}

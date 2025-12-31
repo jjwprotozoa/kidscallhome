@@ -32,6 +32,7 @@ The error URL shows: `https://kids-call-home-cu9u71znw-justins-projects-f7a019bf
 ### 3. Test Direct Access
 
 Open the manifest URL directly in a new tab:
+
 ```
 https://kids-call-home-cu9u71znw-justins-projects-f7a019bf.vercel.app/manifest.json
 ```
@@ -94,4 +95,3 @@ If after all these steps you still get 401:
 ✅ No 401 errors in console  
 ✅ PWA manifest is accessible  
 ✅ Browser can install the PWA
-

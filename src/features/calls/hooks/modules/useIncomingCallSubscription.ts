@@ -164,13 +164,22 @@ export const useIncomingCallSubscription = ({
                 call.caller_type === "child";
             }
 
-            // Only handle incoming calls (opposite caller_type) that are for this user
-            if (
-              call.status === "ringing" &&
+            // Handle incoming calls (opposite caller_type) that are for this user
+            // Accept both "initiating" and "ringing" status - "initiating" means call just created
+            const isIncomingCall =
+              (call.status === "initiating" || call.status === "ringing") &&
               call.caller_type !== actualRole &&
               call.offer &&
-              isForThisUser
-            ) {
+              isForThisUser;
+
+            if (isIncomingCall) {
+              // If status is "initiating", update to "ringing" to notify caller
+              if (call.status === "initiating") {
+                await supabase
+                  .from("calls")
+                  .update({ status: "ringing" })
+                  .eq("id", call.id);
+              }
               // eslint-disable-next-line no-console
               console.log("📞 [INCOMING SUBSCRIPTION] Incoming call detected:", {
                 callId: call.id,
@@ -181,10 +190,12 @@ export const useIncomingCallSubscription = ({
                 family_member_id: call.family_member_id,
                 parent_id: call.parent_id,
                 child_id: call.child_id,
+                status: call.status,
               });
               setCallId(call.id);
+              // Use "ringing" state for incoming calls (matches spec)
               setStateWithLogging(
-                "incoming",
+                "ringing",
                 "Incoming call detected from database",
                 {
                   callId: call.id,

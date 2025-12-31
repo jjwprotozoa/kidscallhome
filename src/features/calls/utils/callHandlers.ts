@@ -466,9 +466,43 @@ export const handleParentCall = async (
                   return;
                 }
 
+                // CRITICAL: Check signaling state before setting remote description
+                // Can only set remote answer if we have a local offer (have-local-offer state)
+                if (pc.signalingState !== "have-local-offer") {
+                  console.warn(
+                    "⚠️ [PARENT HANDLER] Cannot set remote answer - wrong signaling state",
+                    {
+                      callId: updatedCall.id,
+                      expectedState: "have-local-offer",
+                      actualState: pc.signalingState,
+                      hasLocalDescription: !!pc.localDescription,
+                    }
+                  );
+                  return;
+                }
+
                 console.log(
-                  "✅ [PARENT HANDLER] Parent received answer from child (existing call), setting remote description..."
+                  "✅ [PARENT HANDLER] Parent received answer from child (existing call), setting remote description...",
+                  {
+                    callId: updatedCall.id,
+                    signalingState: pc.signalingState,
+                    hasLocalDescription: !!pc.localDescription,
+                  }
                 );
+                
+                // CRITICAL: Double-check signaling state right before setting (race condition protection)
+                if (pc.signalingState !== "have-local-offer") {
+                  console.warn(
+                    "⚠️ [PARENT HANDLER] Signaling state changed before setting remote description - skipping",
+                    {
+                      callId: updatedCall.id,
+                      expectedState: "have-local-offer",
+                      actualState: pc.signalingState,
+                    }
+                  );
+                  return;
+                }
+                
                 const answerDesc =
                   updatedCall.answer as unknown as RTCSessionDescriptionInit;
                 await pc.setRemoteDescription(
@@ -501,10 +535,30 @@ export const handleParentCall = async (
                 iceCandidatesQueue.current = [];
                 setIsConnecting(false);
               } catch (error: unknown) {
-                console.error(
-                  "❌ [PARENT HANDLER] Error setting remote description:",
-                  error
-                );
+                const err = error as Error;
+                // Check if it's the specific "wrong state" error
+                if (err.message?.includes("stable") || err.message?.includes("wrong state")) {
+                  console.error(
+                    "❌ [PARENT HANDLER] Error setting remote description - wrong signaling state:",
+                    {
+                      error: err.message,
+                      callId: updatedCall.id,
+                      signalingState: pc.signalingState,
+                      hasLocalDescription: !!pc.localDescription,
+                      hasRemoteDescription: !!pc.remoteDescription,
+                    }
+                  );
+                } else {
+                  console.error(
+                    "❌ [PARENT HANDLER] Error setting remote description:",
+                    {
+                      error: err.message,
+                      callId: updatedCall.id,
+                      signalingState: pc.signalingState,
+                    }
+                  );
+                }
+                // Don't throw - let the call continue, might recover
               }
             }
 

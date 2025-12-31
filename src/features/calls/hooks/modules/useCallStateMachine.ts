@@ -5,10 +5,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 export type CallState =
   | "idle"
-  | "calling"
-  | "incoming"
-  | "connecting"
-  | "in_call"
+  | "initiating" // Caller: creating call_session
+  | "calling" // Caller: waiting for answer (ringing)
+  | "ringing" // Callee: incoming call received, showing UI
+  | "incoming" // Alias for ringing (backward compatibility)
+  | "connecting" // Both: WebRTC negotiation in progress
+  | "connected" // Both: WebRTC connected (in_call is alias)
+  | "in_call" // Alias for connected (backward compatibility)
   | "ended";
 
 export interface UseCallStateMachineReturn {

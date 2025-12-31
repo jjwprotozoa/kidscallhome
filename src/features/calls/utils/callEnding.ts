@@ -6,11 +6,16 @@ import { safeLog } from "@/utils/security";
 
 export type EndCallBy = "parent" | "child" | "family_member";
 export type EndCallReason =
-  | "hangup"
-  | "disconnected"
-  | "failed"
-  | "closed"
-  | string;
+  | "hangup" // User explicitly ended the call
+  | "declined" // Callee rejected the call
+  | "busy" // Callee is already in another call
+  | "no_answer" // Ring timeout - no answer within 30s
+  | "failed" // Connection failed to establish
+  | "network_lost" // Connection lost during call
+  | "disconnected" // Legacy: connection disconnected
+  | "closed" // Legacy: connection closed
+  | "disconnected_timeout" // Legacy: timeout waiting for connection
+  | string; // Allow custom reasons for edge cases
 
 /**
  * Idempotent end call mutation - both sides use the same function

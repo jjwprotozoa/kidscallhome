@@ -4,6 +4,7 @@
 
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
+import { checkCalleeBusy } from "../../../utils/busyDetection";
 
 export interface ChildOutgoingCallParams {
   localProfileId: string; // child_id
@@ -22,10 +23,27 @@ export const handleChildOutgoingCall = async ({
   remoteId,
   offer,
 }: ChildOutgoingCallParams): Promise<ChildOutgoingCallResult> => {
+  // Edge case: Check if callee is busy (has active call)
+  // Determine callee role based on recipient type detection below
+  // For now, check both parent and family_member roles
+  const parentBusyCheck = await checkCalleeBusy(remoteId, "parent");
+  const familyMemberBusyCheck = await checkCalleeBusy(remoteId, "family_member");
+  
+  if (parentBusyCheck.isBusy || familyMemberBusyCheck.isBusy) {
+    const busyCheck = parentBusyCheck.isBusy ? parentBusyCheck : familyMemberBusyCheck;
+    console.warn("📞 [CHILD OUTGOING] Callee is busy, cannot initiate call:", {
+      remoteId,
+      activeCallId: busyCheck.activeCallId,
+      reason: busyCheck.reason,
+    });
+    throw new Error("User is busy in another call");
+  }
+
+  // Step A: Create call_session with state=initiating
   const callData: Record<string, unknown> = {
     caller_type: "child",
     child_id: localProfileId,
-    status: "ringing",
+    status: "initiating", // Start with initiating, will transition to ringing
     offer: { type: offer.type, sdp: offer.sdp } as Json,
     ended_at: null,
   };
@@ -186,6 +204,12 @@ export const handleChildOutgoingCall = async ({
     if (error) throw error;
     if (!call) throw new Error("Failed to create call");
 
+    // Step A: Update status to ringing after creation (caller UI shows "Calling...")
+    await supabase
+      .from("calls")
+      .update({ status: "ringing" })
+      .eq("id", call.id);
+
     return {
       callId: call.id,
       recipientType: "family_member",
@@ -213,6 +237,12 @@ export const handleChildOutgoingCall = async ({
 
     if (error) throw error;
     if (!call) throw new Error("Failed to create call");
+
+    // Step A: Update status to ringing after creation (caller UI shows "Calling...")
+    await supabase
+      .from("calls")
+      .update({ status: "ringing" })
+      .eq("id", call.id);
 
     return {
       callId: call.id,

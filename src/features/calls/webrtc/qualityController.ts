@@ -7,6 +7,20 @@ import { safeLog } from "@/utils/security";
 import { QUALITY_PROFILES, type QualityLevel } from "../config/callQualityProfiles";
 import { getBatteryMonitor, type BatteryStatus } from "./batteryMonitor";
 
+// RTCRemoteInboundRtpStreamStats type definition
+// This type represents statistics for remote inbound RTP streams
+// Reported via RTCP Receiver Report (RR) or Extended Report (XR)
+interface RTCRemoteInboundRtpStreamStats extends RTCStats {
+  kind?: "audio" | "video";
+  ssrc: number;
+  transportId: string;
+  codecId?: string;
+  fractionLost?: number; // Fraction of packets lost (0-1)
+  packetsLost?: number;
+  jitter?: number;
+  roundTripTime?: number;
+}
+
 // Re-export BatteryStatus for use in other components
 export type { BatteryStatus } from "./batteryMonitor";
 

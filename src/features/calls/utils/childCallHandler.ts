@@ -331,9 +331,62 @@ const handleExistingCall = async (
     }
 
     // Now we can set the remote answer (peer connection should be in "have-local-offer" state)
+    // CRITICAL: Check signaling state before setting remote description
+    if (pc.signalingState !== "have-local-offer") {
+      safeLog.warn(
+        "⚠️ [CHILD HANDLER] Cannot set remote answer - wrong signaling state",
+        {
+          callId: existingCall.id,
+          expectedState: "have-local-offer",
+          actualState: pc.signalingState,
+          hasLocalDescription: !!pc.localDescription,
+        }
+      );
+      return;
+    }
+    
+    // CRITICAL: Double-check signaling state right before setting (race condition protection)
+    if (pc.signalingState !== "have-local-offer") {
+      safeLog.warn(
+        "⚠️ [CHILD HANDLER] Signaling state changed before setting remote description - skipping",
+        {
+          callId: existingCall.id,
+          expectedState: "have-local-offer",
+          actualState: pc.signalingState,
+        }
+      );
+      return;
+    }
+    
     const answerDesc =
       existingCall.answer as unknown as RTCSessionDescriptionInit;
-    await pc.setRemoteDescription(new RTCSessionDescription(answerDesc));
+    try {
+      await pc.setRemoteDescription(new RTCSessionDescription(answerDesc));
+    } catch (error: unknown) {
+      const err = error as Error;
+      if (err.message?.includes("stable") || err.message?.includes("wrong state")) {
+        safeLog.error(
+          "❌ [CHILD HANDLER] Error setting remote description - wrong signaling state:",
+          {
+            error: err.message,
+            callId: existingCall.id,
+            signalingState: pc.signalingState,
+            hasLocalDescription: !!pc.localDescription,
+            hasRemoteDescription: !!pc.remoteDescription,
+          }
+        );
+      } else {
+        safeLog.error(
+          "❌ [CHILD HANDLER] Error setting remote description:",
+          {
+            error: err.message,
+            callId: existingCall.id,
+            signalingState: pc.signalingState,
+          }
+        );
+      }
+      throw error; // Re-throw to let caller handle
+    }
 
     // Process queued ICE candidates
     for (const candidate of iceCandidatesQueue.current) {

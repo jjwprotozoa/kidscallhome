@@ -56,7 +56,10 @@ export const ChildIncomingCallUI = ({
       if (isTriggered || isAnsweringRef.current) return;
 
       if (e) {
-        e.preventDefault();
+        // Only preventDefault if the event is cancelable (not passive)
+        if (e.cancelable) {
+          e.preventDefault();
+        }
         e.stopPropagation();
       }
 
@@ -112,7 +115,10 @@ export const ChildIncomingCallUI = ({
   const handleDecline = useCallback(
     (e?: React.MouseEvent | React.TouchEvent) => {
       if (e) {
-        e.preventDefault();
+        // Only preventDefault if the event is cancelable (not passive)
+        if (e.cancelable) {
+          e.preventDefault();
+        }
         e.stopPropagation();
       }
       // CRITICAL: Don't block decline if answer was attempted - user should always be able to decline

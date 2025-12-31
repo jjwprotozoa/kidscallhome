@@ -367,25 +367,25 @@ export const VideoCallUI = ({
     // Start in loading state - will transition to playing via events
     updateStateRef("loading");
 
-    // Function to attempt play with proper error handling
-    // AUDIO: Only try unmuted if user has started the call
-    const attemptPlay = async () => {
-      if (!video.paused) return;
-
-      // Check again if user started call (might have changed)
+    // CRITICAL: Use onloadedmetadata-driven play (no retry loops)
+    // This prevents AbortError when element is removed from DOM
+    let cancelled = false;
+    
+    const handleLoadedMetadata = async () => {
+      if (cancelled || !video) return;
+      
+      console.warn("📹 [VIDEO UI] Video metadata loaded");
+      updateStateRef("loading");
+      
+      // Check if user started call (determines if audio should be enabled)
       const canPlayAudio = getUserHasStartedCall();
       audioEnabledRef.current = canPlayAudio;
 
-      console.warn("🎬 [VIDEO UI] Attempting to play video", {
-        canPlayAudio,
-        audioEnabledRef: audioEnabledRef.current,
-      });
-
-      if (canPlayAudio) {
-        // User clicked Call/Accept - try to play with audio
-        try {
+      try {
+        if (canPlayAudio) {
+          // User clicked Call/Accept - try to play with audio
           video.muted = false;
-          setIsVideoMuted(false);  // CRITICAL: Update React state
+          setIsVideoMuted(false);
           await video.play();
           console.warn("✅ [VIDEO UI] Video started playing WITH AUDIO");
           playAttemptedRef.current = true;
@@ -395,52 +395,53 @@ export const VideoCallUI = ({
           // Also try to play hidden audio element
           if (audioElementRef.current) {
             audioElementRef.current.muted = false;
-            audioElementRef.current.play().catch((e) => console.warn("Audio element play failed:", e));
+            audioElementRef.current.play().catch(() => {});
           }
-          return;
-        } catch (error: unknown) {
-          const playError = error as { name?: string };
-          console.warn("⏳ [VIDEO UI] Play with audio failed:", playError.name);
-          
-          if (playError.name === "NotAllowedError") {
-            // Even with user interaction, browser blocked audio - try muted
+        } else {
+          // Play muted (no user interaction yet)
+          video.muted = true;
+          setIsVideoMuted(true);
+          await video.play();
+          console.warn("⚠️ [VIDEO UI] Video playing MUTED - tap for audio");
+          playAttemptedRef.current = true;
+          setIsAudioMutedByBrowser(true);
+          updateStateRef("playing");
+        }
+      } catch (error: unknown) {
+        if (cancelled) return; // Element removed, ignore error
+        
+        const playError = error as { name?: string };
+        if (playError.name === "NotAllowedError" && canPlayAudio) {
+          // Browser blocked audio - try muted
+          try {
             video.muted = true;
             setIsVideoMuted(true);
             setIsAudioMutedByBrowser(true);
+            await video.play();
+            updateStateRef("playing");
+          } catch (mutedError) {
+            if (!cancelled) {
+              console.error("❌ [VIDEO UI] Even muted play failed:", mutedError);
+              updateStateRef("error");
+            }
           }
+        } else if (playError.name !== "AbortError") {
+          // AbortError is expected when element is removed - don't log as error
+          console.warn("⏳ [VIDEO UI] Play failed:", playError.name);
+          updateStateRef("error");
         }
       }
-
-      // Fallback: Play muted (no user interaction or browser blocked audio)
-      try {
-        video.muted = true;
-        setIsVideoMuted(true);
-        await video.play();
-        console.warn("⚠️ [VIDEO UI] Video playing MUTED - tap for audio");
-        playAttemptedRef.current = true;
-        setIsAudioMutedByBrowser(true);
-        updateStateRef("playing");
-      } catch (mutedError) {
-        console.error("❌ [VIDEO UI] Even muted play failed:", mutedError);
-        updateStateRef("error");
-      }
     };
 
-    // Event listeners - these drive the state, not polling
-    const handleLoadedMetadata = () => {
-      console.warn("📹 [VIDEO UI] Video metadata loaded");
-      updateStateRef("loading");
-      attemptPlay();
-    };
-
-    const handleLoadedData = () => {
-      console.warn("📹 [VIDEO UI] Video data loaded");
-      attemptPlay();
-    };
-
+    // Set up metadata handler
+    video.onloadedmetadata = handleLoadedMetadata;
+    
+    // Also handle canplay for immediate play if metadata already loaded
     const handleCanPlay = () => {
-      console.warn("📹 [VIDEO UI] Video can play");
-      attemptPlay();
+      if (cancelled || !video) return;
+      if (video.paused && !playAttemptedRef.current) {
+        handleLoadedMetadata();
+      }
     };
 
     const handlePlaying = () => {
@@ -476,8 +477,6 @@ export const VideoCallUI = ({
     };
 
     // Bind to video element events - these are the source of truth
-    video.addEventListener("loadedmetadata", handleLoadedMetadata);
-    video.addEventListener("loadeddata", handleLoadedData);
     video.addEventListener("canplay", handleCanPlay);
     video.addEventListener("canplaythrough", handleCanPlayThrough);
     video.addEventListener("playing", handlePlaying);
@@ -553,6 +552,8 @@ export const VideoCallUI = ({
     // Also check periodically if video is playing but state is still loading
     // This handles edge cases where events don't fire
     const checkInterval = setInterval(() => {
+      if (cancelled || !video) return;
+      
       // Check if video is actually playing (not paused) and has unmuted tracks
       // but state is still loading
       if (!video.paused) {
@@ -566,21 +567,28 @@ export const VideoCallUI = ({
           updateStateRef("playing");
         }
       }
-    }, 2000); // Check every 2 seconds (reduced from 500ms to save resources)
+    }, 2000); // Check every 2 seconds
 
-    // Initial play attempt
-    attemptPlay();
+    // Set srcObject and trigger metadata load
+    video.srcObject = remoteStream;
+    
+    // If metadata already loaded, trigger play immediately
+    if (video.readyState >= 1) {
+      handleLoadedMetadata();
+    }
 
     return () => {
+      cancelled = true;
       clearInterval(checkInterval);
-      video.removeEventListener("loadedmetadata", handleLoadedMetadata);
-      video.removeEventListener("loadeddata", handleLoadedData);
-      video.removeEventListener("canplay", handleCanPlay);
-      video.removeEventListener("canplaythrough", handleCanPlayThrough);
-      video.removeEventListener("playing", handlePlaying);
-      video.removeEventListener("waiting", handleWaiting);
-      video.removeEventListener("pause", handlePause);
-      video.removeEventListener("error", handleError);
+      if (video) {
+        video.onloadedmetadata = null;
+        video.removeEventListener("canplay", handleCanPlay);
+        video.removeEventListener("canplaythrough", handleCanPlayThrough);
+        video.removeEventListener("playing", handlePlaying);
+        video.removeEventListener("waiting", handleWaiting);
+        video.removeEventListener("pause", handlePause);
+        video.removeEventListener("error", handleError);
+      }
 
       // Clean up track listeners
       trackHandlers.forEach((handlers, track) => {
