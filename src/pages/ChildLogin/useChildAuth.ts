@@ -326,6 +326,8 @@ export const useChildAuth = (skipFamilyCode: boolean) => {
 
         // Success - create enhanced session with expiration and device fingerprint
         setChildData(data);
+        
+        // Set session synchronously before navigation
         setChildSession({
           childId: data.id,
           childName: data.name,
@@ -333,14 +335,34 @@ export const useChildAuth = (skipFamilyCode: boolean) => {
           parentId: data.parent_id,
         });
 
+        // Verify session was set correctly before navigating
+        // Use a small delay to ensure localStorage write completes
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        // Double-check session exists before navigation
+        const { getChildSessionLegacy } = await import("@/lib/childSession");
+        const verifySession = getChildSessionLegacy();
+        if (!verifySession) {
+          safeLog.error("Session verification failed after setting", {
+            childId: data.id.substring(0, 8) + "****",
+          });
+          toast({
+            title: "Session error",
+            description: "Failed to create session. Please try logging in again.",
+            variant: "destructive",
+          });
+          setLoading(false);
+          return { success: false, error: "Session creation failed" };
+        }
+
         // Authorize device if family code was used (new device)
         if (!skipFamilyCode) {
           authorizeDevice(data.id);
         }
 
-        // Navigate after delay
+        // Navigate after delay (show success message briefly)
         setTimeout(() => {
-          navigate("/child/dashboard");
+          navigate("/child/dashboard", { replace: true });
         }, SUCCESS_REDIRECT_DELAY_MS);
 
         // Track device (fire-and-forget)

@@ -16,7 +16,24 @@ export const useCodeHandlers = (
     if (familyCode) {
       return `${familyCode}-${child.login_code}`;
     }
+    // Fallback: return child code only if family code not available
+    // Note: This will result in an incomplete code that won't work for login
+    // Components using this should validate familyCode exists before generating QR codes or links
     return child.login_code;
+  }, [familyCode]);
+
+  // Validated version that ensures family code is present
+  const getValidatedFullLoginCode = useCallback((child: Child): string | null => {
+    if (!familyCode) {
+      return null; // Indicates family code is missing
+    }
+    const fullCode = `${familyCode}-${child.login_code}`;
+    // Validate format: should have 3 parts (familyCode-color/animal-number)
+    const parts = fullCode.split("-");
+    if (parts.length !== 3 || parts[0].length !== 6) {
+      return null; // Invalid format
+    }
+    return fullCode;
   }, [familyCode]);
 
   const handleCopyCode = useCallback((code: string) => {
@@ -27,8 +44,67 @@ export const useCodeHandlers = (
     });
   }, [toast]);
 
-  const handleCopyMagicLink = useCallback((child: Child) => {
-    const fullCode = getFullLoginCode(child);
+  const handleCopyMagicLink = useCallback(async (child: Child) => {
+    // Magic links MUST include the family code for proper authentication
+    let codeToUse = familyCode;
+    
+    // If family code is not available, try to fetch it
+    if (!codeToUse || codeToUse.trim().length === 0) {
+      try {
+        const { supabase } = await import("@/integrations/supabase/client");
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          const { data: parentData } = await supabase
+            .from("parents")
+            .select("family_code")
+            .eq("id", session.user.id)
+            .maybeSingle();
+          
+          if (parentData?.family_code) {
+            codeToUse = parentData.family_code;
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching family code:", error);
+      }
+    }
+    
+    // Final check - if still no family code, show error
+    if (!codeToUse || codeToUse.trim().length === 0) {
+      toast({
+        title: "Cannot generate magic link",
+        description: "Family code is required to generate a magic link. Please wait a moment and try again, or refresh the page.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // Construct the full code directly to ensure family code is always included
+    // Format: FAMILYCODE-color/animal-number (e.g., EGW6RZ-fish-34)
+    const fullCode = `${codeToUse.trim().toUpperCase()}-${child.login_code}`;
+    
+    // Validate the format before generating the link
+    const parts = fullCode.split("-");
+    if (parts.length !== 3 || parts[0].length !== 6) {
+      toast({
+        title: "Invalid login code format",
+        description: `The login code format is incorrect. Expected format: FAMILYCODE-color/animal-number. Got: ${fullCode}`,
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // Validate child login code format (should be color/animal-number)
+    const childCodeParts = child.login_code.split("-");
+    if (childCodeParts.length !== 2) {
+      toast({
+        title: "Invalid child login code",
+        description: "The child's login code format is incorrect. Please contact support.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     const encodedCode = encodeURIComponent(fullCode);
     const magicLink = `${window.location.origin}/child/login?code=${encodedCode}`;
     navigator.clipboard.writeText(magicLink);
@@ -36,7 +112,7 @@ export const useCodeHandlers = (
       title: "Copied!",
       description: "Magic link copied to clipboard",
     });
-  }, [getFullLoginCode, toast]);
+  }, [familyCode, toast]);
 
   const handleUpdateLoginCode = useCallback(async (child: Child, setIsUpdating: (value: boolean) => void) => {
     setIsUpdating(true);
@@ -98,6 +174,7 @@ export const useCodeHandlers = (
 
   return {
     getFullLoginCode,
+    getValidatedFullLoginCode,
     handleCopyCode,
     handleCopyMagicLink,
     handleUpdateLoginCode,

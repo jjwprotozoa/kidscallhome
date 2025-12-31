@@ -16,6 +16,7 @@ const GlobalIncomingCall = lazy(() => import("@/components/GlobalIncomingCall").
 const GlobalMessageNotifications = lazy(() => import("@/components/GlobalMessageNotifications").then(m => ({ default: m.GlobalMessageNotifications })));
 const GlobalPresenceTracker = lazy(() => import("@/components/GlobalPresenceTracker").then(m => ({ default: m.GlobalPresenceTracker })));
 const PWAInstallPrompt = lazy(() => import("@/components/PWAInstallPrompt").then(m => ({ default: m.PWAInstallPrompt })));
+const UpdateAvailableToast = lazy(() => import("@/components/UpdateAvailableToast").then(m => ({ default: m.UpdateAvailableToast })));
 const Sonner = lazy(() => import("@/components/ui/sonner").then(m => ({ default: m.Toaster })));
 const Toaster = lazy(() => import("@/components/ui/toaster").then(m => ({ default: m.Toaster })));
 
@@ -364,6 +365,9 @@ const DeferredGlobalComponents = () => {
       </ErrorBoundary>
       <CookieConsent />
       <PWAInstallPrompt />
+      <ErrorBoundary fallback={null}>
+        <UpdateAvailableToast />
+      </ErrorBoundary>
     </Suspense>
   );
 };

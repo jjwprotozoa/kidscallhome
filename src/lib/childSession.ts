@@ -96,9 +96,20 @@ export function getChildSession(): ChildSession | null {
     }
 
     // Verify device fingerprint hasn't changed (detect session hijacking)
-    if (!verifyDeviceFingerprint(session.deviceFingerprint)) {
-      clearChildSession();
-      return null;
+    // Note: Device fingerprint can change due to browser updates, zoom level changes, etc.
+    // In development, we're more lenient to avoid false positives
+    const fingerprintMatches = verifyDeviceFingerprint(session.deviceFingerprint);
+    if (!fingerprintMatches) {
+      // Log the mismatch for debugging, but only clear session in production
+      if (import.meta.env.PROD) {
+        console.warn("[CHILD SESSION] Device fingerprint mismatch - possible session hijacking");
+        clearChildSession();
+        return null;
+      } else {
+        // In development, allow the session even if fingerprint doesn't match
+        // This prevents false positives from browser updates, zoom changes, etc.
+        console.warn("[CHILD SESSION] Device fingerprint mismatch in dev - allowing session");
+      }
     }
 
     return session;

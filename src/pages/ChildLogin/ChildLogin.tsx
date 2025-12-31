@@ -89,6 +89,35 @@ const ChildLogin = () => {
           });
           magicLinkProcessed.current = false;
         }
+      } else if (parts.length === 2) {
+        // Partial code detected - missing family code (e.g., "fish-34" instead of "ABC123-fish-34")
+        // Pre-fill the color/animal and number, then show family code input
+        const [option, num] = parts;
+        
+        if (option && num && option.length > 0 && num.length > 0) {
+          setSelectedOption(option.toLowerCase());
+          setNumber(num);
+          const isColor = colors.some((c) => c.name === option.toLowerCase());
+          setCodeType(isColor ? "color" : "animal");
+          setStep("familyCode"); // Show family code input screen
+          setIsMagicLink(false); // Don't show preloader, show normal flow
+          
+          toast({
+            title: "Family code needed",
+            description:
+              "This link is missing the family code. Please enter your 6-character family code to complete login.",
+            variant: "default",
+          });
+        } else {
+          setIsMagicLink(false);
+          toast({
+            title: "Invalid login code",
+            description:
+              "The login code format is incorrect. Expected: familyCode-color/animal-number (e.g., ABC123-fish-34)",
+            variant: "destructive",
+          });
+          magicLinkProcessed.current = false;
+        }
       } else {
         setIsMagicLink(false); // Reset flag on error
         toast({

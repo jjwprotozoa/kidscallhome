@@ -29,20 +29,47 @@ export const PWAInstallPrompt = () => {
       return;
     }
 
-    // Check if user has dismissed the prompt
-    const dismissed = localStorage.getItem(INSTALL_PROMPT_STORAGE_KEY);
-    if (dismissed) {
-      return;
+    // Check if user has dismissed the prompt (and dismissal is still valid)
+    const dismissedData = localStorage.getItem(INSTALL_PROMPT_STORAGE_KEY);
+    if (dismissedData) {
+      try {
+        const { timestamp } = JSON.parse(dismissedData);
+        const dismissedDate = new Date(timestamp);
+        const daysSinceDismissal = (Date.now() - dismissedDate.getTime()) / (1000 * 60 * 60 * 24);
+        
+        // If dismissed within last 7 days, don't show prompt
+        if (daysSinceDismissal < 7) {
+          return;
+        }
+        // Dismissal expired, remove it so we can show prompt again
+        localStorage.removeItem(INSTALL_PROMPT_STORAGE_KEY);
+      } catch {
+        // Invalid data, remove it
+        localStorage.removeItem(INSTALL_PROMPT_STORAGE_KEY);
+      }
     }
 
     // Listen for the beforeinstallprompt event
     const handleBeforeInstallPrompt = (e: Event) => {
-      // Only prevent default if we're going to show our custom prompt
-      // Check if user has dismissed before preventing default
-      const dismissed = localStorage.getItem(INSTALL_PROMPT_STORAGE_KEY);
-      if (dismissed) {
-        // User already dismissed - don't prevent default, let browser handle it
-        return;
+      // Check if user has dismissed (and dismissal is still valid)
+      const dismissedData = localStorage.getItem(INSTALL_PROMPT_STORAGE_KEY);
+      if (dismissedData) {
+        try {
+          const { timestamp } = JSON.parse(dismissedData);
+          const dismissedDate = new Date(timestamp);
+          const daysSinceDismissal = (Date.now() - dismissedDate.getTime()) / (1000 * 60 * 60 * 24);
+          
+          // If dismissed within last 7 days, don't show prompt
+          if (daysSinceDismissal < 7) {
+            // User recently dismissed - don't prevent default, let browser handle it
+            return;
+          }
+          // Dismissal expired, remove it so we can show prompt again
+          localStorage.removeItem(INSTALL_PROMPT_STORAGE_KEY);
+        } catch {
+          // Invalid data, remove it
+          localStorage.removeItem(INSTALL_PROMPT_STORAGE_KEY);
+        }
       }
       
       // Prevent the default browser install prompt
@@ -92,21 +119,13 @@ export const PWAInstallPrompt = () => {
     }
   };
 
-  const handleDismiss = async () => {
+  const handleDismiss = () => {
     setShowPrompt(false);
     
-    // If we prevented default but user dismissed, we should still call prompt()
-    // to satisfy browser requirements, but we'll let it fail silently
+    // Clear the deferred prompt without calling prompt()
+    // Since user explicitly dismissed, we don't want to show browser's native prompt
+    // The browser will remember the dismissal and may show it again later if needed
     if (deferredPrompt) {
-      try {
-        // Call prompt() to satisfy browser requirement, but don't await user choice
-        // since user already dismissed our custom prompt
-        await deferredPrompt.prompt();
-        // Immediately get user choice to clear the deferred prompt
-        await deferredPrompt.userChoice;
-      } catch {
-        // Ignore errors - prompt may not be available or user may have dismissed
-      }
       setDeferredPrompt(null);
     }
     

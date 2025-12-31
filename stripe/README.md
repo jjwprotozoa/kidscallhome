@@ -5,6 +5,7 @@ This directory contains scripts for running a **local Stripe webhook receiver** 
 ## Environment Separation
 
 ### 🏠 Localhost (Development Testing)
+
 - **Purpose:** Test webhooks locally during development
 - **Server:** Local Node.js server (`webhook-server.cjs`) running on `http://127.0.0.1:4242`
 - **Stripe Mode:** Test mode only (`sk_test_...`)
@@ -12,10 +13,11 @@ This directory contains scripts for running a **local Stripe webhook receiver** 
 - **Database Updates:** Updates both `billing_subscriptions` and `stripe_checkout_sessions` tables
 
 ### 🌐 Development/Production (Supabase Edge Function)
+
 - **Purpose:** Handle real webhooks from Stripe in deployed environments
 - **Server:** Supabase Edge Function at `/functions/v1/stripe-webhook`
 - **Stripe Mode:** Supports both test and live mode (auto-detects from event `livemode` property)
-- **Webhook Secrets:** 
+- **Webhook Secrets:**
   - Test: `STRIPE_WEBHOOK_SECRET_TEST` (for test mode events)
   - Live: `STRIPE_WEBHOOK_SECRET` (for live mode events)
 - **Database Updates:** Updates both `billing_subscriptions` and `stripe_checkout_sessions` tables
@@ -82,7 +84,9 @@ Set these in Supabase Dashboard → Edge Functions → Secrets:
 Both environments update these Supabase tables:
 
 ### 1. `billing_subscriptions`
+
 Tracks user subscription status and Stripe subscription details:
+
 - `user_id` - Links to `auth.users`
 - `stripe_customer_id` - Stripe customer ID
 - `stripe_subscription_id` - Stripe subscription ID
@@ -92,7 +96,9 @@ Tracks user subscription status and Stripe subscription details:
 - `cancel_at_period_end` - Whether subscription will cancel at period end
 
 ### 2. `stripe_checkout_sessions`
+
 Tracks completed checkout sessions for fraud prevention:
+
 - `checkout_session_id` - Stripe checkout session ID
 - `parent_id` - Links to `parents` table (user who completed checkout)
 - `subscription_type` - Type of subscription purchased
@@ -194,6 +200,7 @@ Events should appear at:
 ## Development/Production Webhook Setup
 
 For deployed environments, webhooks are handled by the Supabase Edge Function at:
+
 ```
 https://your-project.supabase.co/functions/v1/stripe-webhook
 ```
@@ -201,12 +208,12 @@ https://your-project.supabase.co/functions/v1/stripe-webhook
 ### Stripe Dashboard Configuration
 
 1. **Test Mode Webhook:**
-   - Go to: https://dashboard.stripe.com/test/webhooks
+   - Go to: <https://dashboard.stripe.com/test/webhooks>
    - Add endpoint: `https://your-project.supabase.co/functions/v1/stripe-webhook`
    - Copy signing secret → Set as `STRIPE_WEBHOOK_SECRET_TEST` in Supabase secrets
 
 2. **Live Mode Webhook:**
-   - Go to: https://dashboard.stripe.com/webhooks (switch to live mode)
+   - Go to: <https://dashboard.stripe.com/webhooks> (switch to live mode)
    - Add endpoint: `https://your-project.supabase.co/functions/v1/stripe-webhook`
    - Copy signing secret → Set as `STRIPE_WEBHOOK_SECRET` in Supabase secrets
 
@@ -227,6 +234,7 @@ Both localhost and development/production handle these events:
 To verify Stripe is configured correctly:
 
 ### ✅ Localhost Configuration
+
 - [ ] `stripe listen` is running and forwarding to `http://127.0.0.1:4242/webhook`
 - [ ] `STRIPE_WEBHOOK_SECRET` in `start-webhook.ps1` matches the secret from `stripe listen`
 - [ ] `STRIPE_SECRET_KEY` is set to test key (`sk_test_...`)
@@ -234,6 +242,7 @@ To verify Stripe is configured correctly:
 - [ ] Both `billing_subscriptions` and `stripe_checkout_sessions` tables are updated when testing
 
 ### ✅ Development/Production Configuration
+
 - [ ] Test mode webhook endpoint configured in Stripe Dashboard
 - [ ] Live mode webhook endpoint configured in Stripe Dashboard
 - [ ] `STRIPE_WEBHOOK_SECRET_TEST` set in Supabase Edge Function secrets

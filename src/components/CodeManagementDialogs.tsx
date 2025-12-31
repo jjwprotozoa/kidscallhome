@@ -99,17 +99,34 @@ export const CodeManagementDialogs = ({
                 </p>
               </div>
               <div className="flex justify-center">
-                <img
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
-                    `${
-                      window.location.origin
-                    }/child/login?code=${encodeURIComponent(
-                      getFullLoginCode(showCodeDialog.child)
-                    )}`
-                  )}`}
-                  alt="QR Code"
-                  className="border-2 border-muted rounded-lg w-[200px] h-[200px] sm:w-[250px] sm:h-[250px] object-contain"
-                />
+                {(() => {
+                  const fullCode = getFullLoginCode(showCodeDialog.child);
+                  const parts = fullCode.split("-");
+                  // Validate that code has 3 parts (familyCode-color/animal-number)
+                  const isValidCode = parts.length === 3 && parts[0].length === 6;
+                  
+                  if (!isValidCode) {
+                    return (
+                      <div className="border-2 border-destructive rounded-lg w-[200px] h-[200px] sm:w-[250px] sm:h-[250px] flex items-center justify-center p-4">
+                        <p className="text-sm text-destructive text-center">
+                          QR code unavailable: Family code missing. Please refresh the page.
+                        </p>
+                      </div>
+                    );
+                  }
+                  
+                  return (
+                    <img
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
+                        `${
+                          window.location.origin
+                        }/child/login?code=${encodeURIComponent(fullCode)}`
+                      )}`}
+                      alt="QR Code"
+                      className="border-2 border-muted rounded-lg w-[200px] h-[200px] sm:w-[250px] sm:h-[250px] object-contain"
+                    />
+                  );
+                })()}
               </div>
               <div className="flex flex-col sm:flex-row gap-2">
                 <Button
@@ -249,17 +266,34 @@ export const CodeManagementDialogs = ({
                 </p>
               </div>
               <div className="flex justify-center print:my-4">
-                <img
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(
-                    `${
-                      window.location.origin
-                    }/child/login?code=${encodeURIComponent(
-                      getFullLoginCode(printViewChild)
-                    )}`
-                  )}`}
-                  alt="QR Code"
-                  className="border-2 border-muted rounded-lg w-[250px] h-[250px] sm:w-[300px] sm:h-[300px] object-contain print:border-gray-800"
-                />
+                {(() => {
+                  const fullCode = getFullLoginCode(printViewChild);
+                  const parts = fullCode.split("-");
+                  // Validate that code has 3 parts (familyCode-color/animal-number)
+                  const isValidCode = parts.length === 3 && parts[0].length === 6;
+                  
+                  if (!isValidCode) {
+                    return (
+                      <div className="border-2 border-destructive rounded-lg w-[250px] h-[250px] sm:w-[300px] sm:h-[300px] flex items-center justify-center p-4 print:border-gray-800">
+                        <p className="text-sm text-destructive text-center print:text-gray-600">
+                          QR code unavailable: Family code missing. Please refresh the page.
+                        </p>
+                      </div>
+                    );
+                  }
+                  
+                  return (
+                    <img
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(
+                        `${
+                          window.location.origin
+                        }/child/login?code=${encodeURIComponent(fullCode)}`
+                      )}`}
+                      alt="QR Code"
+                      className="border-2 border-muted rounded-lg w-[250px] h-[250px] sm:w-[300px] sm:h-[300px] object-contain print:border-gray-800"
+                    />
+                  );
+                })()}
               </div>
               <div className="instructions print:mt-4 print:text-sm print:text-gray-600">
                 <p>Scan the QR code or use the code above to log in</p>

@@ -206,13 +206,25 @@ self.addEventListener('fetch', (event) => {
   }
 
   // Skip external API requests that don't support CORS (let browser handle them)
+  // Also skip Google Fonts to avoid CSP violations - let browser handle them directly
   const knownExternalAPIs = [
     'haveibeenpwned.com',
     'ip-api.com',
     'ipapi.co'
   ];
+  const googleFontsDomains = [
+    'fonts.googleapis.com',
+    'fonts.gstatic.com'
+  ];
+  
   if (knownExternalAPIs.some(api => url.hostname.includes(api))) {
     return; // Don't intercept - let browser handle CORS errors normally
+  }
+  
+  // Skip Google Fonts requests to avoid CSP violations
+  // The browser will handle these directly and respect CSP properly
+  if (googleFontsDomains.some(domain => url.hostname.includes(domain))) {
+    return; // Don't intercept - let browser handle Google Fonts directly
   }
 
   // In development, completely bypass service worker for most requests

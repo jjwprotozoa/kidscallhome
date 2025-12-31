@@ -220,11 +220,10 @@ const Beta = () => {
       // Collect metadata
       const meta: Record<string, unknown> = {
         route: location.pathname,
-        user_agent: navigator.userAgent,
         platform: platform,
-        app_version: appVersion || undefined,
+        referrer: document.referrer || "",
+        user_agent: navigator.userAgent,
         device_model: deviceModel || undefined,
-        referrer: location.search, // Capture ?ref=email for deep links
       };
 
       const payload: BetaFeedbackPayload = {

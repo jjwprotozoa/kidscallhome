@@ -509,7 +509,7 @@ serve(async (req) => {
       "line_items[0][price]": priceId,
       "line_items[0][quantity]": quantityNum.toString(),
       mode: "subscription",
-      locale: "auto", // Auto-detect browser language, prevents locale module errors
+      locale: "en", // Use English locale explicitly to avoid module loading errors
       success_url: `${validatedOrigin}/parent/upgrade?success=1&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${validatedOrigin}/parent/upgrade?canceled=1`,
       client_reference_id: user.id, // This is the primary way to identify the user
