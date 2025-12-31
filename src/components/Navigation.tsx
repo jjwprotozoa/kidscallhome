@@ -1059,7 +1059,6 @@ const Navigation = () => {
                     <SheetTitle className="text-left">Menu</SheetTitle>
                   </SheetHeader>
                   <div className="flex flex-col gap-1 p-4" data-tour="child-help-mobile">
-                    <MobileNavItemChild to="/child" icon={Home} label="Home" />
                     <MobileNavItemChild
                       to="/child/dashboard"
                       icon={LayoutDashboard}
@@ -1111,10 +1110,6 @@ const Navigation = () => {
                 className="hidden sm:flex items-center gap-4 min-w-0 flex-shrink"
                 data-tour="child-help"
               >
-                <NavLink to="/child" className={getNavLinkClassName("/child")}>
-                  <Home className="h-4 w-4" />
-                  <span>Home</span>
-                </NavLink>
                 <NavLink
                   to="/child/dashboard"
                   className={getNavLinkClassName("/child/dashboard")}
