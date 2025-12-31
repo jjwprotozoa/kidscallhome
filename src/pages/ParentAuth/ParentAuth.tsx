@@ -268,14 +268,48 @@ const ParentAuth = () => {
       
       // Check if email confirmation is required
       // If user is not verified, redirect to verify-email screen
-      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      const { data: { user: currentUser }, error: getUserError } = await supabase.auth.getUser();
+      
+      if (getUserError || !currentUser) {
+        // User is not authenticated - wait a moment and retry
+        console.warn("User not authenticated after signup, retrying...", getUserError);
+        await new Promise(resolve => setTimeout(resolve, 500));
+        const { data: { user: retryUser } } = await supabase.auth.getUser();
+        if (!retryUser) {
+          toast({
+            title: "Authentication Error",
+            description: "Please refresh the page and try again.",
+            variant: "destructive",
+          });
+          return;
+        }
+      }
+      
       if (currentUser && !currentUser.email_confirmed_at) {
         // User needs email verification - redirect to verify-email screen
         navigate(`/verify-email?email=${encodeURIComponent(email)}`, { replace: true });
         return;
       }
       
-      // User is verified or doesn't need verification - proceed with family setup
+      // Ensure user is authenticated before proceeding with family setup
+      // This is critical for RLS policies to work
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        console.warn("No session found after signup, waiting for session...");
+        // Wait a bit longer for session to be established
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        const { data: { session: retrySession } } = await supabase.auth.getSession();
+        if (!retrySession) {
+          toast({
+            title: "Session Error",
+            description: "Please refresh the page and try again.",
+            variant: "destructive",
+          });
+          return;
+        }
+      }
+      
+      // User is verified and authenticated - proceed with family setup
       authState.setNeedsFamilySetup(true);
     }
   };
@@ -373,19 +407,47 @@ const ParentAuth = () => {
                   data: { user },
                 } = await supabase.auth.getUser();
                 if (!user) throw new Error("User not found");
-                const { data: parentProfile } = await supabase
+                
+                // Get parent profile to find family_id
+                const { data: parentProfile, error: profileError } = await supabase
                   .from("adult_profiles")
                   .select("family_id")
                   .eq("user_id", user.id)
                   .eq("role", "parent")
                   .single();
-                if (parentProfile?.family_id) {
-                  const { error: updateError } = await supabase
-                    .from("families")
-                    .update({ household_type })
-                    .eq("id", parentProfile.family_id);
-                  if (updateError) throw updateError;
+                
+                // Determine family_id (use fallback if profile doesn't exist)
+                const familyId = parentProfile?.family_id || user.id;
+                
+                // Update family with household type
+                // Note: FamilySetupSelection already updates this, but we do it here
+                // as a safety measure in case the component's update didn't complete
+                const { error: updateError } = await supabase
+                  .from("families")
+                  .update({ household_type })
+                  .eq("id", familyId);
+                
+                if (updateError) {
+                  // Provide more specific error messages
+                  if (updateError.code === "PGRST116") {
+                    throw new Error(
+                      "Family record not found. Please refresh the page and try again."
+                    );
+                  } else if (updateError.code === "42501") {
+                    throw new Error(
+                      "Permission denied. Please refresh the page and try again."
+                    );
+                  } else {
+                    console.error("Family update error details:", {
+                      code: updateError.code,
+                      message: updateError.message,
+                      details: updateError.details,
+                      hint: updateError.hint,
+                    });
+                    throw updateError;
+                  }
                 }
+                
                 authState.setNeedsFamilySetup(false);
                 toast({ title: "Family setup complete! Welcome!" });
                 navigate("/parent");
@@ -393,7 +455,9 @@ const ParentAuth = () => {
                 console.error("Error saving family setup:", error);
                 toast({
                   title: "Error",
-                  description: "Failed to save family setup. Please try again.",
+                  description: error instanceof Error 
+                    ? error.message 
+                    : "Failed to save family setup. Please try again.",
                   variant: "destructive",
                 });
               }

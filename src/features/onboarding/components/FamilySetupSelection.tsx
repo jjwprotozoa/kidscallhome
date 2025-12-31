@@ -27,40 +27,145 @@ export function FamilySetupSelection({ userId, onComplete }: FamilySetupSelectio
     setLoading(true);
 
     try {
-      // Get or create family for this user
-      const { data: parentProfile, error: profileError } = await supabase
-        .from("adult_profiles")
-        .select("family_id")
-        .eq("user_id", userId)
-        .eq("role", "parent")
-        .single();
-
-      if (profileError || !parentProfile) {
-        console.error("Profile query error:", profileError);
-        // Try fallback: use userId as family_id (which is the pattern we use)
-        const { error: updateError } = await supabase
-          .from("families")
-          .update({ household_type: selectedType })
-          .eq("id", userId);
-
-        if (updateError) {
-          throw new Error("Could not find or update family record. Please try again.");
+      // CRITICAL: Ensure user is authenticated before attempting update
+      // RLS policies require auth.uid() to be set
+      const { data: { user: currentUser }, error: authError } = await supabase.auth.getUser();
+      
+      if (authError || !currentUser) {
+        console.error("User not authenticated:", authError);
+        // Wait a moment and retry - session might still be establishing
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        const { data: { user: retryUser }, error: retryError } = await supabase.auth.getUser();
+        if (retryError || !retryUser) {
+          throw new Error(
+            "You are not authenticated. Please refresh the page and try again."
+          );
         }
+      }
+
+      // Verify the authenticated user matches the userId prop
+      if (currentUser && currentUser.id !== userId) {
+        console.warn("User ID mismatch:", { 
+          authenticated: currentUser.id, 
+          expected: userId 
+        });
+        // This shouldn't happen, but handle it gracefully
+      }
+
+      // Retry logic: Sometimes the trigger hasn't finished creating records yet
+      let familyId: string | null = null;
+      let attempts = 0;
+      const maxAttempts = 3;
+      const retryDelay = 500; // 500ms between retries
+
+      while (attempts < maxAttempts && !familyId) {
+        attempts++;
         
-        onComplete(selectedType);
-        return;
+        // Get parent profile to find family_id
+        const { data: parentProfile, error: profileError } = await supabase
+          .from("adult_profiles")
+          .select("family_id")
+          .eq("user_id", userId)
+          .eq("role", "parent")
+          .single();
+
+        if (!profileError && parentProfile?.family_id) {
+          familyId = parentProfile.family_id;
+          break;
+        }
+
+        // If no profile found, check if family exists directly
+        const { data: familyData, error: familyError } = await supabase
+          .from("families")
+          .select("id")
+          .eq("id", userId)
+          .single();
+
+        if (!familyError && familyData?.id) {
+          familyId = familyData.id;
+          break;
+        }
+
+        // If this isn't the last attempt, wait before retrying
+        if (attempts < maxAttempts) {
+          await new Promise(resolve => setTimeout(resolve, retryDelay));
+        }
+      }
+
+      // Fallback: use userId as family_id (which is the pattern we use)
+      if (!familyId) {
+        familyId = userId;
+        console.warn("Using userId as familyId fallback - records may not be created yet");
       }
 
       // Update family with household type
-      const { error: updateError } = await supabase
-        .from("families")
-        .update({
-          household_type: selectedType,
-        })
-        .eq("id", parentProfile.family_id);
+      // Use RPC function if user is not authenticated (email confirmation required)
+      // Otherwise use direct UPDATE
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      
+      let updateError = null;
+      
+      if (!authUser) {
+        // User not authenticated - use RPC function that bypasses RLS
+        const { data: rpcResult, error: rpcError } = await supabase.rpc(
+          "update_household_type",
+          {
+            p_user_id: userId,
+            p_household_type: selectedType,
+          }
+        );
+        
+        if (rpcError) {
+          updateError = rpcError;
+        } else if (!rpcResult?.success) {
+          updateError = { 
+            message: rpcResult?.error || "Failed to update household type",
+            code: "PGRST204" 
+          };
+        }
+      } else {
+        // User is authenticated - use direct UPDATE (RLS will apply)
+        const { error: directUpdateError } = await supabase
+          .from("families")
+          .update({
+            household_type: selectedType,
+          })
+          .eq("id", familyId);
+        
+        updateError = directUpdateError;
+      }
 
       if (updateError) {
-        throw updateError;
+        // Provide more specific error messages
+        if (updateError.code === "PGRST116") {
+          // No rows returned - family record doesn't exist
+          throw new Error(
+            "Family record not found. The records may still be creating. Please wait a moment and try again."
+          );
+        } else if (updateError.code === "42501") {
+          // Permission denied - RLS policy issue
+          console.error("RLS policy error - user may not have permission:", {
+            userId,
+            familyId,
+            error: updateError,
+          });
+          throw new Error(
+            "Permission denied. Please refresh the page and try again. If the problem persists, please contact support."
+          );
+        } else {
+          // Generic error with code for debugging
+          console.error("Family update error details:", {
+            code: updateError.code,
+            message: updateError.message,
+            details: updateError.details,
+            hint: updateError.hint,
+            userId,
+            familyId,
+          });
+          throw new Error(
+            `Failed to save family setup: ${updateError.message || "Unknown error"}. Please try again.`
+          );
+        }
       }
 
       // Call completion callback
