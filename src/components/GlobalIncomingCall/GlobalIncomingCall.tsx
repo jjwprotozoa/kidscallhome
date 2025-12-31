@@ -17,6 +17,7 @@ import { setUserStartedCall } from "@/utils/userInteraction";
 
 // Wrapper component to safely use router hooks
 // This prevents errors when the Router context isn't fully initialized during lazy loading
+// The outer component ensures Router context is ready before rendering this component
 const GlobalIncomingCallInner = () => {
   const { incomingCall, setIncomingCall, stopIncomingCall } = useIncomingCallState();
   const isAnsweringRef = useRef(false);
@@ -30,6 +31,42 @@ const GlobalIncomingCallInner = () => {
   useEffect(() => {
     incomingCallRef.current = incomingCall;
   }, [incomingCall]);
+
+  // Safe navigation helper that retries if Router context isn't ready
+  // This is critical for slower devices like Samsung A31 where Router context
+  // initialization can take longer than expected
+  const safeNavigate = (path: string, maxRetries = 3, retryDelay = 200) => {
+    const attemptNavigate = (attempt: number): void => {
+      try {
+        // Check if navigate function is available and callable
+        if (typeof navigate === 'function') {
+          navigate(path);
+        } else {
+          throw new Error('Navigate function not available');
+        }
+      } catch (error: any) {
+        // Check if it's the Router context error
+        const isRouterContextError = 
+          error?.message?.includes('basename') ||
+          error?.message?.includes('useContext') ||
+          error?.message?.includes('Router');
+        
+        if (isRouterContextError && attempt < maxRetries) {
+          // Router context not ready yet, retry after delay
+          if (import.meta.env.DEV) {
+            console.warn(`⚠️ [GLOBAL INCOMING CALL] Router context not ready, retrying navigation (attempt ${attempt + 1}/${maxRetries})...`);
+          }
+          setTimeout(() => attemptNavigate(attempt + 1), retryDelay * (attempt + 1));
+        } else {
+          // Max retries reached or different error
+          console.error("❌ [GLOBAL INCOMING CALL] Navigation failed after retries:", error);
+          throw error;
+        }
+      }
+    };
+    
+    attemptNavigate(0);
+  };
 
   const handleAnswerCall = async () => {
     // CRITICAL: Use ref instead of state to avoid race conditions
@@ -104,19 +141,20 @@ const GlobalIncomingCallInner = () => {
         setIncomingCall(null);
         incomingCallRef.current = null;
         
+        // Use safe navigation with retry logic for slower devices
         if (childId) {
           // Adult (parent or family member) answering child's call
           if (isFamilyMember) {
             if (import.meta.env.DEV) {
               console.log("✅ [GLOBAL INCOMING CALL] Routing family member to:", `/family-member/call/${childId}?callId=${callId}`);
             }
-            navigate(`/family-member/call/${childId}?callId=${callId}`);
+            safeNavigate(`/family-member/call/${childId}?callId=${callId}`);
           } else {
             // Parent answering child's call - use /parent/call/ route which uses useCallEngine with role="parent"
             if (import.meta.env.DEV) {
               console.log("✅ [GLOBAL INCOMING CALL] Routing parent to:", `/parent/call/${childId}?callId=${callId}`);
             }
-            navigate(`/parent/call/${childId}?callId=${callId}`);
+            safeNavigate(`/parent/call/${childId}?callId=${callId}`);
           }
         } else if (parentId || familyMemberId) {
           // Child answering parent's or family member's call - navigate to child call route
@@ -124,7 +162,7 @@ const GlobalIncomingCallInner = () => {
           if (import.meta.env.DEV) {
             console.log("✅ [GLOBAL INCOMING CALL] Routing child to:", `/child/call/${targetId}?callId=${callId}`);
           }
-          navigate(`/child/call/${targetId}?callId=${callId}`);
+          safeNavigate(`/child/call/${targetId}?callId=${callId}`);
         } else {
           console.error("❌ [GLOBAL INCOMING CALL] No child_id, parent_id, or family_member_id in incoming call:", currentCall);
         }
@@ -281,12 +319,13 @@ export const GlobalIncomingCall = () => {
       // If already ready, wait additional time for Router context
       if (checkReady()) {
         // Use a longer delay for slower devices - Router context needs time to initialize
-        // Samsung A31 and similar devices may need up to 1.5 seconds
+        // Samsung A31 and similar devices may need up to 2.5 seconds
+        // We use a longer delay to ensure Router context is fully initialized
         timeoutId = setTimeout(() => {
           if (mounted) {
             setIsReady(true);
           }
-        }, 1500); // Increased from 500ms to 1500ms for slower devices
+        }, 2500); // Increased from 1500ms to 2500ms for very slow devices like Samsung A31
         return;
       }
       
@@ -298,11 +337,12 @@ export const GlobalIncomingCall = () => {
           timeoutId = setTimeout(() => {
             if (mounted && checkReady()) {
               // Additional delay to ensure Router context is fully initialized
+              // Longer delay for slower devices like Samsung A31
               setTimeout(() => {
                 if (mounted) {
                   setIsReady(true);
                 }
-              }, 1000); // Additional 1 second delay for Router context
+              }, 2000); // Increased from 1000ms to 2000ms for slower devices
             } else if (mounted) {
               // If still not ready, set ready anyway after max wait
               setTimeout(() => {
@@ -327,11 +367,12 @@ export const GlobalIncomingCall = () => {
         if (mounted && checkReady()) {
           clearInterval(pollInterval);
           // Additional delay to ensure Router context is fully initialized
+          // Longer delay for slower devices like Samsung A31
           timeoutId = setTimeout(() => {
             if (mounted) {
               setIsReady(true);
             }
-          }, 1000); // 1 second delay for Router context initialization
+          }, 2000); // Increased from 1000ms to 2000ms for slower devices
         } else if (pollCount >= maxPolls) {
           clearInterval(pollInterval);
           // Maximum wait reached, render anyway
@@ -342,12 +383,13 @@ export const GlobalIncomingCall = () => {
       }, 200);
       
       // Fallback: ensure we render eventually
+      // Increased max wait for slower devices like Samsung A31
       timeoutId = setTimeout(() => {
         clearInterval(pollInterval);
         if (mounted) {
           setIsReady(true);
         }
-      }, 3000); // Maximum 3 second wait
+      }, 5000); // Increased from 3000ms to 5000ms for very slow devices
     };
     
     // Start initialization after a short delay to let the app start loading
