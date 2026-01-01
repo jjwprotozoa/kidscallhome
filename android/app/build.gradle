@@ -1,4 +1,5 @@
 apply plugin: 'com.android.application'
+apply plugin: 'kotlin-android'
 
 apply from: '../capacitor-cordova-android-plugins/cordova.variables.gradle'
 apply from: 'capacitor.build.gradle'
@@ -51,6 +52,7 @@ android {
 
 dependencies {
     implementation fileTree(dir: "libs", include: ["*.jar"])
+    implementation project(':capacitor-android')
     implementation project(':capacitor-app')
     implementation project(':capacitor-device')
     implementation project(':capacitor-haptics')
