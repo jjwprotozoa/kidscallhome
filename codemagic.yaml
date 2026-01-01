@@ -504,6 +504,14 @@ workflows:
       xcode: latest
       cocoapods: default
       ios_signing:
+        # IMPORTANT: If you get "No matching profiles found" error:
+        # 1. Go to Codemagic → Teams → Code Signing → ios_certificates group
+        # 2. Ensure you have:
+        #    - A Distribution Certificate (not Development)
+        #    - An App Store Provisioning Profile (not Development/Ad Hoc)
+        #    - The provisioning profile must be for bundle ID: com.kidscallhome.app
+        # 3. If profiles are missing, generate them in Codemagic or upload from Apple Developer
+        # 4. Verify the bundle ID in the profile matches exactly: com.kidscallhome.app
         distribution_type: app_store  # or 'development' for testing
         bundle_identifier: "com.kidscallhome.app"
     scripts:
@@ -527,15 +535,54 @@ workflows:
 
       - name: Sync Capacitor iOS (generates iOS project if needed)
         script: |
+          echo "=== Syncing Capacitor iOS Project ==="
+          echo "Current directory: $(pwd)"
+          echo ""
+          
           # Sync will create iOS project if it doesn't exist
+          echo "Running: npx cap sync ios"
           npx cap sync ios
           
           # Verify iOS project was created
           if [ ! -d "ios/App" ]; then
-            echo "❌ iOS project not found after sync. Trying to add iOS platform..."
+            echo "⚠️ iOS project not found after sync. Trying to add iOS platform..."
             npx cap add ios
             npx cap sync ios
           fi
+          
+          # Verify key files exist
+          echo ""
+          echo "=== Verifying iOS Project Structure ==="
+          if [ -d "ios/App" ]; then
+            echo "✅ ios/App directory exists"
+            ls -la ios/App/ | head -20
+          else
+            echo "❌ ios/App directory not found!"
+            exit 1
+          fi
+          
+          # Check for Podfile
+          if [ -f "ios/App/Podfile" ]; then
+            echo "✅ Podfile found at ios/App/Podfile"
+          else
+            echo "⚠️ Podfile not found at ios/App/Podfile"
+            echo "Searching for Podfile..."
+            find ios -name "Podfile" -type f 2>/dev/null || echo "No Podfile found anywhere"
+            echo ""
+            echo "This might be normal if Capacitor uses a different structure."
+            echo "The pod install step will handle this."
+          fi
+          
+          # Check for Xcode workspace
+          if [ -f "ios/App/App.xcworkspace/contents.xcworkspacedata" ]; then
+            echo "✅ Xcode workspace found"
+          else
+            echo "⚠️ Xcode workspace not found at expected location"
+            find ios -name "*.xcworkspace" -type d 2>/dev/null || echo "No workspace found"
+          fi
+          
+          echo ""
+          echo "✅ Capacitor iOS sync completed"
 
       - name: Configure iOS permissions in Info.plist
         script: |
@@ -571,8 +618,72 @@ workflows:
 
       - name: Install CocoaPods dependencies
         script: |
-          cd ios/App
+          echo "=== Installing CocoaPods Dependencies ==="
+          echo "Current directory: $(pwd)"
+          echo ""
+          
+          # Check if iOS directory exists
+          if [ ! -d "ios" ]; then
+            echo "❌ iOS directory not found!"
+            echo "This should have been created by 'Sync Capacitor iOS' step"
+            exit 1
+          fi
+          
+          # Find the Podfile location
+          PODFILE_PATH=$(find ios -name "Podfile" -type f | head -1)
+          
+          if [ -z "$PODFILE_PATH" ]; then
+            echo "⚠️ Podfile not found. Checking iOS directory structure..."
+            echo ""
+            echo "iOS directory contents:"
+            ls -la ios/ 2>/dev/null || echo "ios/ directory is empty or doesn't exist"
+            echo ""
+            
+            # Check if ios/App exists
+            if [ -d "ios/App" ]; then
+              echo "ios/App directory exists. Contents:"
+              ls -la ios/App/ 2>/dev/null || echo "ios/App is empty"
+              echo ""
+              
+              # Try to create Podfile if it's missing (Capacitor should have created it)
+              echo "⚠️ Podfile missing. This might indicate Capacitor sync didn't complete properly."
+              echo "Attempting to sync again..."
+              npx cap sync ios
+              
+              # Check again
+              PODFILE_PATH=$(find ios -name "Podfile" -type f | head -1)
+              if [ -z "$PODFILE_PATH" ]; then
+                echo "❌ Podfile still not found after sync!"
+                exit 1
+              fi
+            else
+              echo "❌ ios/App directory not found!"
+              echo "Capacitor iOS project was not created properly."
+              exit 1
+            fi
+          fi
+          
+          # Get the directory containing the Podfile
+          PODFILE_DIR=$(dirname "$PODFILE_PATH")
+          echo "✅ Found Podfile at: $PODFILE_PATH"
+          echo "Changing to directory: $PODFILE_DIR"
+          cd "$PODFILE_DIR"
+          
+          echo ""
+          echo "=== Running pod install ==="
           pod install
+          
+          if [ $? -ne 0 ]; then
+            echo "❌ pod install failed!"
+            echo ""
+            echo "Troubleshooting:"
+            echo "1. Check if CocoaPods is installed: pod --version"
+            echo "2. Try updating CocoaPods: pod repo update"
+            echo "3. Check Podfile syntax"
+            exit 1
+          fi
+          
+          echo "✅ CocoaPods dependencies installed successfully"
 
       - name: Configure iOS permissions after CocoaPods (if needed)
         script: |
@@ -593,9 +704,119 @@ workflows:
             echo "✅ iOS permissions configured"
           fi
 
+      - name: Verify and set bundle identifier in Xcode project
+        script: |
+          cd ios/App
+          echo "=== Verifying Bundle Identifier ==="
+          echo "Expected bundle ID: $BUNDLE_ID"
+          echo ""
+          
+          # Find the project.pbxproj file
+          PROJECT_FILE=$(find . -name "*.xcodeproj" -type d | head -1)
+          if [ -z "$PROJECT_FILE" ]; then
+            echo "❌ Xcode project not found!"
+            exit 1
+          fi
+          
+          echo "Found project: $PROJECT_FILE"
+          echo ""
+          
+          # Check current bundle identifier in project
+          CURRENT_BUNDLE_ID=$(grep -o 'PRODUCT_BUNDLE_IDENTIFIER = "[^"]*"' "$PROJECT_FILE/project.pbxproj" | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          echo "Current bundle ID in project: $CURRENT_BUNDLE_ID"
+          
+          # Update bundle identifier if it doesn't match
+          if [ "$CURRENT_BUNDLE_ID" != "$BUNDLE_ID" ]; then
+            echo "⚠️ Bundle ID mismatch! Updating to $BUNDLE_ID..."
+            sed -i '' "s/PRODUCT_BUNDLE_IDENTIFIER = \"[^\"]*\"/PRODUCT_BUNDLE_IDENTIFIER = \"$BUNDLE_ID\"/g" "$PROJECT_FILE/project.pbxproj"
+            echo "✅ Bundle ID updated"
+          else
+            echo "✅ Bundle ID matches"
+          fi
+          
+          # Also check Info.plist if it exists
+          if [ -f "App/Info.plist" ]; then
+            echo ""
+            echo "Checking Info.plist..."
+            INFO_BUNDLE_ID=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "App/Info.plist" 2>/dev/null || echo "")
+            if [ ! -z "$INFO_BUNDLE_ID" ]; then
+              echo "Info.plist bundle ID: $INFO_BUNDLE_ID"
+              if [ "$INFO_BUNDLE_ID" != "$BUNDLE_ID" ]; then
+                echo "⚠️ Updating Info.plist bundle ID..."
+                /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $BUNDLE_ID" "App/Info.plist" 2>/dev/null || true
+                echo "✅ Info.plist updated"
+              fi
+            fi
+          fi
+          
+          echo ""
+          echo "=== Final Bundle ID Verification ==="
+          FINAL_BUNDLE_ID=$(grep -o 'PRODUCT_BUNDLE_IDENTIFIER = "[^"]*"' "$PROJECT_FILE/project.pbxproj" | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          echo "Final bundle ID: $FINAL_BUNDLE_ID"
+          if [ "$FINAL_BUNDLE_ID" != "$BUNDLE_ID" ]; then
+            echo "❌ ERROR: Bundle ID still doesn't match!"
+            exit 1
+          fi
+
+      - name: List available provisioning profiles
+        script: |
+          echo "=== Available Provisioning Profiles ==="
+          echo "Checking for profiles matching bundle ID: $BUNDLE_ID"
+          echo ""
+          
+          # List all provisioning profiles
+          if [ -d ~/Library/MobileDevice/Provisioning\ Profiles ]; then
+            echo "Provisioning profiles directory exists"
+            ls -la ~/Library/MobileDevice/Provisioning\ Profiles/ | head -20 || echo "No profiles found"
+            echo ""
+            
+            # Try to extract bundle IDs from profiles
+            echo "Extracting bundle IDs from profiles..."
+            for profile in ~/Library/MobileDevice/Provisioning\ Profiles/*.mobileprovision; do
+              if [ -f "$profile" ]; then
+                BUNDLE_ID_IN_PROFILE=$(security cms -D -i "$profile" 2>/dev/null | grep -A 1 "application-identifier" | grep -o '"[^"]*"' | head -1 | sed 's/"//g' | sed 's/.*\.//' || echo "")
+                if [ ! -z "$BUNDLE_ID_IN_PROFILE" ]; then
+                  echo "  Profile: $(basename "$profile")"
+                  echo "    Bundle ID: $BUNDLE_ID_IN_PROFILE"
+                fi
+              fi
+            done
+          else
+            echo "⚠️ Provisioning profiles directory not found"
+          fi
+          
+          echo ""
+          echo "=== Codemagic Environment Check ==="
+          echo "BUNDLE_ID: $BUNDLE_ID"
+          echo "Distribution type: app_store"
+          echo ""
+          echo "⚠️ If no matching profiles are found above, you need to:"
+          echo "1. Go to Codemagic → Teams → Code Signing"
+          echo "2. Ensure the 'ios_certificates' group contains:"
+          echo "   - A Distribution Certificate"
+          echo "   - An App Store Provisioning Profile for bundle ID: $BUNDLE_ID"
+          echo "3. The provisioning profile must match exactly: $BUNDLE_ID"
+
       - name: Set up provisioning profiles settings on Xcode project
         script: |
-          xcode-project use-profiles
+          echo "=== Setting up provisioning profiles ==="
+          echo "Bundle ID: $BUNDLE_ID"
+          echo "Distribution type: app_store"
+          echo ""
+          
+          # Use Codemagic's xcode-project command to set up profiles
+          xcode-project use-profiles || {
+            echo "❌ Failed to set up provisioning profiles"
+            echo ""
+            echo "Troubleshooting steps:"
+            echo "1. Verify 'ios_certificates' group exists in Codemagic"
+            echo "2. Ensure it contains an App Store provisioning profile for: $BUNDLE_ID"
+            echo "3. Check that the certificate and profile are valid and not expired"
+            echo "4. Try regenerating the certificate/profile in Codemagic if needed"
+            exit 1
+          }
+          
+          echo "✅ Provisioning profiles configured"
 
       - name: Increment build number (if App Store Connect API key configured)
         script: |
