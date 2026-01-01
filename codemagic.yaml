@@ -536,62 +536,102 @@ workflows:
         script: |
           npm run build
 
-      - name: Add iOS platform (if not exists)
+      - name: Generate iOS platform
         script: |
-          if [ ! -d "ios" ]; then
-            echo "📱 iOS project not found, generating it now..."
-            npx cap add ios
-            echo "✅ iOS project generated"
+          echo "=== Generating iOS Platform ==="
+          echo "Current directory: $(pwd)"
+          echo ""
+          
+          # Check if ios/App/Podfile exists (indicates full iOS project)
+          if [ -f "ios/App/Podfile" ]; then
+            echo "✅ iOS project already exists with Podfile"
           else
-            echo "✅ iOS project already exists"
+            echo "📱 iOS project not complete, generating it now..."
+            
+            # Remove partial ios directory if it exists (just templates)
+            if [ -d "ios" ]; then
+              echo "Removing partial ios directory..."
+              # Save any template files we might need
+              if [ -f "ios/Info.plist.template" ]; then
+                cp ios/Info.plist.template /tmp/Info.plist.template.backup
+              fi
+              rm -rf ios
+            fi
+            
+            # Add iOS platform fresh
+            echo "Running: npx cap add ios"
+            npx cap add ios
+            
+            if [ $? -ne 0 ]; then
+              echo "❌ Failed to add iOS platform!"
+              exit 1
+            fi
+            
+            echo "✅ iOS project generated"
+          fi
+          
+          # List the ios directory structure
+          echo ""
+          echo "iOS directory structure:"
+          ls -la ios/ 2>/dev/null || echo "ios/ directory not found"
+          echo ""
+          if [ -d "ios/App" ]; then
+            echo "ios/App directory:"
+            ls -la ios/App/ 2>/dev/null || echo "ios/App is empty"
           fi
 
-      - name: Sync Capacitor iOS (generates iOS project if needed)
+      - name: Sync Capacitor iOS
         script: |
           echo "=== Syncing Capacitor iOS Project ==="
           echo "Current directory: $(pwd)"
           echo ""
           
-          # Sync will create iOS project if it doesn't exist
+          # Sync web assets and native plugins
           echo "Running: npx cap sync ios"
           npx cap sync ios
           
-          # Verify iOS project was created
-          if [ ! -d "ios/App" ]; then
-            echo "⚠️ iOS project not found after sync. Trying to add iOS platform..."
-            npx cap add ios
-            npx cap sync ios
+          if [ $? -ne 0 ]; then
+            echo "❌ Capacitor sync failed!"
+            echo ""
+            echo "Attempting recovery..."
+            
+            # Try to add iOS platform if sync failed
+            if [ ! -f "ios/App/Podfile" ]; then
+              echo "Podfile missing, trying to regenerate iOS project..."
+              rm -rf ios
+              npx cap add ios
+              npx cap sync ios
+            fi
           fi
           
           # Verify key files exist
           echo ""
           echo "=== Verifying iOS Project Structure ==="
-          if [ -d "ios/App" ]; then
-            echo "✅ ios/App directory exists"
-            ls -la ios/App/ | head -20
-          else
+          
+          if [ ! -d "ios/App" ]; then
             echo "❌ ios/App directory not found!"
             exit 1
           fi
+          echo "✅ ios/App directory exists"
+          ls -la ios/App/ | head -20
           
-          # Check for Podfile
-          if [ -f "ios/App/Podfile" ]; then
-            echo "✅ Podfile found at ios/App/Podfile"
-          else
-            echo "⚠️ Podfile not found at ios/App/Podfile"
-            echo "Searching for Podfile..."
-            find ios -name "Podfile" -type f 2>/dev/null || echo "No Podfile found anywhere"
+          # Check for Podfile (critical)
+          if [ ! -f "ios/App/Podfile" ]; then
+            echo "❌ Podfile not found at ios/App/Podfile!"
             echo ""
-            echo "This might be normal if Capacitor uses a different structure."
-            echo "The pod install step will handle this."
+            echo "This is a critical error. The iOS project was not generated correctly."
+            echo "Searching for any Podfile..."
+            find ios -name "Podfile" -type f 2>/dev/null || echo "No Podfile found anywhere"
+            exit 1
           fi
+          echo "✅ Podfile found at ios/App/Podfile"
           
-          # Check for Xcode workspace
-          if [ -f "ios/App/App.xcworkspace/contents.xcworkspacedata" ]; then
-            echo "✅ Xcode workspace found"
+          # Check for Xcode project
+          if [ -d "ios/App/App.xcodeproj" ]; then
+            echo "✅ Xcode project found"
           else
-            echo "⚠️ Xcode workspace not found at expected location"
-            find ios -name "*.xcworkspace" -type d 2>/dev/null || echo "No workspace found"
+            echo "⚠️ Xcode project not found"
+            find ios -name "*.xcodeproj" -type d 2>/dev/null || echo "No xcodeproj found"
           fi
           
           echo ""
