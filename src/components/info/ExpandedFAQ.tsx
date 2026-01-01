@@ -23,7 +23,7 @@ const faqItems: FAQItem[] = [
   },
   {
     question: "How does encryption protect my family?",
-    answer: "Kids Call Home uses end-to-end encryption for all calls and messages, meaning your family's conversations are scrambled and can only be decrypted by the intended recipient. Even if someone intercepted the data, they couldn't read or listen to it. This is the same level of security used by banks and healthcare systems to protect sensitive information."
+    answer: "Kids Call Home uses encryption for all calls and messages, meaning your family's conversations are protected in transit. The app uses WebRTC peer-to-peer connections with encryption, similar to modern video calling platforms. Your data is encrypted both in transit (during calls/messages) and at rest (in storage)."
   },
   {
     question: "What data does Kids Call Home collect?",

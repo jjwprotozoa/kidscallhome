@@ -46,3 +46,4 @@ CREATE TRIGGER update_billing_subscriptions_updated_at
 -- Add comment if missing
 COMMENT ON TABLE public.billing_subscriptions IS 'Stores Stripe subscription linkage and state. Source of truth for access/entitlements. Updated by webhooks.';
 
+

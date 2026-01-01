@@ -34,7 +34,7 @@ const softwareApplicationSchema = {
   "@type": "SoftwareApplication",
   name: "Kids Call Home",
   description:
-    "Safe video calling and messaging app for kids. Family-only contacts controlled by parents. Works on most phones, tablets, iPads, and Wi‑Fi devices without a SIM card or phone number. Encrypted calls and messages with no ads, no strangers, no filters, and no data tracking.",
+    "Safe video calling and messaging app for kids. Family-only contacts controlled by parents. Works on most phones, tablets, iPads, and Wi‑Fi devices without a SIM card or phone number. Encrypted calls and messages. No ads. Privacy-respecting analytics only.",
   url: "https://www.kidscallhome.com",
   applicationCategory: "CommunicationApplication",
   operatingSystem: ["Web", "Android", "iOS", "Tablet"],
@@ -56,7 +56,7 @@ const softwareApplicationSchema = {
     "Works without SIM card or phone number",
     "Works on most phones and tablets, including many kids tablets and e-readers",
     "Co-parenting friendly and long-distance family friendly",
-    "No ads, no filters, no data tracking",
+    "No ads. No tracking for advertising",
     "Magic link login for kids (no passwords to remember)",
   ],
   screenshot: "https://www.kidscallhome.com/og/kidscallhome-og.png",
@@ -90,7 +90,7 @@ const Index = () => {
         if (childSession) {
           try {
             JSON.parse(childSession);
-            navigate("/child/parents", { replace: true });
+            navigate("/child/family", { replace: true });
             return;
           } catch {
             // Invalid child session, continue to marketing page
@@ -262,25 +262,26 @@ const Index = () => {
                     Kids Login
                   </h2>
                   <p className="text-foreground text-sm md:text-base lg:text-lg font-medium">
-                    Tap here to call Mom, Dad, or Grandma!
+                    Enter your code to call or message family!
                   </p>
                 </div>
 
-                {/* Middle content area */}
+                {/* Middle content area - matches actual login UI */}
                 <div className="flex-1 flex flex-col items-center justify-center gap-3 md:gap-4">
+                  {/* Color/Animal preview row */}
                   <div className="flex justify-center gap-2 md:gap-3 py-1 md:py-2">
-                    <div className="w-10 h-10 md:w-12 md:h-12 lg:w-14 lg:h-14 rounded-lg bg-blue-500 flex items-center justify-center text-white text-xl md:text-2xl shadow-md">
-                      🐻
+                    <div className="w-10 h-10 md:w-12 md:h-12 lg:w-14 lg:h-14 rounded-xl bg-[#3B82F6] flex items-center justify-center text-white text-xs md:text-sm font-semibold shadow-md">
+                      Blue
                     </div>
-                    <div className="w-10 h-10 md:w-12 md:h-12 lg:w-14 lg:h-14 rounded-lg bg-green-500 flex items-center justify-center text-white text-xl md:text-2xl shadow-md">
-                      🦊
+                    <div className="w-10 h-10 md:w-12 md:h-12 lg:w-14 lg:h-14 rounded-xl bg-white border-2 border-gray-200 flex items-center justify-center text-2xl md:text-3xl shadow-md">
+                      🐱
                     </div>
-                    <div className="w-10 h-10 md:w-12 md:h-12 lg:w-14 lg:h-14 rounded-lg bg-purple-500 flex items-center justify-center text-white text-xl md:text-2xl shadow-md">
-                      🐰
+                    <div className="w-10 h-10 md:w-12 md:h-12 lg:w-14 lg:h-14 rounded-xl bg-[#10B981] flex items-center justify-center text-white text-xs md:text-sm font-semibold shadow-md">
+                      Green
                     </div>
                   </div>
                   <p className="text-xs md:text-sm lg:text-base text-foreground font-medium">
-                    Use your special animal code!
+                    Pick a color or animal, then your number!
                   </p>
                 </div>
 
@@ -508,7 +509,7 @@ const Index = () => {
             {[
               {
                 quote:
-                  "My 4-year-old calls Grandma by herself now. She just taps Grandma's picture and they're talking!",
+                  "My 4-year-old calls Grandma by herself now. She taps 'Call Grandma' and they're talking!",
                 name: "Sarah M.",
                 role: "Mom of 2",
                 stars: 5,
@@ -610,9 +611,8 @@ const Index = () => {
                       How We Help
                     </h4>
                     <p className="text-sm text-muted-foreground">
-                      Kids log in using their name and avatar (like "Emma" with
-                      a bear icon), then tap your face to call. No typing, no
-                      passwords, no adult needed.
+                      Kids log in with a simple code, then see big &quot;Call Mom&quot; and 
+                      &quot;Send Message&quot; buttons. One tap to connect. No adult needed.
                     </p>
                   </div>
                 </div>
@@ -730,8 +730,8 @@ const Index = () => {
                       How We Help
                     </h4>
                     <p className="text-sm text-muted-foreground">
-                      Invite grandparents, aunts, uncles, cousins. Kids see
-                      their faces and call with one tap. Distance disappears.
+                      Invite grandparents, aunts, uncles, cousins. Kids see 
+                      &quot;Call Grandma&quot; and &quot;Message Grandpa&quot; buttons. One tap to connect.
                     </p>
                   </div>
                 </div>
@@ -869,7 +869,10 @@ const Index = () => {
                   <Download className="h-5 w-5 text-primary" aria-hidden="true" />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-lg mb-1">Install on your child&apos;s device, then they call using their animal code</h3>
+                  <h3 className="font-semibold text-lg mb-1">Kids log in and connect</h3>
+                  <p className="text-sm text-muted-foreground">
+                    They enter their code and see big &quot;Call&quot; and &quot;Message&quot; buttons for each family member. One tap!
+                  </p>
                 </div>
               </div>
             </div>
@@ -891,44 +894,38 @@ const Index = () => {
               </Button>
             </div>
 
-            {/* Animal Code Mini Visual */}
+            {/* Login Code Visual - matches actual login UI */}
             <div className="mb-8">
               <h3 className="text-lg md:text-xl font-semibold text-center mb-4">
-                Animal Codes
+                Kid-Friendly Login
               </h3>
               <p className="text-sm text-muted-foreground text-center mb-6">
-                Kids type this to call you
+                No passwords — just pick a color or animal, then a number
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-2xl mx-auto">
+                {/* Color example */}
                 <Card className="p-4 text-center hover:shadow-md transition-shadow">
-                  <div className="w-12 h-12 rounded-full bg-blue-500 mx-auto mb-3 flex items-center justify-center text-white text-2xl">
+                  <div className="w-14 h-14 rounded-xl bg-[#3B82F6] mx-auto mb-3 flex items-center justify-center text-white text-lg font-bold shadow-md">
+                    Blue
+                  </div>
+                  <div className="font-semibold text-primary mb-1">blue + 7</div>
+                  <p className="text-xs text-muted-foreground">Pick a color, add a number</p>
+                </Card>
+                {/* Animal example */}
+                <Card className="p-4 text-center hover:shadow-md transition-shadow">
+                  <div className="w-14 h-14 rounded-xl bg-white border-2 border-gray-200 mx-auto mb-3 flex items-center justify-center text-3xl shadow-md">
+                    🐱
+                  </div>
+                  <div className="font-semibold text-primary mb-1">cat + 23</div>
+                  <p className="text-xs text-muted-foreground">Or pick an animal instead</p>
+                </Card>
+                {/* Another animal example */}
+                <Card className="p-4 text-center hover:shadow-md transition-shadow">
+                  <div className="w-14 h-14 rounded-xl bg-white border-2 border-gray-200 mx-auto mb-3 flex items-center justify-center text-3xl shadow-md">
                     🐻
                   </div>
-                  <div className="flex items-center justify-center gap-2 mb-1">
-                    <div className="w-3 h-3 rounded-full bg-blue-500" aria-hidden="true" />
-                    <div className="font-semibold text-primary">Blue Bear</div>
-                  </div>
-                  <p className="text-xs text-muted-foreground">Kids type this to call you</p>
-                </Card>
-                <Card className="p-4 text-center hover:shadow-md transition-shadow">
-                  <div className="w-12 h-12 rounded-full bg-green-500 mx-auto mb-3 flex items-center justify-center text-white text-2xl">
-                    🦊
-                  </div>
-                  <div className="flex items-center justify-center gap-2 mb-1">
-                    <div className="w-3 h-3 rounded-full bg-red-500" aria-hidden="true" />
-                    <div className="font-semibold text-primary">Red Fox</div>
-                  </div>
-                  <p className="text-xs text-muted-foreground">Kids type this to call you</p>
-                </Card>
-                <Card className="p-4 text-center hover:shadow-md transition-shadow">
-                  <div className="w-12 h-12 rounded-full bg-purple-500 mx-auto mb-3 flex items-center justify-center text-white text-2xl">
-                    🦁
-                  </div>
-                  <div className="flex items-center justify-center gap-2 mb-1">
-                    <div className="w-3 h-3 rounded-full bg-green-500" aria-hidden="true" />
-                    <div className="font-semibold text-primary">Green Lion</div>
-                  </div>
-                  <p className="text-xs text-muted-foreground">Kids type this to call you</p>
+                  <div className="font-semibold text-primary mb-1">bear + 5</div>
+                  <p className="text-xs text-muted-foreground">Easy for kids to remember</p>
                 </Card>
               </div>
             </div>
@@ -965,14 +962,14 @@ const Index = () => {
                 icon: Baby,
                 title: "Kids Get a Code",
                 description:
-                  "Each child gets a fun, memorable code like 'Blue Bear' — no passwords to forget.",
+                  "Each child picks a color or animal plus a number — like 'blue + 7' or 'cat + 23'. No passwords!",
               },
               {
                 step: "3",
                 icon: Heart,
                 title: "Family Connects",
                 description:
-                  "Kids tap their code, see family faces, and call anyone you've approved. That's it.",
+                  "Kids see big buttons with family names — tap to call or message. Simple as that.",
               },
             ].map((item, index) => (
               <div key={index} className="text-center space-y-4">

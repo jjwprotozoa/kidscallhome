@@ -1,5 +1,6 @@
 // src/features/onboarding/useOnboardingTour.ts
 // Hook for managing onboarding tour state
+// Only shows tour on first login per device, can be manually triggered via HelpBubble
 
 import { useState, useEffect, useCallback } from "react";
 import { Role, OnboardingStep, getTourConfig } from "./onboardingConfig";
@@ -7,7 +8,7 @@ import { generateDeviceIdentifier } from "@/utils/deviceTracking";
 
 export interface UseOnboardingTourArgs {
   role: Role;
-  pageKey: string; // e.g. "parent_dashboard" | "child_dashboard"
+  pageKey: string; // e.g. "parent_children_list" | "child_dashboard" | "family_member_dashboard"
 }
 
 export interface UseOnboardingTourResult {

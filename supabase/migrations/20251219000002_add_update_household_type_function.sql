@@ -97,3 +97,4 @@ GRANT EXECUTE ON FUNCTION public.update_household_type(UUID, TEXT) TO anon;
 -- during signup if email confirmation is required. The function validates
 -- the user_id, so it's still secure.
 
+

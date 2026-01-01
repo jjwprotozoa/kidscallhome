@@ -8,7 +8,7 @@ import { SafetyModeSettings } from "./SafetyModeSettings";
 
 export const SafetyReportsTab: React.FC = React.memo(() => {
   return (
-    <div className="space-y-6 min-h-[400px]">
+    <div className="space-y-6 min-h-[400px]" data-tour="parent-safety-reports">
       {/* Blocked Contacts Section */}
       <section>
         <h2 className="text-xl font-semibold mb-4">Blocked Contacts</h2>

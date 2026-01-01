@@ -144,3 +144,4 @@ Based on your setup, verify these are set in Supabase Dashboard → Edge Functio
 - [BILLING_TROUBLESHOOTING.md](./BILLING_TROUBLESHOOTING.md) - Troubleshooting guide
 - [DEPLOY_BILLING_FUNCTIONS.md](./DEPLOY_BILLING_FUNCTIONS.md) - Deployment instructions
 
+

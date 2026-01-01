@@ -1,7 +1,7 @@
 {
   "name": "Kids Call Home",
   "short_name": "KidsCallHome",
-  "description": "Safe video calling and messaging app for kids. Family-only contacts controlled by parents. Works on most phones and tablets over Wi‑Fi or mobile data, no phone number or SIM card required. No ads, no strangers, no filters, no data tracking.",
+  "description": "Safe video calling and messaging app for kids. Family-only contacts controlled by parents. Works on most phones and tablets over Wi‑Fi or mobile data, no phone number or SIM card required. No ads. Privacy-respecting analytics only.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",

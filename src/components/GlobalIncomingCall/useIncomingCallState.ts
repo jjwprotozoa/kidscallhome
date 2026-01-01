@@ -77,7 +77,7 @@ export const useIncomingCallState = () => {
         }
 
         // CRITICAL: Only skip /child/parent which has its own incoming call handling via useDashboardData
-        // Other child pages (/child, /child/parents) need to use GlobalIncomingCall
+        // Other child pages (/child, /child/family) need to use GlobalIncomingCall
         if (isChild && location.pathname === "/child/parent") {
           return;
         }
@@ -292,7 +292,7 @@ export const useIncomingCallState = () => {
         }
 
         // CRITICAL: Only skip /child/parent which has its own incoming call handling via useDashboardData
-        // Other child pages (/child, /child/parents) need to use GlobalIncomingCall
+        // Other child pages (/child, /child/family) need to use GlobalIncomingCall
         if (isChild && location.pathname === "/child/parent") {
           return;
         }

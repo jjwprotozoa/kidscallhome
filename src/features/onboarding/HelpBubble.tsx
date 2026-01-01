@@ -1,5 +1,6 @@
 // src/features/onboarding/HelpBubble.tsx
 // Persistent help bubble that allows re-running the tour
+// Shows on all screens in the bottom right corner
 
 import { Button } from "@/components/ui/button";
 import { HelpCircle } from "lucide-react";
@@ -44,7 +45,7 @@ export function HelpBubble({ role, pageKey }: HelpBubbleProps) {
   return (
     <Button
       onClick={handleClick}
-      className="fixed right-4 sm:right-6 h-12 w-12 rounded-full shadow-lg z-50 safe-area-bottom"
+      className="fixed right-4 sm:right-6 h-12 w-12 rounded-full shadow-lg z-50 safe-area-bottom bg-primary hover:bg-primary/90 text-primary-foreground"
       style={{ 
         bottom: "calc(1rem + var(--safe-area-inset-bottom))",
       }}

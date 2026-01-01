@@ -72,7 +72,7 @@ export const AppDescription = () => {
               <li>Works without SIM card or phone number</li>
               <li>Works on most phones and tablets, including many kids tablets and e-readers</li>
               <li>Co-parenting friendly and long-distance family friendly</li>
-              <li>No ads, no filters, no data tracking</li>
+              <li>No ads. No tracking for advertising</li>
               <li>Magic link login for kids (no passwords to remember)</li>
               <li>Real-time notifications</li>
               <li>Progressive Web App (PWA)</li>

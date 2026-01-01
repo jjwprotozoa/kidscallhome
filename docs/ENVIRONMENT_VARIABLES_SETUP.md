@@ -107,3 +107,4 @@ To verify `VITE_SITE_URL` is set correctly:
 - `VITE_*` variables = Frontend (Vercel/.env)
 - Supabase Secrets = Backend Edge Functions only
 
+

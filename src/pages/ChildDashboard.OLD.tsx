@@ -370,7 +370,7 @@ const ChildDashboard = () => {
       navigate(`/call/${child.id}`);
     } else if (!selectedParentId) {
       // If no parent selected, navigate to parents list
-      navigate("/child/parents");
+      navigate("/child/family");
     }
   };
 
@@ -379,7 +379,7 @@ const ChildDashboard = () => {
       navigate(`/chat/${child.id}`);
     } else if (!selectedParentId) {
       // If no parent selected, navigate to parents list
-      navigate("/child/parents");
+      navigate("/child/family");
     }
   };
 
@@ -476,7 +476,7 @@ const ChildDashboard = () => {
             <p className="text-muted-foreground mb-4">
               Please select a parent first
             </p>
-            <Button onClick={() => navigate("/child/parents")} size="lg">
+            <Button onClick={() => navigate("/child/family")} size="lg">
               Select Parent
             </Button>
           </Card>

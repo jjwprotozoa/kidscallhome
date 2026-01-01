@@ -46,10 +46,14 @@ export const DashboardWidgets = ({
   return (
     <div className="grid gap-4">
       <Card
-        className="p-8 cursor-pointer hover:shadow-lg transition-all border-4 relative"
-        style={{ borderColor: child.avatar_color }}
+        className={`p-8 cursor-pointer hover:shadow-lg transition-all border-2 relative ${
+          isParentOnline
+            ? "shadow-[0_0_12px_-3px_rgba(34,197,94,0.35)] border-green-500/30"
+            : ""
+        }`}
+        style={isParentOnline ? undefined : { borderColor: child.avatar_color }}
         onClick={onCall}
-        data-tour="child-answer-button"
+        data-tour="child-call-button"
       >
         {missedCallCount > 0 && (
           <span className="absolute top-4 right-4 bg-destructive text-destructive-foreground text-xs font-bold rounded-full min-w-[24px] h-6 flex items-center justify-center px-2 border-2 border-background">
@@ -80,10 +84,14 @@ export const DashboardWidgets = ({
       </Card>
 
       <Card
-        className="p-8 cursor-pointer hover:shadow-lg transition-all border-4 relative"
-        style={{ borderColor: child.avatar_color }}
+        className={`p-8 cursor-pointer hover:shadow-lg transition-all border-2 relative ${
+          isParentOnline
+            ? "shadow-[0_0_12px_-3px_rgba(34,197,94,0.35)] border-green-500/30"
+            : ""
+        }`}
+        style={isParentOnline ? undefined : { borderColor: child.avatar_color }}
         onClick={onChat}
-        data-tour="child-messages"
+        data-tour="child-message-button"
       >
         {unreadMessageCount > 0 && (
           <span className="absolute top-4 right-4 bg-destructive text-destructive-foreground text-xs font-bold rounded-full min-w-[24px] h-6 flex items-center justify-center px-2 border-2 border-background">

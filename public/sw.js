@@ -216,6 +216,25 @@ self.addEventListener('fetch', (event) => {
     'fonts.googleapis.com',
     'fonts.gstatic.com'
   ];
+  // Analytics domains - NEVER intercept, let browser handle directly
+  // Using strict matching to avoid accidental host matches (e.g., "fake-va.vercel-scripts.com.evil.com")
+  const analyticsDomains = [
+    'vitals.vercel-insights.com',
+    'va.vercel-scripts.com'
+  ];
+  
+  // Strict hostname matching helper: exact match OR subdomain of the domain
+  const isAnalyticsDomain = (hostname, domain) => {
+    return hostname === domain || hostname.endsWith('.' + domain);
+  };
+  
+  // CRITICAL: Skip analytics requests to ensure they fire reliably
+  // Uses strict matching to prevent bypass via malicious subdomains
+  // Must return a Response (not undefined) to avoid intermittent failures in some browsers
+  if (analyticsDomains.some(domain => isAnalyticsDomain(url.hostname, domain))) {
+    event.respondWith(fetch(event.request));
+    return;
+  }
   
   // CRITICAL: Skip Google Fonts FIRST to prevent CSP violations
   // The service worker must not intercept these requests at all

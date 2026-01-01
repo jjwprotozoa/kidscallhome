@@ -42,7 +42,7 @@ export const TrustSignalsSection = () => {
     {
       icon: Shield,
       title: "Encrypted Communication",
-      description: "All calls and messages are encrypted end-to-end. Your family's conversations are private and secure."
+      description: "All calls and messages are encrypted in transit. Your family's conversations are private and secure."
     },
     {
       icon: Eye,

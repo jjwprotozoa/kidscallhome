@@ -164,7 +164,7 @@ const Pricing = () => {
 
           <div className="text-center space-y-4 mt-8">
             <p className="text-sm text-muted-foreground">
-              All plans include: Family-only contacts, encrypted communication, no ads, no tracking
+              All plans include: Family-only contacts, encrypted communication, no ads
             </p>
             <Link
               to="/"

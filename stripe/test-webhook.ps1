@@ -34,3 +34,4 @@ Write-Host "  2. Make sure stripe listen is running in another terminal" -Foregr
 Write-Host "  3. Trigger test event: C:\Users\DevBox\stripe.exe trigger checkout.session.completed" -ForegroundColor White
 Write-Host "  4. Check webhook server terminal for logs`n" -ForegroundColor White
 
+

@@ -65,9 +65,9 @@ const Privacy = () => {
                 <div className="flex items-start gap-3">
                   <Eye className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
                   <div>
-                    <h3 className="font-semibold mb-1">No Tracking</h3>
+                    <h3 className="font-semibold mb-1">No Ad Tracking</h3>
                     <p className="text-sm text-muted-foreground">
-                      We don't use tracking for advertising purposes.
+                      We don't track for advertising. Privacy-respecting analytics only.
                     </p>
                   </div>
                 </div>
@@ -97,6 +97,7 @@ const Privacy = () => {
 };
 
 export default Privacy;
+
 
 
 

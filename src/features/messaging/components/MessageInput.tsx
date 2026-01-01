@@ -49,16 +49,10 @@ export const MessageInput = ({
     setIsEmojiOpen(false);
   };
 
-  // Check for blocked words as user types
+  // Check for blocked words as user types (done locally, no server calls)
   useEffect(() => {
     if (value.trim()) {
       const { isBlocked, matchedWords } = checkBlockedWords(value, customKeywords);
-      console.warn("[MessageInput] Word check:", {
-        message: value,
-        customKeywords,
-        isBlocked,
-        matchedWords,
-      });
       if (isBlocked) {
         setBlockedMessage(
           `Please remove inappropriate words: ${matchedWords.join(", ")}`

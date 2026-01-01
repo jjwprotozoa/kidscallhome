@@ -105,7 +105,39 @@ When touching files that use safe-area classes:
 - Only introduce memoization when there's a plausible performance benefit
 - Avoid unnecessary global state
 
-### E. FINAL SUMMARY REQUIREMENTS
+### E. FILE ORGANIZATION RULES
+
+Keep the root directory clean. Only essential project files belong in root.
+
+#### Allowed in Root:
+- `README.md` - Project overview
+- `CHANGELOG.md` - Version history
+- Config files: `package.json`, `tsconfig.json`, `vite.config.ts`, `tailwind.config.*`, `eslint.config.js`, `vercel.json`, `capacitor.config.ts`, `codemagic.yaml`, etc.
+- Lock files: `package-lock.json`, `bun.lockb`
+- Dot files: `.env*`, `.gitignore`, `.cursorrules`, etc.
+- `index.html` - Entry point
+
+#### NOT Allowed in Root (move to appropriate directory):
+| File Type | Move To |
+|-----------|---------|
+| `.md` documentation | `docs/` |
+| `.sql` scripts/queries | `docs/sql/` |
+| Test scripts (`.js`, `.ps1`) | `scripts/` |
+| Temporary/debug files | Delete or `docs/archive/` |
+
+#### When Creating New Files:
+1. **Documentation** → Always create in `docs/` (use subdirs like `docs/setup/`, `docs/troubleshooting/`)
+2. **SQL scripts** → Always create in `docs/sql/`
+3. **Shell/PowerShell scripts** → Always create in `scripts/`
+4. **Database migrations** → Always create in `supabase/migrations/`
+
+#### Module-Specific Docs:
+- Keep `README.md` files within their module directories (e.g., `src/features/calls/README.md`, `scripts/README.md`)
+- These provide context for developers working in that specific area
+
+**Rule**: If you need to create a `.md` or `.sql` file, NEVER place it in root. Always use the appropriate subdirectory.
+
+### F. FINAL SUMMARY REQUIREMENTS
 
 At the end of each task touching layout/navigation/calls UI, include a "Safe-Area & Performance Check" section with:
 - Files touched that are layout/UX related

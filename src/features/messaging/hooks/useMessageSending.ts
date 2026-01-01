@@ -331,7 +331,24 @@ export const useMessageSending = ({
 
       if (currentSenderType === "family_member" && familyMemberId) {
         payload.sender_id = familyMemberId;
-        payload.family_member_id = familyMemberId;
+        // Check if family member exists in family_members table before setting family_member_id
+        // The family_member_id column has a foreign key constraint to family_members.id
+        // If the family member was created via adult_profiles only (new system), 
+        // they won't have a record in family_members table
+        const { data: fmExists } = await supabase
+          .from("family_members")
+          .select("id")
+          .eq("id", familyMemberId)
+          .maybeSingle();
+        
+        if (fmExists) {
+          payload.family_member_id = familyMemberId;
+        } else {
+          // Family member doesn't exist in family_members table (created via adult_profiles)
+          // Set to null to avoid foreign key constraint violation
+          payload.family_member_id = null;
+          safeLog.log("📝 [MESSAGE INSERT] Family member not in family_members table, setting family_member_id to null");
+        }
       } else if (currentSenderType === "child") {
         payload.sender_id = senderId;
         payload.family_member_id = null;
@@ -345,6 +362,7 @@ export const useMessageSending = ({
         conversation_id: payload.conversation_id,
         sender_id: payload.sender_id,
         sender_type: payload.sender_type,
+        family_member_id: payload.family_member_id,
         content_length: payload.content.length,
       });
 
@@ -374,6 +392,29 @@ export const useMessageSending = ({
         if (error.code === "42501" || error.message.includes("row-level security")) {
           throw new Error(
             "Unable to send message. Please check database RLS policies are correctly configured."
+          );
+        }
+
+        // Check for 409 Conflict (foreign key violation, unique constraint, etc.)
+        if (error.code === "23503") {
+          // Foreign key violation
+          safeLog.error("❌ [MESSAGE INSERT] Foreign key violation:", {
+            message: error.message,
+            details: error.details,
+          });
+          throw new Error(
+            "Unable to send message. There may be a data consistency issue. Please try refreshing the page."
+          );
+        }
+
+        if (error.code === "23505") {
+          // Unique constraint violation
+          safeLog.error("❌ [MESSAGE INSERT] Unique constraint violation:", {
+            message: error.message,
+            details: error.details,
+          });
+          throw new Error(
+            "This message may have already been sent. Please refresh and try again."
           );
         }
 

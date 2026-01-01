@@ -69,7 +69,11 @@ const FamilyMemberCard = ({
   return (
     <Card
       key={conv.conversation.id}
-      className={`p-4 sm:p-6 hover:shadow-lg transition-all relative ${isBlocked ? "opacity-50" : ""}`}
+      className={`p-4 sm:p-6 hover:shadow-lg transition-all relative ${isBlocked ? "opacity-50" : ""} ${
+        isFamilyMemberOnline && !isBlocked
+          ? "shadow-[0_0_12px_-3px_rgba(34,197,94,0.35)] border-green-500/20"
+          : ""
+      }`}
     >
       {/* Blocked indicator in top right */}
       {isBlocked && (
@@ -409,7 +413,7 @@ const ChildParentsList = () => {
         }}
       >
         <div className="max-w-4xl mx-auto">
-          <div className="mb-6 sm:mb-8 mt-4 sm:mt-6">
+          <div className="mb-6 sm:mb-8 mt-4 sm:mt-6" data-tour="child-family-welcome">
             <h1 className="text-2xl sm:text-3xl font-bold">Call or Message</h1>
             <p className="text-muted-foreground mt-2 text-sm sm:text-base">
               Choose someone to call or message
@@ -435,7 +439,11 @@ const ChildParentsList = () => {
                         <Card
                           key={conv.conversation.id}
                           data-tour="child-parents-list-card"
-                          className={`p-4 sm:p-6 hover:shadow-lg transition-all relative border-2 border-primary/20 ${isBlocked ? "opacity-50" : ""}`}
+                          className={`p-4 sm:p-6 hover:shadow-lg transition-all relative border-2 ${isBlocked ? "opacity-50 border-primary/20" : ""} ${
+                            isOnline && !isBlocked
+                              ? "shadow-[0_0_12px_-3px_rgba(34,197,94,0.35)] border-green-500/30"
+                              : "border-primary/20"
+                          }`}
                         >
                           {/* Blocked indicator in top right */}
                           {isBlocked && (
@@ -470,7 +478,7 @@ const ChildParentsList = () => {
                               </div>
                             </div>
                             <div className="flex flex-col gap-2 w-full sm:w-auto">
-                              <div className="flex gap-2 w-full sm:w-auto">
+                              <div className="flex gap-2 w-full sm:w-auto" data-tour="child-family-actions">
                                 <Button
                                   onClick={() =>
                                     handleCall(
@@ -481,6 +489,7 @@ const ChildParentsList = () => {
                                   variant="outline"
                                   className="flex-1 sm:flex-initial"
                                   disabled={isBlocked}
+                                  data-tour="child-family-call"
                                 >
                                   <Phone className="mr-2 h-4 w-4" />
                                   Call
@@ -494,6 +503,7 @@ const ChildParentsList = () => {
                                   }
                                   className="flex-1 sm:flex-initial"
                                   disabled={isBlocked}
+                                  data-tour="child-family-message"
                                 >
                                   <MessageSquare className="mr-2 h-4 w-4" />
                                   Message
@@ -511,7 +521,7 @@ const ChildParentsList = () => {
 
               {/* Family Members Section */}
               {familyMembers.length > 0 && (
-                <div className="space-y-4">
+                <div className="space-y-4" data-tour="child-family-members-section">
                   <div className="mb-2">
                     <h2 className="text-xl sm:text-2xl font-semibold">Family Members</h2>
                     <p className="text-sm text-muted-foreground">

@@ -4,6 +4,8 @@
 import Navigation from "@/components/Navigation";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { HelpBubble } from "@/features/onboarding/HelpBubble";
+import { OnboardingTour } from "@/features/onboarding/OnboardingTour";
 import { StatusIndicator } from "@/features/presence/StatusIndicator";
 import { useChildrenPresence } from "@/features/presence/useChildrenPresence";
 import { useToast } from "@/hooks/use-toast";
@@ -43,52 +45,68 @@ const FamilyMemberChildCard = ({
   const unreadMessageCount = useUnreadBadgeForChild(child.id);
 
   return (
-    <Card className="p-6">
-      <div className="flex items-center gap-4 mb-4">
-        {/* CLS: Use aspect-square to ensure consistent avatar sizing */}
-        <div
-          className="aspect-square w-12 rounded-full flex items-center justify-center text-white font-bold text-lg leading-none select-none flex-shrink-0"
-          style={{ backgroundColor: child.avatar_color || "#6366f1" }}
-        >
-          <span className="leading-none">
+    <Card 
+      className={`p-4 sm:p-6 hover:shadow-lg transition-all ${
+        isOnline 
+          ? "shadow-[0_0_12px_-3px_rgba(34,197,94,0.35)] border-green-500/20" 
+          : ""
+      }`}
+    >
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        {/* Left: Avatar + Name + Status */}
+        <div className="flex items-center space-x-3 sm:space-x-4 flex-1 min-w-0">
+          <div
+            className="w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center text-white font-bold text-xl sm:text-2xl flex-shrink-0"
+            style={{ backgroundColor: child.avatar_color || "#6366f1" }}
+          >
             {child.name.charAt(0).toUpperCase()}
-          </span>
-        </div>
-        <div className="flex-1">
-          <div className="flex items-center gap-2">
-            <h3 className="text-xl font-bold">{child.name}</h3>
-            <StatusIndicator
-              isOnline={isOnline}
-              size="sm"
-              showPulse={isOnline}
-            />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="text-xl sm:text-2xl font-semibold">
+                {child.name}
+              </h3>
+              <StatusIndicator
+                isOnline={isOnline}
+                size="md"
+                showPulse={isOnline}
+              />
+            </div>
+            <p className="text-sm text-muted-foreground mt-1">
+              {isOnline
+                ? `${child.name} is online`
+                : `${child.name} is offline`}
+            </p>
           </div>
         </div>
-      </div>
-      <div className="flex gap-2">
-        <Button
-          onClick={() => onCall(child.id)}
-          className="flex-1"
-          variant="secondary"
-        >
-          <Phone className="mr-2 h-4 w-4" />
-          Call
-        </Button>
-        <Button
-          onClick={() => onChat(child.id)}
-          className="flex-1 relative bg-chat-accent text-chat-accent-foreground hover:bg-chat-accent/90"
-        >
-          <MessageSquare className="mr-2 h-4 w-4" />
-          Message
-          {/* CLS: Reserve space for badge to prevent layout shift */}
-          <span
-            className={`ml-2 bg-destructive text-destructive-foreground text-xs font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 ${
-              unreadMessageCount === 0 ? "invisible" : ""
-            }`}
+        {/* Right: Call + Message buttons */}
+        <div className="flex gap-2 w-full sm:w-auto" data-tour="family-member-actions">
+          <Button
+            onClick={() => onCall(child.id)}
+            variant="outline"
+            className="flex-1 sm:flex-initial"
+            data-tour="family-member-call"
           >
-            {unreadMessageCount > 99 ? "99+" : unreadMessageCount}
-          </span>
-        </Button>
+            <Phone className="mr-2 h-4 w-4" />
+            Call
+          </Button>
+          <Button
+            onClick={() => onChat(child.id)}
+            className="flex-1 sm:flex-initial relative"
+            data-tour="family-member-message"
+          >
+            <MessageSquare className="mr-2 h-4 w-4" />
+            Message
+            {/* CLS: Reserve space for badge to prevent layout shift */}
+            <span
+              className={`absolute -top-1 -right-1 bg-destructive text-destructive-foreground text-xs font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 ${
+                unreadMessageCount === 0 ? "invisible" : ""
+              }`}
+            >
+              {unreadMessageCount > 99 ? "99+" : unreadMessageCount}
+            </span>
+          </Button>
+        </div>
       </div>
     </Card>
   );
@@ -446,6 +464,8 @@ const FamilyMemberDashboard = () => {
   return (
     <div className="min-h-[100dvh] bg-background w-full overflow-x-hidden">
       <Navigation />
+      <OnboardingTour role="family_member" pageKey="family_member_dashboard" />
+      <HelpBubble role="family_member" pageKey="family_member_dashboard" />
       <div
         className="px-4 pb-4"
         style={{
@@ -460,7 +480,7 @@ const FamilyMemberDashboard = () => {
       </div>
       <div className="p-4">
         <div className="max-w-4xl mx-auto space-y-6">
-          <div className="mt-2">
+          <div className="mt-2" data-tour="family-member-welcome">
             <h1 className="text-3xl font-bold">Family Children</h1>
             <p className="text-muted-foreground mt-2">
               Connect with the children in your family
@@ -474,15 +494,19 @@ const FamilyMemberDashboard = () => {
               </p>
             </Card>
           ) : (
-            <div className="grid gap-4 md:grid-cols-2">
-              {children.map((child) => (
-                <FamilyMemberChildCard
-                  key={child.id}
-                  child={child}
-                  onCall={handleCall}
-                  onChat={handleChat}
-                  isOnline={isChildOnline(child.id)}
-                />
+            <div className="space-y-4">
+              {children.map((child, index) => (
+                <div 
+                  key={child.id} 
+                  data-tour={index === 0 ? "family-member-child-card" : undefined}
+                >
+                  <FamilyMemberChildCard
+                    child={child}
+                    onCall={handleCall}
+                    onChat={handleChat}
+                    isOnline={isChildOnline(child.id)}
+                  />
+                </div>
               ))}
             </div>
           )}

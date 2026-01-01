@@ -59,7 +59,7 @@ const ChildDashboard = () => {
         }
       })();
     } else if (!selectedParentId) {
-      navigate("/child/parents");
+      navigate("/child/family");
     }
   };
 
@@ -67,7 +67,7 @@ const ChildDashboard = () => {
     if (child && selectedParentId) {
       navigate(`/chat/${child.id}`);
     } else if (!selectedParentId) {
-      navigate("/child/parents");
+      navigate("/child/family");
     }
   };
 
@@ -142,7 +142,7 @@ const ChildDashboard = () => {
             unreadMessageCount={unreadMessageCount}
             onCall={handleCall}
             onChat={handleChat}
-            onSelectParent={() => navigate("/child/parents")}
+            onSelectParent={() => navigate("/child/family")}
           />
         </div>
       </div>

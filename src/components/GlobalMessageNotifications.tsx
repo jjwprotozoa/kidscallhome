@@ -15,7 +15,7 @@ interface Message {
   id: string;
   child_id: string;
   sender_id: string;
-  sender_type: "parent" | "child";
+  sender_type: "parent" | "child" | "family_member";
   content: string;
   created_at: string;
   read_at?: string | null;
@@ -76,7 +76,6 @@ const GlobalMessageNotificationsInner = () => {
         // IMPORTANT: Don't show notification if user is currently chatting with this child
         // Use ref to get the current active chat (updates immediately when location changes)
         if (activeChatChildIdRef.current === message.child_id) {
-          // User is actively chatting with this child, not showing notification
           return;
         }
 
@@ -84,8 +83,8 @@ const GlobalMessageNotificationsInner = () => {
         if (isChild && message.sender_type === "child") {
           return; // Child sent this message, don't notify
         }
-        if (!isChild && message.sender_type === "parent") {
-          return; // Parent sent this message, don't notify
+        if (!isChild && (message.sender_type === "parent" || message.sender_type === "family_member")) {
+          return; // Parent/family member sent this message, don't notify them
         }
 
         lastMessageIdRef.current = message.id;
@@ -95,7 +94,7 @@ const GlobalMessageNotificationsInner = () => {
         let childColor: string | null = null;
         let parentColor: string | null = null;
         try {
-          if (message.sender_type === "parent") {
+          if (message.sender_type === "parent" || message.sender_type === "family_member") {
             // Try to fetch from adult_profiles (new schema)
             // sender_id is the user_id (auth.uid())
             const { data: adultProfile } = await supabase
@@ -106,7 +105,7 @@ const GlobalMessageNotificationsInner = () => {
 
             if (adultProfile?.name) {
               senderName = adultProfile.name;
-            } else {
+            } else if (message.sender_type === "parent") {
               // Fallback to old parents table if adult_profiles doesn't have the data
               const { data: parentData } = await supabase
                 .from("parents")
@@ -119,9 +118,22 @@ const GlobalMessageNotificationsInner = () => {
               } else {
                 senderName = "Parent";
               }
+            } else {
+              // Family member fallback - try family_members table
+              const { data: fmData } = await supabase
+                .from("family_members")
+                .select("name")
+                .eq("id", message.sender_id)
+                .maybeSingle();
+
+              if (fmData?.name) {
+                senderName = fmData.name;
+              } else {
+                senderName = "Family Member";
+              }
             }
 
-            // For child users, use the parent's avatar color if available
+            // For child users, use the adult's avatar color if available
             if (isChild) {
               parentColor = adultProfile?.avatar_color || "hsl(213, 94%, 68%)"; // Use avatar color or fallback to primary blue
             }
@@ -220,11 +232,12 @@ const GlobalMessageNotificationsInner = () => {
             if (!childData?.id) {
               return; // Invalid session
             }
+            // Fetch messages from both parents and family members
             const { data: newMessages } = await supabase
               .from("messages")
               .select("*")
               .eq("child_id", childData.id)
-              .eq("sender_type", "parent")
+              .in("sender_type", ["parent", "family_member"])
               .is("read_at", null)
               .gte("created_at", oneMinuteAgo)
               .order("created_at", { ascending: false })
@@ -333,8 +346,8 @@ const GlobalMessageNotificationsInner = () => {
             },
             async (payload) => {
               const message = payload.new as Message;
-              // Only notify for messages from parent
-              if (message.sender_type === "parent" && !message.read_at) {
+              // Notify for messages from parent or family member
+              if ((message.sender_type === "parent" || message.sender_type === "family_member") && !message.read_at) {
                 await handleNewMessage(message);
               }
             }
@@ -398,17 +411,52 @@ const GlobalMessageNotificationsInner = () => {
           return; // No user ID, can't subscribe
         }
 
-        // Parent: Use cached children list from React Query hook
-        if (!children || children.length === 0) {
-          return; // No children, no need to subscribe
+        // Get child IDs that this user can communicate with
+        // This works for both parents (via children table) and family members (via adult_profiles + conversations)
+        let allowedChildIds: string[] = [];
+        
+        // First try parent's children
+        if (children && children.length > 0) {
+          allowedChildIds = children.map((c) => c.id);
+        }
+        
+        // Also check for family member's conversations to get their allowed children
+        try {
+          // Get adult profile for this user (could be parent or family member)
+          const { data: adultProfiles } = await supabase
+            .from("adult_profiles" as never)
+            .select("id, role")
+            .eq("user_id", userId);
+          
+          if (adultProfiles && (adultProfiles as Array<{id: string, role: string}>).length > 0) {
+            const profileIds = (adultProfiles as Array<{id: string, role: string}>).map(p => p.id);
+            
+            // Get all conversations for this user's adult profiles
+            const { data: conversations } = await supabase
+              .from("conversations" as never)
+              .select("child_id")
+              .in("adult_id", profileIds);
+            
+            if (conversations) {
+              const conversationChildIds = (conversations as Array<{child_id: string}>)
+                .map(c => c.child_id)
+                .filter(id => id && !allowedChildIds.includes(id));
+              allowedChildIds = [...allowedChildIds, ...conversationChildIds];
+            }
+          }
+        } catch (error) {
+          // If fetching conversations fails, continue with just the parent's children
+          console.error("Error fetching conversations for notifications:", error);
         }
 
-        const childIds = children.map((c) => c.id);
+        if (allowedChildIds.length === 0) {
+          return; // No children to listen to
+        }
 
-        // Parent: listen for messages from all their children
+        // Parent/Family Member: listen for messages from children they can communicate with
         // We can't filter by multiple child_ids in one subscription, so we'll check in the handler
         channelRef.current = supabase
-          .channel("global-parent-messages")
+          .channel("global-adult-messages")
           .on(
             "postgres_changes",
             {
@@ -418,11 +466,11 @@ const GlobalMessageNotificationsInner = () => {
             },
             async (payload) => {
               const message = payload.new as Message;
-              // Only notify for messages from children that belong to this parent
+              // Only notify for messages from children that this user can communicate with
               if (
                 message.sender_type === "child" &&
                 !message.read_at &&
-                childIds.includes(message.child_id)
+                allowedChildIds.includes(message.child_id)
               ) {
                 await handleNewMessage(message);
               }

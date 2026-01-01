@@ -210,3 +210,4 @@ If webhook still isn't processing:
 4. **Manual database insert (temporary fix):**
    - If webhook continues to fail, you can manually insert the record
    - See `BILLING_TROUBLESHOOTING.md` for SQL
+

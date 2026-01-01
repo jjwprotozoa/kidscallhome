@@ -1,5 +1,6 @@
 // src/features/onboarding/OnboardingTour.tsx
 // Onboarding tour UI component with overlay and speech bubbles
+// Supports parent, child, and family_member roles
 
 import { useEffect, useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
@@ -357,7 +358,7 @@ export function OnboardingTour({ role, pageKey }: OnboardingTourProps) {
 
         {/* Content */}
         <div className={cn("pr-6 sm:pr-8", role === "child" && "text-base sm:text-lg")}>
-          {activeStep.title && role === "parent" && (
+          {activeStep.title && (role === "parent" || role === "family_member") && (
             <h3 className="font-bold text-base sm:text-lg mb-2">{activeStep.title}</h3>
           )}
           <p className={cn("text-sm sm:text-base text-muted-foreground", role === "child" && "text-base sm:text-lg")}>

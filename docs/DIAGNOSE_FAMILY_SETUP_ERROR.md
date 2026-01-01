@@ -147,3 +147,4 @@ SELECT id, household_type, invite_code
 FROM public.families 
 WHERE id = 'USER_ID_HERE';
 ```
+

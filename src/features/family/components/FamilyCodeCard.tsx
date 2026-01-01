@@ -97,7 +97,7 @@ export const FamilyCodeCard = ({ familyCode: propFamilyCode }: FamilyCodeCardPro
   const maskedCode = "••••••";
 
   return (
-    <Card className="bg-primary text-primary-foreground border-primary/20 p-4">
+    <Card className="bg-primary text-primary-foreground border-primary/20 p-4" data-tour="parent-family-code">
       <div className="flex items-center justify-between gap-4">
         <div className="flex-1">
           <p className="text-sm font-medium mb-1 opacity-90">

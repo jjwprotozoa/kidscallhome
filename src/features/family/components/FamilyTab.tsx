@@ -87,7 +87,7 @@ export const FamilyTab = React.memo(({
           </p>
         </Card>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-4 md:grid-cols-2" data-tour="parent-family-members">
           {familyMembers.map((member) => (
             <FamilyMemberCard
               key={member.id || member.email}

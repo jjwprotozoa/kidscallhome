@@ -239,7 +239,7 @@ const GlobalIncomingCallInner = () => {
   const isChild = !!childSession;
   
   // CRITICAL: Only suppress GlobalIncomingCall on ChildDashboard which has its own kid-friendly IncomingCallDialog
-  // Other child pages (like /child/parents) will use the ChildIncomingCallUI below
+  // Other child pages (like /child/family) will use the ChildIncomingCallUI below
   const isOnChildDashboard = location.pathname === "/child/parent";
   
   if (isChild && isOnChildDashboard) {

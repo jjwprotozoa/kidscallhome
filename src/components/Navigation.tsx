@@ -2,6 +2,7 @@
 // Navigation component for parent and child pages
 // Features mobile-friendly hamburger menu with slide-out drawer
 
+import { ChildLogoutDialog } from "@/components/ChildLogoutDialog";
 import { NavLink } from "@/components/NavLink";
 import { NetworkQualityBadge } from "@/components/NetworkQualityBadge";
 import { ShareModal } from "@/components/ShareModal";
@@ -117,8 +118,8 @@ const Navigation = () => {
   const [loading, setLoading] = useState(false);
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
-  // Triple confirmation state for child logout
-  const [childLogoutStep, setChildLogoutStep] = useState<0 | 1 | 2 | null>(null);
+  // Kid-friendly logout dialog state
+  const [showChildLogoutDialog, setShowChildLogoutDialog] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [pendingConnectionsCount, setPendingConnectionsCount] = useState(0);
   const [newReportsCount, setNewReportsCount] = useState(0);
@@ -446,17 +447,15 @@ const Navigation = () => {
   };
 
   const handleChildLogout = async () => {
-    // Triple confirmation completed - proceed with logout
-    if (childLogoutStep === 2) {
-      const { clearChildSession } = await import("@/lib/childSession");
-      clearChildSession();
-      
-      // Reset badge store on logout
-      useBadgeStore.getState().reset();
-      toast({ title: "Logged out" });
-      setChildLogoutStep(null);
-      navigate("/child/login");
-    }
+    // Kid-friendly emoji game completed - proceed with logout
+    const { clearChildSession } = await import("@/lib/childSession");
+    clearChildSession();
+    
+    // Reset badge store on logout
+    useBadgeStore.getState().reset();
+    toast({ title: "Bye bye! 👋" });
+    setShowChildLogoutDialog(false);
+    navigate("/child/login");
   };
 
   // Share app functionality - opens share modal
@@ -591,7 +590,7 @@ const Navigation = () => {
               </Sheet>
 
               {/* Desktop navigation */}
-              <div className="hidden sm:flex items-center gap-4 min-w-0 flex-shrink">
+              <div className="hidden sm:flex items-center gap-4 min-w-0 flex-shrink" data-tour="family-member-menu">
                 <NavLink
                   to="/family-member"
                   className={getNavLinkClassName("/family-member")}
@@ -837,6 +836,7 @@ const Navigation = () => {
                 <NavLink
                   to="/parent/children"
                   className={getNavLinkClassName("/parent/children")}
+                  data-tour="parent-menu-children"
                 >
                   <div className="relative flex items-center justify-center">
                     <Users className="h-4 w-4" />
@@ -847,6 +847,7 @@ const Navigation = () => {
                 <NavLink
                   to="/parent/family"
                   className={getNavLinkClassName("/parent/family")}
+                  data-tour="parent-menu-family"
                 >
                   <div className="relative flex items-center justify-center">
                     <LayoutDashboard className="h-4 w-4" />
@@ -857,6 +858,7 @@ const Navigation = () => {
                 <NavLink
                   to="/parent/connections"
                   className={getNavLinkClassName("/parent/connections")}
+                  data-tour="parent-menu-connections"
                 >
                   <div className="relative flex items-center justify-center">
                     <UserCheck className="h-4 w-4" />
@@ -867,6 +869,7 @@ const Navigation = () => {
                 <NavLink
                   to="/parent/safety"
                   className={getNavLinkClassName("/parent/safety")}
+                  data-tour="parent-menu-safety"
                 >
                   <div className="relative flex items-center justify-center">
                     <Shield className="h-4 w-4" />
@@ -877,6 +880,7 @@ const Navigation = () => {
                 <NavLink
                   to="/parent/referrals"
                   className={getNavLinkClassName("/parent/referrals")}
+                  data-tour="parent-menu-referrals"
                 >
                   <Gift className="h-4 w-4" />
                   <span className="hidden lg:inline">Referrals</span>
@@ -884,6 +888,7 @@ const Navigation = () => {
                 <NavLink
                   to="/parent/upgrade"
                   className={getNavLinkClassName("/parent/upgrade")}
+                  data-tour="parent-menu-subscription"
                 >
                   <Crown className="h-4 w-4" />
                   <span className="hidden lg:inline">Subscription</span>
@@ -900,6 +905,7 @@ const Navigation = () => {
                           ? "bg-accent text-accent-foreground"
                           : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                       )}
+                      data-tour="parent-menu-more"
                     >
                       <MoreVertical className="h-4 w-4" />
                       <span className="hidden lg:inline">More</span>
@@ -944,14 +950,18 @@ const Navigation = () => {
                   className="h-9 w-9 text-primary hover:text-primary hover:bg-primary/10 animate-pulse-subtle"
                   aria-label="Share app"
                   title="Share Kids Call Home"
+                  data-tour="parent-menu-share"
                 >
                   <Share2 className="h-5 w-5" />
                 </Button>
-                <NetworkQualityBadge />
+                <div data-tour="parent-menu-network">
+                  <NetworkQualityBadge />
+                </div>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => setShowLogoutDialog(true)}
+                  data-tour="parent-menu-logout"
                 >
                   <LogOut className="h-4 w-4 md:mr-2" />
                   <span className="hidden md:inline">Logout</span>
@@ -1066,7 +1076,7 @@ const Navigation = () => {
                       badge={missedCallCount}
                     />
                     <MobileNavItemChild
-                      to="/child/parents"
+                      to="/child/family"
                       icon={Users}
                       label="Family"
                       badge={unreadMessageCount}
@@ -1094,7 +1104,7 @@ const Navigation = () => {
                     <button
                       onClick={() => {
                         setMobileMenuOpen(false);
-                        setChildLogoutStep(0);
+                        setShowChildLogoutDialog(true);
                       }}
                       className="flex items-center gap-3 w-full px-4 py-3 rounded-lg text-base font-medium text-destructive hover:bg-destructive/10 transition-colors"
                     >
@@ -1121,8 +1131,8 @@ const Navigation = () => {
                   <span>Parent</span>
                 </NavLink>
                 <NavLink
-                  to="/child/parents"
-                  className={getNavLinkClassName("/child/parents")}
+                  to="/child/family"
+                  className={getNavLinkClassName("/child/family")}
                 >
                   <div className="relative flex items-center justify-center">
                     <Users className="h-4 w-4" />
@@ -1157,7 +1167,7 @@ const Navigation = () => {
                     </DropdownMenuItem>
                     <div className="h-px bg-border my-1" />
                     <DropdownMenuItem 
-                      onClick={() => setChildLogoutStep(0)}
+                      onClick={() => setShowChildLogoutDialog(true)}
                       className="text-destructive focus:text-destructive"
                     >
                       <LogOut className="mr-2 h-4 w-4" />
@@ -1193,75 +1203,12 @@ const Navigation = () => {
         {/* Share Modal */}
         <ShareModal open={showShareModal} onOpenChange={setShowShareModal} />
 
-        {/* Triple Confirmation Dialog for Child Logout */}
-        <AlertDialog 
-          open={childLogoutStep !== null} 
-          onOpenChange={(open) => {
-            if (!open) {
-              setChildLogoutStep(null);
-            }
-          }}
-        >
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>
-                {childLogoutStep === 0 && "Are you sure you want to log out?"}
-                {childLogoutStep === 1 && "Are you really sure?"}
-                {childLogoutStep === 2 && "Final confirmation"}
-              </AlertDialogTitle>
-              <AlertDialogDescription>
-                {childLogoutStep === 0 && (
-                  <>
-                    Logging out will require you to enter your login code again to access your account.
-                    <br /><br />
-                    Are you sure you want to continue?
-                  </>
-                )}
-                {childLogoutStep === 1 && (
-                  <>
-                    This will log you out completely. You'll need to enter your family code and login code again.
-                    <br /><br />
-                    Are you absolutely sure?
-                  </>
-                )}
-                {childLogoutStep === 2 && (
-                  <>
-                    <strong>Last chance!</strong> Clicking "Yes, Logout" will log you out immediately.
-                    <br /><br />
-                    You'll need to enter your full login code to get back in.
-                  </>
-                )}
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel onClick={() => setChildLogoutStep(null)}>
-                Cancel
-              </AlertDialogCancel>
-              {childLogoutStep !== null && childLogoutStep < 2 && (
-                <AlertDialogAction
-                  onClick={(e) => {
-                    e.preventDefault();
-                    setChildLogoutStep((childLogoutStep + 1) as 1 | 2);
-                  }}
-                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                >
-                  Yes, Continue
-                </AlertDialogAction>
-              )}
-              {childLogoutStep === 2 && (
-                <AlertDialogAction
-                  onClick={async (e) => {
-                    e.preventDefault();
-                    await handleChildLogout();
-                  }}
-                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                >
-                  Yes, Logout
-                </AlertDialogAction>
-              )}
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+        {/* Kid-friendly Emoji Logout Dialog */}
+        <ChildLogoutDialog
+          open={showChildLogoutDialog}
+          onOpenChange={setShowChildLogoutDialog}
+          onLogout={handleChildLogout}
+        />
       </>
     );
   }

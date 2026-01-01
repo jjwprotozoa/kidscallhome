@@ -105,3 +105,4 @@ const isAnnualProd = priceId === "price_1SkPL7IIyqCwTeH2tI9TxHRB";
 - Changing price IDs requires updating both backend and frontend code
 - Always test in test mode before using live mode
 
+

@@ -44,7 +44,14 @@ const ChildCard = ({
   const unreadMessageCount = useUnreadBadgeForChild(child.id);
 
   return (
-    <Card className="p-4" data-tour={dataTour}>
+    <Card 
+      className={`p-4 transition-shadow duration-300 ${
+        isOnline 
+          ? "shadow-[0_0_12px_-3px_rgba(34,197,94,0.35)] border-green-500/20" 
+          : ""
+      }`}
+      data-tour={dataTour}
+    >
       <div className="flex items-center justify-between gap-3">
         {/* Left: Avatar + Name + Status */}
         <div className="flex items-center gap-3 flex-1 min-w-0">

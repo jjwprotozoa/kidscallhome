@@ -3,9 +3,7 @@
     <!-- Regional SEO: Primary language English, with support for international markets -->
   <head>
     <!-- Google tag (gtag.js) - Optimized for performance -->
-    <!-- Preconnect to Google Tag Manager for faster connection -->
-    <link rel="preconnect" href="https://www.googletagmanager.com" crossorigin />
-    <link rel="dns-prefetch" href="https://www.googletagmanager.com" />
+    <!-- Note: GA preconnect removed - GA is lazy-loaded only on app routes, not marketing pages -->
     <meta charset="UTF-8" />
     <meta
       name="viewport"
@@ -39,7 +37,7 @@
     <link rel="apple-touch-icon" href="/icon-192x192.png" />
     <meta
       name="description"
-      content="Safe video calling and messaging app for kids. Family-only contacts controlled by parents. Works on most phones and tablets over Wi‑Fi or mobile data, no phone number or SIM card required. No ads, no strangers, no filters, no data tracking."
+      content="Safe video calling and messaging app for kids. Family-only contacts controlled by parents. Works on most phones and tablets over Wi‑Fi or mobile data, no phone number or SIM card required. No ads. Privacy-respecting analytics only."
     />
     <meta name="author" content="Kids Call Home" />
     <meta name="robots" content="index,follow,max-image-preview:large" />
@@ -54,7 +52,7 @@
     />
     <meta
       property="og:description"
-      content="Safe video calls for kids—no phone number needed. Family-only contacts, parent-controlled. Works on tablets & Wi‑Fi devices. Free to start. No ads, no strangers, no tracking."
+      content="Safe video calls for kids—no phone number needed. Family-only contacts, parent-controlled. Works on tablets & Wi‑Fi devices. Free to start. No ads. No tracking for advertising."
     />
     <meta
       property="og:image"
@@ -83,7 +81,7 @@
     />
     <meta
       name="twitter:description"
-      content="Safe video calls for kids—no phone number needed. Family-only contacts, parent-controlled. Works on tablets & Wi‑Fi devices. Free to start. No ads, no strangers, no tracking."
+      content="Safe video calls for kids—no phone number needed. Family-only contacts, parent-controlled. Works on tablets & Wi‑Fi devices. Free to start. No ads. No tracking for advertising."
     />
     <meta
       name="twitter:image"
@@ -118,7 +116,7 @@
         "@context": "https://schema.org",
         "@type": "SoftwareApplication",
         "name": "Kids Call Home",
-        "description": "Safe video calling and messaging app for kids. Family-only contacts controlled by parents. Works on most phones, tablets, iPads, and Wi‑Fi devices without a SIM card or phone number. Encrypted calls and messages with no ads, no strangers, no filters, and no data tracking.",
+        "description": "Safe video calling and messaging app for kids. Family-only contacts controlled by parents. Works on most phones, tablets, iPads, and Wi‑Fi devices without a SIM card or phone number. Encrypted calls and messages. No ads. Privacy-respecting analytics only.",
         "url": "https://www.kidscallhome.com",
         "applicationCategory": "CommunicationApplication",
         "operatingSystem": ["Web", "Android", "iOS", "Tablet"],
@@ -200,15 +198,15 @@
           "Family-only video calls and messaging",
           "Parent-controlled contacts (full parent control)",
           "No public profiles or stranger contact",
-          "Encrypted communication (end-to-end)",
+          "Encrypted calls and messages",
           "Works without SIM card or phone number",
           "International calling support (works across countries)",
           "Works on most phones and tablets, including many kids tablets and e-readers",
           "Co-parenting friendly and long-distance family friendly",
-          "No ads, no filters, no data tracking",
+          "No ads. No tracking for advertising",
           "Magic link login for kids (no passwords to remember)",
           "Child blocking and reporting features",
-          "COPPA compliant for children's privacy",
+          "Designed with COPPA and GDPR in mind",
           "Low bandwidth optimization"
         ],
         "screenshot": "https://www.kidscallhome.com/og/kidscallhome-og.png",
@@ -228,7 +226,7 @@
             "name": "How can my child call me from a tablet without a SIM card?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Kids Call Home works perfectly on tablets, iPads, Kindle Fire, and Chromebooks over Wi‑Fi without needing a SIM card or phone number. Your child simply opens the app, enters their login code, and can call approved family members. Parents control all contacts, so only family members you approve can connect with your child."
+              "text": "Kids Call Home works perfectly on tablets, iPads, Kindle Fire, and Chromebooks over Wi‑Fi without needing a SIM card or phone number. First-time setup is secure (via QR code, magic link, or simple code). After that, your child opens the app and taps to call approved family members. Parents control all contacts, so only family members you approve can connect with your child."
             }
           },
           {
@@ -276,7 +274,7 @@
             "name": "Are there ads or in‑app purchases in Kids Call Home?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "No. Kids Call Home has no ads, no in‑app purchases, and no manipulative design features. The app is designed to be a simple, safe communication tool for families, not a platform for engagement or monetization. Your child's attention stays on connecting with family, not on games, feeds, or notifications designed to keep them online longer."
+              "text": "No ads. Start free with 1 child. Optional paid plans are available for additional kids or features. There are no manipulative design features. The app is designed to be a simple, safe communication tool for families, not a platform for engagement or monetization. Your child's attention stays on connecting with family, not on games, feeds, or notifications designed to keep them online longer."
             }
           },
           {
@@ -329,10 +327,10 @@
           },
           {
             "@type": "Question",
-            "name": "Is Kids Call Home GDPR compliant?",
+            "name": "Is Kids Call Home GDPR ready?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Yes. Kids Call Home is GDPR compliant for European users. We implement data protection measures including: encrypted data storage, right to data deletion and access, transparent privacy policy, cookie consent, no data sold to third parties, and secure data handling. Parents can request data deletion or access at any time through our support channels."
+              "text": "Yes. Kids Call Home is designed with GDPR in mind for European users. We implement data protection measures including: encrypted data storage, right to data deletion and access, transparent privacy policy, cookie consent, no data sold to third parties, and secure data handling. Parents can request data deletion or access at any time through our support channels."
             }
           },
           {
@@ -340,7 +338,7 @@
             "name": "Where is my data stored and is it secure?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Your data is stored in secure, encrypted databases with industry-standard security measures. Data is encrypted both in transit (during calls/messages) and at rest (in storage). We do not sell your data to advertisers or third parties. We comply with GDPR (Europe), COPPA (US), and other regional privacy regulations. You have the right to access, correct, or delete your data at any time."
+              "text": "Your data is stored in secure, encrypted databases with industry-standard security measures. Data is encrypted both in transit (during calls/messages) and at rest (in storage). We do not sell your data to advertisers or third parties. We are designed with GDPR (Europe) and COPPA (US) requirements in mind. You have the right to access, correct, or delete your data at any time."
             }
           }
         ]
@@ -356,7 +354,7 @@
     <!-- Voice Assistant Keywords - Problem-Solving Focus -->
     <meta
       name="keywords"
-      content="safe video calling app for kids, kids call parents without phone or SIM, family-only calling, co-parenting communication for kids, safe kids messaging app, video calls for children without SIM card, tablet calling app for kids, iPad video calling without phone, kids communication app no strangers, privacy-first kids app, kids call parents app, safe kids messenger, family communication app for kids, international calling for kids, parent-controlled kids calling, kids calling app with full parent control, kids video calling internationally, long-distance family calling app, kids calling grandparents, COPPA compliant kids app, encrypted kids calling, kids app no ads no tracking, divorced parents calling app, separated parents app, single mom kids calling, single dad kids calling, kids calling from mom's to dad's, shared custody calling app, non-custodial parent calling, free kids calling app, kids call home pricing, kids calling app cost, kids call home app store, kids call home play store, kids call home iOS app, kids call home Android app, GDPR compliant kids app, EU kids calling app, DSGVO compliant kids app, RGPD compliant kids app, privacy-first kids app, data protection compliant kids app"
+      content="safe video calling app for kids, kids call parents without phone or SIM, family-only calling, co-parenting communication for kids, safe kids messaging app, video calls for children without SIM card, tablet calling app for kids, iPad video calling without phone, kids communication app no strangers, privacy-first kids app, kids call parents app, safe kids messenger, family communication app for kids, international calling for kids, parent-controlled kids calling, kids calling app with full parent control, kids video calling internationally, long-distance family calling app, kids calling grandparents, COPPA-ready kids app, encrypted kids calling, kids app no ads, divorced parents calling app, separated parents app, single mom kids calling, single dad kids calling, kids calling from mom's to dad's, shared custody calling app, non-custodial parent calling, free kids calling app, kids call home pricing, kids calling app cost, kids call home app store, kids call home play store, kids call home iOS app, kids call home Android app, GDPR-ready kids app, EU kids calling app, privacy-first kids app, data protection kids app"
     />
 
     <!-- Speculation Rules API for instant navigations (Chrome 109+) -->
@@ -424,7 +422,7 @@
       <h2>Privacy-first design for kids</h2>
       <p>
         Calls and messages are encrypted to protect your family's communication.
-        The app uses minimal data, doesn't use tracking for ads, and does not
+        The app uses minimal data, doesn't track for advertising purposes, and does not
         sell family data to advertisers or partners. There are no manipulative
         "dark pattern" features like infinite feeds, aggressive notifications,
         time pressure, or surprise in‑app purchases. Kids Call Home is designed
@@ -437,8 +435,8 @@
       <p>
         Kids Call Home works perfectly on tablets, iPads, Kindle Fire, and
         Chromebooks over Wi‑Fi without needing a SIM card or phone number. Your
-        child simply opens the app, enters their login code, and can call
-        approved family members. Parents control all contacts, so only family
+        child opens the app and taps to call approved family members (first-time 
+        setup is via QR code, magic link, or simple code). Parents control all contacts, so only family
         members you approve can connect with your child.
       </p>
 
@@ -483,8 +481,8 @@
 
       <h3>Are there ads or in‑app purchases in Kids Call Home?</h3>
       <p>
-        No. Kids Call Home has no ads, no in‑app purchases, and no manipulative
-        design features. The app is designed to be a simple, safe communication
+        No ads. Start free with 1 child. Optional paid plans are available for 
+        additional kids or features. There are no manipulative design features. The app is designed to be a simple, safe communication
         tool for families, not a platform for engagement or monetization. Your
         child's attention stays on connecting with family, not on games, feeds,
         or notifications designed to keep them online longer.
@@ -746,7 +744,7 @@
         <p>
           Kids Call Home works perfectly on tablets, iPads, Kindle Fire, and
           Chromebooks over Wi‑Fi without needing a SIM card or phone number.
-          Your child simply opens the app, enters their login code, and can call
+          First-time setup is secure (via QR code, magic link, or simple code). After that, your child opens the app and taps to call
           approved family members. Parents control all contacts, so only family
           members you approve can connect with your child.
         </p>
@@ -793,7 +791,8 @@
 
         <h3>Are there ads or in‑app purchases in Kids Call Home?</h3>
         <p>
-          No. Kids Call Home has no ads, no in‑app purchases, and no
+          No ads. Start free with 1 child. Optional paid plans are available for 
+          additional kids or features. There are no
           manipulative design features. The app is designed to be a simple, safe
           communication tool for families, not a platform for engagement or
           monetization. Your child's attention stays on connecting with family,
@@ -815,11 +814,13 @@
         </p>
       </div>
     </noscript>
-        <!-- Vercel Web Analytics and Speed Insights are automatically injected by Vercel at runtime -->
-        <!-- No need to include them in the HTML - Vercel will add them automatically at deployment -->
+        <!-- Vercel Web Analytics and Speed Insights are initialized via React components in src/App.tsx -->
+        <!-- For Vite/React SPAs, Vercel does NOT auto-inject analytics - we use @vercel/analytics and @vercel/speed-insights packages -->
+        <!-- Both components fire on all routes (marketing + app) and track SPA route changes automatically -->
 
     <!-- Google Analytics - Only loaded on app routes, not marketing routes -->
     <!-- This improves Lighthouse scores on marketing pages -->
+    <!-- Debug mode: localStorage.setItem("debug_analytics", "1") then reload -->
     <script>
       // Check if we're on a marketing route
       function isMarketingRoute() {
@@ -827,8 +828,21 @@
         return pathname === '/' || pathname === '/info';
       }
       
+      // Debug helper - logs to console only when debug_analytics flag is set
+      function analyticsDebug(message, data) {
+        try {
+          if (localStorage.getItem('debug_analytics') === '1') {
+            console.log('[GA Debug]', message, data || '');
+          }
+        } catch (e) {
+          // Ignore localStorage errors
+        }
+      }
+      
       // Only initialize GA on app routes (not marketing routes)
       if (!isMarketingRoute()) {
+        analyticsDebug('GA: App route detected, will initialize', window.location.pathname);
+        
         // Initialize dataLayer immediately (lightweight, no blocking)
         window.dataLayer = window.dataLayer || [];
         function gtag() { dataLayer.push(arguments); }
@@ -852,11 +866,13 @@
         }
         
         function initializeGA() {
+          analyticsDebug('GA: Initializing gtag.js');
           // Load gtag.js script asynchronously
           var script = document.createElement('script');
           script.async = true;
           script.src = 'https://www.googletagmanager.com/gtag/js?id=G-5EY72BLX1X';
           script.onload = function() {
+            analyticsDebug('GA: gtag.js loaded, configuring');
             // Initialize GA after script loads
             gtag('js', new Date());
             gtag('config', 'G-5EY72BLX1X', {
@@ -867,9 +883,15 @@
               // Use minimal cookie settings
               cookie_flags: 'SameSite=None;Secure'
             });
+            analyticsDebug('GA: Configuration complete');
+          };
+          script.onerror = function() {
+            analyticsDebug('GA: Failed to load gtag.js (may be blocked by ad blocker)');
           };
           document.head.appendChild(script);
         }
+      } else {
+        analyticsDebug('GA: Marketing route detected, skipping GA', window.location.pathname);
       }
     </script>
 

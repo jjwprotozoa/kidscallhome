@@ -105,7 +105,7 @@ const ChildHome = () => {
               <Button
                 className="w-full"
                 size="lg"
-                onClick={() => navigate("/child/parents")}
+                onClick={() => navigate("/child/family")}
                 data-tour="child-home-parents"
               >
                 <Users className="mr-2 h-5 w-5" />

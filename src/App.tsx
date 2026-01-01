@@ -6,8 +6,9 @@ import { QueryClient } from "@tanstack/react-query";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
 import { lazy, Suspense, useEffect, useState } from "react";
-import { BrowserRouter, Navigate, Route, Routes, useNavigate } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useNavigate, useLocation } from "react-router-dom";
 import { SpeedInsights } from "@vercel/speed-insights/react";
+import { Analytics } from "@vercel/analytics/react";
 
 // Deferred UI components - loaded after initial paint for faster FCP
 // These are non-critical for the initial page render but provide enhanced UX
@@ -331,6 +332,34 @@ const SessionManager = () => {
   return null;
 };
 
+// Debug helper for Vercel Analytics - logs mount and navigation events when debug_analytics=1
+// Zero overhead when disabled: returns null before any hooks to avoid location subscriptions
+const AnalyticsDebugHelper = () => {
+  const enabled = typeof window !== 'undefined' && localStorage.getItem('debug_analytics') === '1';
+  
+  // Early return BEFORE useLocation to avoid subscribing to route changes when disabled
+  if (!enabled) return null;
+  
+  return <AnalyticsDebugHelperInner />;
+};
+
+// Inner component only mounts when debug is enabled - subscribes to location changes
+const AnalyticsDebugHelperInner = () => {
+  const location = useLocation();
+
+  useEffect(() => {
+    // eslint-disable-next-line no-console
+    console.log('[Analytics Debug] Analytics and SpeedInsights mounted inside BrowserRouter');
+  }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line no-console
+    console.log('[Analytics Debug] Route changed:', location.pathname);
+  }, [location.pathname]);
+
+  return null;
+};
+
 // Component to render deferred global components after initial load
 // These are lazy-loaded to improve FCP but should mount quickly after
 const DeferredGlobalComponents = () => {
@@ -406,6 +435,17 @@ const App = () => {
                 v7_relativeSplatPath: true,
               }}
             >
+              {/* Vercel Analytics - inside BrowserRouter to reliably track SPA route changes */}
+              {/* Debug mode: localStorage.setItem("debug_analytics", "1") then reload */}
+              <Analytics 
+                debug={typeof window !== 'undefined' && localStorage.getItem('debug_analytics') === '1'}
+              />
+              {/* Vercel Speed Insights - inside BrowserRouter for consistent context */}
+              <SpeedInsights 
+                debug={typeof window !== 'undefined' && localStorage.getItem('debug_analytics') === '1'}
+              />
+              {/* Debug helper - logs route changes when debug_analytics=1 */}
+              <AnalyticsDebugHelper />
               <ErrorBoundary fallback={null}>
                 <WidgetIntentHandler />
               </ErrorBoundary>
@@ -455,8 +495,10 @@ const App = () => {
                     element={<AccountSettings />}
                   />
                   <Route path="/child/login" element={<ChildLogin />} />
-                  <Route path="/child" element={<Navigate to="/child/parents" replace />} />
-                  <Route path="/child/parents" element={<ChildParentsList />} />
+                  <Route path="/child" element={<Navigate to="/child/family" replace />} />
+                  <Route path="/child/family" element={<ChildParentsList />} />
+                  {/* Legacy route redirect for backward compatibility */}
+                  <Route path="/child/parents" element={<Navigate to="/child/family" replace />} />
                   <Route
                     path="/child/call/:parentId"
                     element={<ChildCallScreen />}
@@ -503,7 +545,6 @@ const App = () => {
               </Suspense>
             </BrowserRouter>
           </SafeAreaLayout>
-          <SpeedInsights />
         </TooltipProvider>
       </PersistQueryClientProvider>
     </ErrorBoundary>
