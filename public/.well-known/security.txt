@@ -1,0 +1,20 @@
+# Kids Call Home - Security Policy
+Contact: support@kidscallhome.com
+Expires: 2026-12-31T23:59:59.000Z
+Preferred-Languages: en
+Canonical: https://www.kidscallhome.com/.well-known/security.txt
+
+# Security Reporting
+# If you discover a security vulnerability, please email support@kidscallhome.com
+# We appreciate responsible disclosure and will respond within 48 hours.
+
+# Our Security Commitment
+# - End-to-end encryption for calls and messages
+# - COPPA compliant for children's privacy
+# - No data sold to third parties
+# - Minimal data collection
+# - Regular security audits
+
+# Privacy Policy: https://www.kidscallhome.com/privacy
+# Security Information: https://www.kidscallhome.com/security
+

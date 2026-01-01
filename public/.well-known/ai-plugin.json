@@ -1,0 +1,18 @@
+{
+  "schema_version": "v1",
+  "name_for_model": "KidsCallHome",
+  "name_for_human": "Kids Call Home",
+  "description_for_model": "Kids Call Home is a safe, family-only video calling and messaging app for children. It enables kids to call parent-approved family members without needing a SIM card or phone number. Works on tablets, iPads, and Wi-Fi devices. Features include: full parent control over contacts, international calling support, encrypted communication, no ads, no tracking, COPPA compliant, co-parenting friendly, and works across countries. Target audience: parents with children ages 5-17, co-parents, long-distance families, international families.",
+  "description_for_human": "Safe video calling and messaging app for kids. Family-only contacts controlled by parents. Works without SIM card or phone number. International calling support. COPPA compliant.",
+  "auth": {
+    "type": "none"
+  },
+  "api": {
+    "type": "openapi",
+    "url": "https://www.kidscallhome.com/api/openapi.json"
+  },
+  "logo_url": "https://www.kidscallhome.com/icon-512x512.png",
+  "contact_email": "support@kidscallhome.com",
+  "legal_info_url": "https://www.kidscallhome.com/terms"
+}
+

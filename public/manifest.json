@@ -29,6 +29,9 @@
   ],
   "categories": ["communication", "social"],
   "screenshots": [],
+  "iarc_rating_id": "",
+  "related_applications": [],
+  "prefer_related_applications": false,
   "shortcuts": [
     {
       "name": "Call Child",

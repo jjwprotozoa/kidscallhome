@@ -1,5 +1,6 @@
 <!doctype html>
 <html lang="en">
+    <!-- Regional SEO: Primary language English, with support for international markets -->
   <head>
     <!-- Google tag (gtag.js) - Optimized for performance -->
     <!-- Preconnect to Google Tag Manager for faster connection -->
@@ -121,11 +122,75 @@
         "url": "https://www.kidscallhome.com",
         "applicationCategory": "CommunicationApplication",
         "operatingSystem": ["Web", "Android", "iOS", "Tablet"],
-        "offers": {
-          "@type": "Offer",
-          "price": "0",
-          "priceCurrency": "USD"
-        },
+        "offers": [
+          {
+            "@type": "Offer",
+            "name": "Free Tier",
+            "price": "0",
+            "priceCurrency": "USD",
+            "description": "1 child included, core features free"
+          },
+          {
+            "@type": "Offer",
+            "name": "Additional Kid Monthly",
+            "price": "4.99",
+            "priceCurrency": "USD",
+            "priceSpecification": {
+              "@type": "UnitPriceSpecification",
+              "price": "4.99",
+              "priceCurrency": "USD",
+              "billingIncrement": "P1M"
+            }
+          },
+          {
+            "@type": "Offer",
+            "name": "Additional Kid Annual",
+            "price": "49.99",
+            "priceCurrency": "USD",
+            "priceSpecification": {
+              "@type": "UnitPriceSpecification",
+              "price": "49.99",
+              "priceCurrency": "USD",
+              "billingIncrement": "P1Y"
+            }
+          },
+          {
+            "@type": "Offer",
+            "name": "Family Bundle Monthly",
+            "price": "14.99",
+            "priceCurrency": "USD",
+            "priceSpecification": {
+              "@type": "UnitPriceSpecification",
+              "price": "14.99",
+              "priceCurrency": "USD",
+              "billingIncrement": "P1M"
+            }
+          },
+          {
+            "@type": "Offer",
+            "name": "Family Bundle Annual",
+            "price": "149.99",
+            "priceCurrency": "USD",
+            "priceSpecification": {
+              "@type": "UnitPriceSpecification",
+              "price": "149.99",
+              "priceCurrency": "USD",
+              "billingIncrement": "P1Y"
+            }
+          },
+          {
+            "@type": "Offer",
+            "name": "Annual Family Plan",
+            "price": "99.00",
+            "priceCurrency": "USD",
+            "priceSpecification": {
+              "@type": "UnitPriceSpecification",
+              "price": "99.00",
+              "priceCurrency": "USD",
+              "billingIncrement": "P1Y"
+            }
+          }
+        ],
         "typicalAgeRange": "5-17",
         "audience": {
           "@type": "Audience",
@@ -133,14 +198,18 @@
         },
         "featureList": [
           "Family-only video calls and messaging",
-          "Parent-controlled contacts",
+          "Parent-controlled contacts (full parent control)",
           "No public profiles or stranger contact",
-          "Encrypted communication",
+          "Encrypted communication (end-to-end)",
           "Works without SIM card or phone number",
+          "International calling support (works across countries)",
           "Works on most phones and tablets, including many kids tablets and e-readers",
           "Co-parenting friendly and long-distance family friendly",
           "No ads, no filters, no data tracking",
-          "Magic link login for kids (no passwords to remember)"
+          "Magic link login for kids (no passwords to remember)",
+          "Child blocking and reporting features",
+          "COPPA compliant for children's privacy",
+          "Low bandwidth optimization"
         ],
         "screenshot": "https://www.kidscallhome.com/og/kidscallhome-og.png",
         "softwareVersion": "1.0"
@@ -175,7 +244,23 @@
             "name": "Can my child use this to call both parents in different homes?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Yes. Kids Call Home is built for co‑parents and long‑distance family. Your child can easily call both parents, grandparents, and other approved family members across different homes and even different countries. Parents control which family members are approved, making it ideal for shared custody situations and international families."
+              "text": "Yes. Kids Call Home is built for co‑parents and long‑distance family. Your child can easily call both parents, grandparents, and other approved family members across different homes and even different countries. Parents control which family members are approved, making it ideal for shared custody situations, divorced families, separated parents, and international families."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Is Kids Call Home good for divorced or separated parents?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Yes. Kids Call Home is perfect for divorced and separated parents. Your child can call both parents from either home, whether they're with mom or dad. Parents maintain full control over contacts, so both parents can be approved while ensuring your child only communicates with family members you've approved. This makes it ideal for shared custody, weekend visits, and maintaining connection between homes."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Can single parents use Kids Call Home?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Absolutely. Single moms and single dads can use Kids Call Home to allow their children to safely call the other parent, grandparents, or other trusted family members. You maintain full control over who can contact your child, so you can approve the other parent, relatives, or any family members you trust, while ensuring your child only communicates with people you've explicitly approved."
             }
           },
           {
@@ -215,7 +300,47 @@
             "name": "How much does Kids Call Home cost?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Kids Call Home is free to get started. You can create your family account, add your children, and invite family members at no cost. Premium features may be available for advanced needs, but the core calling and messaging functionality is free to use."
+              "text": "Kids Call Home is free to get started with 1 child included. Core calling and messaging features are free. Premium plans are available for families with more children: Additional Kid plans start at $4.99/month or $49.99/year, Family Bundle is $14.99/month or $149.99/year (up to 5 children), and the Annual Family Plan is $99/year (up to 10 children). All plans include unlimited calls, international calling, and all safety features."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Is Kids Call Home available in app stores?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Kids Call Home is currently available as a Progressive Web App (PWA) that works on all devices and can be installed on your home screen like a native app. Native apps for Google Play Store (Android) and Apple App Store (iOS) are in development and will be available soon. The PWA provides the full experience and works on iPhones, iPads, Android phones, tablets, and more."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Can my child call relatives internationally?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Yes. Kids Call Home works anywhere there's internet access—Wi‑Fi or mobile data. Your child can call approved family members in different countries just as easily as calling someone in the same city. There are no geographic restrictions, and international calls work the same way as local calls (no extra charges beyond your internet connection)."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Do parents have full control over who can contact their child?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Yes. Parents have complete control over all contacts. Only parent-approved family members can contact your child. Parents can add or remove contacts at any time, see call and message metadata, and children cannot add contacts themselves. This ensures your child only communicates with people you've explicitly approved."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Is Kids Call Home GDPR compliant?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Yes. Kids Call Home is GDPR compliant for European users. We implement data protection measures including: encrypted data storage, right to data deletion and access, transparent privacy policy, cookie consent, no data sold to third parties, and secure data handling. Parents can request data deletion or access at any time through our support channels."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Where is my data stored and is it secure?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Your data is stored in secure, encrypted databases with industry-standard security measures. Data is encrypted both in transit (during calls/messages) and at rest (in storage). We do not sell your data to advertisers or third parties. We comply with GDPR (Europe), COPPA (US), and other regional privacy regulations. You have the right to access, correct, or delete your data at any time."
             }
           }
         ]
@@ -224,13 +349,14 @@
 
     <!-- Additional meta tags for voice assistants -->
     <meta name="application-name" content="Kids Call Home" />
-    <meta name="apple-itunes-app" content="app-id=YOUR_APP_ID" />
-    <meta name="google-play-app" content="app-id=YOUR_APP_ID" />
+    <!-- Native apps coming soon - PWA available now -->
+    <!-- <meta name="apple-itunes-app" content="app-id=YOUR_APP_ID" /> -->
+    <!-- <meta name="google-play-app" content="app-id=YOUR_APP_ID" /> -->
 
     <!-- Voice Assistant Keywords - Problem-Solving Focus -->
     <meta
       name="keywords"
-      content="safe video calling app for kids, kids call parents without phone or SIM, family-only calling, co-parenting communication for kids, safe kids messaging app, video calls for children without SIM card, tablet calling app for kids, iPad video calling without phone, kids communication app no strangers, privacy-first kids app, kids call parents app, safe kids messenger, family communication app for kids"
+      content="safe video calling app for kids, kids call parents without phone or SIM, family-only calling, co-parenting communication for kids, safe kids messaging app, video calls for children without SIM card, tablet calling app for kids, iPad video calling without phone, kids communication app no strangers, privacy-first kids app, kids call parents app, safe kids messenger, family communication app for kids, international calling for kids, parent-controlled kids calling, kids calling app with full parent control, kids video calling internationally, long-distance family calling app, kids calling grandparents, COPPA compliant kids app, encrypted kids calling, kids app no ads no tracking, divorced parents calling app, separated parents app, single mom kids calling, single dad kids calling, kids calling from mom's to dad's, shared custody calling app, non-custodial parent calling, free kids calling app, kids call home pricing, kids calling app cost, kids call home app store, kids call home play store, kids call home iOS app, kids call home Android app, GDPR compliant kids app, EU kids calling app, DSGVO compliant kids app, RGPD compliant kids app, privacy-first kids app, data protection compliant kids app"
     />
 
     <!-- Speculation Rules API for instant navigations (Chrome 109+) -->

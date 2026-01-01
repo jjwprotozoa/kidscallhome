@@ -1,4 +1,42 @@
+# Kids Call Home - Robots.txt
+# Optimized for search engines, AI crawlers, and voice assistants
+
+# Allow all search engines
 User-agent: *
 Allow: /
 
+# Explicitly allow AI and voice assistant crawlers
+User-agent: Google-Extended
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: anthropic-ai
+Allow: /
+
+User-agent: Claude-Web
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Applebot-Extended
+Allow: /
+
+User-agent: GPTBot
+Allow: /
+
+User-agent: CCBot
+Allow: /
+
+# Disallow private/authenticated routes
+Disallow: /parent/
+Disallow: /child/
+Disallow: /family-member/
+Disallow: /chat/
+Disallow: /video-call/
+Disallow: /call/
+
+# Sitemap location
 Sitemap: https://www.kidscallhome.com/sitemap.xml
