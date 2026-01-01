@@ -24,7 +24,7 @@ class WidgetDataPlugin : Plugin() {
             val childId = data.getString("childId")
             val childName = data.getString("childName", "Call Home") ?: "Call Home"
             val childAvatarColor = data.getString("childAvatarColor", "#3B82F6") ?: "#3B82F6"
-            val unreadCount = data.getInt("unreadCount", 0)
+            val unreadCount = data.getInteger("unreadCount") ?: 0
             val lastCallTime = data.getString("lastCallTime")
 
             // Create WidgetData object

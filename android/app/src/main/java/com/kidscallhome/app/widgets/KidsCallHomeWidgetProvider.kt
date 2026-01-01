@@ -14,7 +14,6 @@ import android.content.SharedPreferences
 import android.graphics.Color
 import android.os.Build
 import android.widget.RemoteViews
-import com.kidscallhome.app.MainActivity
 import com.kidscallhome.app.R
 import org.json.JSONObject
 
@@ -147,7 +146,8 @@ class KidsCallHomeWidgetProvider : AppWidgetProvider() {
                 "kidscallhome://widget?fromWidget=true&widgetAction=quick_call"
             }
 
-            val launchIntent = Intent(context, MainActivity::class.java).apply {
+            // Get the launch intent for the app (works without direct MainActivity reference)
+            val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)?.apply {
                 action = Intent.ACTION_VIEW
                 data = android.net.Uri.parse(uriString)
                 putExtra("fromWidget", true)
@@ -155,6 +155,16 @@ class KidsCallHomeWidgetProvider : AppWidgetProvider() {
                 if (widgetData?.childId != null) {
                     putExtra("childId", widgetData.childId)
                 }
+                // Clear any existing task and start fresh
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            } ?: Intent(Intent.ACTION_VIEW, android.net.Uri.parse(uriString)).apply {
+                setPackage(context.packageName)
+                putExtra("fromWidget", true)
+                putExtra("widgetAction", "quick_call")
+                if (widgetData?.childId != null) {
+                    putExtra("childId", widgetData.childId)
+                }
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
 
             val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
