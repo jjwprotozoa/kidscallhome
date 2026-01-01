@@ -1,11 +1,80 @@
 # Kids Call Home - Robots.txt
 # Optimized for search engines, AI crawlers, and voice assistants
+# Last Updated: 2026-01-01
 
 # Allow all search engines
 User-agent: *
 Allow: /
 
-# Explicitly allow AI and voice assistant crawlers
+# ===========================================
+# PUBLIC PAGES - Allowed for indexing
+# ===========================================
+# These are explicitly allowed (default is allow, but being explicit helps)
+Allow: /pricing
+Allow: /privacy
+Allow: /terms
+Allow: /security
+Allow: /supported-devices
+Allow: /info
+Allow: /beta
+
+# Public authentication entry points (marketing/conversion pages)
+Allow: /parent/auth
+Allow: /child/login
+Allow: /family-member/auth
+Allow: /family-member/invite/
+
+# SEO landing pages
+Allow: /call-without-sim
+Allow: /call-dad-from-ipad
+Allow: /free-calls-for-kids
+Allow: /kids-video-calling-kindle
+Allow: /low-data-family-calls
+
+# Error pages (useful for debugging but low priority)
+Allow: /error/
+
+# ===========================================
+# PRIVATE PAGES - Blocked from indexing
+# ===========================================
+# These require authentication and contain private user data
+
+# Parent authenticated routes
+Disallow: /parent/children
+Disallow: /parent/call/
+Disallow: /parent/dashboard
+Disallow: /parent/family
+Disallow: /parent/safety
+Disallow: /parent/connections
+Disallow: /parent/referrals
+Disallow: /parent/devices
+Disallow: /parent/upgrade
+Disallow: /parent/settings
+
+# Child authenticated routes
+Disallow: /child/family
+Disallow: /child/call/
+Disallow: /child/parent
+Disallow: /child/parents
+Disallow: /child/dashboard
+
+# Family member authenticated routes
+Disallow: /family-member/dashboard
+Disallow: /family-member/call/
+
+# Private communication routes
+Disallow: /chat/
+Disallow: /video-call/
+Disallow: /call/
+
+# Email verification (user-specific)
+Disallow: /verify-email
+
+# ===========================================
+# AI and Voice Assistant Crawlers
+# ===========================================
+# Explicitly allow AI crawlers for better discoverability
+
 User-agent: Google-Extended
 Allow: /
 
@@ -30,13 +99,7 @@ Allow: /
 User-agent: CCBot
 Allow: /
 
-# Disallow private/authenticated routes
-Disallow: /parent/
-Disallow: /child/
-Disallow: /family-member/
-Disallow: /chat/
-Disallow: /video-call/
-Disallow: /call/
-
-# Sitemap location
+# ===========================================
+# Sitemap
+# ===========================================
 Sitemap: https://www.kidscallhome.com/sitemap.xml

@@ -1,11 +1,17 @@
 // src/pages/Terms.tsx
 // Terms of Service page for Kids Call Home
 
+import { SEOHead } from "@/components/SEOHead";
 import { Link } from "react-router-dom";
 
 const Terms = () => {
   return (
     <main className="min-h-[100dvh] bg-background">
+      <SEOHead
+        title="Terms of Service - Usage Guidelines"
+        description="Kids Call Home terms of service. Family-only communication, parent responsibilities, and acceptable use guidelines for safe video calling."
+        path="/terms"
+      />
       <div className="container mx-auto px-4 py-12 md:py-16">
         <div className="max-w-3xl mx-auto">
           <h1 className="text-3xl md:text-4xl font-bold mb-6">
@@ -73,6 +79,7 @@ const Terms = () => {
 };
 
 export default Terms;
+
 
 
 

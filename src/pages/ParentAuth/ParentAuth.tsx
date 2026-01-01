@@ -1,9 +1,10 @@
 // src/pages/ParentAuth/ParentAuth.tsx
 // Purpose: Main page orchestrator for parent authentication (max 200 lines)
 
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
+import { SEOHead } from "@/components/SEOHead";
 import { Link } from "react-router-dom";
 import { FamilySetupSelection } from "@/features/onboarding/components/FamilySetupSelection";
 import { useToast } from "@/hooks/use-toast";
@@ -352,6 +353,11 @@ const ParentAuth = () => {
 
   return (
     <div className="min-h-[100dvh] flex items-center justify-center bg-background p-4">
+      <SEOHead
+        title={authState.isLogin ? "Parent Login" : "Create Parent Account - Get Started Free"}
+        description="Sign in or create your Kids Call Home parent account. Set up safe video calling for your kids in minutes. Free for 1 child, no credit card required."
+        path="/parent/auth"
+      />
       <Card className="w-full max-w-md p-8 space-y-6">
         <div className="text-center space-y-2">
           <div className="flex justify-center">

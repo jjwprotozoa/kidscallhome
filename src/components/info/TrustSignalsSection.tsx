@@ -47,7 +47,7 @@ export const TrustSignalsSection = () => {
     {
       icon: Eye,
       title: "Minimal Data Collection",
-      description: "We only collect data necessary for the service to function. No tracking for advertising, no behavioral profiling."
+      description: "We only collect data necessary for the service to function. Analytics are used to improve the app, never for advertising or selling to third parties."
     },
     {
       icon: Database,
@@ -103,15 +103,19 @@ export const TrustSignalsSection = () => {
         </div>
 
         <div className="mt-6 p-4 bg-muted/50 rounded-lg">
-          <h3 className="font-semibold mb-2">What We Don't Collect</h3>
+          <h3 className="font-semibold mb-2">What We Don't Do With Your Data</h3>
           <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
-            <li>Location data (except when you explicitly enable location sharing for safety)</li>
-            <li>Browsing history or activity outside the app</li>
-            <li>Contact lists from your device</li>
-            <li>Biometric data (we don't use face recognition or fingerprint scanning)</li>
-            <li>Behavioral data for advertising or profiling</li>
-            <li>Third-party tracking cookies or pixels</li>
+            <li>Sell or share data with advertisers or data brokers</li>
+            <li>Use data for targeted advertising or marketing profiles</li>
+            <li>Collect location data (except when you explicitly enable location sharing for safety)</li>
+            <li>Access browsing history or activity outside the app</li>
+            <li>Read contact lists from your device</li>
+            <li>Collect biometric data (no face recognition or fingerprint scanning)</li>
           </ul>
+          <p className="text-xs text-muted-foreground mt-3">
+            We use privacy-respecting analytics (Google Analytics) to understand how the app is used and improve it. 
+            This data is used only for app functionality and improvement, never for advertising.
+          </p>
         </div>
 
         {/* Contextual CTA after trust signals - for hesitant parents */}

@@ -27,7 +27,7 @@ const faqItems: FAQItem[] = [
   },
   {
     question: "What data does Kids Call Home collect?",
-    answer: "Kids Call Home collects only the minimal data necessary for the service to function: account information (parent email, child's display name and avatar), contact relationships (which family members are approved), and call/message metadata (who called whom, when, duration—not the content, which is encrypted). We do NOT collect: location data (unless you enable it), browsing history, device contacts, biometric data, or any data for advertising purposes."
+    answer: "Kids Call Home collects only the minimal data necessary for the service to function: account information (parent email, child's display name and avatar), contact relationships (which family members are approved), call/message metadata (who called whom, when, duration—not the content, which is encrypted), and app usage analytics (to improve the service). We do NOT collect: location data (unless you enable it), browsing history, device contacts, or biometric data. We never sell data or use it for advertising."
   },
   {
     question: "Is Kids Call Home safer than FaceTime?",
@@ -47,7 +47,7 @@ const faqItems: FAQItem[] = [
   },
   {
     question: "How does Kids Call Home protect my child's privacy?",
-    answer: "Kids Call Home uses encrypted calls and messages to protect your family's communication. The app collects minimal data necessary for the service to function, does not use tracking for advertising purposes, and does not sell family data. There are no manipulative design patterns like infinite feeds, aggressive notifications, or surprise in‑app purchases. Parents have full control over who can contact their child."
+    answer: "Kids Call Home uses encrypted calls and messages to protect your family's communication. The app collects minimal data necessary for the service to function and uses privacy-respecting analytics only to improve the app—never for advertising or selling to third parties. There are no manipulative design patterns like infinite feeds, aggressive notifications, or surprise in‑app purchases. Parents have full control over who can contact their child."
   },
   {
     question: "What happens if I want to delete my child's account?",

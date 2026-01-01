@@ -1,9 +1,10 @@
 // src/pages/SupportedDevices.tsx
 // Supported devices page for Kids Call Home
 
-import { Link } from "react-router-dom";
 import { Card } from "@/components/ui/card";
-import { Tablet, Laptop, Smartphone } from "lucide-react";
+import { SEOHead } from "@/components/SEOHead";
+import { Laptop, Smartphone, Tablet } from "lucide-react";
+import { Link } from "react-router-dom";
 
 const SupportedDevices = () => {
   const devices = [
@@ -17,6 +18,11 @@ const SupportedDevices = () => {
 
   return (
     <main className="min-h-[100dvh] bg-background">
+      <SEOHead
+        title="Supported Devices - iPad, Android, Kindle Fire, Chromebook"
+        description="Kids Call Home works on iPads, Android tablets, Kindle Fire, Chromebooks, iPhones, and Android phones. No SIM card needed - just WiFi or mobile data."
+        path="/supported-devices"
+      />
       <div className="container mx-auto px-4 py-12 md:py-16">
         <div className="max-w-4xl mx-auto">
           <h1 className="text-3xl md:text-4xl font-bold text-center mb-4">
@@ -71,6 +77,7 @@ const SupportedDevices = () => {
 };
 
 export default SupportedDevices;
+
 
 
 

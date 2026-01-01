@@ -32,6 +32,9 @@ export const PrivacySection = () => {
                 Device information for security and device management
               </li>
               <li>Call and message data for service functionality</li>
+              <li>
+                App usage analytics (via Google Analytics) to understand how the app is used and improve it
+              </li>
             </ul>
           </div>
           <Separator />
@@ -39,7 +42,9 @@ export const PrivacySection = () => {
             <h3 className="font-semibold mb-2">Data Usage</h3>
             <p className="text-sm text-muted-foreground">
               We use collected data solely to provide and improve the
-              service. Data is not sold to third parties. We use
+              service. Analytics data helps us understand app usage patterns,
+              identify issues, and improve the user experience. Data is never
+              sold to third parties or used for advertising. We use
               industry-standard security measures to protect your
               information.
             </p>

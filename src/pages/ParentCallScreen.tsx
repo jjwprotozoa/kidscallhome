@@ -11,6 +11,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { setUserStartedCall } from "@/utils/userInteraction";
 import { useFamilyMemberRedirect } from "@/hooks/useFamilyMemberRedirect";
+import {
+  trackCallStarted,
+  trackCallCompleted,
+  trackCallFailed,
+} from "@/utils/analytics";
 
 const ParentCallScreen = () => {
   // Redirect family members away from parent routes
@@ -27,6 +32,8 @@ const ParentCallScreen = () => {
   const [callFailed, setCallFailed] = useState(false);
   // Track if call was started to prevent re-triggering
   const callStartedRef = useRef(false);
+  // Track call start time for duration analytics
+  const callStartTimeRef = useRef<number | null>(null);
 
   useEffect(() => {
     const initialize = async () => {
@@ -147,9 +154,15 @@ const ParentCallScreen = () => {
       // CRITICAL: User navigated to call screen - enable audio
       setUserStartedCall();
       
+      // Track analytics: call started
+      trackCallStarted("video", "parent");
+      callStartTimeRef.current = Date.now();
+      
       callEngine.startOutgoingCall(childId).catch((error) => {
         console.error("Failed to start call:", error);
         setCallFailed(true);
+        // Track analytics: call failed
+        trackCallFailed(error instanceof Error ? error.message : "unknown_error", "video");
         toast({
           title: "Call Failed",
           description: error instanceof Error ? error.message : "Failed to start call. Please check camera/microphone permissions.",
@@ -159,9 +172,15 @@ const ParentCallScreen = () => {
     }
   }, [callEngine.state, parentId, childId, callEngine, callFailed, toast, searchParams]);
 
-  // Handle ended state redirect
+  // Handle ended state redirect and track call completion
   useEffect(() => {
     if (callEngine.state === "ended") {
+      // Track analytics: call completed
+      if (callStartTimeRef.current) {
+        const durationSeconds = Math.round((Date.now() - callStartTimeRef.current) / 1000);
+        trackCallCompleted(durationSeconds, "video");
+        callStartTimeRef.current = null;
+      }
       // Redirect handled by useCallEngine hook
     }
   }, [callEngine.state]);

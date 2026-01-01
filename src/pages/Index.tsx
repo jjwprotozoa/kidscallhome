@@ -810,8 +810,8 @@ const Index = () => {
                       How We Help
                     </h4>
                     <p className="text-sm text-muted-foreground">
-                      We collect minimal data, never track for ads, never sell
-                      your information. Your family's privacy is sacred.
+                      We collect minimal data, use analytics only to improve the app,
+                      never for ads, and never sell your information.
                     </p>
                   </div>
                 </div>

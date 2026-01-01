@@ -4,6 +4,47 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added - 2026-01-02
+
+#### Comprehensive Analytics Tracking System
+- **New Analytics Utility** (`src/utils/analytics.ts`): Created comprehensive GA4-compatible analytics module with 50+ trackable events organized by AARRR metrics:
+  - **Acquisition**: `page_view`, `landing_page_view`, `seo_page_view`
+  - **Activation**: `signup_started`, `signup_complete`, `email_verified`, `child_added`, `first_call_made`, `first_message_sent`, `family_setup_complete`
+  - **Engagement**: `call_started`, `call_completed`, `call_duration`, `message_sent`, `family_member_invited`, `family_member_joined`, `child_login_success/failed`, `device_authorized`, `pwa_installed`
+  - **Revenue**: `pricing_viewed`, `upgrade_started`, `subscription_started`, `subscription_renewed`, `subscription_cancelled`
+  - **Referral**: `referral_link_copied/shared`, `referral_signup`, `referral_converted`
+  - **Technical**: `call_failed`, `call_quality_poor`, `webrtc_error`, `network_error`, `permission_denied`, `error_occurred`
+- **Key Features**:
+  - Cookie consent aware (respects user's analytics preferences)
+  - GA4 compatible with gtag format and dataLayer fallback
+  - Full TypeScript types for all events and parameters
+  - Non-blocking (analytics never breaks the app)
+  - Dev logging in development mode for debugging
+  - User properties and user ID support for segmentation
+
+#### Analytics Integration Across App
+- **Signup Flow** (`authHandlers.ts`): Added `trackSignupStarted`, `trackSignupComplete`, `trackReferralSignup`, `trackAppOpened`
+- **Call Screens** (`ParentCallScreen.tsx`, `ChildCallScreen.tsx`): Added `trackCallStarted`, `trackCallCompleted`, `trackCallFailed` with duration tracking
+- **Subscriptions** (`usePaymentHandlers.ts`): Added `trackUpgradeStarted`, `trackSubscriptionStarted`
+- **Messaging** (`useMessageSending.ts`): Added `trackMessageSent` with sender type
+- **Family Management** (`AddFamilyMemberDialog.tsx`): Added `trackFamilyMemberInvited`
+- **Child Creation** (`AddChildDialog.tsx`): Added `trackChildAdded` with child count
+- **Pricing Page** (`Pricing.tsx`): Added `trackPricingViewed`
+
+### Changed - 2026-01-02
+
+#### Privacy Statement Updates for Analytics Transparency
+- **Updated privacy messaging across all pages** to accurately reflect analytics usage:
+  - Analytics is used for app improvement, never for advertising or selling data
+  - Added explicit mention of Google Analytics usage
+  - Reframed "What We Don't Collect" to "What We Don't Do With Your Data" for accuracy
+- **Files Updated**:
+  - `src/components/info/TrustSignalsSection.tsx`: Updated data collection description, added analytics disclosure
+  - `src/components/info/ExpandedFAQ.tsx`: Updated FAQ answers about data collection and privacy
+  - `src/components/info/PrivacySection.tsx`: Added analytics to data collection list, explained analytics purpose
+  - `src/pages/Privacy.tsx`: Added analytics disclosure, updated protection section
+  - `src/pages/Index.tsx`: Updated privacy claim to mention analytics for improvement
+
 ### Fixed - 2026-01-01
 
 #### Vercel Analytics & Speed Insights SPA Tracking Hardening

@@ -7,6 +7,11 @@ import { useCallEngine } from "@/features/calls/hooks/useCallEngine";
 import { useIncomingCallNotifications } from "@/features/calls/hooks/useIncomingCallNotifications";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  trackCallStarted,
+  trackCallCompleted,
+  trackCallFailed,
+} from "@/utils/analytics";
 import { setUserStartedCall } from "@/utils/userInteraction";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
@@ -23,6 +28,8 @@ const ChildCallScreen = () => {
   const autoAcceptAttemptedRef = useRef<string | null>(null);
   // Track if call failed to prevent infinite retry loop and show error UI
   const [callFailed, setCallFailed] = useState(false);
+  // Track call start time for duration analytics
+  const callStartTimeRef = useRef<number | null>(null);
 
   useEffect(() => {
     const initialize = async () => {
@@ -237,6 +244,10 @@ const ChildCallScreen = () => {
       // Update the ref to track this call
       lastCalledParentIdRef.current = parentId;
 
+      // Track analytics: call started
+      trackCallStarted("video", "child");
+      callStartTimeRef.current = Date.now();
+
       callEngine.startOutgoingCall(parentId).catch((error) => {
         if (import.meta.env.DEV) {
           console.error("[CHILD CALL SCREEN] Failed to start call:", error);
@@ -245,6 +256,8 @@ const ChildCallScreen = () => {
         lastCalledParentIdRef.current = null;
         // Set callFailed to show error UI and prevent infinite retry
         setCallFailed(true);
+        // Track analytics: call failed
+        trackCallFailed(error instanceof Error ? error.message : "unknown_error", "video");
         toast({
           title: "Call Failed",
           description:
@@ -283,6 +296,12 @@ const ChildCallScreen = () => {
   // Handle ended state redirect - IMMEDIATE redirect (no delay)
   useEffect(() => {
     if (callEngine.state === "ended") {
+      // Track analytics: call completed
+      if (callStartTimeRef.current) {
+        const durationSeconds = Math.round((Date.now() - callStartTimeRef.current) / 1000);
+        trackCallCompleted(durationSeconds, "video");
+        callStartTimeRef.current = null;
+      }
       // Redirect immediately to avoid showing calling screen
       navigate("/child/parent", { replace: true });
     }

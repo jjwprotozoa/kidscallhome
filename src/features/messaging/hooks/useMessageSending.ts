@@ -14,6 +14,7 @@ import {
 import { safeLog, sanitizeError } from "@/utils/security";
 import { checkBlockedWords } from "@/lib/wordFilter";
 import { notifyParentsOfBlockedWords } from "@/lib/parentNotifications";
+import { trackMessageSent } from "@/utils/analytics";
 
 interface Message {
   id: string;
@@ -434,6 +435,9 @@ export const useMessageSending = ({
           created_at: data.created_at,
           read_at: data.read_at || null,
         };
+
+        // Track analytics: message sent
+        trackMessageSent(data.sender_type as "parent" | "child" | "family_member");
 
         onMessageSent(newMessage);
       }

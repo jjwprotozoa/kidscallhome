@@ -9,6 +9,11 @@ import { SubscriptionPlan } from "./types";
 import { UNLIMITED_CHILDREN } from "./constants";
 import { purchaseNativeSubscription } from "@/utils/nativePurchases";
 import { isPWA } from "@/utils/platformDetection";
+import {
+  trackUpgradeStarted,
+  trackPricingViewed,
+  trackSubscriptionStarted,
+} from "@/utils/analytics";
 
 export const usePaymentHandlers = (
   currentAllowedChildren: number,
@@ -30,6 +35,8 @@ export const usePaymentHandlers = (
       return;
     }
 
+    // Track analytics: upgrade started
+    trackUpgradeStarted(selectedPlan.id);
     setIsProcessing(true);
 
     try {
@@ -39,6 +46,10 @@ export const usePaymentHandlers = (
         const result = await purchaseNativeSubscription(selectedPlan);
         
         if (result.success) {
+          // Track analytics: subscription started (native purchase)
+          const planType = selectedPlan.id.includes("annual") ? "family_annual" : "family_monthly";
+          trackSubscriptionStarted(planType, selectedPlan.price, "USD");
+          
           toast({
             title: "Purchase Successful!",
             description: result.message || "Your subscription has been activated.",

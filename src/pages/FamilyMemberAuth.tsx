@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SEOHead } from "@/components/SEOHead";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { safeLog, sanitizeError } from "@/utils/security";
@@ -671,6 +672,11 @@ const FamilyMemberAuth = () => {
 
   return (
     <div className="min-h-[100dvh] bg-background flex items-center justify-center p-4">
+      <SEOHead
+        title="Family Member Login - Grandparents, Aunts, Uncles"
+        description="Login for invited family members on Kids Call Home. Grandparents, aunts, uncles, and cousins can video call kids safely after being invited by parents."
+        path="/family-member/auth"
+      />
       <Card className="p-8 w-full max-w-md">
         <div className="space-y-6">
           <div className="text-center">

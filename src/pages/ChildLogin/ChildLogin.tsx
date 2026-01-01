@@ -5,6 +5,7 @@ import { ColorAnimalSelector } from "@/components/childLogin/ColorAnimalSelector
 import { FamilyCodeKeypad } from "@/components/childLogin/FamilyCodeKeypad";
 import { MagicLinkPreloader } from "@/components/childLogin/MagicLinkPreloader";
 import { NumberEntryScreen } from "@/components/childLogin/NumberEntryScreen";
+import { SEOHead } from "@/components/SEOHead";
 import { SuccessScreen } from "@/components/childLogin/SuccessScreen";
 import { colors } from "@/data/childLoginConstants";
 import { useToast } from "@/hooks/use-toast";
@@ -314,37 +315,52 @@ const ChildLogin = () => {
     }
   };
 
+  // SEO component - rendered on all screens
+  const seoHead = (
+    <SEOHead
+      title="Kids Login - Enter Your Code to Call Family"
+      description="Kids Call Home login for children. Enter your color or animal code to video call mom, dad, and family. No password needed - just pick your code!"
+      path="/child/login"
+    />
+  );
+
   // Show preloader for magic link authentication (hides family code)
   // Keep showing until navigation completes (even after loading finishes)
   if (isMagicLink && (loading || childData)) {
-    return <MagicLinkPreloader />;
+    return <>{seoHead}<MagicLinkPreloader /></>;
   }
 
   // Success screen
   // Don't show for magic links (preloader handles that flow)
   if (step === "success" && childData && !isMagicLink) {
     return (
-      <SuccessScreen
-        childName={childData.name}
-        avatarColor={childData.avatar_color}
-      />
+      <>
+        {seoHead}
+        <SuccessScreen
+          childName={childData.name}
+          avatarColor={childData.avatar_color}
+        />
+      </>
     );
   }
 
   // Number entry screen
   if (step === "number") {
     return (
-      <NumberEntryScreen
-        selectedOption={selectedOption}
-        codeType={codeType}
-        familyCode={familyCode}
-        number={number}
-        loading={loading}
-        onBack={handleBack}
-        onNumberClick={handleNumberClick}
-        onDelete={handleDelete}
-        onLogin={handleLogin}
-      />
+      <>
+        {seoHead}
+        <NumberEntryScreen
+          selectedOption={selectedOption}
+          codeType={codeType}
+          familyCode={familyCode}
+          number={number}
+          loading={loading}
+          onBack={handleBack}
+          onNumberClick={handleNumberClick}
+          onDelete={handleDelete}
+          onLogin={handleLogin}
+        />
+      </>
     );
   }
 
@@ -352,27 +368,33 @@ const ChildLogin = () => {
   // Don't show if we have childData from a magic link (preloader should be showing instead)
   if (step === "familyCode" && !(isMagicLink && childData)) {
     return (
-      <FamilyCodeKeypad
-        familyCode={familyCode}
-        currentBlock={currentBlock}
-        loading={loading}
-        onFamilyCodeChange={handleFamilyCodeChange}
-        onBlockChange={handleBlockChange}
-        onDelete={() => setFamilyCode(familyCode.slice(0, -1))}
-        onSubmit={handleFamilyCodeSubmit}
-      />
+      <>
+        {seoHead}
+        <FamilyCodeKeypad
+          familyCode={familyCode}
+          currentBlock={currentBlock}
+          loading={loading}
+          onFamilyCodeChange={handleFamilyCodeChange}
+          onBlockChange={handleBlockChange}
+          onDelete={() => setFamilyCode(familyCode.slice(0, -1))}
+          onSubmit={handleFamilyCodeSubmit}
+        />
+      </>
     );
   }
 
   // Initial selection screen
   return (
-    <ColorAnimalSelector
-      familyCode={familyCode}
-      codeType={codeType}
-      onCodeTypeChange={setCodeType}
-      onOptionSelect={handleOptionSelect}
-      onBack={handleBack}
-    />
+    <>
+      {seoHead}
+      <ColorAnimalSelector
+        familyCode={familyCode}
+        codeType={codeType}
+        onCodeTypeChange={setCodeType}
+        onOptionSelect={handleOptionSelect}
+        onBack={handleBack}
+      />
+    </>
   );
 };
 

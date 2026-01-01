@@ -1,12 +1,18 @@
 // src/pages/Security.tsx
 // Security information page for Kids Call Home
 
+import { SEOHead } from "@/components/SEOHead";
+import { Eye, Lock, Shield } from "lucide-react";
 import { Link } from "react-router-dom";
-import { Shield, Lock, Eye } from "lucide-react";
 
 const Security = () => {
   return (
     <main className="min-h-[100dvh] bg-background">
+      <SEOHead
+        title="Security - How We Keep Your Family Safe"
+        description="Kids Call Home security features. Encrypted calls and messages, parent-controlled contacts, secure authentication, and regular security updates."
+        path="/security"
+      />
       <div className="container mx-auto px-4 py-12 md:py-16">
         <div className="max-w-3xl mx-auto">
           <h1 className="text-3xl md:text-4xl font-bold mb-6">
@@ -84,6 +90,7 @@ const Security = () => {
 };
 
 export default Security;
+
 
 
 

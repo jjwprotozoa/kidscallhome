@@ -21,6 +21,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { safeLog, sanitizeError } from "@/utils/security";
+import { trackFamilyMemberInvited } from "@/utils/analytics";
 import { Loader2, Mail, UserPlus } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -273,6 +274,9 @@ const AddFamilyMemberDialog = ({
           });
         }
       }
+
+      // Track analytics: family member invited
+      trackFamilyMemberInvited();
 
       // Reset form
       setName("");

@@ -98,3 +98,4 @@ GRANT EXECUTE ON FUNCTION public.update_household_type(UUID, TEXT) TO anon;
 -- the user_id, so it's still secure.
 
 
+

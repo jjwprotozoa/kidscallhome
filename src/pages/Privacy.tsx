@@ -1,12 +1,18 @@
 // src/pages/Privacy.tsx
 // Privacy policy page for Kids Call Home
 
+import { SEOHead } from "@/components/SEOHead";
+import { Eye, Lock, Shield } from "lucide-react";
 import { Link } from "react-router-dom";
-import { Shield, Lock, Eye } from "lucide-react";
 
 const Privacy = () => {
   return (
     <main className="min-h-[100dvh] bg-background">
+      <SEOHead
+        title="Privacy Policy - How We Protect Your Family's Data"
+        description="Kids Call Home privacy policy. We collect minimal data, never sell to advertisers, and encrypt all communications. COPPA and GDPR compliant design."
+        path="/privacy"
+      />
       <div className="container mx-auto px-4 py-12 md:py-16">
         <div className="max-w-3xl mx-auto">
           <h1 className="text-3xl md:text-4xl font-bold mb-6">
@@ -27,17 +33,18 @@ const Privacy = () => {
                 <li>Account information (parent email, child's display name and avatar)</li>
                 <li>Contact relationships (which family members are approved)</li>
                 <li>Call and message metadata (who called whom, when, duration—not the content)</li>
+                <li>App usage analytics (via Google Analytics) to understand how the app is used and improve it</li>
               </ul>
             </div>
 
             <div className="space-y-4">
-              <h2 className="text-2xl font-semibold">Data We Don't Collect</h2>
+              <h2 className="text-2xl font-semibold">What We Don't Do With Your Data</h2>
               <ul className="list-disc list-inside space-y-2 text-muted-foreground ml-4">
-                <li>Location data (unless you explicitly enable it)</li>
-                <li>Browsing history</li>
-                <li>Device contacts</li>
-                <li>Biometric data</li>
-                <li>Any data for advertising purposes</li>
+                <li>Sell or share data with advertisers or data brokers</li>
+                <li>Use data for targeted advertising or marketing profiles</li>
+                <li>Collect location data (unless you explicitly enable it)</li>
+                <li>Access browsing history or device contacts</li>
+                <li>Collect biometric data</li>
               </ul>
             </div>
 
@@ -65,9 +72,9 @@ const Privacy = () => {
                 <div className="flex items-start gap-3">
                   <Eye className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
                   <div>
-                    <h3 className="font-semibold mb-1">No Ad Tracking</h3>
+                    <h3 className="font-semibold mb-1">Analytics for Improvement Only</h3>
                     <p className="text-sm text-muted-foreground">
-                      We don't track for advertising. Privacy-respecting analytics only.
+                      We use analytics only to improve the app—never for advertising or selling data.
                     </p>
                   </div>
                 </div>

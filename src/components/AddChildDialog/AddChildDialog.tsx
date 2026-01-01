@@ -11,6 +11,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { safeLog, sanitizeError } from "@/utils/security";
+import { trackChildAdded } from "@/utils/analytics";
 import { useCallback, useEffect, useState } from "react";
 import { ChildForm } from "./ChildForm";
 import {
@@ -353,6 +354,15 @@ const AddChildDialog = ({
       });
 
       if (error) throw error;
+
+      // Get child count for analytics
+      const { count: childCount } = await supabase
+        .from("children")
+        .select("*", { count: "exact", head: true })
+        .eq("parent_id", user.id);
+      
+      // Track analytics: child added
+      trackChildAdded(childCount || 1);
 
       toast({
         title: "Child added successfully!",

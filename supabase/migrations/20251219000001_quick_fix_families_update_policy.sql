@@ -51,3 +51,4 @@ WHERE schemaname = 'public'
   AND cmd = 'UPDATE';
 
 
+

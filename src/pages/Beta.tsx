@@ -20,6 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { SEOHead } from "@/components/SEOHead";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -280,6 +281,11 @@ const Beta = () => {
 
   return (
     <div className="container mx-auto max-w-2xl px-4 py-8">
+      <SEOHead
+        title="Beta Testing Program - Help Shape Kids Call Home"
+        description="Join the Kids Call Home beta program. Get early access to new features, provide feedback, and help us build the safest video calling app for kids."
+        path="/beta"
+      />
       <div className="mb-6">
         <div className="flex items-center gap-4 mb-4">
           <Button

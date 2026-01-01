@@ -16,6 +16,7 @@ import { PricingSection } from "@/components/info/PricingSection";
 import { PrivacySection } from "@/components/info/PrivacySection";
 import { ReferralsSection } from "@/components/info/ReferralsSection";
 import { SecuritySection } from "@/components/info/SecuritySection";
+import { SEOHead } from "@/components/SEOHead";
 import { TermsSection } from "@/components/info/TermsSection";
 import { TrustSignalsSection } from "@/components/info/TrustSignalsSection";
 import Navigation from "@/components/Navigation";
@@ -234,6 +235,11 @@ const Info = () => {
 
   return (
     <div className="min-h-[100dvh] bg-background w-full overflow-x-hidden">
+      <SEOHead
+        title="App Information & Safety - Complete Guide"
+        description="Complete guide to Kids Call Home. Learn about safety features, privacy policy, pricing, supported devices, and how we protect your family's communication."
+        path="/info"
+      />
       <Navigation />
       <div
         className="px-4 pb-8 md:pb-12"

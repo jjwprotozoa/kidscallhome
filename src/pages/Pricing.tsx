@@ -3,24 +3,36 @@
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { SEOHead } from "@/components/SEOHead";
 import { Separator } from "@/components/ui/separator";
 import {
   Building2,
   Check,
   Crown,
-  DollarSign,
   ExternalLink,
   Heart,
   Mail,
   Sparkles,
 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
+import { useEffect } from "react";
+import { trackPricingViewed } from "@/utils/analytics";
 
 const Pricing = () => {
   const navigate = useNavigate();
 
+  // Track pricing page view
+  useEffect(() => {
+    trackPricingViewed("direct");
+  }, []);
+
   return (
     <main className="min-h-[100dvh] bg-background">
+      <SEOHead
+        title="Pricing - Free Plan & Family Subscriptions"
+        description="Kids Call Home is free for 1 child. Family Plan from $14.99/month for up to 5 kids. No hidden fees, no ads. Safe video calling for the whole family."
+        path="/pricing"
+      />
       <div className="container mx-auto px-4 py-12 md:py-16">
         <div className="max-w-4xl mx-auto">
           <h1 className="text-3xl md:text-4xl font-bold text-center mb-4">

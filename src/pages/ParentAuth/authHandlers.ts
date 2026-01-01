@@ -2,6 +2,12 @@
 // Purpose: Authentication handler functions (login, signup)
 
 import { trackSignupStart } from "@/utils/funnelTracking";
+import {
+  trackSignupStarted,
+  trackSignupComplete,
+  trackReferralSignup,
+  trackAppOpened,
+} from "@/utils/analytics";
 
 import { toast as toastFn } from "@/hooks/use-toast";
 import { LockoutInfo } from "@/hooks/useAccountLockout";
@@ -273,6 +279,9 @@ export const handleLogin = async ({
     }
   }
 
+  // Track analytics: app opened (return visit)
+  trackAppOpened("parent");
+
   toast({ title: "Welcome back!" });
   navigate("/parent/children");
 };
@@ -287,6 +296,8 @@ export const handleSignup = async ({
 }: SignupParams) => {
   // Track funnel event: signup start (intent_type: commit)
   trackSignupStart(referralCode ? "referral" : "direct");
+  // Track analytics: signup started
+  trackSignupStarted(referralCode ? "referral" : "direct");
   
   logAuditEvent("signup", { email, severity: "low" });
   const { data, error } = await supabase.auth.signUp({
@@ -338,6 +349,8 @@ export const handleSignup = async ({
           metadata: { referral_code: referralCode, referrer_id: referralResult.referrer_id },
           severity: "low",
         });
+        // Track analytics: referral signup
+        trackReferralSignup(referralCode);
       }
     } catch (refError) {
       // Don't fail signup if referral tracking fails
@@ -388,6 +401,11 @@ export const handleSignup = async ({
       // Don't fail signup if profile creation fails
       safeLog.warn("Error creating adult profile:", sanitizeError(profileError));
     }
+  }
+
+  // Track analytics: signup complete
+  if (data.user) {
+    trackSignupComplete("parent", !!referralCode);
   }
 
   return { user: data.user, needsFamilySetup: !error && !!data.user };
