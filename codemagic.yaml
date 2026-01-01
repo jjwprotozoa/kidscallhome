@@ -669,6 +669,19 @@ workflows:
           echo "Changing to directory: $PODFILE_DIR"
           cd "$PODFILE_DIR"
           
+          # Verify CocoaPods is installed
+          echo ""
+          echo "=== Verifying CocoaPods ==="
+          if ! command -v pod &> /dev/null; then
+            echo "❌ CocoaPods not found in PATH!"
+            echo "Codemagic should have CocoaPods installed. Checking version..."
+            which pod || echo "pod command not found"
+            exit 1
+          fi
+          
+          POD_VERSION=$(pod --version 2>/dev/null || echo "unknown")
+          echo "✅ CocoaPods version: $POD_VERSION"
+          
           echo ""
           echo "=== Running pod install ==="
           pod install
