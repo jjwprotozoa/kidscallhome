@@ -178,6 +178,14 @@ workflows:
           if [ $BUILD_EXIT_CODE -ne 0 ]; then
             echo ""
             echo "🚨🚨🚨 BUILD FAILED! Extracting error messages... 🚨🚨🚨"
+            echo ""
+            echo "=== QUICK ERROR SUMMARY ==="
+            echo "Last 30 lines of build output (most likely to contain the error):"
+            tail -n 30 debug-build.log
+            echo ""
+            echo "Looking for specific error patterns..."
+            grep -i -E "error:|FAILURE|What went wrong|Execution failed" debug-build.log | tail -20 || echo "No obvious error patterns found in last check"
+            echo ""
           fi
 
           echo ""
@@ -223,6 +231,14 @@ workflows:
             echo "=== ERROR PATTERNS ===" >> build-errors.txt
             grep -i -E "error|exception|failed|cannot|unable" debug-build.log | grep -v "at org.gradle" | head -50 >> build-errors.txt 2>/dev/null || echo "No error patterns found" >> build-errors.txt
             
+            echo "" >> build-errors.txt
+            echo "=== COMPILATION ERRORS ===" >> build-errors.txt
+            grep -i -E "error:|error code|compilation error|cannot find symbol|package.*does not exist|class.*not found" debug-build.log >> build-errors.txt 2>/dev/null || echo "No compilation errors found" >> build-errors.txt
+            
+            echo "" >> build-errors.txt
+            echo "=== LAST 50 LINES (MOST RECENT ERRORS) ===" >> build-errors.txt
+            tail -n 50 debug-build.log >> build-errors.txt
+            
             # Display the error file prominently
             echo ""
             echo "═══════════════════════════════════════════════════════════════"
@@ -235,11 +251,8 @@ workflows:
             echo ""
             echo "═══════════════════════════════════════════════════════════════"
             echo ""
-            echo "=== FIRST 200 LINES OF BUILD LOG ==="
-            head -n 200 debug-build.log
-            echo ""
-            echo "=== LAST 100 LINES OF BUILD LOG ==="
-            tail -n 100 debug-build.log
+            echo "=== LAST 150 LINES OF BUILD LOG (MOST RECENT) ==="
+            tail -n 150 debug-build.log
             echo ""
             echo "📋 Full log: debug-build.log ($(wc -l < debug-build.log) lines)"
             echo "📋 Errors: build-errors.txt"
