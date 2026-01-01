@@ -44,10 +44,29 @@ android {
         }
     }
     
+    packaging {
+        resources {
+            // Exclude JVM-only coroutines debug classes that cause desugaring issues
+            excludes += [
+                'META-INF/versions/9/org/jetbrains/kotlinx/coroutines/debug/**',
+                'kotlinx/coroutines/debug/**'
+            ]
+        }
+    }
+    
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
+    
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+}
+
+configurations.all {
+    // Exclude JVM-only coroutines artifacts that cause desugaring issues on Android
+    exclude group: 'org.jetbrains.kotlinx', module: 'kotlinx-coroutines-core-jvm'
 }
 
 dependencies {
