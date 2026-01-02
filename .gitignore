@@ -75,3 +75,16 @@ public/llms.txt
 
 # Stripe configuration files with sensitive keys
 stripe/start-webhook.ps1
+
+# Documentation files (not needed for deployment)
+# Ignore most docs except essential module READMEs
+docs/**/*.md
+!src/**/README.md
+!scripts/README.md
+!stripe/README.md
+!src/features/calls/README.md
+!src/features/calls/PROTECTED.md
+
+# Diagnostic SQL scripts (not needed for deployment)
+# Keep database migrations in supabase/migrations/ - those are critical
+docs/sql/*.sql
