@@ -27,13 +27,25 @@ const isRouterContextError = (error: Error | null): boolean => {
   return (
     message.includes("basename") ||
     message.includes("cannot destructure property") ||
-    (message.includes("null") && message.includes("undefined") && message.includes("destructure"))
+    message.includes("usenavigate") ||
+    message.includes("usesearchparams") ||
+    message.includes("uselocation") ||
+    message.includes("router") ||
+    (message.includes("null") && message.includes("undefined") && message.includes("destructure")) ||
+    (message.includes("cannot read") && message.includes("null"))
   );
 };
 
+// Detect iOS for longer retry delays
+const isIOS = typeof navigator !== 'undefined' && (
+  /iPad|iPhone|iPod/.test(navigator.userAgent) || 
+  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+);
+
 export class ErrorBoundary extends Component<Props, State> {
   private retryTimeoutId: ReturnType<typeof setTimeout> | null = null;
-  private maxRetries = 5;
+  // iOS needs more retries due to slower context initialization
+  private maxRetries = isIOS ? 8 : 5;
 
   constructor(props: Props) {
     super(props);
@@ -89,9 +101,13 @@ export class ErrorBoundary extends Component<Props, State> {
         clearTimeout(this.retryTimeoutId);
       }
       
-      // Progressive retry delays: 300ms, 600ms, 1000ms, 1500ms, 2000ms
-      const retryDelays = [300, 600, 1000, 1500, 2000];
-      const retryDelay = retryDelays[this.state.retryCount] || 2000;
+      // Progressive retry delays - iOS needs longer delays
+      // iOS: 500ms, 1000ms, 1500ms, 2000ms, 2500ms, 3000ms, 3500ms, 4000ms
+      // Other: 300ms, 600ms, 1000ms, 1500ms, 2000ms
+      const retryDelays = isIOS 
+        ? [500, 1000, 1500, 2000, 2500, 3000, 3500, 4000]
+        : [300, 600, 1000, 1500, 2000];
+      const retryDelay = retryDelays[this.state.retryCount] || (isIOS ? 4000 : 2000);
       
       this.retryTimeoutId = setTimeout(() => {
         if (import.meta.env.DEV) {

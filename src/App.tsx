@@ -339,12 +339,19 @@ const DeferredGlobalComponents = () => {
   
   useEffect(() => {
     // Wait for initial paint then mount deferred components
+    // iOS Safari needs a longer delay to ensure Router context is ready
     // Use requestIdleCallback for best performance, fallback to setTimeout
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    
+    // iOS needs more time for Router context to be fully ready
+    const delay = isIOS ? 1500 : 100;
+    
     const schedule = (callback: () => void) => {
-      if ('requestIdleCallback' in window) {
+      if ('requestIdleCallback' in window && !isIOS) {
         requestIdleCallback(callback, { timeout: 1000 });
       } else {
-        setTimeout(callback, 100);
+        setTimeout(callback, delay);
       }
     };
     
