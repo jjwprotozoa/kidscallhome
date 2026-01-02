@@ -5,8 +5,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient } from "@tanstack/react-query";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
-import { lazy, Suspense, useEffect, useState } from "react";
-import { BrowserRouter, Navigate, Route, Routes, useNavigate } from "react-router-dom";
+import { lazy, Suspense, useEffect, useState, createContext, useContext } from "react";
+import { BrowserRouter, Navigate, Route, Routes, useNavigate, useLocation, UNSAFE_NavigationContext } from "react-router-dom";
 import { SpeedInsights } from "@vercel/speed-insights/react";
 import { Analytics } from "@vercel/analytics/react";
 
@@ -86,10 +86,14 @@ const RoutePrefetcher = () => {
 };
 
 // Keep small/essential pages as regular imports (needed immediately)
-import Index from "./pages/Index";
+// Note: Index uses Router hooks so we need to ensure Router context is ready
 import NetworkError from "./pages/NetworkError";
 import NotFound from "./pages/NotFound";
 import ServerError from "./pages/ServerError";
+
+// Lazy load Index to prevent Router context errors on mobile
+// Index uses useNavigate and useSearchParams which require Router context
+const Index = lazy(() => import("./pages/Index"));
 
 // Lazy load all other pages for code splitting
 const ParentAuth = lazy(() => import("./pages/ParentAuth"));
@@ -145,6 +149,45 @@ const PageLoader = () => {
       </div>
     </div>
   );
+};
+
+// RouterReadyGuard - ensures Router context is available before rendering children
+// This prevents "Cannot destructure property 'basename'" errors on mobile devices
+// where the Router context may not be immediately available during initial render
+const RouterReadyGuard = ({ children }: { children: React.ReactNode }) => {
+  const [isReady, setIsReady] = useState(false);
+  
+  // Use the UNSAFE_NavigationContext to check if Router is ready
+  // This is the internal context that useNavigate/useLocation depend on
+  const navigationContext = useContext(UNSAFE_NavigationContext);
+  
+  useEffect(() => {
+    // Check if Router context is available
+    if (navigationContext?.navigator) {
+      setIsReady(true);
+    } else {
+      // If not ready, wait a bit and check again
+      const checkReady = () => {
+        if (navigationContext?.navigator) {
+          setIsReady(true);
+        }
+      };
+      
+      // Use requestAnimationFrame for faster check
+      const rafId = requestAnimationFrame(checkReady);
+      // Also set a timeout as fallback
+      const timeoutId = setTimeout(() => setIsReady(true), 100);
+      
+      return () => {
+        cancelAnimationFrame(rafId);
+        clearTimeout(timeoutId);
+      };
+    }
+  }, [navigationContext]);
+  
+  // Always render children - the guard is just to trigger a re-render
+  // after Router context is confirmed ready
+  return <>{children}</>;
 };
 
 // Configure QueryClient with error handling and caching
@@ -453,8 +496,10 @@ const App = () => {
                 </ErrorBoundary>
                 {/* Deferred global components - loaded after initial paint */}
                 <DeferredGlobalComponents />
-                <Suspense fallback={<PageLoader />}>
-                  <Routes>
+                {/* RouterReadyGuard ensures Router context is ready before rendering routes */}
+                <RouterReadyGuard>
+                  <Suspense fallback={<PageLoader />}>
+                    <Routes>
                   <Route path="/" element={<Index />} />
                   <Route path="/parent/auth" element={<ParentAuth />} />
                   <Route path="/verify-email" element={<VerifyEmail />} />
@@ -541,10 +586,11 @@ const App = () => {
                   {/* Error pages */}
                   <Route path="/error/server" element={<ServerError />} />
                   <Route path="/error/network" element={<NetworkError />} />
-                  {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-                  <Route path="*" element={<NotFound />} />
-                </Routes>
-              </Suspense>
+                    {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+                    <Route path="*" element={<NotFound />} />
+                  </Routes>
+                </Suspense>
+                </RouterReadyGuard>
               </BrowserRouter>
             </ErrorBoundary>
           </SafeAreaLayout>
