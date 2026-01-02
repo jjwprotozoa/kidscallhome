@@ -25,60 +25,126 @@ export const GlobalPresenceTracker = () => {
   const [parentName, setParentName] = useState<string | null>(null);
 
   useEffect(() => {
+    let subscription: { unsubscribe: () => void } | null = null;
+    
     const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (session?.user) {
-        // Parent is logged in - track parent presence
-        setParentId(session.user.id);
-        setChild(null);
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
         
-        // Fetch parent name
-        const { data: parentData } = await supabase
-          .from("parents")
-          .select("name")
-          .eq("id", session.user.id)
-          .maybeSingle();
-        
-        setParentName(parentData?.name || null);
-      } else {
-        // Check for child session
-        if (typeof window === 'undefined' || !window.localStorage) {
-          return;
+        // If there's an error getting session, silently fail and check child session
+        if (error) {
+          if (import.meta.env.DEV) {
+            console.warn("⚠️ [GLOBAL PRESENCE] Error getting session:", error);
+          }
+          // Fall through to check child session
         }
         
-        const childData = getChildSessionLegacy();
-        if (childData) {
-          setChild(childData);
-          setParentId(null);
-          setParentName(null);
-        } else {
+        if (session?.user) {
+          // Parent is logged in - track parent presence
+          setParentId(session.user.id);
           setChild(null);
-          setParentId(null);
-          setParentName(null);
+          
+          // Fetch parent name with error handling
+          try {
+            const { data: parentData } = await supabase
+              .from("parents")
+              .select("name")
+              .eq("id", session.user.id)
+              .maybeSingle();
+            
+            setParentName(parentData?.name || null);
+          } catch (error) {
+            if (import.meta.env.DEV) {
+              console.warn("⚠️ [GLOBAL PRESENCE] Error fetching parent name:", error);
+            }
+            setParentName(null);
+          }
+        } else {
+          // Check for child session
+          if (typeof window === 'undefined' || !window.localStorage) {
+            return;
+          }
+          
+          try {
+            const childData = getChildSessionLegacy();
+            if (childData) {
+              setChild(childData);
+              setParentId(null);
+              setParentName(null);
+            } else {
+              setChild(null);
+              setParentId(null);
+              setParentName(null);
+            }
+          } catch (error) {
+            if (import.meta.env.DEV) {
+              console.warn("⚠️ [GLOBAL PRESENCE] Error getting child session:", error);
+            }
+            setChild(null);
+            setParentId(null);
+            setParentName(null);
+          }
         }
+      } catch (error) {
+        // Catch any unexpected errors and log them
+        if (import.meta.env.DEV) {
+          console.error("❌ [GLOBAL PRESENCE] Unexpected error in checkSession:", error);
+        }
+        // Reset state on error
+        setChild(null);
+        setParentId(null);
+        setParentName(null);
       }
     };
 
-    checkSession();
+    // Initial session check with error handling
+    checkSession().catch((error) => {
+      if (import.meta.env.DEV) {
+        console.error("❌ [GLOBAL PRESENCE] Error in initial checkSession:", error);
+      }
+    });
 
     // Listen for storage changes (in case user logs in/out in another tab)
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === "childSession") {
-        checkSession();
+        checkSession().catch((error) => {
+          if (import.meta.env.DEV) {
+            console.warn("⚠️ [GLOBAL PRESENCE] Error in storage change handler:", error);
+          }
+        });
       }
     };
 
-    // Listen for auth state changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(() => {
-      checkSession();
-    });
+    // Listen for auth state changes with error handling
+    try {
+      const { data: { subscription: authSubscription } } = supabase.auth.onAuthStateChange(() => {
+        checkSession().catch((error) => {
+          if (import.meta.env.DEV) {
+            console.warn("⚠️ [GLOBAL PRESENCE] Error in auth state change handler:", error);
+          }
+        });
+      });
+      subscription = authSubscription;
+    } catch (error) {
+      if (import.meta.env.DEV) {
+        console.error("❌ [GLOBAL PRESENCE] Error setting up auth state listener:", error);
+      }
+      // Continue without auth state listener if it fails
+    }
 
     window.addEventListener("storage", handleStorageChange);
 
     return () => {
       window.removeEventListener("storage", handleStorageChange);
-      subscription.unsubscribe();
+      if (subscription) {
+        try {
+          subscription.unsubscribe();
+        } catch (error) {
+          if (import.meta.env.DEV) {
+            console.warn("⚠️ [GLOBAL PRESENCE] Error unsubscribing:", error);
+          }
+        }
+      }
     };
   }, []);
 

@@ -441,6 +441,35 @@ const DeferredGlobalComponents = () => {
 };
 
 const App = () => {
+  // Set up global error handler for unhandled errors
+  useEffect(() => {
+    const handleError = (event: ErrorEvent) => {
+      console.error("❌ [GLOBAL ERROR] Unhandled error:", event.error);
+      console.error("❌ [GLOBAL ERROR] Error message:", event.message);
+      console.error("❌ [GLOBAL ERROR] Error filename:", event.filename);
+      console.error("❌ [GLOBAL ERROR] Error lineno:", event.lineno);
+    };
+
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      console.error("❌ [GLOBAL ERROR] Unhandled promise rejection:", event.reason);
+      // Prevent default error logging for known non-critical errors
+      if (event.reason?.message?.includes?.('basename') || 
+          event.reason?.message?.includes?.('Router')) {
+        // Router context errors are handled by component-level error boundaries
+        event.preventDefault();
+        return;
+      }
+    };
+
+    window.addEventListener('error', handleError);
+    window.addEventListener('unhandledrejection', handleUnhandledRejection);
+
+    return () => {
+      window.removeEventListener('error', handleError);
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+    };
+  }, []);
+
   // Wrap critical components in error boundaries to prevent app crashes
   return (
     <ErrorBoundary>
