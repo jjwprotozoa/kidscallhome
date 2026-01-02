@@ -1,8 +1,9 @@
 // public/sw.js
 // Service Worker for PWA push notifications and background tasks
 
-const CACHE_NAME = 'kidscallhome-v1';
-const RUNTIME_CACHE = 'kidscallhome-runtime';
+// Increment version to force cache refresh when deploying breaking changes
+const CACHE_NAME = 'kidscallhome-v2';
+const RUNTIME_CACHE = 'kidscallhome-runtime-v2';
 
 // Install event - cache static assets
 self.addEventListener('install', (event) => {
