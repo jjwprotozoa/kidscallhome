@@ -165,7 +165,7 @@ export const SafetyModeSettings: React.FC = () => {
         </div>
 
         {enabled && (
-          <div className="pl-4 space-y-3 border-l-2 border-gray-200">
+          <div className="pl-4 space-y-3">
             <label className="flex items-center gap-2">
               <input
                 type="checkbox"

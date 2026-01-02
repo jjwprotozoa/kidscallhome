@@ -44,11 +44,11 @@ export function BootGate({ children }: BootGateProps) {
     };
   }, []);
 
-  // If boot failed, show fallback (ErrorBoundary will handle UI)
-  if (bootFailed) {
-    return null; // Let ErrorBoundary show the UI
-  }
-
+  // CRITICAL: Always render children or fallback to prevent white screen
+  // If boot failed, ErrorBoundary will show the UI, but we still render children
+  // to ensure there's always something on screen (no blank state)
+  // ErrorBoundary will catch and display the error UI if needed
+  
   return (
     <>
       {children}

@@ -65,7 +65,26 @@ export function OnboardingTour({ role, pageKey }: OnboardingTourProps) {
       const bubbleWidth = isMobile ? Math.min(viewportWidth - 32, 320) : 320; // Responsive width
       const bubbleHeight = 140; // Increased approximate bubble height
       const padding = 16;
+      
+      // Account for safe area insets and navigation height
+      // Parse CSS custom properties (values may include units like "56px")
+      const getCSSValue = (property: string, fallback: number): number => {
+        const value = getComputedStyle(document.documentElement).getPropertyValue(property).trim();
+        if (!value) return fallback;
+        const parsed = parseFloat(value);
+        return isNaN(parsed) ? fallback : parsed;
+      };
+      
+      const safeAreaTop = getCSSValue('--safe-area-inset-top', 0);
+      const safeAreaBottom = getCSSValue('--safe-area-inset-bottom', 0);
+      const navHeight = getCSSValue('--kch-topnav-h', 56);
+      
+      // Calculate available viewport height accounting for safe areas and navigation
+      const topOffset = Math.max(safeAreaTop, navHeight);
+      const bottomOffset = safeAreaBottom;
       const viewportHeight = window.innerHeight;
+      const availableTop = topOffset + padding;
+      const availableBottom = viewportHeight - bottomOffset - padding;
 
       let top = 0;
       let left = 0;
@@ -80,18 +99,38 @@ export function OnboardingTour({ role, pageKey }: OnboardingTourProps) {
         case "top":
           top = targetTop - bubbleHeight - spacing;
           left = rect.left + rect.width / 2 - bubbleWidth / 2;
+          // Ensure top placement doesn't go above available area
+          if (top < availableTop) {
+            // Not enough space above, try below instead
+            top = targetBottom + spacing;
+          }
           break;
         case "bottom":
           top = targetBottom + spacing;
           left = rect.left + rect.width / 2 - bubbleWidth / 2;
+          // Ensure bottom placement doesn't go below available area
+          if (top + bubbleHeight > availableBottom) {
+            // Not enough space below, try above instead
+            const topPosition = targetTop - bubbleHeight - spacing;
+            if (topPosition >= availableTop) {
+              top = topPosition;
+            } else {
+              // Neither fits perfectly, use the one that fits better
+              top = Math.max(availableTop, Math.min(top, availableBottom - bubbleHeight));
+            }
+          }
           break;
         case "left":
           top = rect.top + rect.height / 2 - bubbleHeight / 2;
           left = targetLeft - bubbleWidth - spacing;
+          // Ensure vertical centering stays within bounds
+          top = Math.max(availableTop, Math.min(top, availableBottom - bubbleHeight));
           break;
         case "right":
           top = rect.top + rect.height / 2 - bubbleHeight / 2;
           left = targetRight + spacing;
+          // Ensure vertical centering stays within bounds
+          top = Math.max(availableTop, Math.min(top, availableBottom - bubbleHeight));
           break;
       }
 
@@ -112,51 +151,51 @@ export function OnboardingTour({ role, pageKey }: OnboardingTourProps) {
           // Try right side first
           if (targetRight + spacing + bubbleWidth < viewportWidth - padding) {
             left = targetRight + spacing;
-            top = Math.max(padding, Math.min(rect.top + rect.height / 2 - bubbleHeight / 2, viewportHeight - bubbleHeight - padding));
+            top = Math.max(availableTop, Math.min(rect.top + rect.height / 2 - bubbleHeight / 2, availableBottom - bubbleHeight));
           }
           // Try left side if right doesn't work
           else if (targetLeft - spacing - bubbleWidth > padding) {
             left = targetLeft - spacing - bubbleWidth;
-            top = Math.max(padding, Math.min(rect.top + rect.height / 2 - bubbleHeight / 2, viewportHeight - bubbleHeight - padding));
+            top = Math.max(availableTop, Math.min(rect.top + rect.height / 2 - bubbleHeight / 2, availableBottom - bubbleHeight));
           }
           // If neither side works, place above/below with more spacing
           else if (placement === "top") {
-            top = targetTop - bubbleHeight - spacing * 2;
+            top = Math.max(availableTop, targetTop - bubbleHeight - spacing * 2);
             left = Math.max(padding, Math.min(left, viewportWidth - bubbleWidth - padding));
           } else {
-            top = targetBottom + spacing * 2;
+            top = Math.min(availableBottom - bubbleHeight, targetBottom + spacing * 2);
             left = Math.max(padding, Math.min(left, viewportWidth - bubbleWidth - padding));
           }
         } else if (placement === "left" || placement === "right") {
           // Try bottom first
-          if (targetBottom + spacing + bubbleHeight < viewportHeight - padding) {
+          if (targetBottom + spacing + bubbleHeight < availableBottom) {
             top = targetBottom + spacing;
             left = Math.max(padding, Math.min(rect.left + rect.width / 2 - bubbleWidth / 2, viewportWidth - bubbleWidth - padding));
           }
           // Try top if bottom doesn't work
-          else if (targetTop - spacing - bubbleHeight > padding) {
+          else if (targetTop - spacing - bubbleHeight > availableTop) {
             top = targetTop - spacing - bubbleHeight;
             left = Math.max(padding, Math.min(rect.left + rect.width / 2 - bubbleWidth / 2, viewportWidth - bubbleWidth - padding));
           }
           // If neither works, place left/right with more spacing
           else if (placement === "left") {
             left = targetLeft - bubbleWidth - spacing * 2;
-            top = Math.max(padding, Math.min(top, viewportHeight - bubbleHeight - padding));
+            top = Math.max(availableTop, Math.min(top, availableBottom - bubbleHeight));
           } else {
             left = targetRight + spacing * 2;
-            top = Math.max(padding, Math.min(top, viewportHeight - bubbleHeight - padding));
+            top = Math.max(availableTop, Math.min(top, availableBottom - bubbleHeight));
           }
         }
       }
 
-      // Ensure bubble stays within viewport bounds
+      // Ensure bubble stays within viewport bounds (accounting for safe areas)
       if (left < padding) left = padding;
       if (left + bubbleWidth > viewportWidth - padding) {
         left = viewportWidth - bubbleWidth - padding;
       }
-      if (top < padding) top = padding;
-      if (top + bubbleHeight > viewportHeight - padding) {
-        top = viewportHeight - bubbleHeight - padding;
+      if (top < availableTop) top = availableTop;
+      if (top + bubbleHeight > availableBottom) {
+        top = availableBottom - bubbleHeight;
       }
 
       // Final overlap check - if still overlapping, force position above
@@ -168,12 +207,16 @@ export function OnboardingTour({ role, pageKey }: OnboardingTourProps) {
 
       if (stillOverlaps) {
         // Force position above the target with extra spacing
-        top = targetTop - bubbleHeight - spacing * 2;
+        top = Math.max(availableTop, targetTop - bubbleHeight - spacing * 2);
         left = Math.max(padding, Math.min(rect.left + rect.width / 2 - bubbleWidth / 2, viewportWidth - bubbleWidth - padding));
         
         // If above doesn't fit, try below
-        if (top < padding) {
-          top = targetBottom + spacing * 2;
+        if (top + bubbleHeight > availableBottom || top < availableTop) {
+          top = Math.min(availableBottom - bubbleHeight, targetBottom + spacing * 2);
+          // Ensure it's still visible
+          if (top < availableTop) {
+            top = availableTop;
+          }
         }
       }
 

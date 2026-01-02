@@ -77,6 +77,7 @@ const Index = () => {
     // Track if this effect instance is still active (for cleanup)
     let isMounted = true;
     
+    // PERFORMANCE: Reduced timeout from 3s to 1.5s for faster page load
     // Safety timeout: If auth check takes too long, show the page anyway
     // This prevents blank screen on slow networks or iOS Safari issues
     const safetyTimeout = setTimeout(() => {
@@ -84,7 +85,7 @@ const Index = () => {
         console.warn("⚠️ [INDEX] Auth check timeout - showing marketing page");
         setIsCheckingAuth(false);
       }
-    }, 3000); // 3 second safety timeout
+    }, 1500); // 1.5 second safety timeout
 
     const checkAuthAndRedirect = async () => {
       try {

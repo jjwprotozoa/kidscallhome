@@ -9,6 +9,7 @@ import { useRef, useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { KeypadOnboardingHints, useFirstTimeUser } from "./KeypadOnboardingHints";
 import { Input } from "@/components/ui/input";
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 
 interface FamilyCodeKeypadProps {
   familyCode: string;
@@ -40,9 +41,12 @@ export const FamilyCodeKeypad = ({
 
   // Onboarding state
   const { isFirstTime, markAsSeen } = useFirstTimeUser("keypad_hints");
+  const { isFirstTime: isFirstTimeKeyboard, markAsSeen: markKeyboardSeen } = useFirstTimeUser("keyboard_tooltip");
+  const { isFirstTime: isFirstTimeTopButtons, markAsSeen: markTopButtonsSeen } = useFirstTimeUser("top_buttons_tooltips");
   const [showHints, setShowHints] = useState(false);
   const [hasInteracted, setHasInteracted] = useState(false);
   const [showHelpTooltip, setShowHelpTooltip] = useState(false);
+  const [showTopButtonsTooltip, setShowTopButtonsTooltip] = useState(false);
   const [useDeviceKeyboard, setUseDeviceKeyboard] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -53,6 +57,40 @@ export const FamilyCodeKeypad = ({
       return () => clearTimeout(timer);
     }
   }, [isFirstTime, hasInteracted]);
+
+  // Show combined tooltip for top buttons (first-time users only)
+  useEffect(() => {
+    if (!isFirstTimeTopButtons) {
+      return;
+    }
+
+    const TOOLTIP_DURATION = 5000; // 5 seconds
+    const DELAY_BEFORE_START = 1500; // Wait 1.5 seconds before starting
+
+    const timer = setTimeout(() => {
+      setShowTopButtonsTooltip(true);
+      
+      const closeTimer = setTimeout(() => {
+        setShowTopButtonsTooltip(false);
+        markTopButtonsSeen();
+      }, TOOLTIP_DURATION);
+
+      return () => clearTimeout(closeTimer);
+    }, DELAY_BEFORE_START);
+
+    return () => clearTimeout(timer);
+  }, [isFirstTimeTopButtons, markTopButtonsSeen]);
+
+  // Keyboard tooltip is now hover-only, no auto-show on load
+
+  // Handle keyboard toggle
+  const handleKeyboardToggle = () => {
+    if (showTopButtonsTooltip) {
+      setShowTopButtonsTooltip(false);
+      markTopButtonsSeen();
+    }
+    setUseDeviceKeyboard(!useDeviceKeyboard);
+  };
 
   // Focus input when switching to device keyboard
   useEffect(() => {
@@ -131,35 +169,133 @@ export const FamilyCodeKeypad = ({
     <div className="min-h-[100dvh] flex items-center justify-center bg-primary/5 p-4">
       <Card className="w-full max-w-md p-6 space-y-3 relative overflow-visible">
         {/* Help, Keyboard toggle, and Switch to Parent buttons */}
-        <div className="absolute top-4 right-4 flex items-center gap-2">
-          <button
-            onClick={() => navigate("/parent/auth")}
-            className="p-2 rounded-full hover:bg-muted transition-colors"
-            aria-label="Switch to Parent"
-            title="Switch to Parent Login"
-          >
-            <Shuffle className="h-5 w-5 text-muted-foreground hover:text-primary transition-colors" />
-          </button>
-          <button
-            onClick={() => setUseDeviceKeyboard(!useDeviceKeyboard)}
-            className="p-2 rounded-full hover:bg-muted transition-colors"
-            aria-label={useDeviceKeyboard ? "Use on-screen keypad" : "Use device keyboard"}
-            title={useDeviceKeyboard ? "Switch to on-screen keypad" : "Switch to device keyboard"}
-          >
-            {useDeviceKeyboard ? (
-              <Grid3x3 className="h-5 w-5 text-muted-foreground hover:text-primary transition-colors" />
-            ) : (
-              <Keyboard className="h-5 w-5 text-muted-foreground hover:text-primary transition-colors" />
+        <TooltipProvider>
+          <div className="absolute top-4 right-4 flex items-center gap-2 z-10">
+            {/* Combined tooltip for all three buttons */}
+            {showTopButtonsTooltip && (
+              <div className="absolute top-12 right-0 z-50 w-72 p-4 bg-card border-2 border-primary/20 rounded-xl shadow-xl animate-fade-in">
+                <div className="space-y-2 text-sm">
+                  <div className="flex items-center gap-2 font-semibold text-primary">
+                    <Sparkles className="h-4 w-4" />
+                    <span>Quick Actions</span>
+                  </div>
+                  <div className="space-y-1.5 text-muted-foreground">
+                    <div className="flex items-start gap-2">
+                      <Shuffle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                      <p className="text-xs"><strong>Switch to Parent:</strong> Tap if you need parent login</p>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <Keyboard className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                      <p className="text-xs"><strong>Keyboard Toggle:</strong> Switch between on-screen keypad and device keyboard</p>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <HelpCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                      <p className="text-xs"><strong>Help:</strong> Get instructions on entering your code</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
             )}
-          </button>
-          <button
-            onClick={() => setShowHelpTooltip(!showHelpTooltip)}
-            className="p-2 rounded-full hover:bg-muted transition-colors"
-            aria-label="Help"
-          >
-            <HelpCircle className="h-5 w-5 text-muted-foreground hover:text-primary transition-colors" />
-          </button>
-        </div>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={() => {
+                    if (showTopButtonsTooltip) {
+                      setShowTopButtonsTooltip(false);
+                      markTopButtonsSeen();
+                    }
+                    navigate("/parent/auth");
+                  }}
+                  onMouseEnter={() => {
+                    if (showTopButtonsTooltip) {
+                      setShowTopButtonsTooltip(false);
+                      markTopButtonsSeen();
+                    }
+                  }}
+                  className="p-2 rounded-full hover:bg-muted transition-colors"
+                  aria-label="Switch to Parent"
+                >
+                  <Shuffle className="h-5 w-5 text-muted-foreground hover:text-primary transition-colors" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="left" className="max-w-[200px]">
+                <div className="space-y-1">
+                  <p className="font-semibold text-primary">Switch to Parent Login</p>
+                  <p className="text-xs text-muted-foreground">
+                    Tap if you need to log in as a parent instead
+                  </p>
+                </div>
+              </TooltipContent>
+            </Tooltip>
+            
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={handleKeyboardToggle}
+                  onMouseEnter={() => {
+                    if (showTopButtonsTooltip) {
+                      setShowTopButtonsTooltip(false);
+                      markTopButtonsSeen();
+                    }
+                  }}
+                  className="p-2 rounded-full hover:bg-muted transition-colors"
+                  aria-label={useDeviceKeyboard ? "Use on-screen keypad" : "Use device keyboard"}
+                >
+                  {useDeviceKeyboard ? (
+                    <Grid3x3 className="h-5 w-5 text-muted-foreground hover:text-primary transition-colors" />
+                  ) : (
+                    <Keyboard className="h-5 w-5 text-muted-foreground hover:text-primary transition-colors" />
+                  )}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="left" className="max-w-[200px]">
+                <div className="space-y-1">
+                  <p className="font-semibold text-primary">
+                    {useDeviceKeyboard ? "Switch to on-screen keypad" : "Switch to device keyboard"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {useDeviceKeyboard 
+                      ? "Tap to use the on-screen keypad instead" 
+                      : "Tap to use your device's keyboard instead"}
+                  </p>
+                </div>
+              </TooltipContent>
+            </Tooltip>
+            
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={() => {
+                    if (showTopButtonsTooltip) {
+                      setShowTopButtonsTooltip(false);
+                      markTopButtonsSeen();
+                    }
+                    setShowHelpTooltip(!showHelpTooltip);
+                  }}
+                  onMouseEnter={() => {
+                    if (showTopButtonsTooltip) {
+                      setShowTopButtonsTooltip(false);
+                      markTopButtonsSeen();
+                    }
+                  }}
+                  className="p-2 rounded-full hover:bg-muted transition-colors"
+                  aria-label="Help"
+                >
+                  <HelpCircle className="h-5 w-5 text-muted-foreground hover:text-primary transition-colors" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="left" className="max-w-[200px]">
+                <div className="space-y-1">
+                  <p className="font-semibold text-primary">Need Help?</p>
+                  <p className="text-xs text-muted-foreground">
+                    Tap to see instructions on how to enter your code
+                  </p>
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          </div>
+        </TooltipProvider>
 
         {/* Help tooltip */}
         {showHelpTooltip && (

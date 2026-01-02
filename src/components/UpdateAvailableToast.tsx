@@ -6,6 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { ExternalLink, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import { safeJSONGet, safeJSONSet } from "@/utils/safeStorage";
 
 const UPDATE_TOAST_STORAGE_KEY = "kch_update_toast";
 const TOAST_DURATION_DAYS = 3;
@@ -44,22 +45,21 @@ export const UpdateAvailableToast = () => {
 
   // Check if toast should be shown
   const shouldShowToast = (): boolean => {
-    const stored = localStorage.getItem(UPDATE_TOAST_STORAGE_KEY);
-    if (!stored) {
-      return true; // First time, show it
-    }
-
     try {
-      const { startTime, dismissed } = JSON.parse(stored);
-      if (dismissed) {
+      const stored = safeJSONGet<{ startTime: number; dismissed: boolean }>(UPDATE_TOAST_STORAGE_KEY);
+      if (!stored) {
+        return true; // First time, show it
+      }
+
+      if (stored.dismissed) {
         return false; // User dismissed it
       }
 
-      const elapsed = Date.now() - startTime;
+      const elapsed = Date.now() - stored.startTime;
       const totalMs = TOAST_DURATION_DAYS * 24 * 60 * 60 * 1000;
       return elapsed < totalMs; // Still within 3 days
     } catch {
-      return true; // Invalid data, show it
+      return true; // Invalid data or storage error, show it
     }
   };
 
@@ -70,107 +70,91 @@ export const UpdateAvailableToast = () => {
       return;
     }
 
-    const stored = localStorage.getItem(UPDATE_TOAST_STORAGE_KEY);
-    let startTime: number;
+    try {
+      const stored = safeJSONGet<{ startTime: number; dismissed: boolean }>(UPDATE_TOAST_STORAGE_KEY);
+      let startTime: number;
 
-    if (stored) {
-      try {
-        const data = JSON.parse(stored);
-        if (data.dismissed) {
+      if (stored) {
+        if (stored.dismissed) {
           return; // User dismissed, don't show
         }
-        startTime = data.startTime;
-      } catch {
-        // Invalid data, start fresh
+        startTime = stored.startTime;
+      } else {
+        // First time, set start time
         startTime = Date.now();
+        safeJSONSet(UPDATE_TOAST_STORAGE_KEY, { startTime, dismissed: false });
+      }
+
+      // Check if still within 3 days
+      const elapsed = Date.now() - startTime;
+      const totalMs = TOAST_DURATION_DAYS * 24 * 60 * 60 * 1000;
+      if (elapsed >= totalMs) {
+        // Expired, mark as dismissed
         localStorage.setItem(
           UPDATE_TOAST_STORAGE_KEY,
-          JSON.stringify({ startTime, dismissed: false })
+          JSON.stringify({ startTime, dismissed: true })
         );
+        return;
       }
-    } else {
-      // First time, set start time
-      startTime = Date.now();
-      localStorage.setItem(
-        UPDATE_TOAST_STORAGE_KEY,
-        JSON.stringify({ startTime, dismissed: false })
-      );
-    }
 
-    // Check if still within 3 days
-    const elapsed = Date.now() - startTime;
-    const totalMs = TOAST_DURATION_DAYS * 24 * 60 * 60 * 1000;
-    if (elapsed >= totalMs) {
-      // Expired, mark as dismissed
-      localStorage.setItem(
-        UPDATE_TOAST_STORAGE_KEY,
-        JSON.stringify({ startTime, dismissed: true })
-      );
-      return;
-    }
+      // Show toast
+      const initialTimeRemaining = calculateTimeRemaining(startTime);
+      setTimeRemaining(initialTimeRemaining);
 
-    // Show toast
-    const initialTimeRemaining = calculateTimeRemaining(startTime);
-    setTimeRemaining(initialTimeRemaining);
-
-    const { id } = toast({
-      title: "Update Available",
-      description: (
-        <div className="space-y-2">
-          <p>A new version of KidsCallHome is available!</p>
-          <p className="text-xs text-muted-foreground">
-            This notification will disappear in {initialTimeRemaining}
-          </p>
-        </div>
-      ),
-      variant: "default",
-      duration: Infinity, // Don't auto-dismiss
-      action: (
-        <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            asChild
-            className="h-8"
-          >
-            <Link to="/beta">
-              <ExternalLink className="h-3 w-3 mr-1" />
-              Feedback
-            </Link>
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => {
-              // Mark as dismissed
-              const current = localStorage.getItem(UPDATE_TOAST_STORAGE_KEY);
-              if (current) {
-                try {
-                  const data = JSON.parse(current);
-                  localStorage.setItem(
-                    UPDATE_TOAST_STORAGE_KEY,
-                    JSON.stringify({ ...data, dismissed: true })
-                  );
-                } catch {
-                  // Ignore
+      const { id } = toast({
+        title: "Update Available",
+        description: (
+          <div className="space-y-2">
+            <p>A new version of KidsCallHome is available!</p>
+            <p className="text-xs text-muted-foreground">
+              This notification will disappear in {initialTimeRemaining}
+            </p>
+          </div>
+        ),
+        variant: "default",
+        duration: Infinity, // Don't auto-dismiss
+        action: (
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              asChild
+              className="h-8"
+            >
+              <Link to="/beta">
+                <ExternalLink className="h-3 w-3 mr-1" />
+                Feedback
+              </Link>
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                // Mark as dismissed
+                const current = safeJSONGet<{ startTime: number; dismissed: boolean }>(UPDATE_TOAST_STORAGE_KEY);
+                if (current) {
+                  safeJSONSet(UPDATE_TOAST_STORAGE_KEY, { ...current, dismissed: true });
                 }
-              }
-              if (toastIdRef.current) {
-                toast({ id: toastIdRef.current, open: false });
-                toastIdRef.current = null;
-                setToastShowing(false);
-              }
-            }}
-            className="h-8 px-2"
-          >
-            <X className="h-3 w-3" />
-          </Button>
-        </div>
-      ),
-    });
+                if (toastIdRef.current) {
+                  toast({ id: toastIdRef.current, open: false });
+                  toastIdRef.current = null;
+                  setToastShowing(false);
+                }
+              }}
+              className="h-8 px-2"
+            >
+              <X className="h-3 w-3" />
+            </Button>
+          </div>
+        ),
+      });
 
-    toastIdRef.current = id;
-    setToastShowing(true);
+      toastIdRef.current = id;
+      setToastShowing(true);
+    } catch (error) {
+      // Silently fail if toast initialization fails
+      console.warn("Failed to initialize update toast:", error);
+    }
   };
 
   // Update countdown timer (only runs when toast is showing)
@@ -184,13 +168,13 @@ export const UpdateAvailableToast = () => {
       return;
     }
 
-    const stored = localStorage.getItem(UPDATE_TOAST_STORAGE_KEY);
+    const stored = safeJSONGet<{ startTime: number; dismissed: boolean }>(UPDATE_TOAST_STORAGE_KEY);
     if (!stored) {
       return;
     }
 
     try {
-      const { startTime, dismissed } = JSON.parse(stored);
+      const { startTime, dismissed } = stored;
       if (dismissed) {
         return;
       }
@@ -267,20 +251,13 @@ export const UpdateAvailableToast = () => {
   useEffect(() => {
     if (shouldShowToast() && !toastIdRef.current) {
       // Check if there's a stored startTime that's still valid
-      const stored = localStorage.getItem(UPDATE_TOAST_STORAGE_KEY);
-      if (stored) {
-        try {
-          const { startTime, dismissed } = JSON.parse(stored);
-          if (!dismissed) {
-            const elapsed = Date.now() - startTime;
-            const totalMs = TOAST_DURATION_DAYS * 24 * 60 * 60 * 1000;
-            if (elapsed < totalMs) {
-              // Still within 3 days, restore toast
-              initializeToast();
-            }
-          }
-        } catch {
-          // Invalid data, ignore
+      const stored = safeJSONGet<{ startTime: number; dismissed: boolean }>(UPDATE_TOAST_STORAGE_KEY);
+      if (stored && !stored.dismissed) {
+        const elapsed = Date.now() - stored.startTime;
+        const totalMs = TOAST_DURATION_DAYS * 24 * 60 * 60 * 1000;
+        if (elapsed < totalMs) {
+          // Still within 3 days, restore toast
+          initializeToast();
         }
       }
     }
@@ -355,4 +332,7 @@ export const UpdateAvailableToast = () => {
 
   return null; // This component doesn't render anything directly
 };
+
+// Also export as default for compatibility
+export default UpdateAvailableToast;
 

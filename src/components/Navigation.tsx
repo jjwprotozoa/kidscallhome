@@ -60,6 +60,8 @@ import {
 } from "lucide-react";
 import { useEffect, useState, useRef, useLayoutEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { prefetchRoute } from "@/utils/routePrefetch.ts";
+import { safeGet, safeJSONGet } from "@/utils/safeStorage";
 
 const Navigation = () => {
   const location = useLocation();
@@ -92,22 +94,22 @@ const Navigation = () => {
     // For other routes, check sessions
     // CRITICAL: Check auth session FIRST - parents and family members have auth session, children don't
     // This prevents parents from being misidentified as children due to stale childSession
-    const hasAuthSession =
-      document.cookie.includes("sb-") || localStorage.getItem("sb-");
-    if (hasAuthSession) {
-      // Has auth session - could be parent or family member, will check in useEffect
-      return null; // Will check in useEffect
-    }
-
-    // No auth session - check if we have childSession
-    const childSession = localStorage.getItem("childSession");
-    if (childSession) {
-      try {
-        JSON.parse(childSession);
-        return "child";
-      } catch {
-        // Invalid JSON
+    try {
+      // Use safe storage utilities
+      const hasAuthSession =
+        document.cookie.includes("sb-") || safeGet("sb-");
+      if (hasAuthSession) {
+        // Has auth session - could be parent or family member, will check in useEffect
+        return null; // Will check in useEffect
       }
+
+      // No auth session - check if we have childSession
+      const childSession = safeJSONGet<{ id: string }>("childSession");
+      if (childSession) {
+        return "child";
+      }
+    } catch {
+      // Storage read failed - fall through to return null
     }
     return null;
   };
@@ -132,6 +134,9 @@ const Navigation = () => {
 
   // Measure navbar height and set CSS variable for global layout spacing
   useLayoutEffect(() => {
+    // Capture ref value at effect start to use in cleanup
+    const navElement = navRef.current;
+    
     const updateNavbarHeight = () => {
       if (navRef.current) {
         const height = navRef.current.offsetHeight;
@@ -149,20 +154,20 @@ const Navigation = () => {
     updateNavbarHeight();
 
     // Use ResizeObserver to track height changes
-    const resizeObserver = navRef.current
+    const resizeObserver = navElement
       ? new ResizeObserver(updateNavbarHeight)
       : null;
 
-    if (navRef.current && resizeObserver) {
-      resizeObserver.observe(navRef.current);
+    if (navElement && resizeObserver) {
+      resizeObserver.observe(navElement);
     }
 
     // Fallback: also listen to window resize
     window.addEventListener("resize", updateNavbarHeight);
 
     return () => {
-      if (resizeObserver && navRef.current) {
-        resizeObserver.unobserve(navRef.current);
+      if (resizeObserver && navElement) {
+        resizeObserver.unobserve(navElement);
       }
       window.removeEventListener("resize", updateNavbarHeight);
     };
@@ -179,15 +184,14 @@ const Navigation = () => {
       // Route-based detection (most reliable)
       if (pathname.includes("/child/")) {
         // On child route - verify childSession exists
-        const childSession = localStorage.getItem("childSession");
-        if (childSession) {
-          try {
-            JSON.parse(childSession);
+        try {
+          const childSession = safeJSONGet<{ id: string }>("childSession");
+          if (childSession) {
             setUserType("child");
             return;
-          } catch {
-            // Invalid JSON - fall through to check auth
           }
+        } catch {
+          // Storage read failed - fall through to check auth
         }
       }
 
@@ -613,7 +617,10 @@ const Navigation = () => {
                     </button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-48">
-                    <DropdownMenuItem onClick={() => navigate("/info")}>
+                    <DropdownMenuItem 
+                      onMouseEnter={() => prefetchRoute("/info")}
+                      onClick={() => navigate("/info")}
+                    >
                       <Info className="mr-2 h-4 w-4" />
                       <span>App Information</span>
                     </DropdownMenuItem>
@@ -722,9 +729,18 @@ const Navigation = () => {
         }
       };
 
+      // Prefetch route on hover/focus for faster navigation
+      const handleMouseEnter = () => {
+        if (to) {
+          prefetchRoute(to);
+        }
+      };
+
       return (
         <button
           onClick={handleClick}
+          onMouseEnter={handleMouseEnter}
+          onFocus={handleMouseEnter}
           className={cn(
             "flex items-center gap-3 w-full px-4 py-3 rounded-lg text-base font-medium transition-colors",
             isActive
@@ -913,22 +929,30 @@ const Navigation = () => {
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-48">
                     <DropdownMenuItem
+                      onMouseEnter={() => prefetchRoute("/parent/devices")}
                       onClick={() => navigate("/parent/devices")}
                     >
                       <Smartphone className="mr-2 h-4 w-4" />
                       <span>Devices</span>
                     </DropdownMenuItem>
                     <DropdownMenuItem
+                      onMouseEnter={() => prefetchRoute("/parent/settings")}
                       onClick={() => navigate("/parent/settings")}
                     >
                       <Settings className="mr-2 h-4 w-4" />
                       <span>Settings</span>
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => navigate("/info")}>
+                    <DropdownMenuItem 
+                      onMouseEnter={() => prefetchRoute("/info")}
+                      onClick={() => navigate("/info")}
+                    >
                       <Info className="mr-2 h-4 w-4" />
                       <span>App Information</span>
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => navigate("/beta")}>
+                    <DropdownMenuItem 
+                      onMouseEnter={() => prefetchRoute("/beta")}
+                      onClick={() => navigate("/beta")}
+                    >
                       <Star className="mr-2 h-4 w-4" />
                       <span>Beta Testing</span>
                     </DropdownMenuItem>
@@ -1021,9 +1045,16 @@ const Navigation = () => {
         navigate(to);
       };
 
+      // Prefetch route on hover/focus for faster navigation
+      const handleMouseEnter = () => {
+        prefetchRoute(to);
+      };
+
       return (
         <button
           onClick={handleClick}
+          onMouseEnter={handleMouseEnter}
+          onFocus={handleMouseEnter}
           className={cn(
             "flex items-center gap-3 w-full px-4 py-3 rounded-lg text-base font-medium transition-colors",
             isActive
@@ -1156,12 +1187,18 @@ const Navigation = () => {
                     </button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-48">
-                    <DropdownMenuItem onClick={() => navigate("/info")}>
+                    <DropdownMenuItem 
+                      onMouseEnter={() => prefetchRoute("/info")}
+                      onClick={() => navigate("/info")}
+                    >
                       <Info className="mr-2 h-4 w-4" />
                       <span>App Information</span>
                     </DropdownMenuItem>
                     <div className="h-px bg-border my-1" />
-                    <DropdownMenuItem onClick={() => navigate("/parent/auth")}>
+                    <DropdownMenuItem 
+                      onMouseEnter={() => prefetchRoute("/parent/auth")}
+                      onClick={() => navigate("/parent/auth")}
+                    >
                       <Shuffle className="mr-2 h-4 w-4" />
                       <span>Switch to Parent</span>
                     </DropdownMenuItem>

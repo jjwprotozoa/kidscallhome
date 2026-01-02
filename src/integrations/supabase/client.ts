@@ -187,10 +187,11 @@ if (typeof window !== 'undefined' && !isMarketingRoute) {
     // Ignore errors during initialization check
   });
 
-  // Timeout after 3 seconds - don't let this block app initialization
+  // PERFORMANCE: Reduced timeout from 3s to 1.5s for faster initialization
+  // Timeout after 1.5 seconds - don't let this block app initialization
   Promise.race([
     sessionCheckPromise,
-    new Promise((resolve) => setTimeout(resolve, 3000))
+    new Promise((resolve) => setTimeout(resolve, 1500))
   ]).catch(() => {
     // Ignore timeout errors
   });

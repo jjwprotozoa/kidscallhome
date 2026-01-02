@@ -1042,14 +1042,6 @@ export const VideoCallUI = ({
   // CRITICAL: Show audio muted indicator prominently when audio is not playing
   const showAudioMutedIndicator = isAudioMutedByBrowser || isVideoMuted;
   
-  // Show "tap for audio" button for first 10 seconds of call as a hint
-  const [showAudioHint, setShowAudioHint] = useState(true);
-  useEffect(() => {
-    if (videoState === "playing") {
-      const timer = setTimeout(() => setShowAudioHint(false), 10000);
-      return () => clearTimeout(timer);
-    }
-  }, [videoState]);
 
   return (
     <div className="fixed inset-0 bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950" onClick={handleVideoClick}>
@@ -1194,21 +1186,6 @@ export const VideoCallUI = ({
           </div>
         )}
 
-        {/* Audio hint button - shown for first 10 seconds in case audio doesn't work */}
-        {showAudioHint && videoState === "playing" && !showAudioMutedIndicator && (
-          <div 
-            className="absolute top-44 left-1/2 -translate-x-1/2 z-50"
-            onClick={() => {
-              forceAudioPlayback();
-              setShowAudioHint(false);
-            }}
-          >
-            <button className="bg-white/10 backdrop-blur-sm text-white px-5 py-2.5 rounded-full shadow-lg flex items-center gap-2 cursor-pointer text-sm hover:bg-white/20 transition-colors border border-white/20">
-              <span>🔊</span>
-              <span>No audio? Tap here</span>
-            </button>
-          </div>
-        )}
 
         {/* Warning when no audio data ever received - only shows if we've NEVER detected audio */}
         {showNoRemoteAudioWarning && videoState === "playing" && !showAudioMutedIndicator && (

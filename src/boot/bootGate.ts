@@ -86,6 +86,14 @@ class BootLogger {
       // Ignore storage errors
     }
   }
+
+  /**
+   * Append a log entry (can be called anywhere, even after boot completes)
+   * Useful for post-render error capture
+   */
+  append(phase: BootPhase, message: string, metadata?: Record<string, unknown>, error?: Error): void {
+    this.log(phase, message, metadata, error);
+  }
 }
 
 export const bootLogger = new BootLogger();
@@ -97,7 +105,7 @@ export function installErrorHandlers(): void {
   if (errorHandlersInstalled) return;
   errorHandlersInstalled = true;
 
-  // Window error handler
+  // Window error handler - captures errors even after boot completes
   window.addEventListener("error", (event) => {
     const error = event.error || new Error(event.message);
     const isChunkError = 
@@ -107,29 +115,39 @@ export function installErrorHandlers(): void {
       error.message?.includes("Failed to load resource") ||
       (error.message?.includes("404") && error.message?.includes(".js"));
 
-    bootLogger.log(
+    // Always append to boot log (works even after boot completes)
+    bootLogger.append(
       "failed",
-      `Unhandled error: ${error.message}`,
+      `Post-render error: ${error.message}`,
       {
         filename: event.filename,
         lineno: event.lineno,
         colno: event.colno,
         isChunkError,
+        stack: error.stack?.split('\n').slice(0, 5).join('\n'), // First 5 lines of stack
       },
       error
     );
 
-    // If chunk error detected, trigger recovery
+    // If chunk error detected, trigger recovery (once per session)
     if (isChunkError) {
-      bootLogger.log("failed", "Chunk load error detected - triggering recovery");
-      // Delay recovery slightly to allow logging
-      setTimeout(() => {
-        recoverAndReload({ mode: "reset" });
-      }, 500);
+      try {
+        const alreadyRecovered = sessionStorage.getItem("kch_chunk_recovered");
+        if (alreadyRecovered !== "1") {
+          bootLogger.append("failed", "Chunk load error detected - triggering recovery");
+          sessionStorage.setItem("kch_chunk_recovered", "1");
+          // Delay recovery slightly to allow logging
+          setTimeout(() => {
+            recoverAndReload({ mode: "reset" });
+          }, 500);
+        }
+      } catch {
+        // Ignore storage errors
+      }
     }
   });
 
-  // Unhandled promise rejection handler
+  // Unhandled promise rejection handler - captures rejections even after boot completes
   window.addEventListener("unhandledrejection", (event) => {
     const error = event.reason instanceof Error ? event.reason : new Error(String(event.reason));
     const isChunkError = 
@@ -137,19 +155,31 @@ export function installErrorHandlers(): void {
       error.message?.includes("Loading chunk") ||
       error.message?.includes("Failed to fetch dynamically imported module");
 
-    bootLogger.log(
+    // Always append to boot log (works even after boot completes)
+    bootLogger.append(
       "failed",
-      `Unhandled promise rejection: ${error.message}`,
-      { isChunkError },
+      `Post-render promise rejection: ${error.message}`,
+      { 
+        isChunkError,
+        stack: error.stack?.split('\n').slice(0, 5).join('\n'), // First 5 lines of stack
+      },
       error
     );
 
-    // If chunk error detected, trigger recovery
+    // If chunk error detected, trigger recovery (once per session)
     if (isChunkError) {
-      bootLogger.log("failed", "Chunk load error in promise - triggering recovery");
-      setTimeout(() => {
-        recoverAndReload({ mode: "reset" });
-      }, 500);
+      try {
+        const alreadyRecovered = sessionStorage.getItem("kch_chunk_recovered");
+        if (alreadyRecovered !== "1") {
+          bootLogger.append("failed", "Chunk load error in promise - triggering recovery");
+          sessionStorage.setItem("kch_chunk_recovered", "1");
+          setTimeout(() => {
+            recoverAndReload({ mode: "reset" });
+          }, 500);
+        }
+      } catch {
+        // Ignore storage errors
+      }
     }
   });
 }

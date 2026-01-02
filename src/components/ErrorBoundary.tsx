@@ -7,6 +7,14 @@ import { AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 
+interface BootLogEntry {
+  phase: string;
+  timestamp: number;
+  message: string;
+  error?: string;
+  metadata?: Record<string, unknown>;
+}
+
 interface Props {
   children: ReactNode;
   fallback?: ReactNode;
@@ -56,6 +64,14 @@ export class ErrorBoundary extends Component<Props, State> {
       isRouterContextError: false,
       retryCount: 0,
       bootLog: [],
+      isChunkError: false,
+      isStorageCorrupt: false,
+      detectedFlags: {
+        ios: false,
+        chunkError: false,
+        routerError: false,
+        storageCorrupt: false,
+      },
     };
   }
 
@@ -81,16 +97,64 @@ export class ErrorBoundary extends Component<Props, State> {
 
   static getDerivedStateFromError(error: Error): Partial<State> {
     const isRouterError = isRouterContextError(error);
+    const isChunkErr = 
+      error.message?.includes("ChunkLoadError") ||
+      error.message?.includes("Loading chunk") ||
+      error.message?.includes("Failed to fetch dynamically imported module");
+    const isStorageErr = 
+      error.message?.includes("storage:corrupt") ||
+      error.message?.includes("QuotaExceededError") ||
+      error.message?.includes("Failed to read") ||
+      (error.message?.includes("JSON") && error.message?.includes("parse"));
+    
+    const isIOSDevice = typeof navigator !== 'undefined' && (
+      /iPad|iPhone|iPod/.test(navigator.userAgent) || 
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+    );
+
     return {
       hasError: true,
       error,
       errorInfo: null,
       isRouterContextError: isRouterError,
+      isChunkError: isChunkErr,
+      isStorageCorrupt: isStorageErr,
+      detectedFlags: {
+        ios: isIOSDevice,
+        chunkError: isChunkErr,
+        routerError: isRouterError,
+        storageCorrupt: isStorageErr,
+      },
     };
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     const isRouterError = isRouterContextError(error);
+    const isChunkErr = 
+      error.message?.includes("ChunkLoadError") ||
+      error.message?.includes("Loading chunk") ||
+      error.message?.includes("Failed to fetch dynamically imported module");
+    const isStorageErr = 
+      error.message?.includes("storage:corrupt") ||
+      error.message?.includes("QuotaExceededError") ||
+      error.message?.includes("Failed to read") ||
+      (error.message?.includes("JSON") && error.message?.includes("parse"));
+    
+    // Log to boot logger if available
+    try {
+      import("@/boot/bootGate").then(({ bootLogger }) => {
+        bootLogger.append("failed", `ErrorBoundary caught: ${error.message}`, {
+          isRouterError,
+          isChunkError: isChunkErr,
+          isStorageCorrupt: isStorageErr,
+          componentStack: errorInfo.componentStack?.split('\n').slice(0, 5).join('\n'),
+        }, error);
+      }).catch(() => {
+        // Boot logger not available
+      });
+    } catch {
+      // Ignore import errors
+    }
     
     // Only log non-router errors or final retry failures
     if (!isRouterError || this.state.retryCount >= this.maxRetries) {
@@ -102,10 +166,47 @@ export class ErrorBoundary extends Component<Props, State> {
       console.warn(`⚠️ [ERROR BOUNDARY] Router context error caught, will retry (attempt ${this.state.retryCount + 1}/${this.maxRetries}):`, error.message);
     }
     
+    // iOS auto-recovery for storage/router errors (once per session)
+    const isIOSDevice = typeof navigator !== 'undefined' && (
+      /iPad|iPhone|iPod/.test(navigator.userAgent) || 
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+    );
+    
+    if (isIOSDevice && (isStorageErr || isRouterError)) {
+      try {
+        const alreadyRecovered = sessionStorage.getItem("kch_ios_autorecover");
+        if (alreadyRecovered !== "1") {
+          console.warn("⚠️ [ERROR BOUNDARY] iOS auto-recovery triggered for", isStorageErr ? "storage" : "router", "error");
+          sessionStorage.setItem("kch_ios_autorecover", "1");
+          // Trigger recovery after a short delay to allow logging
+          setTimeout(async () => {
+            try {
+              const { recoverAndReload } = await import("@/boot/bootGate");
+              await recoverAndReload({ mode: "reset" });
+            } catch {
+              // Fallback to reload
+              window.location.reload();
+            }
+          }, 1000);
+          return; // Exit early, recovery will reload
+        }
+      } catch {
+        // Ignore storage errors
+      }
+    }
+    
     this.setState({
       error,
       errorInfo,
       isRouterContextError: isRouterError,
+      isChunkError: isChunkErr,
+      isStorageCorrupt: isStorageErr,
+      detectedFlags: {
+        ios: isIOSDevice,
+        chunkError: isChunkErr,
+        routerError: isRouterError,
+        storageCorrupt: isStorageErr,
+      },
     });
   }
 
@@ -286,16 +387,56 @@ export class ErrorBoundary extends Component<Props, State> {
               </Button>
             </div>
 
-            {showDebug && this.state.bootLog.length > 0 && (
-              <div className="mt-4 pt-4 border-t">
-                <details className="text-sm">
-                  <summary className="cursor-pointer text-muted-foreground mb-2">
-                    Boot Log (debug mode)
-                  </summary>
-                  <pre className="mt-2 text-xs bg-muted p-2 rounded overflow-auto max-h-48 font-mono">
-                    {JSON.stringify(this.state.bootLog, null, 2)}
-                  </pre>
-                </details>
+            {showDebug && (
+              <div className="mt-4 pt-4 border-t space-y-4">
+                {/* Detected Flags */}
+                <div className="text-sm">
+                  <div className="font-semibold text-muted-foreground mb-2">Detected Flags:</div>
+                  <div className="flex flex-wrap gap-2">
+                    {this.state.detectedFlags.ios && (
+                      <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs">iOS</span>
+                    )}
+                    {this.state.detectedFlags.chunkError && (
+                      <span className="px-2 py-1 bg-orange-100 text-orange-800 rounded text-xs">Chunk Error</span>
+                    )}
+                    {this.state.detectedFlags.routerError && (
+                      <span className="px-2 py-1 bg-red-100 text-red-800 rounded text-xs">Router Error</span>
+                    )}
+                    {this.state.detectedFlags.storageCorrupt && (
+                      <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded text-xs">Storage Corrupt</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Last Error */}
+                {this.state.error && (
+                  <div className="text-sm">
+                    <div className="font-semibold text-muted-foreground mb-2">Last Error:</div>
+                    <div className="bg-muted p-2 rounded text-xs font-mono break-all">
+                      {this.state.error.message}
+                    </div>
+                    {this.state.error.stack && (
+                      <details className="mt-2">
+                        <summary className="cursor-pointer text-xs text-muted-foreground">Stack Trace</summary>
+                        <pre className="mt-2 text-xs bg-muted p-2 rounded overflow-auto max-h-32 font-mono">
+                          {this.state.error.stack}
+                        </pre>
+                      </details>
+                    )}
+                  </div>
+                )}
+
+                {/* Boot Log */}
+                {this.state.bootLog.length > 0 && (
+                  <details className="text-sm">
+                    <summary className="cursor-pointer text-muted-foreground mb-2">
+                      Boot Log (debug mode)
+                    </summary>
+                    <pre className="mt-2 text-xs bg-muted p-2 rounded overflow-auto max-h-48 font-mono">
+                      {JSON.stringify(this.state.bootLog, null, 2)}
+                    </pre>
+                  </details>
+                )}
               </div>
             )}
           </Card>

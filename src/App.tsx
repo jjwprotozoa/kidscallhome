@@ -17,7 +17,15 @@ const GlobalIncomingCall = lazy(() => import("@/components/GlobalIncomingCall").
 const GlobalMessageNotifications = lazy(() => import("@/components/GlobalMessageNotifications").then(m => ({ default: m.GlobalMessageNotifications })));
 const GlobalPresenceTracker = lazy(() => import("@/components/GlobalPresenceTracker").then(m => ({ default: m.GlobalPresenceTracker })));
 const PWAInstallPrompt = lazy(() => import("@/components/PWAInstallPrompt").then(m => ({ default: m.PWAInstallPrompt })));
-const UpdateAvailableToast = lazy(() => import("@/components/UpdateAvailableToast").then(m => ({ default: m.UpdateAvailableToast })));
+const UpdateAvailableToast = lazy(() => 
+  import("@/components/UpdateAvailableToast")
+    .then(m => ({ default: m.default || m.UpdateAvailableToast }))
+    .catch((error) => {
+      console.error("Failed to load UpdateAvailableToast:", error);
+      // Return a no-op component to prevent app crash
+      return { default: () => null };
+    })
+);
 const Sonner = lazy(() => import("@/components/ui/sonner").then(m => ({ default: m.Toaster })));
 const Toaster = lazy(() => import("@/components/ui/toaster").then(m => ({ default: m.Toaster })));
 const BootGate = lazy(() => import("@/boot/bootGateComponent").then(m => ({ default: m.BootGate })));
@@ -385,6 +393,7 @@ const isIOSDevice = () => {
 // These are lazy-loaded to improve FCP but should mount quickly after
 const DeferredGlobalComponents = () => {
   const [mounted, setMounted] = useState(false);
+  const [routerReady, setRouterReady] = useState(false);
   const [isIOS] = useState(isIOSDevice);
   
   useEffect(() => {
@@ -405,6 +414,8 @@ const DeferredGlobalComponents = () => {
             // After two animation frames, add a small delay for iOS Safari
             setTimeout(() => {
               setMounted(true);
+              // Check router context after mount
+              checkRouterContext();
             }, 500); // 500ms delay after paint is more reliable than waiting for interaction
           });
         });
@@ -424,20 +435,72 @@ const DeferredGlobalComponents = () => {
         }
       };
       
-      schedule(() => setMounted(true));
+      schedule(() => {
+        setMounted(true);
+        checkRouterContext();
+      });
     }
   }, [isIOS]);
+
+  // Check if router context is ready by attempting to detect it
+  const checkRouterContext = () => {
+    let retryCount = 0;
+    const maxRetries = 10;
+    const retryDelay = 100;
+
+    const check = () => {
+      retryCount++;
+      
+      // Try to detect router context availability
+      // If we're inside BrowserRouter, router should be ready
+      try {
+        // Check if document is ready and we're in a SPA context
+        const isReady = typeof window !== 'undefined' && 
+          window.location && 
+          document.readyState === 'complete';
+        
+        if (isReady) {
+          // Additional iOS delay for router initialization
+          if (isIOS && retryCount < 3) {
+            setTimeout(check, retryDelay);
+            return;
+          }
+          setRouterReady(true);
+          return;
+        }
+      } catch {
+        // Router not ready yet
+      }
+
+      if (retryCount >= maxRetries) {
+        // Max retries - assume router is ready (component will handle errors)
+        setRouterReady(true);
+        return;
+      }
+
+      setTimeout(check, retryDelay);
+    };
+
+    setTimeout(check, retryDelay);
+  };
   
   if (!mounted) return null;
   
-  return (
-    <Suspense fallback={null}>
+  // Components that use router hooks - only render when router is ready
+  const routerDependentComponents = routerReady ? (
+    <>
       <ErrorBoundary fallback={null}>
         <GlobalIncomingCall />
       </ErrorBoundary>
       <ErrorBoundary fallback={null}>
         <GlobalMessageNotifications />
       </ErrorBoundary>
+    </>
+  ) : null;
+  
+  return (
+    <Suspense fallback={null}>
+      {routerDependentComponents}
       <ErrorBoundary fallback={null}>
         <GlobalPresenceTracker />
       </ErrorBoundary>
