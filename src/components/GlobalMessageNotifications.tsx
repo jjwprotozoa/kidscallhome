@@ -578,25 +578,24 @@ export const GlobalMessageNotifications = () => {
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
-    // Wait for Router context to be ready (same pattern as GlobalIncomingCall)
-    // Use a longer delay for production builds
-    const scheduleRender = () => {
-      if ('requestIdleCallback' in window) {
-        requestIdleCallback(() => {
-          setTimeout(() => {
-            setIsReady(true);
-          }, 200);
-        }, { timeout: 500 });
-      } else {
+    let mounted = true;
+    
+    // Simple strategy: wait for next tick + small delay to ensure Router context is initialized
+    // This is more reliable than complex timing because BrowserRouter should be mounted
+    // by the time this component renders (it's inside BrowserRouter in App.tsx)
+    const timeoutId = setTimeout(() => {
+      if (mounted) {
+        // Additional small delay to ensure Router context is fully ready
         setTimeout(() => {
-          setIsReady(true);
-        }, 500); // Fallback delay for browsers without requestIdleCallback
+          if (mounted) {
+            setIsReady(true);
+          }
+        }, 50);
       }
-    };
-    
-    const timeoutId = setTimeout(scheduleRender, 0);
-    
+    }, 100);
+
     return () => {
+      mounted = false;
       clearTimeout(timeoutId);
     };
   }, []);

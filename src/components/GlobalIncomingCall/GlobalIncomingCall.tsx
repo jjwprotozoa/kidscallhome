@@ -285,6 +285,8 @@ class RouterContextErrorBoundary extends React.Component<
   { children: React.ReactNode },
   { hasError: boolean; retryCount: number }
 > {
+  private retryTimeoutId: NodeJS.Timeout | null = null;
+
   constructor(props: { children: React.ReactNode }) {
     super(props);
     this.state = { hasError: false, retryCount: 0 };
@@ -295,7 +297,8 @@ class RouterContextErrorBoundary extends React.Component<
     const isRouterContextError =
       error.message?.includes("basename") ||
       error.message?.includes("useContext") ||
-      error.message?.includes("Router");
+      error.message?.includes("Router") ||
+      error.message?.includes("Cannot destructure");
     
     if (isRouterContextError) {
       return { hasError: true };
@@ -313,13 +316,27 @@ class RouterContextErrorBoundary extends React.Component<
     }
   }
 
-  componentDidUpdate() {
+  componentDidUpdate(prevProps: { children: React.ReactNode }, prevState: { hasError: boolean; retryCount: number }) {
     // Auto-retry after a delay if we caught a Router context error
-    if (this.state.hasError && this.state.retryCount < 3) {
-      const retryDelay = 1000 * (this.state.retryCount + 1); // 1s, 2s, 3s
-      setTimeout(() => {
+    if (this.state.hasError && this.state.retryCount < 5 && this.state.retryCount !== prevState.retryCount) {
+      // Clear any existing timeout
+      if (this.retryTimeoutId) {
+        clearTimeout(this.retryTimeoutId);
+      }
+      
+      // Progressive retry delay: 500ms, 1s, 2s, 3s, 5s
+      const retryDelays = [500, 1000, 2000, 3000, 5000];
+      const retryDelay = retryDelays[this.state.retryCount] || 5000;
+      
+      this.retryTimeoutId = setTimeout(() => {
         this.setState({ hasError: false, retryCount: this.state.retryCount + 1 });
       }, retryDelay);
+    }
+  }
+
+  componentWillUnmount() {
+    if (this.retryTimeoutId) {
+      clearTimeout(this.retryTimeoutId);
     }
   }
 
@@ -337,125 +354,41 @@ class RouterContextErrorBoundary extends React.Component<
 // This prevents "Cannot destructure property 'basename'" errors during lazy loading
 // The issue occurs when lazy-loaded components try to use router hooks before
 // the Router context is fully initialized during the lazy loading process
-// On slower devices (like Samsung A31), Router context initialization takes longer
 export const GlobalIncomingCall = () => {
+  // Use a simple, reliable check for Router context availability
+  // This is more reliable than complex polling and timing logic
   const [isReady, setIsReady] = useState(false);
 
-  // Delay rendering until Router context is fully initialized
-  // This is necessary because lazy-loaded components can render before Router context is available
-  // Production builds may have different timing, so we use a longer delay
-  // On slower devices (like Samsung A31), we need significantly more time for Router context to initialize
   useEffect(() => {
     let mounted = true;
-    let timeoutId: NodeJS.Timeout;
     
-    // Use a more reliable initialization strategy for slower devices
-    const initialize = () => {
+    // Strategy: Wait for BrowserRouter to be fully initialized
+    // Since this component is rendered inside BrowserRouter (in App.tsx),
+    // we need to wait for the Router context to be available
+    // Use a combination of timing and readiness checks
+    
+    const checkAndSetReady = () => {
       if (!mounted) return;
       
-      // Strategy: Wait for multiple conditions to be met
-      // 1. Document must be ready
-      // 2. Window and location must be available
-      // 3. Body must have content (indicating React has rendered)
-      // 4. Additional delay to ensure Router context is fully initialized
-      // 5. Wait for BrowserRouter to be fully mounted (check for route elements)
-      
-      const checkReady = () => {
-        const hasBasicReady = (
-          typeof window !== 'undefined' &&
-          window.location &&
-          document.readyState === 'complete' &&
-          document.body &&
-          document.body.children.length > 0
-        );
-        
-        // Check if React Router has rendered by looking for common route elements
-        // This is a heuristic - if we see route-specific elements, Router is likely ready
-        const hasRouterElements = document.querySelector('[data-router]') !== null ||
-          document.querySelector('main') !== null ||
-          document.body.querySelector('div[id]') !== null;
-        
-        return hasBasicReady && hasRouterElements;
-      };
-      
-      // If already ready, wait additional time for Router context
-      if (checkReady()) {
-        // Use a much longer delay for slower devices - Router context needs significant time
-        // Samsung A31 and similar devices may need up to 5 seconds
-        timeoutId = setTimeout(() => {
-          if (mounted) {
-            setIsReady(true);
-          }
-        }, 5000); // Increased to 5 seconds for very slow devices like Samsung A31
-        return;
-      }
-      
-      // Wait for document to be ready first
+      // Check if document is ready
       if (document.readyState === 'loading') {
-        const onDOMContentLoaded = () => {
-          document.removeEventListener('DOMContentLoaded', onDOMContentLoaded);
-          // After DOM is ready, wait for Router context
-          timeoutId = setTimeout(() => {
-            if (mounted && checkReady()) {
-              // Additional delay to ensure Router context is fully initialized
-              // Much longer delay for slower devices like Samsung A31
-              setTimeout(() => {
-                if (mounted) {
-                  setIsReady(true);
-                }
-              }, 4000); // Increased to 4 seconds for slower devices
-            } else if (mounted) {
-              // If still not ready, set ready anyway after max wait
-              setTimeout(() => {
-                if (mounted) {
-                  setIsReady(true);
-                }
-              }, 4000);
-            }
-          }, 1000); // Increased initial wait
-        };
-        document.addEventListener('DOMContentLoaded', onDOMContentLoaded);
+        document.addEventListener('DOMContentLoaded', () => {
+          setTimeout(() => {
+            if (mounted) setIsReady(true);
+          }, 200);
+        }, { once: true });
         return;
       }
       
-      // Document is ready, but check if Router context is ready
-      // Use a polling approach with a maximum wait time
-      let pollCount = 0;
-      const maxPolls = 25; // 25 * 200ms = 5 seconds max
-      
-      const pollInterval = setInterval(() => {
-        pollCount++;
-        if (mounted && checkReady()) {
-          clearInterval(pollInterval);
-          // Additional delay to ensure Router context is fully initialized
-          // Much longer delay for slower devices like Samsung A31
-          timeoutId = setTimeout(() => {
-            if (mounted) {
-              setIsReady(true);
-            }
-          }, 4000); // Increased to 4 seconds for slower devices
-        } else if (pollCount >= maxPolls) {
-          clearInterval(pollInterval);
-          // Maximum wait reached, render anyway
-          if (mounted) {
-            setIsReady(true);
-          }
-        }
+      // Document is ready, wait a bit more for Router context
+      setTimeout(() => {
+        if (mounted) setIsReady(true);
       }, 200);
-      
-      // Fallback: ensure we render eventually
-      // Much longer max wait for slower devices like Samsung A31
-      timeoutId = setTimeout(() => {
-        clearInterval(pollInterval);
-        if (mounted) {
-          setIsReady(true);
-        }
-      }, 8000); // Increased to 8 seconds for very slow devices
     };
     
-    // Start initialization after a longer delay to let the app start loading
-    timeoutId = setTimeout(initialize, 500); // Increased from 200ms
-    
+    // Initial delay to let BrowserRouter mount
+    const timeoutId = setTimeout(checkAndSetReady, 100);
+
     return () => {
       mounted = false;
       clearTimeout(timeoutId);

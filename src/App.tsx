@@ -362,21 +362,30 @@ const AnalyticsDebugHelperInner = () => {
 
 // Component to render deferred global components after initial load
 // These are lazy-loaded to improve FCP but should mount quickly after
+// CRITICAL: These components use router hooks, so we must ensure BrowserRouter
+// is fully initialized before rendering them
 const DeferredGlobalComponents = () => {
   const [mounted, setMounted] = useState(false);
   
   useEffect(() => {
-    // Wait for initial paint then mount deferred components
-    // Use requestIdleCallback for best performance, fallback to setTimeout
+    // Wait for initial paint AND ensure Router context is ready
+    // Components like GlobalIncomingCall use router hooks, so Router must be initialized
     const schedule = (callback: () => void) => {
       if ('requestIdleCallback' in window) {
         requestIdleCallback(callback, { timeout: 1000 });
       } else {
-        setTimeout(callback, 100);
+        setTimeout(callback, 200); // Increased delay to ensure Router context is ready
       }
     };
     
-    schedule(() => setMounted(true));
+    // Additional delay to ensure BrowserRouter context is fully initialized
+    // This prevents "Cannot destructure property 'basename'" errors
+    schedule(() => {
+      // Wait one more tick to ensure Router context is definitely ready
+      setTimeout(() => {
+        setMounted(true);
+      }, 100);
+    });
   }, []);
   
   if (!mounted) return null;
