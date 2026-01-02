@@ -362,60 +362,21 @@ const AnalyticsDebugHelperInner = () => {
 
 // Component to render deferred global components after initial load
 // These are lazy-loaded to improve FCP but should mount quickly after
-// CRITICAL: These components use router hooks, so we must ensure BrowserRouter
-// is fully initialized before rendering them
 const DeferredGlobalComponents = () => {
   const [mounted, setMounted] = useState(false);
   
   useEffect(() => {
-    // Wait for initial paint AND ensure Router context is ready
-    // Components like GlobalIncomingCall use router hooks, so Router must be initialized
-    // CRITICAL: On mobile devices, Router context initialization can take longer
-    // Use longer delays and check Router context availability
+    // Wait for initial paint then mount deferred components
+    // Use requestIdleCallback for best performance, fallback to setTimeout
     const schedule = (callback: () => void) => {
       if ('requestIdleCallback' in window) {
-        requestIdleCallback(callback, { timeout: 2000 });
+        requestIdleCallback(callback, { timeout: 1000 });
       } else {
-        setTimeout(callback, 500); // Increased delay for mobile devices
+        setTimeout(callback, 100);
       }
     };
     
-    // Check if Router context is available by trying to access it
-    const checkRouterContext = (): boolean => {
-      try {
-        // Try to access React Router's internal context
-        // If BrowserRouter is mounted, the context should be available
-        // We check by looking for the Router context in React's internal state
-        // This is a heuristic check - if document is ready and we've waited enough, assume Router is ready
-        return document.readyState === 'complete' || document.readyState === 'interactive';
-      } catch {
-        return false;
-      }
-    };
-    
-    // Additional delay to ensure BrowserRouter context is fully initialized
-    // This prevents "Cannot destructure property 'basename'" errors on mobile devices
-    schedule(() => {
-      // Progressive delay: wait longer on mobile devices
-      // Mobile devices may have slower JavaScript execution
-      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-      const baseDelay = isMobile ? 300 : 100;
-      
-      // Wait for Router context to be ready
-      const checkAndMount = (attempt: number = 0) => {
-        if (checkRouterContext() || attempt >= 5) {
-          // Router context is ready or max attempts reached
-          setTimeout(() => {
-            setMounted(true);
-          }, baseDelay);
-        } else {
-          // Router context not ready yet, retry after delay
-          setTimeout(() => checkAndMount(attempt + 1), 100);
-        }
-      };
-      
-      checkAndMount();
-    });
+    schedule(() => setMounted(true));
   }, []);
   
   if (!mounted) return null;
@@ -441,35 +402,6 @@ const DeferredGlobalComponents = () => {
 };
 
 const App = () => {
-  // Set up global error handler for unhandled errors
-  useEffect(() => {
-    const handleError = (event: ErrorEvent) => {
-      console.error("❌ [GLOBAL ERROR] Unhandled error:", event.error);
-      console.error("❌ [GLOBAL ERROR] Error message:", event.message);
-      console.error("❌ [GLOBAL ERROR] Error filename:", event.filename);
-      console.error("❌ [GLOBAL ERROR] Error lineno:", event.lineno);
-    };
-
-    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
-      console.error("❌ [GLOBAL ERROR] Unhandled promise rejection:", event.reason);
-      // Prevent default error logging for known non-critical errors
-      if (event.reason?.message?.includes?.('basename') || 
-          event.reason?.message?.includes?.('Router')) {
-        // Router context errors are handled by component-level error boundaries
-        event.preventDefault();
-        return;
-      }
-    };
-
-    window.addEventListener('error', handleError);
-    window.addEventListener('unhandledrejection', handleUnhandledRejection);
-
-    return () => {
-      window.removeEventListener('error', handleError);
-      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
-    };
-  }, []);
-
   // Wrap critical components in error boundaries to prevent app crashes
   return (
     <ErrorBoundary>
