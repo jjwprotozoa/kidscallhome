@@ -438,20 +438,23 @@ const App = () => {
             <Sonner />
           </Suspense>
           <SafeAreaLayout className="w-full overflow-x-hidden">
-            <BrowserRouter
-              future={{
-                v7_startTransition: true,
-                v7_relativeSplatPath: true,
-              }}
-            >
-              {/* WidgetIntentHandler - deferred to prevent Router context errors on mobile */}
-              <ErrorBoundary fallback={null}>
-                <WidgetIntentHandler />
-              </ErrorBoundary>
-              {/* Deferred global components - loaded after initial paint */}
-              <DeferredGlobalComponents />
-              <Suspense fallback={<PageLoader />}>
-                <Routes>
+            {/* ErrorBoundary wraps BrowserRouter to catch Router context errors on mobile */}
+            {/* These errors occur when Router hooks are called before context is ready */}
+            <ErrorBoundary>
+              <BrowserRouter
+                future={{
+                  v7_startTransition: true,
+                  v7_relativeSplatPath: true,
+                }}
+              >
+                {/* WidgetIntentHandler - deferred to prevent Router context errors on mobile */}
+                <ErrorBoundary fallback={null}>
+                  <WidgetIntentHandler />
+                </ErrorBoundary>
+                {/* Deferred global components - loaded after initial paint */}
+                <DeferredGlobalComponents />
+                <Suspense fallback={<PageLoader />}>
+                  <Routes>
                   <Route path="/" element={<Index />} />
                   <Route path="/parent/auth" element={<ParentAuth />} />
                   <Route path="/verify-email" element={<VerifyEmail />} />
@@ -542,7 +545,8 @@ const App = () => {
                   <Route path="*" element={<NotFound />} />
                 </Routes>
               </Suspense>
-            </BrowserRouter>
+              </BrowserRouter>
+            </ErrorBoundary>
           </SafeAreaLayout>
           {/* Vercel Analytics - outside BrowserRouter to prevent Router context errors on mobile */}
           {/* Vercel Analytics internally uses Router hooks which can fail if Router context isn't ready */}

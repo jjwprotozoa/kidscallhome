@@ -99,3 +99,4 @@ GRANT EXECUTE ON FUNCTION public.update_household_type(UUID, TEXT) TO anon;
 
 
 
+

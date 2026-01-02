@@ -1,6 +1,7 @@
 # Domain Errors Troubleshooting Guide
 
 ## Problem
+
 - ✅ Vercel deployment URL works: `kids-call-home-13mvk3l11-justins-projects-f7a019bf.vercel.app`
 - ❌ Custom domain throws errors: `https://www.kidscallhome.com`
 
@@ -9,6 +10,7 @@
 ### Step 1: Identify the Specific Error
 
 **What error are you seeing?**
+
 - SSL/TLS certificate error?
 - "This site can't be reached" / Connection timeout?
 - 502/503/504 errors?
@@ -17,6 +19,7 @@
 - Redirect loop?
 
 **How to check:**
+
 1. Open browser DevTools (F12)
 2. Go to **Console** tab - look for error messages
 3. Go to **Network** tab - check failed requests and their status codes
@@ -27,7 +30,7 @@
 **This is the #1 cause of domain errors when Vercel URL works.**
 
 1. Go to Cloudflare Dashboard:
-   - https://dash.cloudflare.com/b1a8f1b6b9e7c3969413a8c1db5dbdc8/kidscallhome.com
+   - <https://dash.cloudflare.com/b1a8f1b6b9e7c3969413a8c1db5dbdc8/kidscallhome.com>
 2. Navigate to **SSL/TLS** → **Overview**
 3. Check the current encryption mode:
    - ❌ **Flexible** - This is likely your problem!
@@ -35,6 +38,7 @@
    - ✅ **Full (strict)** - Also correct, more secure
 
 **If it's set to "Flexible:**
+
 1. Click the dropdown
 2. Select **"Full"** (or "Full (strict)" if you prefer)
 3. Save
@@ -42,6 +46,7 @@
 5. Test the domain again
 
 **Why this fixes it:**
+
 - **Flexible mode**: Cloudflare → Vercel connection is NOT encrypted (HTTP)
 - Vercel requires HTTPS connections
 - This causes SSL handshake failures
@@ -50,7 +55,7 @@
 
 ### Step 3: Verify Domain in Vercel Dashboard
 
-1. Go to: https://vercel.com/justins-projects-f7a019bf/kids-call-home/settings/domains
+1. Go to: <https://vercel.com/justins-projects-f7a019bf/kids-call-home/settings/domains>
 2. Check both domains:
    - `kidscallhome.com`
    - `www.kidscallhome.com`
@@ -61,6 +66,7 @@
    - ❌ **Not Found** - Domain is not added (add it)
 
 **If domain shows "Invalid Configuration":**
+
 - Check the DNS records shown in Vercel
 - Compare with your Cloudflare DNS records
 - Ensure they match exactly
@@ -71,6 +77,7 @@
 2. Verify you have these records:
 
 **For www subdomain:**
+
 ```
 Type: CNAME
 Name: www
@@ -80,6 +87,7 @@ TTL: Auto
 ```
 
 **For root domain:**
+
 ```
 Type: CNAME
 Name: @
@@ -89,6 +97,7 @@ TTL: Auto
 ```
 
 **Important:**
+
 - The CNAME target should match what Vercel shows in the domain settings
 - If Vercel shows a different target, update Cloudflare to match
 - You can find the correct target in Vercel → Settings → Domains → [Your Domain] → Configuration
@@ -96,6 +105,7 @@ TTL: Auto
 ### Step 5: Test DNS Resolution
 
 **From your computer:**
+
 ```bash
 # Windows PowerShell
 nslookup www.kidscallhome.com
@@ -105,12 +115,14 @@ nslookup kidscallhome.com
 ```
 
 **Online tools:**
-1. Go to: https://dnschecker.org
+
+1. Go to: <https://dnschecker.org>
 2. Check `www.kidscallhome.com` globally
 3. Check `kidscallhome.com` globally
 4. All locations should show the same DNS records
 
 **If DNS is inconsistent:**
+
 - Wait 15-30 minutes for propagation
 - Clear your local DNS cache:
   - Windows: `ipconfig /flushdns`
@@ -127,6 +139,7 @@ nslookup kidscallhome.com
    - **Gray cloud** = DNS only (direct to Vercel)
 
 **Try this:**
+
 1. If `www` is proxied (orange), temporarily set it to DNS only (gray)
 2. Wait 2-5 minutes
 3. Test the domain
@@ -140,6 +153,7 @@ nslookup kidscallhome.com
 **Open DevTools (F12) and check:**
 
 **Console Tab:**
+
 - Look for red error messages
 - Common errors:
   - `NET::ERR_CERT_AUTHORITY_INVALID` - SSL certificate issue
@@ -148,6 +162,7 @@ nslookup kidscallhome.com
   - `ERR_TOO_MANY_REDIRECTS` - Redirect loop
 
 **Network Tab:**
+
 - Look for failed requests (red status)
 - Check the status code:
   - `502 Bad Gateway` - Cloudflare can't reach Vercel
@@ -160,11 +175,13 @@ nslookup kidscallhome.com
 ### Error: "This site can't be reached" / Connection Timeout
 
 **Causes:**
+
 1. DNS not resolving correctly
 2. Cloudflare proxy blocking connection
 3. Vercel domain not properly configured
 
 **Fix:**
+
 1. Check DNS propagation (Step 5)
 2. Verify domain in Vercel (Step 3)
 3. Try disabling Cloudflare proxy temporarily (Step 6)
@@ -172,11 +189,13 @@ nslookup kidscallhome.com
 ### Error: SSL Certificate Error / "Not Secure"
 
 **Causes:**
+
 1. Cloudflare SSL/TLS mode set to "Flexible"
 2. SSL certificate not provisioned yet
 3. Mixed content (HTTP resources on HTTPS page)
 
 **Fix:**
+
 1. Set Cloudflare SSL/TLS to "Full" (Step 2)
 2. Wait 5-15 minutes for SSL certificate provisioning
 3. Check Vercel dashboard for certificate status
@@ -184,11 +203,13 @@ nslookup kidscallhome.com
 ### Error: 502 Bad Gateway
 
 **Causes:**
+
 1. Cloudflare can't reach Vercel
 2. SSL/TLS mode mismatch
 3. Vercel deployment issue
 
 **Fix:**
+
 1. Set Cloudflare SSL/TLS to "Full"
 2. Check Vercel deployment status
 3. Verify domain is added in Vercel
@@ -196,23 +217,27 @@ nslookup kidscallhome.com
 ### Error: 503 Service Unavailable
 
 **Causes:**
+
 1. Vercel deployment failed
 2. Vercel service outage
 3. Domain configuration issue in Vercel
 
 **Fix:**
+
 1. Check Vercel dashboard for deployment status
 2. Verify domain configuration in Vercel
-3. Check Vercel status page: https://www.vercel-status.com
+3. Check Vercel status page: <https://www.vercel-status.com>
 
 ### Error: ERR_TOO_MANY_REDIRECTS
 
 **Causes:**
+
 1. Redirect loop between root and www
 2. Cloudflare Page Rule conflict
 3. Vercel redirect conflict
 
 **Fix:**
+
 1. Check Cloudflare Page Rules (Rules → Page Rules)
 2. Check `vercel.json` redirects
 3. Remove duplicate redirects
@@ -243,8 +268,8 @@ If none of the above fixes work:
    - Use VPN to test from different region
 
 3. **Contact support:**
-   - Vercel Support: https://vercel.com/support
-   - Cloudflare Support: https://support.cloudflare.com
+   - Vercel Support: <https://vercel.com/support>
+   - Cloudflare Support: <https://support.cloudflare.com>
 
 4. **Share diagnostic information:**
    - Browser console errors
@@ -256,16 +281,19 @@ If none of the above fixes work:
 ## Expected Configuration
 
 **Cloudflare:**
+
 - SSL/TLS mode: **Full** or **Full (strict)**
 - DNS records: CNAME pointing to Vercel
 - Proxy: Orange cloud (proxied) for CDN benefits
 
 **Vercel:**
+
 - Both domains added: `kidscallhome.com` and `www.kidscallhome.com`
 - Status: **Valid Configuration**
 - SSL certificates: Provisioned and valid
 
 **DNS:**
+
 - Nameservers: Cloudflare (`bruce.ns.cloudflare.com`, `kay.ns.cloudflare.com`)
 - Records: CNAME to Vercel target
 - Propagation: Complete globally
@@ -276,4 +304,3 @@ If none of the above fixes work:
 - [Root Domain Loading Issue](./ROOT_DOMAIN_LOADING_ISSUE.md)
 - [Confirmed Configuration](./CONFIRMED_CONFIGURATION.md)
 - [Vercel Domain Configuration](../setup/VERCEL_CNAME_CONFIGURATION.md)
-
