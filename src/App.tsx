@@ -31,6 +31,7 @@ import {
   isNativeAndroid,
 } from "@/utils/nativeAndroid";
 import { loadWidgetData } from "@/utils/widgetData";
+import { initRoutePrefetching } from "@/utils/routePrefetch";
 
 // Import functions for critical routes (used for both lazy loading and prefetching)
 const parentHomeImport = () => import("./pages/ParentHome");
@@ -44,6 +45,10 @@ const childCallScreenImport = () => import("./pages/ChildCallScreen");
 // critical route chunks in the background when the browser is idle
 const RoutePrefetcher = () => {
   useEffect(() => {
+    // Initialize global route prefetching on link hover/focus
+    // This automatically prefetches routes when users hover over links
+    initRoutePrefetching();
+    
     // Use requestIdleCallback for non-blocking prefetch on idle
     // Falls back to setTimeout if not available
     const schedulePrefetch = (callback: () => void) => {
@@ -444,8 +449,17 @@ const DeferredGlobalComponents = () => {
   );
 };
 
-const App = () => {
+interface AppProps {
+  bootResult?: {
+    session: any | null;
+    bootLog: string[];
+    ok: boolean;
+  };
+}
+
+const App = ({ bootResult }: AppProps = {}) => {
   // Wrap critical components in error boundaries to prevent app crashes
+  // Boot result is available but not required - app should work without it
   return (
     <ErrorBoundary>
       <PersistQueryClientProvider

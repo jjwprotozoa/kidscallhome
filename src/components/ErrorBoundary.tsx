@@ -141,6 +141,33 @@ export class ErrorBoundary extends Component<Props, State> {
     window.location.reload();
   };
 
+  handleSoftReset = async () => {
+    // Clear volatile cache and reload
+    try {
+      const { clearVolatileCache } = await import("@/utils/storage");
+      clearVolatileCache();
+    } catch {
+      // Ignore import errors
+    }
+    window.location.reload();
+  };
+
+  handleForceLogout = async () => {
+    // Clear all storage and reload
+    try {
+      const { clearAppStorage } = await import("@/utils/storage");
+      clearAppStorage();
+      // Also clear Supabase session
+      const { supabase } = await import("@/integrations/supabase/client");
+      await supabase.auth.signOut({ scope: 'local' }).catch(() => {
+        // Ignore signout errors
+      });
+    } catch {
+      // Ignore errors during cleanup
+    }
+    window.location.href = "/";
+  };
+
   render() {
     if (this.state.hasError) {
       // For Router context errors, show nothing while retrying (prevents flash of error UI)
@@ -219,9 +246,16 @@ export class ErrorBoundary extends Component<Props, State> {
               </div>
             )}
 
-            <div className="flex gap-4">
-              <Button onClick={this.handleReset} className="flex-1">
-                Reload Page
+            <div className="flex gap-4 flex-col sm:flex-row">
+              <Button onClick={this.handleSoftReset} className="flex-1">
+                Retry
+              </Button>
+              <Button
+                variant="outline"
+                onClick={this.handleForceLogout}
+                className="flex-1"
+              >
+                Start Fresh
               </Button>
               <Button
                 variant="outline"

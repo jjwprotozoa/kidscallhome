@@ -2,6 +2,7 @@ import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
 import { safeLog } from "./utils/security";
+import { initApp } from "./boot/initApp";
 
 // Disable console in production (fallback - esbuild should remove these)
 // CRITICAL: Always keep console.error and console.warn enabled for debugging
@@ -16,6 +17,28 @@ if (import.meta.env.PROD) {
   console.info = noop;
   // CRITICAL: Keep console.error and console.warn enabled for debugging production issues
   // These are essential for diagnosing blank screens and rendering errors
+}
+
+// Suppress known browser extension/autofill errors that don't affect app functionality
+// These are harmless console noise from browser extensions and Chrome's autofill overlay
+if (typeof window !== "undefined") {
+  const originalError = console.error;
+  console.error = (...args: any[]) => {
+    const errorMessage = args[0]?.toString() || "";
+    const isBrowserExtensionError = 
+      errorMessage.includes("Duplicate script ID") ||
+      errorMessage.includes("fido2-page-script") ||
+      errorMessage.includes("Frame with ID") ||
+      errorMessage.includes("extension port") ||
+      errorMessage.includes("bootstrap-autofill-overlay") ||
+      errorMessage.includes("AutofillInlineMenuContentService") ||
+      (errorMessage.includes("insertBefore") && errorMessage.includes("NotFoundError"));
+    
+    // Only suppress browser extension/autofill errors, log everything else
+    if (!isBrowserExtensionError) {
+      originalError.apply(console, args);
+    }
+  };
 }
 
 // Log startup (only in development)
@@ -52,103 +75,149 @@ safeLog.log("🔍 [ENV] Environment variables check:", {
   keyLength: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY?.length || 0,
 });
 
-try {
-  // Remove SSR fallback content before React hydration to prevent mismatch
-  const ssrFallback = rootElement.querySelector("main[data-ssr-fallback]");
-  if (ssrFallback) {
-    ssrFallback.remove();
-  }
-
-  safeLog.log("⚛️ [APP INIT] Creating React root...");
-  const root = createRoot(rootElement);
-  safeLog.log("⚛️ [APP INIT] Rendering App component...");
-  root.render(<App />);
-  safeLog.log("✅ [APP INIT] App render initiated");
-
-  // Function to hide loading screen and signal app loaded
-  const hideLoadingScreen = () => {
-    const loadingElement = document.getElementById("app-loading");
-    if (loadingElement) {
-      // Use CSS class for smooth fade (hardware-accelerated)
-      loadingElement.classList.add("fade-out");
-      // Remove from DOM after fade completes to free memory
-      setTimeout(() => {
-        loadingElement.remove();
-      }, 200);
+// Boot-safe initialization wrapper - never throws, always recovers
+// PERFORMANCE: Render React immediately, run boot in parallel to avoid blocking UI
+(async () => {
+  try {
+    // Remove SSR fallback content before React hydration to prevent mismatch
+    const ssrFallback = rootElement.querySelector("main[data-ssr-fallback]");
+    if (ssrFallback) {
+      ssrFallback.remove();
     }
+
+    // Detect iOS for special handling (needed for both boot recovery and loading screen timing)
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+    // PERFORMANCE OPTIMIZATION: Render React immediately with default bootResult
+    // Boot initialization runs in parallel and updates the app when complete
+    // This eliminates the 3-4 second blocking delay on initial load
+    safeLog.log("⚛️ [APP INIT] Creating React root immediately...");
+    const root = createRoot(rootElement);
     
-    // Signal to the recovery mechanism that the app has loaded successfully
-    // This prevents the recovery UI from showing on successful loads
-    // CRITICAL: Only call this AFTER we've confirmed content is painted
-    if (typeof window !== "undefined" && typeof (window as unknown as { __appLoaded?: () => void }).__appLoaded === "function") {
-      (window as unknown as { __appLoaded: () => void }).__appLoaded();
-    }
-  };
+    // Start with default bootResult - app will work without it
+    const defaultBootResult = { session: null, bootLog: ["boot:deferred"], ok: true };
+    safeLog.log("⚛️ [APP INIT] Rendering App component immediately...");
+    root.render(<App bootResult={defaultBootResult} />);
+    safeLog.log("✅ [APP INIT] App render initiated (non-blocking)");
 
-  // Detect iOS for special handling - iOS Safari needs more time for React to settle
-  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
-    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    // Run boot initialization in parallel (non-blocking)
+    // This allows React to render immediately while boot completes in background
+    safeLog.log("⚛️ [APP INIT] Starting boot initialization in parallel...");
+    (async () => {
+      try {
+        const bootResult = await initApp();
+        if (import.meta.env.DEV) {
+          safeLog.log("⚛️ [APP INIT] Boot log:", bootResult.bootLog);
+        }
 
-  // Hide loading spinner after React render
-  // iOS Safari needs double requestAnimationFrame to ensure React has fully committed
-  // This prevents the blank screen issue where loading screen is removed before content is painted
-  if (isIOS) {
-    // iOS: Use triple RAF + delay to ensure paint is complete
-    // iOS Safari is notoriously slow at committing React renders
-    requestAnimationFrame(() => {
+        // iOS recovery path - detect repeated boot failures
+
+        if (isIOS && !bootResult.ok && !sessionStorage.getItem("ios_recovered")) {
+          safeLog.warn("⚠️ [APP INIT] iOS boot failure detected, attempting recovery...");
+          try {
+            const { clearAppStorage } = await import("./utils/storage");
+            clearAppStorage();
+            sessionStorage.setItem("ios_recovered", "1");
+            window.location.reload();
+            return; // Exit early, reload will restart
+          } catch {
+            // If recovery fails, continue with normal boot
+          }
+        }
+
+        // Update app with boot result when available
+        // This allows React to use the boot result if needed, but doesn't block initial render
+        root.render(<App bootResult={bootResult} />);
+        safeLog.log("✅ [APP INIT] Boot complete, app updated");
+      } catch (error) {
+        safeLog.error("⚠️ [APP INIT] Boot failed, continuing with default:", error);
+        // Continue with default bootResult - app should work without it
+      }
+    })();
+
+    // Function to hide loading screen and signal app loaded
+    const hideLoadingScreen = () => {
+      const loadingElement = document.getElementById("app-loading");
+      if (loadingElement) {
+        // Use CSS class for smooth fade (hardware-accelerated)
+        loadingElement.classList.add("fade-out");
+        // Remove from DOM after fade completes to free memory
+        setTimeout(() => {
+          loadingElement.remove();
+        }, 200);
+      }
+      
+      // Signal to the recovery mechanism that the app has loaded successfully
+      // This prevents the recovery UI from showing on successful loads
+      // CRITICAL: Only call this AFTER we've confirmed content is painted
+      if (typeof window !== "undefined" && typeof (window as unknown as { __appLoaded?: () => void }).__appLoaded === "function") {
+        (window as unknown as { __appLoaded: () => void }).__appLoaded();
+      }
+    };
+
+    // Hide loading spinner after React render
+    // iOS Safari needs double requestAnimationFrame to ensure React has fully committed
+    // This prevents the blank screen issue where loading screen is removed before content is painted
+    if (isIOS) {
+      // PERFORMANCE: Reduced delay from 300ms to 150ms since React renders immediately
+      // iOS: Use triple RAF + delay to ensure paint is complete
+      // iOS Safari is notoriously slow at committing React renders
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
-          // Add a delay for iOS Safari to ensure content is visible
-          // 300ms gives iOS Safari enough time to paint the DOM
-          setTimeout(hideLoadingScreen, 300);
+          requestAnimationFrame(() => {
+            // Add a delay for iOS Safari to ensure content is visible
+            // 150ms gives iOS Safari enough time to paint the DOM (reduced from 300ms)
+            setTimeout(hideLoadingScreen, 150);
+          });
         });
       });
-    });
-  } else {
-    // Non-iOS: Double RAF is sufficient for most browsers
-    requestAnimationFrame(() => {
+    } else {
+      // Non-iOS: Double RAF is sufficient for most browsers
       requestAnimationFrame(() => {
-        hideLoadingScreen();
+        requestAnimationFrame(() => {
+          hideLoadingScreen();
+        });
       });
-    });
-  }
-
-  // Fallback timeout: If React doesn't render within 5 seconds, hide loading screen anyway
-  // This prevents the app from being stuck on loading if there's an initialization issue
-  setTimeout(() => {
-    const loadingElement = document.getElementById("app-loading");
-    if (loadingElement && !loadingElement.classList.contains("fade-out")) {
-      safeLog.warn("⚠️ [APP INIT] Loading screen timeout - forcing removal");
-      hideLoadingScreen();
     }
-  }, 5000);
-} catch (error) {
-  // Always log errors to console, even in production, for debugging
-  console.error("❌ [APP INIT] Failed to render app:", error);
-  safeLog.error("❌ [APP INIT] Failed to render app:", error);
-  // Hide loading spinner on error
-  const loadingElement = document.getElementById("app-loading");
-  if (loadingElement) {
-    loadingElement.remove();
-  }
-  // Show error in the DOM if React fails to render
-  rootElement.innerHTML = `
-    <div style="padding: 2rem; font-family: system-ui; max-width: 600px; margin: 2rem auto;">
-      <h1 style="color: #dc2626;">Application Error</h1>
-      <p style="color: #6b7280;">Failed to initialize the application.</p>
-      <pre style="background: #f3f4f6; padding: 1rem; border-radius: 0.5rem; overflow: auto; margin-top: 1rem; white-space: pre-wrap;">
+
+    // Fallback timeout: If React doesn't render within 5 seconds, hide loading screen anyway
+    // This prevents the app from being stuck on loading if there's an initialization issue
+    setTimeout(() => {
+      const loadingElement = document.getElementById("app-loading");
+      if (loadingElement && !loadingElement.classList.contains("fade-out")) {
+        safeLog.warn("⚠️ [APP INIT] Loading screen timeout - forcing removal");
+        hideLoadingScreen();
+      }
+    }, 5000);
+  } catch (error) {
+    // Always log errors to console, even in production, for debugging
+    console.error("❌ [APP INIT] Failed to render app:", error);
+    safeLog.error("❌ [APP INIT] Failed to render app:", error);
+    // Hide loading spinner on error
+    const loadingElement = document.getElementById("app-loading");
+    if (loadingElement) {
+      loadingElement.remove();
+    }
+    // Show error in the DOM if React fails to render
+    rootElement.innerHTML = `
+      <div style="padding: 2rem; font-family: system-ui; max-width: 600px; margin: 2rem auto;">
+        <h1 style="color: #dc2626;">Application Error</h1>
+        <p style="color: #6b7280;">Failed to initialize the application.</p>
+        <pre style="background: #f3f4f6; padding: 1rem; border-radius: 0.5rem; overflow: auto; margin-top: 1rem; white-space: pre-wrap;">
 ${error instanceof Error ? error.message + "\n\n" + error.stack : String(error)}
-      </pre>
-      <button 
-        onclick="window.location.reload()" 
-        style="margin-top: 1rem; padding: 0.5rem 1rem; background: #3b82f6; color: white; border: none; border-radius: 0.25rem; cursor: pointer;"
-      >
-        Reload Page
-      </button>
-      <p style="margin-top: 1rem; font-size: 0.875rem; color: #6b7280;">
-        Check the browser console (F12) for more details.
-      </p>
-    </div>
-  `;
-  throw error;
-}
+        </pre>
+        <button 
+          onclick="window.location.reload()" 
+          style="margin-top: 1rem; padding: 0.5rem 1rem; background: #3b82f6; color: white; border: none; border-radius: 0.25rem; cursor: pointer;"
+        >
+          Reload Page
+        </button>
+        <p style="margin-top: 1rem; font-size: 0.875rem; color: #6b7280;">
+          Check the browser console (F12) for more details.
+        </p>
+      </div>
+    `;
+    throw error;
+  }
+})();

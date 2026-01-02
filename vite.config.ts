@@ -179,7 +179,7 @@ export default defineConfig(({ mode }) => {
           globPatterns:
             mode === "development"
               ? [] // Don't precache anything in development
-              : ["**/*.{js,css,html,ico,png,svg,woff,woff2}"],
+              : ["**/*.{js,css,ico,png,svg,woff,woff2}"], // CRITICAL: Exclude HTML - never cache index.html
           globIgnores: [
             "**/node_modules/**/*",
             "**/src/**/*", // Exclude all source files
@@ -188,6 +188,7 @@ export default defineConfig(({ mode }) => {
             "**/*.map",
             "**/*.ts", // Exclude TypeScript source files
             "**/*.tsx", // Exclude TSX source files
+            "**/*.html", // CRITICAL: Never cache HTML files - always fetch fresh HTML to prevent boot crashes
             "**/kids-video-calling-kindle.html", // Exclude files that return 403
             "**/*-kindle.html", // Exclude kindle-specific pages
             "**/date-fns/**/*", // Exclude date-fns from PWA precaching to avoid build issues
