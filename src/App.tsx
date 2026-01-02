@@ -5,8 +5,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient } from "@tanstack/react-query";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
-import { lazy, Suspense, useEffect, useState, createContext, useContext } from "react";
-import { BrowserRouter, Navigate, Route, Routes, useNavigate, useLocation, UNSAFE_NavigationContext } from "react-router-dom";
+import { lazy, Suspense, useEffect, useState } from "react";
+import { BrowserRouter, Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import { SpeedInsights } from "@vercel/speed-insights/react";
 import { Analytics } from "@vercel/analytics/react";
 
@@ -86,14 +86,10 @@ const RoutePrefetcher = () => {
 };
 
 // Keep small/essential pages as regular imports (needed immediately)
-// Note: Index uses Router hooks so we need to ensure Router context is ready
+import Index from "./pages/Index";
 import NetworkError from "./pages/NetworkError";
 import NotFound from "./pages/NotFound";
 import ServerError from "./pages/ServerError";
-
-// Lazy load Index to prevent Router context errors on mobile
-// Index uses useNavigate and useSearchParams which require Router context
-const Index = lazy(() => import("./pages/Index"));
 
 // Lazy load all other pages for code splitting
 const ParentAuth = lazy(() => import("./pages/ParentAuth"));
@@ -149,45 +145,6 @@ const PageLoader = () => {
       </div>
     </div>
   );
-};
-
-// RouterReadyGuard - ensures Router context is available before rendering children
-// This prevents "Cannot destructure property 'basename'" errors on mobile devices
-// where the Router context may not be immediately available during initial render
-const RouterReadyGuard = ({ children }: { children: React.ReactNode }) => {
-  const [isReady, setIsReady] = useState(false);
-  
-  // Use the UNSAFE_NavigationContext to check if Router is ready
-  // This is the internal context that useNavigate/useLocation depend on
-  const navigationContext = useContext(UNSAFE_NavigationContext);
-  
-  useEffect(() => {
-    // Check if Router context is available
-    if (navigationContext?.navigator) {
-      setIsReady(true);
-    } else {
-      // If not ready, wait a bit and check again
-      const checkReady = () => {
-        if (navigationContext?.navigator) {
-          setIsReady(true);
-        }
-      };
-      
-      // Use requestAnimationFrame for faster check
-      const rafId = requestAnimationFrame(checkReady);
-      // Also set a timeout as fallback
-      const timeoutId = setTimeout(() => setIsReady(true), 100);
-      
-      return () => {
-        cancelAnimationFrame(rafId);
-        clearTimeout(timeoutId);
-      };
-    }
-  }, [navigationContext]);
-  
-  // Always render children - the guard is just to trigger a re-render
-  // after Router context is confirmed ready
-  return <>{children}</>;
 };
 
 // Configure QueryClient with error handling and caching
@@ -253,8 +210,7 @@ const NativeAndroidInitializer = () => {
 };
 
 // Component to handle widget intents and deep links
-// Inner component that uses Router hooks - only rendered after Router context is ready
-const WidgetIntentHandlerInner = () => {
+const WidgetIntentHandler = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -311,30 +267,6 @@ const WidgetIntentHandlerInner = () => {
   }, [navigate]);
 
   return null;
-};
-
-// Outer wrapper that defers mounting until Router context is ready
-// This prevents "Cannot destructure property 'basename'" errors on mobile devices
-const WidgetIntentHandler = () => {
-  const [mounted, setMounted] = useState(false);
-  
-  useEffect(() => {
-    // Wait for Router context to be ready before mounting
-    // Use requestIdleCallback for best performance, fallback to setTimeout
-    const schedule = (callback: () => void) => {
-      if ('requestIdleCallback' in window) {
-        requestIdleCallback(callback, { timeout: 1000 });
-      } else {
-        setTimeout(callback, 200);
-      }
-    };
-    
-    schedule(() => setMounted(true));
-  }, []);
-  
-  if (!mounted) return null;
-  
-  return <WidgetIntentHandlerInner />;
 };
 
 // Component to manage widget data updates
@@ -400,31 +332,19 @@ const SessionManager = () => {
   return null;
 };
 
-// Analytics removed from inside BrowserRouter to prevent Router context errors on mobile
-// Vercel Analytics internally uses Router hooks which can fail on mobile if Router context isn't ready
-// Moving it outside BrowserRouter prevents crashes, though it won't auto-track route changes
-
 // Component to render deferred global components after initial load
 // These are lazy-loaded to improve FCP but should mount quickly after
-// CRITICAL: On mobile devices, Router context initialization can take longer
-// Use longer delays to prevent "Cannot destructure property 'basename'" errors
 const DeferredGlobalComponents = () => {
   const [mounted, setMounted] = useState(false);
   
   useEffect(() => {
-    // Wait for Router context to be ready before mounting components that use Router hooks
-    // Mobile devices need longer delays due to slower initialization
-    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
-      typeof navigator !== 'undefined' ? navigator.userAgent : ''
-    );
-    
+    // Wait for initial paint then mount deferred components
     // Use requestIdleCallback for best performance, fallback to setTimeout
     const schedule = (callback: () => void) => {
       if ('requestIdleCallback' in window) {
-        requestIdleCallback(callback, { timeout: isMobile ? 2000 : 1000 });
+        requestIdleCallback(callback, { timeout: 1000 });
       } else {
-        // Mobile devices need longer delay to ensure Router context is ready
-        setTimeout(callback, isMobile ? 500 : 200);
+        setTimeout(callback, 100);
       }
     };
     
@@ -481,25 +401,19 @@ const App = () => {
             <Sonner />
           </Suspense>
           <SafeAreaLayout className="w-full overflow-x-hidden">
-            {/* ErrorBoundary wraps BrowserRouter to catch Router context errors on mobile */}
-            {/* These errors occur when Router hooks are called before context is ready */}
-            <ErrorBoundary>
-              <BrowserRouter
-                future={{
-                  v7_startTransition: true,
-                  v7_relativeSplatPath: true,
-                }}
-              >
-                {/* WidgetIntentHandler - deferred to prevent Router context errors on mobile */}
-                <ErrorBoundary fallback={null}>
-                  <WidgetIntentHandler />
-                </ErrorBoundary>
-                {/* Deferred global components - loaded after initial paint */}
-                <DeferredGlobalComponents />
-                {/* RouterReadyGuard ensures Router context is ready before rendering routes */}
-                <RouterReadyGuard>
-                  <Suspense fallback={<PageLoader />}>
-                    <Routes>
+            <BrowserRouter
+              future={{
+                v7_startTransition: true,
+                v7_relativeSplatPath: true,
+              }}
+            >
+              <ErrorBoundary fallback={null}>
+                <WidgetIntentHandler />
+              </ErrorBoundary>
+              {/* Deferred global components - loaded after initial paint */}
+              <DeferredGlobalComponents />
+              <Suspense fallback={<PageLoader />}>
+                <Routes>
                   <Route path="/" element={<Index />} />
                   <Route path="/parent/auth" element={<ParentAuth />} />
                   <Route path="/verify-email" element={<VerifyEmail />} />
@@ -586,27 +500,15 @@ const App = () => {
                   {/* Error pages */}
                   <Route path="/error/server" element={<ServerError />} />
                   <Route path="/error/network" element={<NetworkError />} />
-                    {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-                    <Route path="*" element={<NotFound />} />
-                  </Routes>
-                </Suspense>
-                </RouterReadyGuard>
-              </BrowserRouter>
-            </ErrorBoundary>
+                  {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </Suspense>
+            </BrowserRouter>
           </SafeAreaLayout>
-          {/* Vercel Analytics - outside BrowserRouter to prevent Router context errors on mobile */}
-          {/* Vercel Analytics internally uses Router hooks which can fail if Router context isn't ready */}
-          {/* Moving outside BrowserRouter prevents crashes, though it won't auto-track route changes */}
-          <ErrorBoundary fallback={null}>
-            <Analytics 
-              debug={typeof window !== 'undefined' && localStorage.getItem('debug_analytics') === '1'}
-            />
-          </ErrorBoundary>
-          {/* Vercel Speed Insights - outside BrowserRouter to match working version */}
-          {/* This prevents Router context initialization issues on mobile devices */}
-          <SpeedInsights 
-            debug={typeof window !== 'undefined' && localStorage.getItem('debug_analytics') === '1'}
-          />
+          {/* Analytics outside BrowserRouter - doesn't need Router context */}
+          <Analytics />
+          <SpeedInsights />
         </TooltipProvider>
       </PersistQueryClientProvider>
     </ErrorBoundary>
