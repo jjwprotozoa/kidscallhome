@@ -503,6 +503,12 @@ workflows:
     name: iOS Build
     max_build_duration: 120
     instance_type: mac_mini_m2
+    # App Store Connect Integration
+    # References the App Store Connect API key stored in Codemagic Team Settings
+    # Integration name: "codemagic" (must match the key name in Codemagic Team Settings)
+    # To change: Update the integration name here and ensure it exists in Codemagic Team Settings → Integrations → App Store Connect
+    integrations:
+      app_store_connect: codemagic
     environment:
       groups:
         - ios_certificates
@@ -917,15 +923,40 @@ workflows:
           
           echo "✅ Provisioning profiles configured"
 
-      - name: Increment build number (if App Store Connect API key configured)
+      - name: Set build number for App Store distribution
         script: |
-          if [ ! -z "$APP_STORE_APPLE_ID" ] && [ ! -z "$APP_STORE_CONNECT_API_KEY_ID" ]; then
-            cd ios/App
-            LATEST_BUILD_NUMBER=$(app-store-connect get-latest-app-store-build-number "$APP_STORE_APPLE_ID" || echo "0")
-            agvtool new-version -all $(($LATEST_BUILD_NUMBER + 1))
+          cd ios/App
+          echo "=== Setting Build Number ==="
+          
+          # Use Codemagic's BUILD_NUMBER if available (auto-increments per build)
+          # Otherwise fall back to timestamp-based build number
+          if [ ! -z "$BUILD_NUMBER" ]; then
+            BUILD_VERSION="$BUILD_NUMBER"
+            echo "Using Codemagic BUILD_NUMBER: $BUILD_VERSION"
           else
-            echo "⚠️ Skipping build number increment - App Store Connect not configured"
+            # Fallback: Use timestamp as build number (ensures uniqueness)
+            BUILD_VERSION=$(date +%s)
+            echo "Using timestamp-based build number: $BUILD_VERSION"
           fi
+          
+          # Update CFBundleVersion in Info.plist
+          INFO_PLIST="App/Info.plist"
+          if [ -f "$INFO_PLIST" ]; then
+            /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_VERSION" "$INFO_PLIST" 2>/dev/null || \
+            /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string $BUILD_VERSION" "$INFO_PLIST" 2>/dev/null || true
+            echo "✅ Updated CFBundleVersion to $BUILD_VERSION in Info.plist"
+          fi
+          
+          # Also update in Xcode project file (project.pbxproj)
+          PROJECT_FILE=$(find . -name "*.xcodeproj" -type d | head -1)
+          if [ ! -z "$PROJECT_FILE" ]; then
+            PBXPROJ="$PROJECT_FILE/project.pbxproj"
+            # Update CURRENT_PROJECT_VERSION in project.pbxproj
+            sed -i '' "s/CURRENT_PROJECT_VERSION = [^;]*/CURRENT_PROJECT_VERSION = $BUILD_VERSION/g" "$PBXPROJ" 2>/dev/null || true
+            echo "✅ Updated CURRENT_PROJECT_VERSION to $BUILD_VERSION in project.pbxproj"
+          fi
+          
+          echo "Final build number: $BUILD_VERSION"
 
       - name: Build IPA for distribution
         script: |
@@ -946,10 +977,53 @@ workflows:
         notify:
           success: true
           failure: true
-      # Uncomment and configure after setting up App Store Connect API key
-      # app_store_connect:
-      #   auth: integration
-      #   submit_to_testflight: true
-      #   beta_groups:
-      #     - "Internal Testers"
-      #   submit_to_app_store: false
+      # App Store Connect / TestFlight Publishing Configuration
+      # 
+      # CONFIGURATION NOTES:
+      # - auth: integration - Uses the App Store Connect API key stored in Codemagic
+      #   - Integration name: "codemagic" (must match the key name in Codemagic Team Settings)
+      #   - To change: Update the integration name in Codemagic Team Settings → Integrations → App Store Connect
+      #   - Required environment variables (set in Codemagic Team Settings):
+      #     * APP_STORE_CONNECT_API_KEY_ID - Your App Store Connect API Key ID
+      #     * APP_STORE_CONNECT_ISSUER_ID - Your App Store Connect Issuer ID
+      #     * APP_STORE_CONNECT_API_KEY - Your App Store Connect API private key (P8 file content)
+      #
+      # - submit_to_testflight: true - Automatically uploads successful builds to TestFlight
+      #   - Set to false to disable TestFlight uploads (builds will still be available as artifacts)
+      #
+      # - beta_groups: List of TestFlight beta group names to automatically distribute to
+      #   - Builds will be automatically distributed to these groups after TestFlight upload
+      #   - Common groups: "Internal Testers", "External Testers", "QA Team"
+      #   - Groups must exist in App Store Connect → TestFlight → Groups
+      #   - To disable auto-distribution: Comment out or remove the beta_groups section
+      #
+      # - submit_to_app_store: true - Automatically submits builds to App Store for review
+      #   - Set to false for TestFlight-only distribution (no App Store submission)
+      #   - When true: Builds are uploaded to TestFlight AND submitted to App Store review
+      #
+      # BUNDLE ID & TEAM CONFIGURATION:
+      # - Bundle ID: Set in vars.BUNDLE_ID (currently: com.kidscallhome.app)
+      #   - To change: Update line 518 in this file (search for "BUNDLE_ID:")
+      # - Team: Configured via ios_signing section (around line 530-540)
+      #   - Distribution type: app_store (required for TestFlight/App Store)
+      #   - Bundle identifier: Must match vars.BUNDLE_ID
+      #
+      # APPLE ID:
+      # - APP_STORE_APPLE_ID: Set in vars.APP_STORE_APPLE_ID (currently: 6756827237)
+      #   - To change: Update line 522 in this file (search for "APP_STORE_APPLE_ID:")
+      #   - Find your Apple ID in App Store Connect → My Apps → [Your App] → App Information
+      #
+      app_store_connect:
+        auth: integration
+        # Integration name: "codemagic" (configured in Codemagic Team Settings)
+        # To use a different integration, change the name here and ensure it exists in Codemagic
+        submit_to_testflight: true
+        # Automatic TestFlight distribution to beta groups
+        # Uncomment and customize the group names to match your TestFlight groups in App Store Connect
+        # Groups must be created in App Store Connect → TestFlight → Groups before they can be used here
+        beta_groups:
+          - "Internal Testers"  # Change to your actual TestFlight group name(s)
+        # Automatic App Store submission
+        # When true: Builds are uploaded to TestFlight AND submitted to App Store for review
+        # When false: Builds are uploaded to TestFlight only (no App Store submission)
+        submit_to_app_store: true
