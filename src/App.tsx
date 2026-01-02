@@ -210,7 +210,8 @@ const NativeAndroidInitializer = () => {
 };
 
 // Component to handle widget intents and deep links
-const WidgetIntentHandler = () => {
+// Inner component that uses Router hooks - only rendered after Router context is ready
+const WidgetIntentHandlerInner = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -267,6 +268,30 @@ const WidgetIntentHandler = () => {
   }, [navigate]);
 
   return null;
+};
+
+// Outer wrapper that defers mounting until Router context is ready
+// This prevents "Cannot destructure property 'basename'" errors on mobile devices
+const WidgetIntentHandler = () => {
+  const [mounted, setMounted] = useState(false);
+  
+  useEffect(() => {
+    // Wait for Router context to be ready before mounting
+    // Use requestIdleCallback for best performance, fallback to setTimeout
+    const schedule = (callback: () => void) => {
+      if ('requestIdleCallback' in window) {
+        requestIdleCallback(callback, { timeout: 1000 });
+      } else {
+        setTimeout(callback, 200);
+      }
+    };
+    
+    schedule(() => setMounted(true));
+  }, []);
+  
+  if (!mounted) return null;
+  
+  return <WidgetIntentHandlerInner />;
 };
 
 // Component to manage widget data updates
