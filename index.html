@@ -9,6 +9,10 @@
       name="viewport"
       content="width=device-width, initial-scale=1, viewport-fit=cover"
     />
+    <!-- Cache control hints for iOS Safari -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
     <title>Kids Call Home – Safe Video Calls for Kids Without a Phone Number or SIM Card</title>
     <!-- Resource hints for performance optimization -->
     <!-- Preconnect to self-origin for faster asset loading -->
@@ -680,6 +684,108 @@
         if (ssrFallback && window.location.pathname === "/") {
           ssrFallback.style.display = "block";
         }
+        
+        // =============================================================================
+        // iOS CACHE RECOVERY MECHANISM
+        // =============================================================================
+        // iOS Safari has aggressive service worker caching that can cause the app to
+        // fail loading after updates. This mechanism detects loading failures and
+        // offers to clear the cache and reload.
+        // =============================================================================
+        
+        var loadTimeout = null;
+        var hasLoaded = false;
+        
+        // Mark app as loaded when React renders
+        window.__appLoaded = function() {
+          hasLoaded = true;
+          if (loadTimeout) {
+            clearTimeout(loadTimeout);
+            loadTimeout = null;
+          }
+        };
+        
+        // Function to show recovery UI
+        function showRecoveryUI() {
+          if (hasLoaded) return; // App loaded successfully
+          
+          var loadingEl = document.getElementById('app-loading');
+          if (loadingEl) {
+            loadingEl.innerHTML = '<div class="loader-content" style="max-width: 320px; padding: 1rem;">' +
+              '<h2 style="font-size: 1.25rem; font-weight: 600; margin-bottom: 0.5rem; color: #0f172a;">Loading Issue Detected</h2>' +
+              '<p style="font-size: 0.875rem; color: #6b7280; margin-bottom: 1rem;">The app is having trouble loading. This can happen after an update.</p>' +
+              '<button onclick="window.__clearCacheAndReload()" style="background: #3b82f6; color: white; border: none; padding: 0.75rem 1.5rem; border-radius: 0.5rem; font-size: 1rem; cursor: pointer; width: 100%; margin-bottom: 0.5rem;">Clear Cache & Reload</button>' +
+              '<button onclick="window.location.reload()" style="background: #f3f4f6; color: #374151; border: none; padding: 0.75rem 1.5rem; border-radius: 0.5rem; font-size: 0.875rem; cursor: pointer; width: 100%;">Just Reload</button>' +
+              '</div>';
+          }
+        }
+        
+        // Function to clear all caches and service worker, then reload
+        window.__clearCacheAndReload = async function() {
+          try {
+            // Show loading state
+            var loadingEl = document.getElementById('app-loading');
+            if (loadingEl) {
+              loadingEl.innerHTML = '<div class="loader-content">' +
+                '<div class="loader-spinner"></div>' +
+                '<p style="margin-top: 1rem; color: #6b7280;">Clearing cache...</p>' +
+                '</div>';
+            }
+            
+            // Unregister all service workers
+            if ('serviceWorker' in navigator) {
+              var registrations = await navigator.serviceWorker.getRegistrations();
+              for (var reg of registrations) {
+                await reg.unregister();
+              }
+            }
+            
+            // Clear all caches
+            if ('caches' in window) {
+              var cacheNames = await caches.keys();
+              for (var name of cacheNames) {
+                await caches.delete(name);
+              }
+            }
+            
+            // Clear localStorage cache keys (but keep auth)
+            var keysToRemove = [];
+            for (var i = 0; i < localStorage.length; i++) {
+              var key = localStorage.key(i);
+              if (key && (key.includes('cache') || key.includes('workbox') || key.includes('sw-'))) {
+                keysToRemove.push(key);
+              }
+            }
+            keysToRemove.forEach(function(key) {
+              localStorage.removeItem(key);
+            });
+            
+            // Force reload from server (bypass cache)
+            window.location.reload(true);
+          } catch (e) {
+            console.error('Failed to clear cache:', e);
+            // Fallback: just reload
+            window.location.reload(true);
+          }
+        };
+        
+        // Set a timeout to show recovery UI if app doesn't load
+        // iOS Safari can get stuck with stale service worker cache
+        loadTimeout = setTimeout(function() {
+          if (!hasLoaded) {
+            showRecoveryUI();
+          }
+        }, 10000); // 10 seconds timeout
+        
+        // Also detect if main.tsx fails to load (script error)
+        window.addEventListener('error', function(e) {
+          // Check if it's a script loading error
+          if (e.target && e.target.tagName === 'SCRIPT') {
+            console.error('Script failed to load:', e.target.src);
+            // Show recovery UI after a short delay
+            setTimeout(showRecoveryUI, 1000);
+          }
+        }, true);
       })();
     </script>
     <script type="module" src="/src/main.tsx"></script>

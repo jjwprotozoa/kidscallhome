@@ -65,6 +65,12 @@ try {
   root.render(<App />);
   safeLog.log("✅ [APP INIT] App rendered successfully");
 
+  // Signal to the recovery mechanism that the app has loaded successfully
+  // This prevents the recovery UI from showing on successful loads
+  if (typeof window !== "undefined" && typeof (window as unknown as { __appLoaded?: () => void }).__appLoaded === "function") {
+    (window as unknown as { __appLoaded: () => void }).__appLoaded();
+  }
+
   // Function to hide loading screen
   const hideLoadingScreen = () => {
     const loadingElement = document.getElementById("app-loading");

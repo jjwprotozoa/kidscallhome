@@ -2,28 +2,39 @@
 // Service Worker for PWA push notifications and background tasks
 
 // Increment version to force cache refresh when deploying breaking changes
-const CACHE_NAME = 'kidscallhome-v2';
-const RUNTIME_CACHE = 'kidscallhome-runtime-v2';
+// IMPORTANT: Increment this version number when making breaking changes
+const CACHE_VERSION = 3;
+const CACHE_NAME = `kidscallhome-v${CACHE_VERSION}`;
+const RUNTIME_CACHE = `kidscallhome-runtime-v${CACHE_VERSION}`;
+
+// iOS Safari detection - iOS has unique caching issues that require special handling
+const isIOS = /iPad|iPhone|iPod/.test(self.navigator?.userAgent || '') || 
+  (self.navigator?.platform === 'MacIntel' && self.navigator?.maxTouchPoints > 1);
 
 // Install event - cache static assets
 self.addEventListener('install', (event) => {
-  console.log('[SW] Service Worker installing...');
+  console.log('[SW] Service Worker installing... version:', CACHE_VERSION);
   self.skipWaiting(); // Activate immediately
 });
 
 // Activate event - clean up old caches
 self.addEventListener('activate', (event) => {
-  console.log('[SW] Service Worker activating...');
+  console.log('[SW] Service Worker activating... version:', CACHE_VERSION);
   event.waitUntil(
     caches.keys().then((cacheNames) => {
       return Promise.all(
         cacheNames
-          .filter((name) => name !== CACHE_NAME && name !== RUNTIME_CACHE)
-          .map((name) => caches.delete(name))
+          // Delete ALL old caches that don't match current version
+          .filter((name) => name.startsWith('kidscallhome') && name !== CACHE_NAME && name !== RUNTIME_CACHE)
+          .map((name) => {
+            console.log('[SW] Deleting old cache:', name);
+            return caches.delete(name);
+          })
       );
     })
   );
-  return self.clients.claim(); // Take control of all pages immediately
+  // Take control of all pages immediately - critical for iOS
+  return self.clients.claim();
 });
 
 // Handle push notifications
@@ -224,10 +235,21 @@ self.addEventListener('fetch', (event) => {
     'va.vercel-scripts.com'
   ];
   
+  // Supabase domains - NEVER cache, always go to network
+  const supabaseDomains = [
+    '.supabase.co'
+  ];
+  
   // Strict hostname matching helper: exact match OR subdomain of the domain
   const isAnalyticsDomain = (hostname, domain) => {
     return hostname === domain || hostname.endsWith('.' + domain);
   };
+  
+  // CRITICAL: Skip Supabase requests entirely - let browser handle them
+  // This prevents stale auth tokens and API responses from being cached
+  if (supabaseDomains.some(domain => url.hostname.includes(domain))) {
+    return; // Don't intercept - let browser handle Supabase directly
+  }
   
   // CRITICAL: Skip analytics requests to ensure they fire reliably
   // Uses strict matching to prevent bypass via malicious subdomains
@@ -285,12 +307,71 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Production: use cache-first strategy with network fallback
+  // =============================================================================
+  // PRODUCTION CACHING STRATEGY
+  // =============================================================================
+  // iOS Safari has aggressive caching that can cause stale content issues.
+  // We use NETWORK-FIRST for HTML/navigation and CACHE-FIRST for static assets.
+  // This ensures iOS users always get fresh HTML while benefiting from cached assets.
+  // =============================================================================
+
   // Double-check: Never intercept Google Fonts (should already be skipped above)
   if (googleFontsDomains.some(domain => url.hostname.includes(domain))) {
     return;
   }
   
+  // For navigation requests (HTML pages), use NETWORK-FIRST strategy
+  // This is critical for iOS to prevent serving stale HTML that references
+  // old JavaScript bundles that no longer exist
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request)
+        .then((networkResponse) => {
+          // Network succeeded, return fresh response
+          return networkResponse;
+        })
+        .catch((error) => {
+          console.warn('[SW] Navigation fetch failed, trying cache:', error);
+          // Network failed, try cache as fallback
+          return caches.match(event.request).then((cachedResponse) => {
+            if (cachedResponse) {
+              return cachedResponse;
+            }
+            // No cache available, return offline page
+            return new Response(`
+              <!DOCTYPE html>
+              <html>
+              <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1">
+                <title>Kids Call Home - Offline</title>
+                <style>
+                  body { font-family: system-ui, sans-serif; padding: 2rem; text-align: center; }
+                  h1 { color: #3b82f6; }
+                  button { background: #3b82f6; color: white; border: none; padding: 0.75rem 1.5rem; border-radius: 0.5rem; font-size: 1rem; cursor: pointer; margin-top: 1rem; }
+                  button:hover { background: #2563eb; }
+                  .retry { margin-top: 2rem; }
+                </style>
+              </head>
+              <body>
+                <h1>Kids Call Home</h1>
+                <p>You appear to be offline. Please check your internet connection.</p>
+                <div class="retry">
+                  <button onclick="window.location.reload()">Try Again</button>
+                </div>
+              </body>
+              </html>
+            `, {
+              status: 503,
+              headers: { 'Content-Type': 'text/html' }
+            });
+          });
+        })
+    );
+    return;
+  }
+  
+  // For static assets (JS, CSS, images), use cache-first with network fallback
   event.respondWith(
     caches.match(event.request).then((response) => {
       // Return cached version if available
@@ -300,22 +381,14 @@ self.addEventListener('fetch', (event) => {
 
       // Fetch from network with error handling
       return fetch(event.request).catch((error) => {
-        const url = new URL(event.request.url);
+        const reqUrl = new URL(event.request.url);
         
         // Skip logging for known external APIs that don't support CORS (expected to fail)
-        const isKnownExternalAPI = knownExternalAPIs.some(api => url.hostname.includes(api));
+        const isKnownExternalAPI = knownExternalAPIs.some(api => reqUrl.hostname.includes(api));
         
         // Only log errors for internal requests or unexpected failures
         if (!isKnownExternalAPI) {
           console.error('[SW] Fetch failed for:', event.request.url, error);
-        }
-        
-        // For navigation requests, return a basic HTML response
-        if (event.request.mode === 'navigate') {
-          return new Response('Network error. Please check your connection.', {
-            status: 408,
-            headers: { 'Content-Type': 'text/html' }
-          });
         }
         
         // For external API requests that fail (CORS, etc.), return empty response
@@ -332,9 +405,9 @@ self.addEventListener('fetch', (event) => {
       });
     }).catch((error) => {
       // Only log unexpected errors
-      const url = new URL(event.request.url);
+      const reqUrl = new URL(event.request.url);
       const isKnownExternalAPI = knownExternalAPIs.some(api => 
-        url.hostname.includes(api)
+        reqUrl.hostname.includes(api)
       );
       
       if (!isKnownExternalAPI) {
