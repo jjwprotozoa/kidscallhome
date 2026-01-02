@@ -132,17 +132,53 @@ const SupportedDevices = lazy(() => import("./pages/SupportedDevices"));
 // The initial HTML loading screen handles the first load, this is for route transitions
 const PageLoader = () => {
   // If initial loading screen is still visible, don't show another spinner
+  // But on iOS, we need to be careful - the loading screen might be fading out
   const initialLoading = document.getElementById("app-loading");
-  if (initialLoading) {
+  const isFadingOut = initialLoading?.classList.contains("fade-out");
+  
+  // Only skip if loading screen is visible AND not fading out
+  if (initialLoading && !isFadingOut) {
     return null; // Let the HTML loading screen handle it
   }
   
+  // Use inline styles as fallback for iOS Safari where CSS might not be fully loaded
   return (
-    <div className="flex items-center justify-center min-h-[100dvh]">
-      <div className="text-center">
-        <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]" />
-        <p className="mt-4 text-sm text-muted-foreground">Loading...</p>
+    <div 
+      className="flex items-center justify-center min-h-[100dvh]"
+      style={{ 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'center', 
+        minHeight: '100dvh',
+        backgroundColor: '#ffffff'
+      }}
+    >
+      <div className="text-center" style={{ textAlign: 'center' }}>
+        <div 
+          className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]"
+          style={{
+            display: 'inline-block',
+            width: '32px',
+            height: '32px',
+            borderRadius: '50%',
+            border: '4px solid #e5e7eb',
+            borderTopColor: '#3b82f6',
+            animation: 'spin 0.8s linear infinite'
+          }}
+        />
+        <p 
+          className="mt-4 text-sm text-muted-foreground"
+          style={{ marginTop: '1rem', fontSize: '0.875rem', color: '#6b7280' }}
+        >
+          Loading...
+        </p>
       </div>
+      {/* Inline keyframes for spinner animation as fallback */}
+      <style>{`
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
     </div>
   );
 };
@@ -347,41 +383,31 @@ const DeferredGlobalComponents = () => {
   
   useEffect(() => {
     // Wait for initial paint then mount deferred components
-    // iOS Safari has severe issues with Router context - use much longer delay
-    // and wait for user interaction or navigation before mounting
+    // iOS Safari needs a longer delay to ensure Router context is ready
+    // but we should NOT wait for user interaction as that causes blank screen issues
     
     if (isIOS) {
-      // On iOS, wait for either:
-      // 1. User interaction (click, touch, scroll)
-      // 2. 5 seconds timeout (fallback)
-      // This ensures Router context is fully ready
+      // On iOS, use a fixed delay to ensure Router context is ready
+      // This is more reliable than waiting for user interaction which can cause
+      // the page to appear blank while scrolling
       
-      let hasMounted = false;
-      
-      const mountComponents = () => {
-        if (hasMounted) return;
-        hasMounted = true;
-        setMounted(true);
-        // Clean up listeners
-        window.removeEventListener('click', mountComponents);
-        window.removeEventListener('touchstart', mountComponents);
-        window.removeEventListener('scroll', mountComponents);
+      // Use double requestAnimationFrame + setTimeout for iOS stability
+      // This ensures React has fully committed the render before mounting deferred components
+      const mountWithDelay = () => {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            // After two animation frames, add a small delay for iOS Safari
+            setTimeout(() => {
+              setMounted(true);
+            }, 500); // 500ms delay after paint is more reliable than waiting for interaction
+          });
+        });
       };
       
-      // Mount on user interaction
-      window.addEventListener('click', mountComponents, { once: true, passive: true });
-      window.addEventListener('touchstart', mountComponents, { once: true, passive: true });
-      window.addEventListener('scroll', mountComponents, { once: true, passive: true });
+      // Start the mounting process
+      mountWithDelay();
       
-      // Fallback: mount after 5 seconds if no interaction
-      const fallbackTimeout = setTimeout(mountComponents, 5000);
-      
-      return () => {
-        clearTimeout(fallbackTimeout);
-        window.removeEventListener('click', mountComponents);
-        window.removeEventListener('touchstart', mountComponents);
-        window.removeEventListener('scroll', mountComponents);
-      };
+      // No cleanup needed since we're using a simple timeout chain
     } else {
       // Non-iOS: use requestIdleCallback for best performance
       const schedule = (callback: () => void) => {

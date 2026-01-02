@@ -74,6 +74,18 @@ const Index = () => {
   // Smart routing: Check if user should be redirected
   // Only load Supabase when actually needed (lazy import to avoid loading on marketing page)
   useEffect(() => {
+    // Track if this effect instance is still active (for cleanup)
+    let isMounted = true;
+    
+    // Safety timeout: If auth check takes too long, show the page anyway
+    // This prevents blank screen on slow networks or iOS Safari issues
+    const safetyTimeout = setTimeout(() => {
+      if (isMounted) {
+        console.warn("⚠️ [INDEX] Auth check timeout - showing marketing page");
+        setIsCheckingAuth(false);
+      }
+    }, 3000); // 3 second safety timeout
+
     const checkAuthAndRedirect = async () => {
       try {
         const source =
@@ -90,7 +102,10 @@ const Index = () => {
         if (childSession) {
           try {
             JSON.parse(childSession);
-            navigate("/child/family", { replace: true });
+            clearTimeout(safetyTimeout);
+            if (isMounted) {
+              navigate("/child/family", { replace: true });
+            }
             return;
           } catch {
             // Invalid child session, continue to marketing page
@@ -98,7 +113,10 @@ const Index = () => {
         }
 
         if (isAppStoreTraffic) {
-          navigate("/parent/auth", { replace: true });
+          clearTimeout(safetyTimeout);
+          if (isMounted) {
+            navigate("/parent/auth", { replace: true });
+          }
           return;
         }
 
@@ -116,29 +134,43 @@ const Index = () => {
             data: { session },
           } = await supabase.auth.getSession();
 
-          if (session?.user) {
+          if (session?.user && isMounted) {
             const userRole = await getUserRole(session.user.id);
 
             if (userRole === "family_member") {
+              clearTimeout(safetyTimeout);
               navigate("/family-member/dashboard", { replace: true });
               return;
             } else if (userRole === "parent") {
+              clearTimeout(safetyTimeout);
               navigate("/parent/children", { replace: true });
               return;
             }
           }
         }
 
-        setIsCheckingAuth(false);
+        clearTimeout(safetyTimeout);
+        if (isMounted) {
+          setIsCheckingAuth(false);
+        }
       } catch (error) {
         // Silently fail - don't break marketing page if Supabase check fails
         console.error("Error checking auth:", error);
-        setIsCheckingAuth(false);
+        clearTimeout(safetyTimeout);
+        if (isMounted) {
+          setIsCheckingAuth(false);
+        }
       }
     };
 
     checkAuthAndRedirect();
-  }, [navigate, searchParams]);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(safetyTimeout);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navigate, searchParams]); // Intentionally exclude isCheckingAuth to prevent re-runs
 
   // Track page view
   useEffect(() => {
@@ -178,24 +210,67 @@ const Index = () => {
   }, []);
 
   if (isCheckingAuth) {
+    // Use inline styles as fallback in case Tailwind CSS hasn't loaded yet on iOS
+    // This prevents blank screen while checking auth
     return (
-      <div className="flex items-center justify-center min-h-[100dvh]">
-        <div className="text-center">
-          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-primary border-r-transparent" />
-          <p className="mt-4 text-sm text-muted-foreground">Loading...</p>
+      <div 
+        className="flex items-center justify-center min-h-[100dvh]"
+        style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center', 
+          minHeight: '100dvh',
+          backgroundColor: '#ffffff'
+        }}
+      >
+        <div className="text-center" style={{ textAlign: 'center' }}>
+          <div 
+            className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-primary border-r-transparent"
+            style={{
+              display: 'inline-block',
+              width: '32px',
+              height: '32px',
+              borderRadius: '50%',
+              border: '4px solid #e5e7eb',
+              borderTopColor: '#3b82f6',
+              animation: 'spin 1s linear infinite'
+            }}
+          />
+          <p 
+            className="mt-4 text-sm text-muted-foreground"
+            style={{ marginTop: '1rem', fontSize: '0.875rem', color: '#6b7280' }}
+          >
+            Loading...
+          </p>
         </div>
+        {/* Inline keyframes for spinner animation as fallback */}
+        <style>{`
+          @keyframes spin {
+            to { transform: rotate(360deg); }
+          }
+        `}</style>
       </div>
     );
   }
 
   return (
-    <main className="min-h-[100dvh] bg-background">
+    <main 
+      className="min-h-[100dvh] bg-background"
+      style={{ 
+        minHeight: '100dvh', 
+        backgroundColor: '#ffffff',
+        // Ensure content is visible even if CSS hasn't loaded
+        visibility: 'visible',
+        opacity: 1
+      }}
+    >
       {/* ============================================================
           HERO SECTION - Problem-focused with emotional hook
           ============================================================ */}
       <section
         className="relative overflow-hidden"
         aria-labelledby="hero-heading"
+        style={{ position: 'relative', overflow: 'hidden' }}
       >
         {/* Background gradient */}
         <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-background to-secondary/10 -z-10" />

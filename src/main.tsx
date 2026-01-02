@@ -63,15 +63,9 @@ try {
   const root = createRoot(rootElement);
   safeLog.log("⚛️ [APP INIT] Rendering App component...");
   root.render(<App />);
-  safeLog.log("✅ [APP INIT] App rendered successfully");
+  safeLog.log("✅ [APP INIT] App render initiated");
 
-  // Signal to the recovery mechanism that the app has loaded successfully
-  // This prevents the recovery UI from showing on successful loads
-  if (typeof window !== "undefined" && typeof (window as unknown as { __appLoaded?: () => void }).__appLoaded === "function") {
-    (window as unknown as { __appLoaded: () => void }).__appLoaded();
-  }
-
-  // Function to hide loading screen
+  // Function to hide loading screen and signal app loaded
   const hideLoadingScreen = () => {
     const loadingElement = document.getElementById("app-loading");
     if (loadingElement) {
@@ -82,13 +76,42 @@ try {
         loadingElement.remove();
       }, 200);
     }
+    
+    // Signal to the recovery mechanism that the app has loaded successfully
+    // This prevents the recovery UI from showing on successful loads
+    // CRITICAL: Only call this AFTER we've confirmed content is painted
+    if (typeof window !== "undefined" && typeof (window as unknown as { __appLoaded?: () => void }).__appLoaded === "function") {
+      (window as unknown as { __appLoaded: () => void }).__appLoaded();
+    }
   };
 
-  // Hide loading spinner immediately after React render (reduced delay for faster LCP)
-  // Single requestAnimationFrame is sufficient - double RAF was causing unnecessary delay
-  requestAnimationFrame(() => {
-    hideLoadingScreen();
-  });
+  // Detect iOS for special handling - iOS Safari needs more time for React to settle
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+  // Hide loading spinner after React render
+  // iOS Safari needs double requestAnimationFrame to ensure React has fully committed
+  // This prevents the blank screen issue where loading screen is removed before content is painted
+  if (isIOS) {
+    // iOS: Use triple RAF + delay to ensure paint is complete
+    // iOS Safari is notoriously slow at committing React renders
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          // Add a delay for iOS Safari to ensure content is visible
+          // 300ms gives iOS Safari enough time to paint the DOM
+          setTimeout(hideLoadingScreen, 300);
+        });
+      });
+    });
+  } else {
+    // Non-iOS: Double RAF is sufficient for most browsers
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        hideLoadingScreen();
+      });
+    });
+  }
 
   // Fallback timeout: If React doesn't render within 5 seconds, hide loading screen anyway
   // This prevents the app from being stuck on loading if there's an initialization issue
