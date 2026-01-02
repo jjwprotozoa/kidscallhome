@@ -3,6 +3,7 @@ import App from "./App.tsx";
 import "./index.css";
 import { safeLog } from "./utils/security";
 import { initApp } from "./boot/initApp";
+import { installErrorHandlers, bootLogger, startBootWatchdog, markBootReady } from "./boot/bootGate";
 
 // Disable console in production (fallback - esbuild should remove these)
 // CRITICAL: Always keep console.error and console.warn enabled for debugging
@@ -75,15 +76,24 @@ safeLog.log("🔍 [ENV] Environment variables check:", {
   keyLength: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY?.length || 0,
 });
 
+// Install global error handlers first
+installErrorHandlers();
+bootLogger.log("start", "Boot started");
+
 // Boot-safe initialization wrapper - never throws, always recovers
 // PERFORMANCE: Render React immediately, run boot in parallel to avoid blocking UI
 (async () => {
   try {
+    bootLogger.log("dom-ready", "DOM ready, starting React initialization");
+    
     // Remove SSR fallback content before React hydration to prevent mismatch
     const ssrFallback = rootElement.querySelector("main[data-ssr-fallback]");
     if (ssrFallback) {
       ssrFallback.remove();
     }
+
+    // Start boot watchdog
+    startBootWatchdog(8000);
 
     // Detect iOS for special handling (needed for both boot recovery and loading screen timing)
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
@@ -92,34 +102,38 @@ safeLog.log("🔍 [ENV] Environment variables check:", {
     // PERFORMANCE OPTIMIZATION: Render React immediately with default bootResult
     // Boot initialization runs in parallel and updates the app when complete
     // This eliminates the 3-4 second blocking delay on initial load
+    bootLogger.log("react-init", "Creating React root");
     safeLog.log("⚛️ [APP INIT] Creating React root immediately...");
     const root = createRoot(rootElement);
     
     // Start with default bootResult - app will work without it
     const defaultBootResult = { session: null, bootLog: ["boot:deferred"], ok: true };
+    bootLogger.log("react-init", "Rendering App component");
     safeLog.log("⚛️ [APP INIT] Rendering App component immediately...");
     root.render(<App bootResult={defaultBootResult} />);
     safeLog.log("✅ [APP INIT] App render initiated (non-blocking)");
 
     // Run boot initialization in parallel (non-blocking)
     // This allows React to render immediately while boot completes in background
+    bootLogger.log("auth-check", "Starting auth check");
     safeLog.log("⚛️ [APP INIT] Starting boot initialization in parallel...");
     (async () => {
       try {
+        bootLogger.log("auth-check", "Calling initApp");
         const bootResult = await initApp();
+        bootLogger.log("auth-check", `Auth check complete: ${bootResult.ok ? "ok" : "failed"}`);
         if (import.meta.env.DEV) {
           safeLog.log("⚛️ [APP INIT] Boot log:", bootResult.bootLog);
         }
 
         // iOS recovery path - detect repeated boot failures
-
-        if (isIOS && !bootResult.ok && !sessionStorage.getItem("ios_recovered")) {
+        if (isIOS && !bootResult.ok && !sessionStorage.getItem("kch_ios_autorecover")) {
+          bootLogger.log("failed", "iOS boot failure detected, triggering auto-recovery");
           safeLog.warn("⚠️ [APP INIT] iOS boot failure detected, attempting recovery...");
           try {
-            const { clearAppStorage } = await import("./utils/storage");
-            clearAppStorage();
-            sessionStorage.setItem("ios_recovered", "1");
-            window.location.reload();
+            const { recoverAndReload } = await import("./boot/bootGate");
+            sessionStorage.setItem("kch_ios_autorecover", "1");
+            await recoverAndReload({ mode: "reset" });
             return; // Exit early, reload will restart
           } catch {
             // If recovery fails, continue with normal boot
@@ -128,11 +142,16 @@ safeLog.log("🔍 [ENV] Environment variables check:", {
 
         // Update app with boot result when available
         // This allows React to use the boot result if needed, but doesn't block initial render
+        bootLogger.log("routes-ready", "Routes ready, updating app");
         root.render(<App bootResult={bootResult} />);
+        bootLogger.log("ready", "Boot complete");
+        markBootReady();
         safeLog.log("✅ [APP INIT] Boot complete, app updated");
       } catch (error) {
+        bootLogger.log("failed", `Boot failed: ${error instanceof Error ? error.message : String(error)}`, undefined, error instanceof Error ? error : undefined);
         safeLog.error("⚠️ [APP INIT] Boot failed, continuing with default:", error);
         // Continue with default bootResult - app should work without it
+        markBootReady(); // Still mark as ready to prevent watchdog timeout
       }
     })();
 

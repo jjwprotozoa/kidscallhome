@@ -55,7 +55,28 @@ export class ErrorBoundary extends Component<Props, State> {
       errorInfo: null,
       isRouterContextError: false,
       retryCount: 0,
+      bootLog: [],
     };
+  }
+
+  async componentDidMount() {
+    // Load boot log if debug mode
+    const showDebug = typeof window !== "undefined" && 
+      new URLSearchParams(window.location.search).get("debug") === "1";
+    
+    if (showDebug) {
+      try {
+        const stored = sessionStorage.getItem("kch_bootlog");
+        if (stored) {
+          this.setState({ bootLog: JSON.parse(stored) });
+        } else {
+          const { bootLogger } = await import("@/boot/bootGate");
+          this.setState({ bootLog: bootLogger.getLogs() });
+        }
+      } catch {
+        // Ignore errors
+      }
+    }
   }
 
   static getDerivedStateFromError(error: Error): Partial<State> {
@@ -142,30 +163,25 @@ export class ErrorBoundary extends Component<Props, State> {
   };
 
   handleSoftReset = async () => {
-    // Clear volatile cache and reload
+    // Use BootGate recovery
     try {
-      const { clearVolatileCache } = await import("@/utils/storage");
-      clearVolatileCache();
+      const { recoverAndReload } = await import("@/boot/bootGate");
+      await recoverAndReload({ mode: "soft" });
     } catch {
-      // Ignore import errors
+      // Fallback to simple reload
+      window.location.reload();
     }
-    window.location.reload();
   };
 
   handleForceLogout = async () => {
-    // Clear all storage and reload
+    // Use BootGate recovery with reset
     try {
-      const { clearAppStorage } = await import("@/utils/storage");
-      clearAppStorage();
-      // Also clear Supabase session
-      const { supabase } = await import("@/integrations/supabase/client");
-      await supabase.auth.signOut({ scope: 'local' }).catch(() => {
-        // Ignore signout errors
-      });
+      const { recoverAndReload } = await import("@/boot/bootGate");
+      await recoverAndReload({ mode: "reset" });
     } catch {
-      // Ignore errors during cleanup
+      // Fallback to simple reload
+      window.location.href = "/";
     }
-    window.location.href = "/";
   };
 
   render() {
@@ -184,6 +200,10 @@ export class ErrorBoundary extends Component<Props, State> {
       
       // For Router context errors that exhausted retries, show a simpler message
       const isRouterError = this.state.isRouterContextError;
+
+      // Check for debug mode
+      const showDebug = typeof window !== "undefined" && 
+        new URLSearchParams(window.location.search).get("debug") === "1";
 
       return (
         <div className="min-h-[100dvh] flex items-center justify-center bg-gradient-to-br from-primary/5 via-background to-secondary/5 p-4">
@@ -255,7 +275,7 @@ export class ErrorBoundary extends Component<Props, State> {
                 onClick={this.handleForceLogout}
                 className="flex-1"
               >
-                Start Fresh
+                Reset & Reload
               </Button>
               <Button
                 variant="outline"
@@ -265,6 +285,19 @@ export class ErrorBoundary extends Component<Props, State> {
                 Go Home
               </Button>
             </div>
+
+            {showDebug && this.state.bootLog.length > 0 && (
+              <div className="mt-4 pt-4 border-t">
+                <details className="text-sm">
+                  <summary className="cursor-pointer text-muted-foreground mb-2">
+                    Boot Log (debug mode)
+                  </summary>
+                  <pre className="mt-2 text-xs bg-muted p-2 rounded overflow-auto max-h-48 font-mono">
+                    {JSON.stringify(this.state.bootLog, null, 2)}
+                  </pre>
+                </details>
+              </div>
+            )}
           </Card>
         </div>
       );

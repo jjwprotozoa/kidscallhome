@@ -189,6 +189,7 @@ export default defineConfig(({ mode }) => {
             "**/*.ts", // Exclude TypeScript source files
             "**/*.tsx", // Exclude TSX source files
             "**/*.html", // CRITICAL: Never cache HTML files - always fetch fresh HTML to prevent boot crashes
+            "**/index.html", // Explicitly exclude index.html
             "**/kids-video-calling-kindle.html", // Exclude files that return 403
             "**/*-kindle.html", // Exclude kindle-specific pages
             "**/date-fns/**/*", // Exclude date-fns from PWA precaching to avoid build issues

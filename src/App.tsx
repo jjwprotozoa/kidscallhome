@@ -20,6 +20,7 @@ const PWAInstallPrompt = lazy(() => import("@/components/PWAInstallPrompt").then
 const UpdateAvailableToast = lazy(() => import("@/components/UpdateAvailableToast").then(m => ({ default: m.UpdateAvailableToast })));
 const Sonner = lazy(() => import("@/components/ui/sonner").then(m => ({ default: m.Toaster })));
 const Toaster = lazy(() => import("@/components/ui/toaster").then(m => ({ default: m.Toaster })));
+const BootGate = lazy(() => import("@/boot/bootGateComponent").then(m => ({ default: m.BootGate })));
 
 // Regular imports for hooks and utilities (small size, needed for functionality)
 import { useBadgeInitialization } from "@/hooks/useBadgeInitialization";
@@ -31,7 +32,7 @@ import {
   isNativeAndroid,
 } from "@/utils/nativeAndroid";
 import { loadWidgetData } from "@/utils/widgetData";
-import { initRoutePrefetching } from "@/utils/routePrefetch";
+import { initRoutePrefetching } from "@/utils/routePrefetch.ts";
 
 // Import functions for critical routes (used for both lazy loading and prefetching)
 const parentHomeImport = () => import("./pages/ParentHome");
@@ -466,7 +467,9 @@ const App = ({ bootResult }: AppProps = {}) => {
         client={queryClient}
         persistOptions={persistOptions}
       >
-        <TooltipProvider>
+        <Suspense fallback={null}>
+          <BootGate>
+            <TooltipProvider>
           <ErrorBoundary fallback={null}>
             <BadgeProvider />
           </ErrorBoundary>
@@ -594,7 +597,9 @@ const App = ({ bootResult }: AppProps = {}) => {
           {/* Analytics outside BrowserRouter - doesn't need Router context */}
           <Analytics />
           <SpeedInsights />
-        </TooltipProvider>
+            </TooltipProvider>
+          </BootGate>
+        </Suspense>
       </PersistQueryClientProvider>
     </ErrorBoundary>
   );
