@@ -6,7 +6,7 @@ import { QueryClient } from "@tanstack/react-query";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
 import { lazy, Suspense, useEffect, useState } from "react";
-import { BrowserRouter, Navigate, Route, Routes, useNavigate, useLocation } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import { SpeedInsights } from "@vercel/speed-insights/react";
 import { Analytics } from "@vercel/analytics/react";
 
@@ -332,32 +332,32 @@ const SessionManager = () => {
   return null;
 };
 
-// Debug helper for Vercel Analytics - logs mount and navigation events when debug_analytics=1
-// Zero overhead when disabled: returns null before any hooks to avoid location subscriptions
-const AnalyticsDebugHelper = () => {
-  const enabled = typeof window !== 'undefined' && localStorage.getItem('debug_analytics') === '1';
+// Deferred Analytics component - mounts after Router context is ready
+// This prevents Router context errors on mobile devices during initial load
+const DeferredAnalytics = () => {
+  const [mounted, setMounted] = useState(false);
   
-  // Early return BEFORE useLocation to avoid subscribing to route changes when disabled
-  if (!enabled) return null;
-  
-  return <AnalyticsDebugHelperInner />;
-};
-
-// Inner component only mounts when debug is enabled - subscribes to location changes
-const AnalyticsDebugHelperInner = () => {
-  const location = useLocation();
-
   useEffect(() => {
-    // eslint-disable-next-line no-console
-    console.log('[Analytics Debug] Analytics and SpeedInsights mounted inside BrowserRouter');
+    // Wait for Router context to be ready before mounting Analytics
+    // Use requestIdleCallback for best performance, fallback to setTimeout
+    const schedule = (callback: () => void) => {
+      if ('requestIdleCallback' in window) {
+        requestIdleCallback(callback, { timeout: 1000 });
+      } else {
+        setTimeout(callback, 200);
+      }
+    };
+    
+    schedule(() => setMounted(true));
   }, []);
-
-  useEffect(() => {
-    // eslint-disable-next-line no-console
-    console.log('[Analytics Debug] Route changed:', location.pathname);
-  }, [location.pathname]);
-
-  return null;
+  
+  if (!mounted) return null;
+  
+  return (
+    <Analytics 
+      debug={typeof window !== 'undefined' && localStorage.getItem('debug_analytics') === '1'}
+    />
+  );
 };
 
 // Component to render deferred global components after initial load
@@ -435,17 +435,11 @@ const App = () => {
                 v7_relativeSplatPath: true,
               }}
             >
-              {/* Vercel Analytics - inside BrowserRouter to reliably track SPA route changes */}
+              {/* Vercel Analytics - deferred mount to prevent Router context errors on mobile */}
               {/* Debug mode: localStorage.setItem("debug_analytics", "1") then reload */}
-              <Analytics 
-                debug={typeof window !== 'undefined' && localStorage.getItem('debug_analytics') === '1'}
-              />
-              {/* Vercel Speed Insights - inside BrowserRouter for consistent context */}
-              <SpeedInsights 
-                debug={typeof window !== 'undefined' && localStorage.getItem('debug_analytics') === '1'}
-              />
-              {/* Debug helper - logs route changes when debug_analytics=1 */}
-              <AnalyticsDebugHelper />
+              <ErrorBoundary fallback={null}>
+                <DeferredAnalytics />
+              </ErrorBoundary>
               <ErrorBoundary fallback={null}>
                 <WidgetIntentHandler />
               </ErrorBoundary>
@@ -545,6 +539,11 @@ const App = () => {
               </Suspense>
             </BrowserRouter>
           </SafeAreaLayout>
+          {/* Vercel Speed Insights - outside BrowserRouter to match working version */}
+          {/* This prevents Router context initialization issues on mobile devices */}
+          <SpeedInsights 
+            debug={typeof window !== 'undefined' && localStorage.getItem('debug_analytics') === '1'}
+          />
         </TooltipProvider>
       </PersistQueryClientProvider>
     </ErrorBoundary>
