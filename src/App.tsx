@@ -332,31 +332,69 @@ const SessionManager = () => {
   return null;
 };
 
+// Detect iOS for special handling
+const isIOSDevice = () => {
+  if (typeof navigator === 'undefined') return false;
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) || 
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+};
+
 // Component to render deferred global components after initial load
 // These are lazy-loaded to improve FCP but should mount quickly after
 const DeferredGlobalComponents = () => {
   const [mounted, setMounted] = useState(false);
+  const [isIOS] = useState(isIOSDevice);
   
   useEffect(() => {
     // Wait for initial paint then mount deferred components
-    // iOS Safari needs a longer delay to ensure Router context is ready
-    // Use requestIdleCallback for best performance, fallback to setTimeout
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
-      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    // iOS Safari has severe issues with Router context - use much longer delay
+    // and wait for user interaction or navigation before mounting
     
-    // iOS needs more time for Router context to be fully ready
-    const delay = isIOS ? 1500 : 100;
-    
-    const schedule = (callback: () => void) => {
-      if ('requestIdleCallback' in window && !isIOS) {
-        requestIdleCallback(callback, { timeout: 1000 });
-      } else {
-        setTimeout(callback, delay);
-      }
-    };
-    
-    schedule(() => setMounted(true));
-  }, []);
+    if (isIOS) {
+      // On iOS, wait for either:
+      // 1. User interaction (click, touch, scroll)
+      // 2. 5 seconds timeout (fallback)
+      // This ensures Router context is fully ready
+      
+      let hasMounted = false;
+      
+      const mountComponents = () => {
+        if (hasMounted) return;
+        hasMounted = true;
+        setMounted(true);
+        // Clean up listeners
+        window.removeEventListener('click', mountComponents);
+        window.removeEventListener('touchstart', mountComponents);
+        window.removeEventListener('scroll', mountComponents);
+      };
+      
+      // Mount on user interaction
+      window.addEventListener('click', mountComponents, { once: true, passive: true });
+      window.addEventListener('touchstart', mountComponents, { once: true, passive: true });
+      window.addEventListener('scroll', mountComponents, { once: true, passive: true });
+      
+      // Fallback: mount after 5 seconds if no interaction
+      const fallbackTimeout = setTimeout(mountComponents, 5000);
+      
+      return () => {
+        clearTimeout(fallbackTimeout);
+        window.removeEventListener('click', mountComponents);
+        window.removeEventListener('touchstart', mountComponents);
+        window.removeEventListener('scroll', mountComponents);
+      };
+    } else {
+      // Non-iOS: use requestIdleCallback for best performance
+      const schedule = (callback: () => void) => {
+        if ('requestIdleCallback' in window) {
+          requestIdleCallback(callback, { timeout: 1000 });
+        } else {
+          setTimeout(callback, 100);
+        }
+      };
+      
+      schedule(() => setMounted(true));
+    }
+  }, [isIOS]);
   
   if (!mounted) return null;
   
