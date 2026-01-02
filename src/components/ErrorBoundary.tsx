@@ -3,9 +3,8 @@
 // Includes special handling for Router context errors on mobile devices
 
 import React, { Component, ErrorInfo, ReactNode } from "react";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, RefreshCw, Home, Sparkles, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 
 interface BootLogEntry {
   phase: string;
@@ -26,6 +25,15 @@ interface State {
   errorInfo: ErrorInfo | null;
   isRouterContextError: boolean;
   retryCount: number;
+  bootLog: BootLogEntry[];
+  isChunkError: boolean;
+  isStorageCorrupt: boolean;
+  detectedFlags: {
+    ios: boolean;
+    chunkError: boolean;
+    routerError: boolean;
+    storageCorrupt: boolean;
+  };
 }
 
 // Helper to detect Router context errors (basename destructuring issue on mobile)
@@ -306,27 +314,94 @@ export class ErrorBoundary extends Component<Props, State> {
       const showDebug = typeof window !== "undefined" && 
         new URLSearchParams(window.location.search).get("debug") === "1";
 
+      // Determine error type and theme
+      const errorTitle = isEnvError 
+        ? "Oops! Something needs fixing! 🔧"
+        : isRouterError
+        ? "Loading issue"
+        : "Oops! Something went wrong! 😅";
+      const errorMessage = isEnvError
+        ? "The app is missing some important settings. Don't worry, this is usually easy to fix!"
+        : isRouterError
+        ? "The app is having trouble loading. Please reload the page."
+        : "An unexpected error occurred. Let's try again!";
+      const errorIcon = isEnvError ? Settings : isRouterError ? RefreshCw : AlertTriangle;
+      const emojis = isEnvError ? ["🔧", "⚙️", "🛠️"] : isRouterError ? ["⏳", "🔄", "✨"] : ["😅", "🌟", "🎈"];
+
+      const Icon = errorIcon;
+
       return (
-        <div className="min-h-[100dvh] flex items-center justify-center bg-gradient-to-br from-primary/5 via-background to-secondary/5 p-4">
-          <Card className="max-w-2xl w-full p-8 space-y-6">
-            <div className="flex items-center gap-4">
-              <AlertTriangle className="h-12 w-12 text-destructive" />
-              <div>
-                <h1 className="text-2xl font-bold">
-                  {isRouterError ? "Loading issue" : "Something went wrong"}
-                </h1>
-                <p className="text-muted-foreground mt-1">
-                  {isEnvError 
-                    ? "Missing required configuration"
-                    : isRouterError
-                    ? "The app is having trouble loading. Please reload the page."
-                    : "An unexpected error occurred"}
-                </p>
-              </div>
+        <div className="flex min-h-[100dvh] items-center justify-center bg-gradient-to-br from-primary/5 via-background to-secondary/5 p-4">
+          <div className="text-center space-y-8 max-w-md w-full">
+            {/* Animated error code/icon */}
+            <div className="relative">
+              {isEnvError ? (
+                <div className="text-9xl font-bold text-primary/20 select-none">
+                  <span className="inline-block animate-bounce" style={{ animationDelay: "0s", animationDuration: "2s" }}>
+                    !
+                  </span>
+                </div>
+              ) : isRouterError ? (
+                <div className="text-9xl font-bold text-primary/20 select-none">
+                  <span className="inline-block animate-spin-slow">⏳</span>
+                </div>
+              ) : (
+                <div className="text-9xl font-bold text-destructive/20 select-none">
+                  <span className="inline-block animate-bounce" style={{ animationDelay: "0s", animationDuration: "2s" }}>
+                    ⚠
+                  </span>
+                  <span className="inline-block animate-bounce" style={{ animationDelay: "0.2s", animationDuration: "2s" }}>
+                    ⚠
+                  </span>
+                </div>
+              )}
+              {/* Icon overlay */}
+              <Icon className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-16 h-16 text-primary/40 animate-pulse" />
+              {/* Floating sparkles for non-env errors */}
+              {!isEnvError && (
+                <>
+                  <Sparkles className="absolute top-0 left-1/4 w-6 h-6 text-kid-purple animate-pulse" style={{ animationDelay: "0.5s" }} />
+                  <Sparkles className="absolute top-4 right-1/4 w-5 h-5 text-kid-pink animate-pulse" style={{ animationDelay: "1s" }} />
+                  <Sparkles className="absolute bottom-0 left-1/3 w-4 h-4 text-kid-green animate-pulse" style={{ animationDelay: "1.5s" }} />
+                </>
+              )}
             </div>
 
-            {isEnvError ? (
+            {/* Friendly message */}
+            <div className="space-y-4 animate-fade-in">
+              <h1 className="text-4xl md:text-5xl font-bold text-foreground">{errorTitle}</h1>
+              <p className="text-xl text-muted-foreground">{errorMessage}</p>
+            </div>
+
+            {/* Animated icon */}
+            <div className="flex justify-center">
+              <Icon className="w-24 h-24 text-primary/30 animate-spin-slow" />
+            </div>
+
+            {/* Error details (show for non-router, non-env errors) */}
+            {!isRouterError && !isEnvError && this.state.error && (
               <div className="space-y-4">
+                <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4">
+                  <p className="font-mono text-sm text-destructive break-all">
+                    {this.state.error.message || this.state.error.toString()}
+                  </p>
+                  {this.state.errorInfo && (
+                    <details className="mt-4">
+                      <summary className="cursor-pointer text-sm text-muted-foreground">
+                        ▼ Stack trace
+                      </summary>
+                      <pre className="mt-2 text-xs text-muted-foreground overflow-auto max-h-48">
+                        {this.state.errorInfo.componentStack}
+                      </pre>
+                    </details>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Environment error details */}
+            {isEnvError && (
+              <div className="space-y-4 text-left bg-muted/50 rounded-lg p-4">
                 <p className="text-sm text-muted-foreground">
                   The app is missing required environment variables. Please check:
                 </p>
@@ -338,53 +413,63 @@ export class ErrorBoundary extends Component<Props, State> {
                   Set these in your Vercel project settings (Settings → Environment Variables) or in a .env file for local development.
                 </p>
               </div>
-            ) : isRouterError ? (
+            )}
+
+            {/* Router error details */}
+            {isRouterError && (
               <div className="space-y-4">
                 <p className="text-sm text-muted-foreground">
                   This can happen on slower connections or when the app is loading for the first time.
                   Reloading usually fixes the issue.
                 </p>
               </div>
-            ) : (
-              <div className="space-y-4">
-                {this.state.error && (
-                  <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4">
-                    <p className="font-mono text-sm text-destructive break-all">
-                      {this.state.error.toString()}
-                    </p>
-                    {this.state.errorInfo && (
-                      <details className="mt-4">
-                        <summary className="cursor-pointer text-sm text-muted-foreground">
-                          Stack trace
-                        </summary>
-                        <pre className="mt-2 text-xs text-muted-foreground overflow-auto max-h-48">
-                          {this.state.errorInfo.componentStack}
-                        </pre>
-                      </details>
-                    )}
-                  </div>
-                )}
-              </div>
             )}
 
-            <div className="flex gap-4 flex-col sm:flex-row">
-              <Button onClick={this.handleSoftReset} className="flex-1">
-                Retry
-              </Button>
+            {/* Action buttons */}
+            <div className="flex flex-col sm:flex-row gap-4 justify-center items-center pt-4">
               <Button
-                variant="outline"
-                onClick={this.handleForceLogout}
-                className="flex-1"
+                onClick={this.handleSoftReset}
+                size="lg"
+                className="w-full sm:w-auto animate-fade-in-up"
+                style={{ animationDelay: "0.3s" }}
               >
-                Reset & Reload
+                <RefreshCw className="mr-2 h-5 w-5" />
+                {isRouterError ? "Reload Page" : "Retry"}
               </Button>
+              {!isRouterError && (
+                <Button
+                  variant="outline"
+                  onClick={this.handleForceLogout}
+                  size="lg"
+                  className="w-full sm:w-auto animate-fade-in-up"
+                  style={{ animationDelay: "0.5s" }}
+                >
+                  Reset & Reload
+                </Button>
+              )}
               <Button
-                variant="outline"
+                variant={isRouterError ? "outline" : "outline"}
                 onClick={() => window.location.href = "/"}
-                className="flex-1"
+                size="lg"
+                className="w-full sm:w-auto animate-fade-in-up"
+                style={{ animationDelay: isRouterError ? "0.3s" : "0.7s" }}
               >
+                <Home className="mr-2 h-5 w-5" />
                 Go Home
               </Button>
+            </div>
+
+            {/* Fun emoji trail */}
+            <div className="flex justify-center gap-4 text-2xl pt-4">
+              {emojis.map((emoji, index) => (
+                <span
+                  key={index}
+                  className="animate-bounce"
+                  style={{ animationDelay: `${index * 0.2}s` }}
+                >
+                  {emoji}
+                </span>
+              ))}
             </div>
 
             {showDebug && (
@@ -439,7 +524,7 @@ export class ErrorBoundary extends Component<Props, State> {
                 )}
               </div>
             )}
-          </Card>
+          </div>
         </div>
       );
     }

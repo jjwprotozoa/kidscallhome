@@ -748,10 +748,10 @@ const Navigation = () => {
               : "text-foreground hover:bg-accent"
           )}
         >
-          <div className="relative">
+          <div className="flex items-center gap-2">
             <Icon className="h-5 w-5" />
             {badge && badge > 0 && (
-              <span className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground text-xs font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+              <span className="bg-destructive text-destructive-foreground text-xs font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
                 {badge > 99 ? "99+" : badge}
               </span>
             )}
@@ -1062,10 +1062,10 @@ const Navigation = () => {
               : "text-foreground hover:bg-accent"
           )}
         >
-          <div className="relative">
+          <div className="flex items-center gap-2">
             <Icon className="h-5 w-5" />
             {badge && badge > 0 && (
-              <span className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground text-xs font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+              <span className="bg-destructive text-destructive-foreground text-xs font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
                 {badge > 99 ? "99+" : badge}
               </span>
             )}
