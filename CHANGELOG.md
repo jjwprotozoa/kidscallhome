@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed - 2026-01-02
+
+#### Stripe Webhook Integration Fix
+- **Fixed Stripe webhook returning 401 "Missing authorization header"**: Supabase Edge Functions enforce JWT verification by default, but Stripe webhooks don't send JWTs
+  - Deployed `stripe-webhook` function with `--no-verify-jwt` flag to disable JWT requirement
+  - Webhook now relies solely on Stripe signature verification for security (which is the correct approach)
+- **Fixed webhook signature verification**: Ensured `STRIPE_WEBHOOK_SECRET_TEST` matches the actual Stripe test mode webhook signing secret
+- **Verified user_id extraction**: Webhook correctly extracts `user_id` from checkout session's `client_reference_id` and `metadata.user_id`
+- **End-to-end subscription flow now working**:
+  - User completes Stripe Checkout → Webhook receives event → `billing_subscriptions` table updated → Frontend displays subscription status
+  - "Manage Subscription" button opens Stripe Customer Portal
+  - Current plan badge shows on active subscription
+- **Files**: `supabase/functions/stripe-webhook/index.ts`, `supabase/config.toml`
+
 ### Added - 2026-01-02
 
 #### Comprehensive Analytics Tracking System

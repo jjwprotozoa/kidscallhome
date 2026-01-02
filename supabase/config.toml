@@ -1,1 +1,7 @@
 project_id = "itmhojbjfacocrpmslmt"
+
+# Edge Functions configuration
+[functions.stripe-webhook]
+# Disable JWT verification for Stripe webhook
+# Stripe uses signature verification, not JWT
+verify_jwt = false

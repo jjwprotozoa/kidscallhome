@@ -4,7 +4,164 @@
 
 ---
 
-## Latest Changes (2025-01-31)
+## Latest Changes (2026-01-02)
+
+### 1. Stripe Webhook Integration Fix - Subscription Status Sync
+
+#### Purpose
+
+Fix Stripe webhook not updating app subscription status after successful Stripe payments. Users were completing payments in Stripe but the app wasn't reflecting their subscription status.
+
+#### Issues Fixed
+
+1. **401 "Missing authorization header"**: Supabase Edge Functions enforce JWT verification by default, but Stripe webhooks don't send JWTs - they use signature verification instead
+2. **400 "Webhook signature verification failed"**: The `STRIPE_WEBHOOK_SECRET_TEST` environment variable in Supabase didn't match the actual Stripe test mode webhook signing secret
+3. **Subscription status not updating**: The `billing_subscriptions` table wasn't being updated after successful Stripe Checkout sessions, causing the frontend to show incorrect subscription status
+
+#### Complete File List
+
+**Files Verified (No Code Changes Needed):**
+
+- `supabase/functions/stripe-webhook/index.ts` - Webhook handler implementation
+  - Correctly extracts `user_id` from `session.client_reference_id` or `session.metadata?.user_id`
+  - Properly upserts into `billing_subscriptions` table
+  - Handles `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `invoice.payment_succeeded` events
+
+- `supabase/functions/stripe-create-checkout-session/index.ts` - Checkout session creation
+  - Sets `client_reference_id: user.id` for webhook to identify user
+  - Sets `metadata: { user_id: user.id }` as fallback
+
+- `src/pages/Upgrade/useSubscriptionData.ts` - Frontend subscription data hook
+  - Correctly queries `billing_subscriptions` table by `user_id`
+  - Maps price IDs to subscription types (both test and production)
+  - Determines `hasActiveSubscription` based on status
+
+- `supabase/migrations/20250123000000_create_billing_subscriptions.sql` - Database schema
+  - Table structure correct with all required columns
+
+**Configuration Changes (Supabase Dashboard):**
+
+- Deployed `stripe-webhook` function with `--no-verify-jwt` flag
+- Verified all Stripe secrets are correctly set:
+  - `STRIPE_SECRET_KEY_LIVE`
+  - `STRIPE_SECRET_KEY_TEST`
+  - `STRIPE_WEBHOOK_SECRET`
+  - `STRIPE_WEBHOOK_SECRET_TEST`
+
+#### Implementation Details
+
+**1. JWT Verification Issue:**
+
+Supabase Edge Functions enforce JWT verification by default. When Stripe sends a webhook request, it doesn't include a JWT - it uses its own signature verification system. The solution was to disable JWT verification for the webhook function:
+
+```bash
+supabase functions deploy stripe-webhook --no-verify-jwt
+```
+
+Or configure in `supabase/config.toml`:
+```toml
+[functions.stripe-webhook]
+verify_jwt = false
+```
+
+**2. Webhook Signature Verification:**
+
+The webhook uses Stripe's signature verification for security:
+
+```typescript
+const event = stripe.webhooks.constructEvent(
+  body,
+  signature,
+  webhookSecret
+);
+```
+
+This is the correct and secure approach for webhooks - Stripe signs each request with a secret, and the webhook verifies the signature.
+
+**3. User ID Extraction:**
+
+The webhook extracts the user ID from the checkout session:
+
+```typescript
+const userId = session.client_reference_id || session.metadata?.user_id;
+```
+
+This requires the checkout session creation to include these fields:
+
+```typescript
+const session = await stripe.checkout.sessions.create({
+  client_reference_id: user.id,
+  metadata: { user_id: user.id },
+  // ... other options
+});
+```
+
+**4. Database Update:**
+
+On successful events, the webhook upserts into `billing_subscriptions`:
+
+```typescript
+await supabaseAdmin
+  .from("billing_subscriptions")
+  .upsert({
+    user_id: userId,
+    stripe_customer_id: customerId,
+    stripe_subscription_id: subscriptionId,
+    stripe_price_id: priceId,
+    status: "active",
+    current_period_end: periodEnd,
+    cancel_at_period_end: cancelAtPeriodEnd,
+  }, { onConflict: "user_id" });
+```
+
+**5. Frontend Price ID Mapping:**
+
+The frontend maps price IDs to subscription types:
+
+```typescript
+// Test price IDs
+const isMonthlyTest = priceId === "price_1SjULhIIyqCwTeH2GmBL1jVk";
+const isAnnualTest = priceId === "price_1SkQUaIIyqCwTeH2QowSbcfb";
+
+// Production price IDs
+const isMonthlyProd = priceId === "price_1SUVdqIIyqCwTeH2zggZpPAK";
+const isAnnualProd = priceId === "price_1SjSkPIIyqCwTeH2QMbl0SCA";
+```
+
+#### Testing Recommendations
+
+1. **Test Mode Flow:**
+   - Use Stripe test mode credentials
+   - Complete a checkout session in the app
+   - Verify `billing_subscriptions` table is updated
+   - Verify frontend shows correct subscription status
+
+2. **Webhook Logs:**
+   - Check Supabase Edge Function logs for webhook events
+   - Verify no 401 or 400 errors
+   - Confirm user_id extraction is working
+
+3. **Production Verification:**
+   - Ensure `STRIPE_WEBHOOK_SECRET` (live) is correctly set
+   - Test with a real payment (can refund immediately)
+   - Verify subscription syncs correctly
+
+4. **Edge Cases:**
+   - Test subscription cancellation flow
+   - Test plan change (monthly ↔ annual)
+   - Test subscription renewal
+
+#### Impact
+
+- **End-to-End Flow Working**: Stripe Checkout → Webhook → Database → Frontend all connected
+- **Real-Time Updates**: Subscription status updates immediately after payment
+- **Both Environments**: Same webhook URL works for test and production modes
+- **Secure**: Uses Stripe signature verification (industry standard for webhooks)
+- **No Code Changes**: Issue was configuration/deployment, not code bugs
+
+---
+
+## Previous Changes (2025-01-31)
 
 ### 1. Onboarding Flow Enhancements - Comprehensive Tour Updates
 

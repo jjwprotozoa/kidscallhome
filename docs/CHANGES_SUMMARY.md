@@ -7,7 +7,56 @@
 
 > **Note**: For detailed technical information, complete file lists, testing recommendations, and implementation specifics, see [CHANGES_DETAILED.md](./CHANGES_DETAILED.md).
 
-## Latest Changes (2026-01-01) - Kid-Friendly Emoji Logout Game
+## Latest Changes (2026-01-02) - Stripe Webhook Integration Fix
+
+### -31. Stripe Webhook Integration Fix - Subscription Status Sync
+
+- **Purpose**: Fix Stripe webhook not updating app subscription status after successful Stripe payments
+- **Issues Fixed**:
+  1. **401 "Missing authorization header"**: Stripe webhooks don't send JWTs, but Supabase Edge Functions enforce JWT verification by default
+  2. **400 "Webhook signature verification failed"**: `STRIPE_WEBHOOK_SECRET_TEST` didn't match actual Stripe test mode webhook signing secret
+  3. **Subscription status not updating**: Database wasn't being updated after successful Stripe Checkout sessions
+
+#### Changes Applied
+
+- **Disabled JWT Verification for Webhook** (Supabase Dashboard/CLI):
+  - Deployed `stripe-webhook` function with `--no-verify-jwt` flag
+  - Webhook now relies solely on Stripe signature verification for security (correct approach for webhooks)
+  
+- **Verified Stripe Secrets Configuration** (Supabase Dashboard):
+  - `STRIPE_SECRET_KEY_LIVE` - Live mode API key ✅
+  - `STRIPE_SECRET_KEY_TEST` - Test mode API key ✅
+  - `STRIPE_WEBHOOK_SECRET` - Live mode webhook signing secret ✅
+  - `STRIPE_WEBHOOK_SECRET_TEST` - Test mode webhook signing secret ✅
+
+- **Verified User ID Extraction** (`stripe-webhook/index.ts`):
+  - Extracts `user_id` from `client_reference_id` (set during checkout session creation)
+  - Falls back to `metadata.user_id` if `client_reference_id` not available
+  - Properly upserts into `billing_subscriptions` table
+
+#### Technical Implementation
+
+- **Webhook Security**: Uses Stripe signature verification (`stripe.webhooks.constructEvent()`) instead of JWT
+- **Database Sync**: On `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, and `invoice.payment_succeeded` events
+- **Price ID Mapping**: Frontend correctly maps both test and production price IDs to subscription types
+
+#### Files Verified (No Code Changes Needed)
+
+- `supabase/functions/stripe-webhook/index.ts` - Webhook handler (working correctly)
+- `supabase/functions/stripe-create-checkout-session/index.ts` - Sets `client_reference_id` and `metadata.user_id`
+- `src/pages/Upgrade/useSubscriptionData.ts` - Correctly reads from `billing_subscriptions` table
+- `supabase/migrations/20250123000000_create_billing_subscriptions.sql` - Table schema correct
+
+#### Impact
+
+- **End-to-End Flow Working**: User completes Stripe Checkout → Webhook receives event → `billing_subscriptions` table updated → Frontend displays correct subscription status
+- **Subscription UI Updates**: "Your Current Plan" card shows correct plan, "Subscribe" button disabled for current plan
+- **Manage Subscription**: Button correctly opens Stripe Customer Portal
+- **Both Test and Production**: Same webhook URL works for both modes, secrets differentiated by environment
+
+---
+
+## Previous Changes (2026-01-01) - Kid-Friendly Emoji Logout Game
 
 ### -30. Kid-Friendly Logout Verification - Emoji Mini-Game
 
