@@ -357,47 +357,31 @@ const SessionManager = () => {
   return null;
 };
 
-// Deferred Analytics component - mounts after Router context is ready
-// This prevents Router context errors on mobile devices during initial load
-const DeferredAnalytics = () => {
-  const [mounted, setMounted] = useState(false);
-  
-  useEffect(() => {
-    // Wait for Router context to be ready before mounting Analytics
-    // Use requestIdleCallback for best performance, fallback to setTimeout
-    const schedule = (callback: () => void) => {
-      if ('requestIdleCallback' in window) {
-        requestIdleCallback(callback, { timeout: 1000 });
-      } else {
-        setTimeout(callback, 200);
-      }
-    };
-    
-    schedule(() => setMounted(true));
-  }, []);
-  
-  if (!mounted) return null;
-  
-  return (
-    <Analytics 
-      debug={typeof window !== 'undefined' && localStorage.getItem('debug_analytics') === '1'}
-    />
-  );
-};
+// Analytics removed from inside BrowserRouter to prevent Router context errors on mobile
+// Vercel Analytics internally uses Router hooks which can fail on mobile if Router context isn't ready
+// Moving it outside BrowserRouter prevents crashes, though it won't auto-track route changes
 
 // Component to render deferred global components after initial load
 // These are lazy-loaded to improve FCP but should mount quickly after
+// CRITICAL: On mobile devices, Router context initialization can take longer
+// Use longer delays to prevent "Cannot destructure property 'basename'" errors
 const DeferredGlobalComponents = () => {
   const [mounted, setMounted] = useState(false);
   
   useEffect(() => {
-    // Wait for initial paint then mount deferred components
+    // Wait for Router context to be ready before mounting components that use Router hooks
+    // Mobile devices need longer delays due to slower initialization
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+      typeof navigator !== 'undefined' ? navigator.userAgent : ''
+    );
+    
     // Use requestIdleCallback for best performance, fallback to setTimeout
     const schedule = (callback: () => void) => {
       if ('requestIdleCallback' in window) {
-        requestIdleCallback(callback, { timeout: 1000 });
+        requestIdleCallback(callback, { timeout: isMobile ? 2000 : 1000 });
       } else {
-        setTimeout(callback, 100);
+        // Mobile devices need longer delay to ensure Router context is ready
+        setTimeout(callback, isMobile ? 500 : 200);
       }
     };
     
@@ -460,11 +444,7 @@ const App = () => {
                 v7_relativeSplatPath: true,
               }}
             >
-              {/* Vercel Analytics - deferred mount to prevent Router context errors on mobile */}
-              {/* Debug mode: localStorage.setItem("debug_analytics", "1") then reload */}
-              <ErrorBoundary fallback={null}>
-                <DeferredAnalytics />
-              </ErrorBoundary>
+              {/* WidgetIntentHandler - deferred to prevent Router context errors on mobile */}
               <ErrorBoundary fallback={null}>
                 <WidgetIntentHandler />
               </ErrorBoundary>
@@ -564,6 +544,14 @@ const App = () => {
               </Suspense>
             </BrowserRouter>
           </SafeAreaLayout>
+          {/* Vercel Analytics - outside BrowserRouter to prevent Router context errors on mobile */}
+          {/* Vercel Analytics internally uses Router hooks which can fail if Router context isn't ready */}
+          {/* Moving outside BrowserRouter prevents crashes, though it won't auto-track route changes */}
+          <ErrorBoundary fallback={null}>
+            <Analytics 
+              debug={typeof window !== 'undefined' && localStorage.getItem('debug_analytics') === '1'}
+            />
+          </ErrorBoundary>
           {/* Vercel Speed Insights - outside BrowserRouter to match working version */}
           {/* This prevents Router context initialization issues on mobile devices */}
           <SpeedInsights 
