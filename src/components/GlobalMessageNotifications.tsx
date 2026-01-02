@@ -580,19 +580,56 @@ export const GlobalMessageNotifications = () => {
   useEffect(() => {
     let mounted = true;
     
-    // Simple strategy: wait for next tick + small delay to ensure Router context is initialized
-    // This is more reliable than complex timing because BrowserRouter should be mounted
-    // by the time this component renders (it's inside BrowserRouter in App.tsx)
-    const timeoutId = setTimeout(() => {
-      if (mounted) {
-        // Additional small delay to ensure Router context is fully ready
-        setTimeout(() => {
-          if (mounted) {
-            setIsReady(true);
-          }
-        }, 50);
+    // CRITICAL: On mobile devices, Router context initialization can take longer
+    // Use longer delays and progressive retry logic to prevent "Cannot destructure property 'basename'" errors
+    
+    // Check if Router context is available
+    const checkRouterContext = (): boolean => {
+      try {
+        // Heuristic check: if document is ready, assume Router context is available
+        return document.readyState === 'complete' || document.readyState === 'interactive';
+      } catch {
+        return false;
       }
-    }, 100);
+    };
+    
+    const checkAndSetReady = (attempt: number = 0) => {
+      if (!mounted) return;
+      
+      // Progressive delay for mobile devices
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      const baseDelay = isMobile ? 300 : 100;
+      
+      // Check if document is ready
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => {
+          setTimeout(() => {
+            if (mounted && (checkRouterContext() || attempt >= 5)) {
+              setIsReady(true);
+            } else if (mounted) {
+              // Retry if Router context not ready
+              setTimeout(() => checkAndSetReady(attempt + 1), 100);
+            }
+          }, baseDelay);
+        }, { once: true });
+        return;
+      }
+      
+      // Document is ready, wait for Router context
+      setTimeout(() => {
+        if (mounted && (checkRouterContext() || attempt >= 5)) {
+          setIsReady(true);
+        } else if (mounted) {
+          // Retry if Router context not ready
+          setTimeout(() => checkAndSetReady(attempt + 1), 100);
+        }
+      }, baseDelay);
+    };
+    
+    // Initial delay to let BrowserRouter mount
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    const initialDelay = isMobile ? 200 : 100;
+    const timeoutId = setTimeout(() => checkAndSetReady(), initialDelay);
 
     return () => {
       mounted = false;

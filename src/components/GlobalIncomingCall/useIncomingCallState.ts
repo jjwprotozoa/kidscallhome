@@ -13,6 +13,10 @@ export const useIncomingCallState = () => {
   const [incomingCall, setIncomingCall] = useState<IncomingCall | null>(null);
   const incomingCallRef = useRef<IncomingCall | null>(null);
   const channelRef = useRef<RealtimeChannel | null>(null);
+  
+  // CRITICAL: useLocation must be called unconditionally (React hooks rule)
+  // The Router context check is handled in GlobalIncomingCall wrapper component
+  // This hook assumes Router context is available when called
   const location = useLocation();
   const { handleIncomingCall, stopIncomingCall } = useIncomingCallNotifications(
     {

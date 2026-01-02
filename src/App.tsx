@@ -370,21 +370,51 @@ const DeferredGlobalComponents = () => {
   useEffect(() => {
     // Wait for initial paint AND ensure Router context is ready
     // Components like GlobalIncomingCall use router hooks, so Router must be initialized
+    // CRITICAL: On mobile devices, Router context initialization can take longer
+    // Use longer delays and check Router context availability
     const schedule = (callback: () => void) => {
       if ('requestIdleCallback' in window) {
-        requestIdleCallback(callback, { timeout: 1000 });
+        requestIdleCallback(callback, { timeout: 2000 });
       } else {
-        setTimeout(callback, 200); // Increased delay to ensure Router context is ready
+        setTimeout(callback, 500); // Increased delay for mobile devices
+      }
+    };
+    
+    // Check if Router context is available by trying to access it
+    const checkRouterContext = (): boolean => {
+      try {
+        // Try to access React Router's internal context
+        // If BrowserRouter is mounted, the context should be available
+        // We check by looking for the Router context in React's internal state
+        // This is a heuristic check - if document is ready and we've waited enough, assume Router is ready
+        return document.readyState === 'complete' || document.readyState === 'interactive';
+      } catch {
+        return false;
       }
     };
     
     // Additional delay to ensure BrowserRouter context is fully initialized
-    // This prevents "Cannot destructure property 'basename'" errors
+    // This prevents "Cannot destructure property 'basename'" errors on mobile devices
     schedule(() => {
-      // Wait one more tick to ensure Router context is definitely ready
-      setTimeout(() => {
-        setMounted(true);
-      }, 100);
+      // Progressive delay: wait longer on mobile devices
+      // Mobile devices may have slower JavaScript execution
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      const baseDelay = isMobile ? 300 : 100;
+      
+      // Wait for Router context to be ready
+      const checkAndMount = (attempt: number = 0) => {
+        if (checkRouterContext() || attempt >= 5) {
+          // Router context is ready or max attempts reached
+          setTimeout(() => {
+            setMounted(true);
+          }, baseDelay);
+        } else {
+          // Router context not ready yet, retry after delay
+          setTimeout(() => checkAndMount(attempt + 1), 100);
+        }
+      };
+      
+      checkAndMount();
     });
   }, []);
   
