@@ -350,92 +350,14 @@ class RouterContextErrorBoundary extends React.Component<
   }
 }
 
-// Outer component that safely renders after Router context is initialized
-// This prevents "Cannot destructure property 'basename'" errors during lazy loading
-// The issue occurs when lazy-loaded components try to use router hooks before
-// the Router context is fully initialized during the lazy loading process
+// Outer component that renders after Router context is initialized
+// This component is rendered by DeferredGlobalComponents which already waits for Router context
+// The deferral in App.tsx (500ms on mobile, 200ms on desktop) ensures Router is ready
+// Simplified from complex polling logic that was unreliable on mobile devices
 export const GlobalIncomingCall = () => {
-  // Use a simple, reliable check for Router context availability
-  // This is more reliable than complex polling and timing logic
-  const [isReady, setIsReady] = useState(false);
-
-  useEffect(() => {
-    let mounted = true;
-    
-    // Strategy: Wait for BrowserRouter to be fully initialized
-    // Since this component is rendered inside BrowserRouter (in App.tsx),
-    // we need to wait for the Router context to be available
-    // CRITICAL: On mobile devices, Router context initialization can take longer
-    // Use longer delays and progressive retry logic
-    
-    // Check if Router context is available by trying to access it
-    const checkRouterContext = (): boolean => {
-      try {
-        // Try to access React Router's internal context
-        // If BrowserRouter is mounted, the context should be available
-        // We check by looking for the Router context in React's internal state
-        // This is a heuristic check - if document is ready and we've waited enough, assume Router is ready
-        return document.readyState === 'complete' || document.readyState === 'interactive';
-      } catch {
-        return false;
-      }
-    };
-    
-    const checkAndSetReady = (attempt: number = 0) => {
-      if (!mounted) return;
-      
-      // Check if document is ready
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', () => {
-          // Progressive delay for mobile devices
-          const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-          const delay = isMobile ? 400 : 200;
-          setTimeout(() => {
-            if (mounted && (checkRouterContext() || attempt >= 5)) {
-              setIsReady(true);
-            } else if (mounted) {
-              // Retry if Router context not ready
-              setTimeout(() => checkAndSetReady(attempt + 1), 100);
-            }
-          }, delay);
-        }, { once: true });
-        return;
-      }
-      
-      // Document is ready, wait a bit more for Router context
-      // Progressive delay for mobile devices
-      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-      const baseDelay = isMobile ? 400 : 200;
-      
-      setTimeout(() => {
-        if (mounted && (checkRouterContext() || attempt >= 5)) {
-          setIsReady(true);
-        } else if (mounted) {
-          // Retry if Router context not ready
-          setTimeout(() => checkAndSetReady(attempt + 1), 100);
-        }
-      }, baseDelay);
-    };
-    
-    // Initial delay to let BrowserRouter mount
-    // Longer delay on mobile devices
-    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    const initialDelay = isMobile ? 200 : 100;
-    const timeoutId = setTimeout(() => checkAndSetReady(), initialDelay);
-
-    return () => {
-      mounted = false;
-      clearTimeout(timeoutId);
-    };
-  }, []);
-
-  // Only render when Router context is confirmed ready
-  // This prevents the "Cannot destructure property 'basename'" error
-  if (!isReady) {
-    return null;
-  }
-
-  // Wrap in error boundary to catch any Router context errors and retry
+  // Wrap in error boundary to catch any unexpected errors
+  // The Router context should already be available since we're rendered inside BrowserRouter
+  // and DeferredGlobalComponents has already waited for the appropriate delay
   return (
     <RouterContextErrorBoundary>
       <GlobalIncomingCallInner />

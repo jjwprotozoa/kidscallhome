@@ -573,73 +573,12 @@ const GlobalMessageNotificationsInner = () => {
   return null; // This component doesn't render anything
 };
 
-// Outer wrapper to safely render after Router context is initialized
+// Outer wrapper that renders after Router context is initialized
+// This component is rendered by DeferredGlobalComponents which already waits for Router context
+// The deferral in App.tsx (500ms on mobile, 200ms on desktop) ensures Router is ready
+// Simplified from complex polling logic that was unreliable on mobile devices
 export const GlobalMessageNotifications = () => {
-  const [isReady, setIsReady] = useState(false);
-
-  useEffect(() => {
-    let mounted = true;
-    
-    // CRITICAL: On mobile devices, Router context initialization can take longer
-    // Use longer delays and progressive retry logic to prevent "Cannot destructure property 'basename'" errors
-    
-    // Check if Router context is available
-    const checkRouterContext = (): boolean => {
-      try {
-        // Heuristic check: if document is ready, assume Router context is available
-        return document.readyState === 'complete' || document.readyState === 'interactive';
-      } catch {
-        return false;
-      }
-    };
-    
-    const checkAndSetReady = (attempt: number = 0) => {
-      if (!mounted) return;
-      
-      // Progressive delay for mobile devices
-      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-      const baseDelay = isMobile ? 300 : 100;
-      
-      // Check if document is ready
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', () => {
-          setTimeout(() => {
-            if (mounted && (checkRouterContext() || attempt >= 5)) {
-              setIsReady(true);
-            } else if (mounted) {
-              // Retry if Router context not ready
-              setTimeout(() => checkAndSetReady(attempt + 1), 100);
-            }
-          }, baseDelay);
-        }, { once: true });
-        return;
-      }
-      
-      // Document is ready, wait for Router context
-      setTimeout(() => {
-        if (mounted && (checkRouterContext() || attempt >= 5)) {
-          setIsReady(true);
-        } else if (mounted) {
-          // Retry if Router context not ready
-          setTimeout(() => checkAndSetReady(attempt + 1), 100);
-        }
-      }, baseDelay);
-    };
-    
-    // Initial delay to let BrowserRouter mount
-    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    const initialDelay = isMobile ? 200 : 100;
-    const timeoutId = setTimeout(() => checkAndSetReady(), initialDelay);
-
-    return () => {
-      mounted = false;
-      clearTimeout(timeoutId);
-    };
-  }, []);
-
-  if (!isReady) {
-    return null;
-  }
-
+  // The Router context should already be available since we're rendered inside BrowserRouter
+  // and DeferredGlobalComponents has already waited for the appropriate delay
   return <GlobalMessageNotificationsInner />;
 };
