@@ -539,7 +539,9 @@ export const VideoCallUI = ({
         );
         // When track unmutes, ICE connection is established - try to play immediately
         if (video.paused) {
-          attemptPlay();
+          video.play().catch((error) => {
+            console.warn("⚠️ [VIDEO UI] Failed to play video on track unmute:", error);
+          });
         } else {
           // Video is already playing - check if we should mark as playing
           // This handles the case where video.play() succeeded but readyState is still 0
