@@ -33,70 +33,68 @@ workflows:
         script: |
           echo "=== Setting up Android Keystore for Signing ==="
           echo ""
-          
+
           # Check if keystore environment variables are set
           if [ -z "$CM_KEYSTORE_PATH" ]; then
             echo "❌ ERROR: CM_KEYSTORE_PATH is not set!"
             echo "Please configure the keystore in Codemagic Team Settings → Code Signing → android_keystore group"
             exit 1
           fi
-          
+
           if [ -z "$CM_KEYSTORE_PASSWORD" ]; then
             echo "❌ ERROR: CM_KEYSTORE_PASSWORD is not set!"
             exit 1
           fi
-          
+
           if [ -z "$CM_KEY_ALIAS" ]; then
             echo "❌ ERROR: CM_KEY_ALIAS is not set!"
             exit 1
           fi
-          
+
           if [ -z "$CM_KEY_PASSWORD" ]; then
             echo "❌ ERROR: CM_KEY_PASSWORD is not set!"
             exit 1
           fi
-          
+
           echo "✅ All keystore environment variables are set"
           echo "  Keystore path: $CM_KEYSTORE_PATH"
           echo "  Key alias: $CM_KEY_ALIAS"
           echo ""
-          
+
           # Verify keystore file exists
           if [ ! -f "$CM_KEYSTORE_PATH" ]; then
             echo "❌ ERROR: Keystore file not found at: $CM_KEYSTORE_PATH"
             exit 1
           fi
-          
+
           echo "✅ Keystore file found"
-          
+
           # Copy keystore to android directory
           KEYSTORE_DEST="android/upload-keystore.jks"
           echo "Copying keystore to: $KEYSTORE_DEST"
           cp "$CM_KEYSTORE_PATH" "$KEYSTORE_DEST"
-          
+
           if [ ! -f "$KEYSTORE_DEST" ]; then
             echo "❌ ERROR: Failed to copy keystore file!"
             exit 1
           fi
-          
+
           echo "✅ Keystore copied successfully"
-          
+
           # Create keystore.properties file in android directory
           KEYSTORE_PROPERTIES="android/keystore.properties"
           echo "Creating keystore.properties file..."
-          
-          cat > "$KEYSTORE_PROPERTIES" << EOF
-storeFile=upload-keystore.jks
-storePassword=$CM_KEYSTORE_PASSWORD
-keyAlias=$CM_KEY_ALIAS
-keyPassword=$CM_KEY_PASSWORD
-EOF
-          
+
+          printf "storeFile=upload-keystore.jks\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n" \
+            "$CM_KEYSTORE_PASSWORD" \
+            "$CM_KEY_ALIAS" \
+            "$CM_KEY_PASSWORD" > "$KEYSTORE_PROPERTIES"
+
           if [ ! -f "$KEYSTORE_PROPERTIES" ]; then
             echo "❌ ERROR: Failed to create keystore.properties file!"
             exit 1
           fi
-          
+
           echo "✅ keystore.properties created"
           echo ""
           echo "Verifying keystore.properties contents (without passwords):"
@@ -262,13 +260,13 @@ EOF
           if [ $BUILD_EXIT_CODE -ne 0 ]; then
             # Extract errors to a separate file for easy access
             echo "Extracting error messages..." > build-errors.txt
-            
+
             echo "" >> build-errors.txt
             echo "═══════════════════════════════════════════════════════════════" >> build-errors.txt
             echo "❌ BUILD FAILED - ERROR EXTRACTION" >> build-errors.txt
             echo "═══════════════════════════════════════════════════════════════" >> build-errors.txt
             echo "" >> build-errors.txt
-            
+
             # Find the line number where "BUILD FAILED" appears
             FAIL_LINE=$(grep -n "BUILD FAILED" debug-build.log | tail -1 | cut -d: -f1)
             if [ ! -z "$FAIL_LINE" ]; then
@@ -277,35 +275,35 @@ EOF
               echo "" >> build-errors.txt
               sed -n "$((FAIL_LINE - 50)),$((FAIL_LINE + 200))p" debug-build.log >> build-errors.txt
             fi
-            
+
             echo "" >> build-errors.txt
             echo "=== FAILURE MESSAGES ===" >> build-errors.txt
             grep -A 30 "FAILURE:" debug-build.log >> build-errors.txt 2>/dev/null || echo "No FAILURE: found" >> build-errors.txt
-            
+
             echo "" >> build-errors.txt
             echo "=== WHAT WENT WRONG ===" >> build-errors.txt
             grep -A 30 "What went wrong:" debug-build.log >> build-errors.txt 2>/dev/null || echo "No 'What went wrong:' found" >> build-errors.txt
-            
+
             echo "" >> build-errors.txt
             echo "=== EXECUTION FAILED FOR TASK ===" >> build-errors.txt
             grep -B 10 -A 20 "Execution failed for task" debug-build.log >> build-errors.txt 2>/dev/null || echo "No task execution failures found" >> build-errors.txt
-            
+
             echo "" >> build-errors.txt
             echo "=== FAILED TASKS ===" >> build-errors.txt
             grep "> Task :.*FAILED" debug-build.log >> build-errors.txt 2>/dev/null || echo "No failed tasks found" >> build-errors.txt
-            
+
             echo "" >> build-errors.txt
             echo "=== ERROR PATTERNS ===" >> build-errors.txt
             grep -i -E "error|exception|failed|cannot|unable" debug-build.log | grep -v "at org.gradle" | head -50 >> build-errors.txt 2>/dev/null || echo "No error patterns found" >> build-errors.txt
-            
+
             echo "" >> build-errors.txt
             echo "=== COMPILATION ERRORS ===" >> build-errors.txt
             grep -i -E "error:|error code|compilation error|cannot find symbol|package.*does not exist|class.*not found" debug-build.log >> build-errors.txt 2>/dev/null || echo "No compilation errors found" >> build-errors.txt
-            
+
             echo "" >> build-errors.txt
             echo "=== LAST 50 LINES (MOST RECENT ERRORS) ===" >> build-errors.txt
             tail -n 50 debug-build.log >> build-errors.txt
-            
+
             # Display the error file prominently
             echo ""
             echo "═══════════════════════════════════════════════════════════════"
@@ -348,26 +346,26 @@ EOF
         script: |
           cd android/app
           echo "=== Setting Android Version ==="
-          
+
           # Use Codemagic's BUILD_NUMBER if available (auto-increments per build)
           # Otherwise, read current version and increment it
           BUILD_GRADLE="build.gradle"
-          
+
           if [ ! -f "$BUILD_GRADLE" ]; then
             echo "❌ ERROR: build.gradle not found at android/app/build.gradle"
             exit 1
           fi
-          
+
           # Extract current version code
           CURRENT_VERSION_CODE=$(grep "versionCode" "$BUILD_GRADLE" | head -1 | sed 's/.*versionCode //' | sed 's/[^0-9].*//')
-          
+
           if [ -z "$CURRENT_VERSION_CODE" ]; then
             echo "⚠️ Could not extract current version code, defaulting to 1"
             CURRENT_VERSION_CODE=1
           fi
-          
+
           echo "Current version code in build.gradle: $CURRENT_VERSION_CODE"
-          
+
           # Determine new version code
           if [ ! -z "$BUILD_NUMBER" ]; then
             # Use Codemagic's BUILD_NUMBER if it's >= current (avoids skipping versions)
@@ -384,62 +382,62 @@ EOF
             NEW_VERSION_CODE=$((CURRENT_VERSION_CODE + 1))
             echo "No BUILD_NUMBER available, incrementing version code to: $NEW_VERSION_CODE"
           fi
-          
+
           # Extract current version name
           CURRENT_VERSION_NAME=$(grep "versionName" "$BUILD_GRADLE" | head -1 | sed 's/.*versionName "//' | sed 's/".*//')
-          
+
           if [ -z "$CURRENT_VERSION_NAME" ]; then
             echo "⚠️ Could not extract current version name, defaulting to 1.0.0"
             CURRENT_VERSION_NAME="1.0.0"
           fi
-          
+
           echo "Current version name: $CURRENT_VERSION_NAME"
-          
+
           # Increment patch version (e.g., 1.0.1 -> 1.0.2)
           # Extract major.minor.patch
           MAJOR=$(echo "$CURRENT_VERSION_NAME" | cut -d. -f1)
           MINOR=$(echo "$CURRENT_VERSION_NAME" | cut -d. -f2)
           PATCH=$(echo "$CURRENT_VERSION_NAME" | cut -d. -f3)
-          
+
           # Default to 0 if empty
           MAJOR=${MAJOR:-1}
           MINOR=${MINOR:-0}
           PATCH=${PATCH:-0}
-          
+
           # Increment patch version
           PATCH=$((PATCH + 1))
           NEW_VERSION_NAME="$MAJOR.$MINOR.$PATCH"
-          
+
           echo "New version name: $NEW_VERSION_NAME"
-          
+
           # Update version code in build.gradle
           # Handle both formats: versionCode 2 and versionCode = 2
           sed -i '' "s/versionCode [0-9]*/versionCode $NEW_VERSION_CODE/g" "$BUILD_GRADLE" || \
           sed -i '' "s/versionCode = [0-9]*/versionCode = $NEW_VERSION_CODE/g" "$BUILD_GRADLE" || \
           sed -i '' "s/versionCode[[:space:]]*[0-9]*/versionCode $NEW_VERSION_CODE/g" "$BUILD_GRADLE"
-          
+
           # Update version name in build.gradle
           # Handle both formats: versionName "1.0.1" and versionName = "1.0.1"
           sed -i '' "s/versionName \"[^\"]*\"/versionName \"$NEW_VERSION_NAME\"/g" "$BUILD_GRADLE" || \
           sed -i '' "s/versionName = \"[^\"]*\"/versionName = \"$NEW_VERSION_NAME\"/g" "$BUILD_GRADLE"
-          
+
           # Verify the update
           echo ""
           echo "=== Verification ==="
           UPDATED_VERSION_CODE=$(grep "versionCode" "$BUILD_GRADLE" | head -1 | sed 's/.*versionCode //' | sed 's/[^0-9].*//')
           UPDATED_VERSION_NAME=$(grep "versionName" "$BUILD_GRADLE" | head -1 | sed 's/.*versionName "//' | sed 's/".*//')
-          
+
           echo "Updated version code: $UPDATED_VERSION_CODE"
           echo "Updated version name: $UPDATED_VERSION_NAME"
-          
+
           if [ "$UPDATED_VERSION_CODE" != "$NEW_VERSION_CODE" ]; then
             echo "⚠️ WARNING: Version code may not have been updated correctly"
           fi
-          
+
           if [ "$UPDATED_VERSION_NAME" != "$NEW_VERSION_NAME" ]; then
             echo "⚠️ WARNING: Version name may not have been updated correctly"
           fi
-          
+
           echo ""
           echo "✅ Version updated successfully"
           echo "   Version Code: $UPDATED_VERSION_CODE"
@@ -450,7 +448,7 @@ EOF
           cd android
           echo "=== Verifying Signing Configuration ==="
           echo ""
-          
+
           # Check if keystore.properties exists
           if [ ! -f "keystore.properties" ]; then
             echo "❌ ERROR: keystore.properties not found!"
@@ -458,40 +456,40 @@ EOF
             echo "Please check the 'Set up Android keystore' step output."
             exit 1
           fi
-          
+
           echo "✅ keystore.properties found"
-          
+
           # Verify keystore file exists
           KEYSTORE_FILE=$(grep "^storeFile=" keystore.properties | cut -d'=' -f2)
           if [ -z "$KEYSTORE_FILE" ]; then
             echo "❌ ERROR: storeFile not found in keystore.properties"
             exit 1
           fi
-          
+
           if [ ! -f "$KEYSTORE_FILE" ]; then
             echo "❌ ERROR: Keystore file not found: $KEYSTORE_FILE"
             echo "Expected location: android/$KEYSTORE_FILE"
             exit 1
           fi
-          
+
           echo "✅ Keystore file found: $KEYSTORE_FILE"
-          
+
           # Verify all required properties are set (without showing values)
           if ! grep -q "^keyAlias=" keystore.properties; then
             echo "❌ ERROR: keyAlias not found in keystore.properties"
             exit 1
           fi
-          
+
           if ! grep -q "^storePassword=" keystore.properties; then
             echo "❌ ERROR: storePassword not found in keystore.properties"
             exit 1
           fi
-          
+
           if ! grep -q "^keyPassword=" keystore.properties; then
             echo "❌ ERROR: keyPassword not found in keystore.properties"
             exit 1
           fi
-          
+
           echo "✅ All signing properties are configured"
           echo ""
           echo "Signing configuration summary:"
@@ -557,7 +555,7 @@ EOF
             echo "⚠️ Release build failed. Trying to build debug bundle instead..."
             ./gradlew bundleDebug --stacktrace --info 2>&1 | tee debug-bundle.log
             DEBUG_BUNDLE_EXIT_CODE=${PIPESTATUS[0]}
-            
+
             if [ $DEBUG_BUNDLE_EXIT_CODE -ne 0 ]; then
               echo ""
               echo "❌ Debug bundle also failed!"
@@ -589,7 +587,7 @@ EOF
           ls -la app/build/outputs/bundle/debug/ 2>/dev/null || echo "Bundle debug directory not found"
           ls -la app/build/outputs/apk/release/ 2>/dev/null || echo "APK release directory not found"
           ls -la app/build/outputs/apk/debug/ 2>/dev/null || echo "APK debug directory not found"
-          
+
           # Verify AAB is signed
           echo ""
           echo "=== Verifying AAB Signature ==="
@@ -597,15 +595,15 @@ EOF
           if [ ! -z "$AAB_FILE" ] && [ -f "$AAB_FILE" ]; then
             echo "Found AAB file: $AAB_FILE"
             echo "Verifying signature..."
-            
+
             # Use jarsigner to verify the AAB is signed
             jarsigner -verify -verbose -certs "$AAB_FILE" 2>&1 | head -20 || echo "⚠️ jarsigner verification failed or not available"
-            
+
             # Check if AAB contains signature files (META-INF/*.SF, META-INF/*.RSA)
             echo ""
             echo "Checking for signature files in AAB..."
             unzip -l "$AAB_FILE" 2>/dev/null | grep -E "META-INF/.*\.(SF|RSA|DSA|EC)" | head -10 || echo "⚠️ No signature files found in AAB"
-            
+
             # If we can extract and check, verify signature files exist
             if unzip -l "$AAB_FILE" 2>/dev/null | grep -q "META-INF/.*\.SF"; then
               echo "✅ AAB appears to be signed (contains signature files)"
@@ -799,13 +797,13 @@ EOF
           echo "=== Generating iOS Platform ==="
           echo "Current directory: $(pwd)"
           echo ""
-          
+
           # Check if ios/App/Podfile exists (indicates full iOS project)
           if [ -f "ios/App/Podfile" ]; then
             echo "✅ iOS project already exists with Podfile"
           else
             echo "📱 iOS project not complete, generating it now..."
-            
+
             # Remove partial ios directory if it exists (just templates)
             if [ -d "ios" ]; then
               echo "Removing partial ios directory..."
@@ -815,19 +813,19 @@ EOF
               fi
               rm -rf ios
             fi
-            
+
             # Add iOS platform fresh
             echo "Running: npx cap add ios"
             npx cap add ios
-            
+
             if [ $? -ne 0 ]; then
               echo "❌ Failed to add iOS platform!"
               exit 1
             fi
-            
+
             echo "✅ iOS project generated"
           fi
-          
+
           # List the ios directory structure
           echo ""
           echo "iOS directory structure:"
@@ -843,16 +841,16 @@ EOF
           echo "=== Syncing Capacitor iOS Project ==="
           echo "Current directory: $(pwd)"
           echo ""
-          
+
           # Sync web assets and native plugins
           echo "Running: npx cap sync ios"
           npx cap sync ios
-          
+
           if [ $? -ne 0 ]; then
             echo "❌ Capacitor sync failed!"
             echo ""
             echo "Attempting recovery..."
-            
+
             # Try to add iOS platform if sync failed
             if [ ! -f "ios/App/Podfile" ]; then
               echo "Podfile missing, trying to regenerate iOS project..."
@@ -861,18 +859,18 @@ EOF
               npx cap sync ios
             fi
           fi
-          
+
           # Verify key files exist
           echo ""
           echo "=== Verifying iOS Project Structure ==="
-          
+
           if [ ! -d "ios/App" ]; then
             echo "❌ ios/App directory not found!"
             exit 1
           fi
           echo "✅ ios/App directory exists"
           ls -la ios/App/ | head -20
-          
+
           # Check for Podfile (critical)
           if [ ! -f "ios/App/Podfile" ]; then
             echo "❌ Podfile not found at ios/App/Podfile!"
@@ -883,7 +881,7 @@ EOF
             exit 1
           fi
           echo "✅ Podfile found at ios/App/Podfile"
-          
+
           # Check for Xcode project
           if [ -d "ios/App/App.xcodeproj" ]; then
             echo "✅ Xcode project found"
@@ -891,7 +889,7 @@ EOF
             echo "⚠️ Xcode project not found"
             find ios -name "*.xcodeproj" -type d 2>/dev/null || echo "No xcodeproj found"
           fi
-          
+
           echo ""
           echo "✅ Capacitor iOS sync completed"
 
@@ -899,7 +897,7 @@ EOF
         script: |
           # Ensure Info.plist exists and has required permissions
           INFO_PLIST="ios/App/App/Info.plist"
-          
+
           if [ ! -f "$INFO_PLIST" ]; then
             echo "⚠️ Info.plist not found at $INFO_PLIST"
             echo "Searching for Info.plist..."
@@ -907,23 +905,23 @@ EOF
             echo "Will try to configure after CocoaPods install"
           else
             echo "📝 Configuring iOS permissions in $INFO_PLIST..."
-            
+
             # Use PlistBuddy to add/update permissions (macOS tool)
             /usr/libexec/PlistBuddy -c "Add :NSCameraUsageDescription string 'Kids Call Home needs camera access for video calls with family.'" "$INFO_PLIST" 2>/dev/null || \
             /usr/libexec/PlistBuddy -c "Set :NSCameraUsageDescription 'Kids Call Home needs camera access for video calls with family.'" "$INFO_PLIST" 2>/dev/null || true
-            
+
             /usr/libexec/PlistBuddy -c "Add :NSMicrophoneUsageDescription string 'Kids Call Home needs microphone access for video calls with family.'" "$INFO_PLIST" 2>/dev/null || \
             /usr/libexec/PlistBuddy -c "Set :NSMicrophoneUsageDescription 'Kids Call Home needs microphone access for video calls with family.'" "$INFO_PLIST" 2>/dev/null || true
-            
+
             /usr/libexec/PlistBuddy -c "Add :NSPhotoLibraryUsageDescription string 'Kids Call Home needs photo library access to share photos with family.'" "$INFO_PLIST" 2>/dev/null || \
             /usr/libexec/PlistBuddy -c "Set :NSPhotoLibraryUsageDescription 'Kids Call Home needs photo library access to share photos with family.'" "$INFO_PLIST" 2>/dev/null || true
-            
+
             /usr/libexec/PlistBuddy -c "Add :NSPhotoLibraryAddUsageDescription string 'Kids Call Home needs permission to save photos from messages.'" "$INFO_PLIST" 2>/dev/null || \
             /usr/libexec/PlistBuddy -c "Set :NSPhotoLibraryAddUsageDescription 'Kids Call Home needs permission to save photos from messages.'" "$INFO_PLIST" 2>/dev/null || true
-            
+
             /usr/libexec/PlistBuddy -c "Add :NSUserNotificationsUsageDescription string 'Kids Call Home needs notification permission to alert you about calls and messages.'" "$INFO_PLIST" 2>/dev/null || \
             /usr/libexec/PlistBuddy -c "Set :NSUserNotificationsUsageDescription 'Kids Call Home needs notification permission to alert you about calls and messages.'" "$INFO_PLIST" 2>/dev/null || true
-            
+
             echo "✅ iOS permissions configured"
           fi
 
@@ -932,35 +930,35 @@ EOF
           echo "=== Installing CocoaPods Dependencies ==="
           echo "Current directory: $(pwd)"
           echo ""
-          
+
           # Check if iOS directory exists
           if [ ! -d "ios" ]; then
             echo "❌ iOS directory not found!"
             echo "This should have been created by 'Sync Capacitor iOS' step"
             exit 1
           fi
-          
+
           # Find the Podfile location
           PODFILE_PATH=$(find ios -name "Podfile" -type f | head -1)
-          
+
           if [ -z "$PODFILE_PATH" ]; then
             echo "⚠️ Podfile not found. Checking iOS directory structure..."
             echo ""
             echo "iOS directory contents:"
             ls -la ios/ 2>/dev/null || echo "ios/ directory is empty or doesn't exist"
             echo ""
-            
+
             # Check if ios/App exists
             if [ -d "ios/App" ]; then
               echo "ios/App directory exists. Contents:"
               ls -la ios/App/ 2>/dev/null || echo "ios/App is empty"
               echo ""
-              
+
               # Try to create Podfile if it's missing (Capacitor should have created it)
               echo "⚠️ Podfile missing. This might indicate Capacitor sync didn't complete properly."
               echo "Attempting to sync again..."
               npx cap sync ios
-              
+
               # Check again
               PODFILE_PATH=$(find ios -name "Podfile" -type f | head -1)
               if [ -z "$PODFILE_PATH" ]; then
@@ -973,13 +971,13 @@ EOF
               exit 1
             fi
           fi
-          
+
           # Get the directory containing the Podfile
           PODFILE_DIR=$(dirname "$PODFILE_PATH")
           echo "✅ Found Podfile at: $PODFILE_PATH"
           echo "Changing to directory: $PODFILE_DIR"
           cd "$PODFILE_DIR"
-          
+
           # Verify CocoaPods is installed
           echo ""
           echo "=== Verifying CocoaPods ==="
@@ -989,14 +987,14 @@ EOF
             which pod || echo "pod command not found"
             exit 1
           fi
-          
+
           POD_VERSION=$(pod --version 2>/dev/null || echo "unknown")
           echo "✅ CocoaPods version: $POD_VERSION"
-          
+
           echo ""
           echo "=== Running pod install ==="
           pod install
-          
+
           if [ $? -ne 0 ]; then
             echo "❌ pod install failed!"
             echo ""
@@ -1006,7 +1004,7 @@ EOF
             echo "3. Check Podfile syntax"
             exit 1
           fi
-          
+
           echo "✅ CocoaPods dependencies installed successfully"
 
       - name: Configure iOS permissions after CocoaPods (if needed)
@@ -1034,7 +1032,7 @@ EOF
           echo "=== Verifying Bundle Identifier ==="
           echo "Expected bundle ID: $BUNDLE_ID"
           echo ""
-          
+
           # Find the project.pbxproj file
           PROJECT_FILE=$(find . -name "*.xcodeproj" -type d | head -1)
           if [ -z "$PROJECT_FILE" ]; then
@@ -1043,35 +1041,35 @@ EOF
             find . -name "*.xcodeproj" -type d 2>/dev/null || echo "No .xcodeproj found"
             exit 1
           fi
-          
+
           PBXPROJ="$PROJECT_FILE/project.pbxproj"
           echo "Found project: $PROJECT_FILE"
           echo "Reading: $PBXPROJ"
           echo ""
-          
+
           # Debug: Show all PRODUCT_BUNDLE_IDENTIFIER lines (Capacitor may use different formats)
           echo "=== All PRODUCT_BUNDLE_IDENTIFIER lines in project ==="
           grep "PRODUCT_BUNDLE_IDENTIFIER" "$PBXPROJ" | head -20 || echo "No PRODUCT_BUNDLE_IDENTIFIER found"
           echo ""
-          
+
           # Capacitor projects may use format: PRODUCT_BUNDLE_IDENTIFIER = com.example.app; (no quotes)
           # or: PRODUCT_BUNDLE_IDENTIFIER = "com.example.app"; (with quotes)
           # Extract bundle ID handling both formats
           CURRENT_BUNDLE_ID=$(grep "PRODUCT_BUNDLE_IDENTIFIER" "$PBXPROJ" | head -1 | sed 's/.*PRODUCT_BUNDLE_IDENTIFIER = //' | sed 's/[";]//g' | tr -d '[:space:]')
           echo "Current bundle ID in project: '$CURRENT_BUNDLE_ID'"
-          
+
           # Update bundle identifier if it doesn't match or is empty
           if [ "$CURRENT_BUNDLE_ID" != "$BUNDLE_ID" ]; then
             echo "⚠️ Bundle ID mismatch! Updating all instances to $BUNDLE_ID..."
-            
+
             # Update both quoted and unquoted formats
             # Format 1: PRODUCT_BUNDLE_IDENTIFIER = "something";
             sed -i '' "s/PRODUCT_BUNDLE_IDENTIFIER = \"[^\"]*\"/PRODUCT_BUNDLE_IDENTIFIER = \"$BUNDLE_ID\"/g" "$PBXPROJ"
             # Format 2: PRODUCT_BUNDLE_IDENTIFIER = something; (no quotes, Capacitor default)
             sed -i '' "s/PRODUCT_BUNDLE_IDENTIFIER = [^;\"]*;/PRODUCT_BUNDLE_IDENTIFIER = $BUNDLE_ID;/g" "$PBXPROJ"
-            
+
             echo "✅ Bundle ID updated in project.pbxproj"
-            
+
             # Verify the update worked
             echo ""
             echo "After update - PRODUCT_BUNDLE_IDENTIFIER lines:"
@@ -1079,14 +1077,14 @@ EOF
           else
             echo "✅ Bundle ID matches"
           fi
-          
+
           # Info.plist typically uses $(PRODUCT_BUNDLE_IDENTIFIER) variable, which is fine
           if [ -f "App/Info.plist" ]; then
             echo ""
             echo "Checking Info.plist..."
             INFO_BUNDLE_ID=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "App/Info.plist" 2>/dev/null || echo "")
             echo "Info.plist CFBundleIdentifier: $INFO_BUNDLE_ID"
-            
+
             # If it uses $(PRODUCT_BUNDLE_IDENTIFIER), that's correct - it will inherit from project
             if [ "$INFO_BUNDLE_ID" = '$(PRODUCT_BUNDLE_IDENTIFIER)' ]; then
               echo "✅ Info.plist uses project variable (correct)"
@@ -1096,12 +1094,12 @@ EOF
               echo "✅ Info.plist updated to use \$(PRODUCT_BUNDLE_IDENTIFIER)"
             fi
           fi
-          
+
           echo ""
           echo "=== Final Bundle ID Verification ==="
           FINAL_BUNDLE_ID=$(grep "PRODUCT_BUNDLE_IDENTIFIER" "$PBXPROJ" | head -1 | sed 's/.*PRODUCT_BUNDLE_IDENTIFIER = //' | sed 's/[";]//g' | tr -d '[:space:]')
           echo "Final bundle ID: '$FINAL_BUNDLE_ID'"
-          
+
           if [ "$FINAL_BUNDLE_ID" != "$BUNDLE_ID" ]; then
             echo "⚠️ WARNING: Bundle ID may not have been updated correctly"
             echo "Expected: $BUNDLE_ID"
@@ -1120,13 +1118,13 @@ EOF
           echo "=== Available Provisioning Profiles ==="
           echo "Checking for profiles matching bundle ID: $BUNDLE_ID"
           echo ""
-          
+
           # List all provisioning profiles
           if [ -d ~/Library/MobileDevice/Provisioning\ Profiles ]; then
             echo "Provisioning profiles directory exists"
             ls -la ~/Library/MobileDevice/Provisioning\ Profiles/ | head -20 || echo "No profiles found"
             echo ""
-            
+
             # Try to extract bundle IDs from profiles
             echo "Extracting bundle IDs from profiles..."
             for profile in ~/Library/MobileDevice/Provisioning\ Profiles/*.mobileprovision; do
@@ -1141,7 +1139,7 @@ EOF
           else
             echo "⚠️ Provisioning profiles directory not found"
           fi
-          
+
           echo ""
           echo "=== Codemagic Environment Check ==="
           echo "BUNDLE_ID: $BUNDLE_ID"
@@ -1160,7 +1158,7 @@ EOF
           echo "Bundle ID: $BUNDLE_ID"
           echo "Distribution type: app_store"
           echo ""
-          
+
           # Use Codemagic's xcode-project command to set up profiles
           xcode-project use-profiles || {
             echo "❌ Failed to set up provisioning profiles"
@@ -1172,23 +1170,23 @@ EOF
             echo "4. Try regenerating the certificate/profile in Codemagic if needed"
             exit 1
           }
-          
+
           echo "✅ Provisioning profiles configured"
 
       - name: Set version and build number for App Store distribution
         script: |
           cd ios/App
           echo "=== Setting iOS Version and Build Number ==="
-          
+
           INFO_PLIST="App/Info.plist"
-          
+
           # Read current version name (CFBundleShortVersionString)
           if [ -f "$INFO_PLIST" ]; then
             CURRENT_VERSION_NAME=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$INFO_PLIST" 2>/dev/null || echo "")
           else
             CURRENT_VERSION_NAME=""
           fi
-          
+
           # If version name not found, try reading from project.pbxproj
           if [ -z "$CURRENT_VERSION_NAME" ]; then
             PROJECT_FILE=$(find . -name "*.xcodeproj" -type d | head -1)
@@ -1197,7 +1195,7 @@ EOF
               CURRENT_VERSION_NAME=$(grep "MARKETING_VERSION" "$PBXPROJ" | head -1 | sed 's/.*MARKETING_VERSION = //' | sed 's/;//' | sed 's/"//g' | tr -d '[:space:]' || echo "")
             fi
           fi
-          
+
           # Default to 1.0.0 if not found
           if [ -z "$CURRENT_VERSION_NAME" ]; then
             CURRENT_VERSION_NAME="1.0.0"
@@ -1205,23 +1203,23 @@ EOF
           else
             echo "Current version name: $CURRENT_VERSION_NAME"
           fi
-          
+
           # Increment patch version (e.g., 1.0.1 -> 1.0.2)
           MAJOR=$(echo "$CURRENT_VERSION_NAME" | cut -d. -f1)
           MINOR=$(echo "$CURRENT_VERSION_NAME" | cut -d. -f2)
           PATCH=$(echo "$CURRENT_VERSION_NAME" | cut -d. -f3)
-          
+
           # Default to 0 if empty
           MAJOR=${MAJOR:-1}
           MINOR=${MINOR:-0}
           PATCH=${PATCH:-0}
-          
+
           # Increment patch version
           PATCH=$((PATCH + 1))
           NEW_VERSION_NAME="$MAJOR.$MINOR.$PATCH"
-          
+
           echo "New version name: $NEW_VERSION_NAME"
-          
+
           # Determine build number (CFBundleVersion)
           # Use Codemagic's BUILD_NUMBER if available (auto-increments per build)
           # Otherwise fall back to timestamp-based build number
@@ -1233,35 +1231,35 @@ EOF
             BUILD_VERSION=$(date +%s)
             echo "Using timestamp-based build number: $BUILD_VERSION"
           fi
-          
+
           # Update CFBundleShortVersionString (version name) in Info.plist
           if [ -f "$INFO_PLIST" ]; then
             /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $NEW_VERSION_NAME" "$INFO_PLIST" 2>/dev/null || \
             /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string $NEW_VERSION_NAME" "$INFO_PLIST" 2>/dev/null || true
             echo "✅ Updated CFBundleShortVersionString to $NEW_VERSION_NAME in Info.plist"
-            
+
             # Update CFBundleVersion (build number) in Info.plist
             /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_VERSION" "$INFO_PLIST" 2>/dev/null || \
             /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string $BUILD_VERSION" "$INFO_PLIST" 2>/dev/null || true
             echo "✅ Updated CFBundleVersion to $BUILD_VERSION in Info.plist"
           fi
-          
+
           # Also update in Xcode project file (project.pbxproj)
           PROJECT_FILE=$(find . -name "*.xcodeproj" -type d | head -1)
           if [ ! -z "$PROJECT_FILE" ]; then
             PBXPROJ="$PROJECT_FILE/project.pbxproj"
-            
+
             # Update MARKETING_VERSION (version name) in project.pbxproj
             # Handle both formats: MARKETING_VERSION = "1.0.1"; and MARKETING_VERSION = 1.0.1;
             sed -i '' "s/MARKETING_VERSION = \"[^\"]*\"/MARKETING_VERSION = \"$NEW_VERSION_NAME\"/g" "$PBXPROJ" 2>/dev/null || \
             sed -i '' "s/MARKETING_VERSION = [^;]*/MARKETING_VERSION = $NEW_VERSION_NAME/g" "$PBXPROJ" 2>/dev/null || true
             echo "✅ Updated MARKETING_VERSION to $NEW_VERSION_NAME in project.pbxproj"
-            
+
             # Update CURRENT_PROJECT_VERSION (build number) in project.pbxproj
             sed -i '' "s/CURRENT_PROJECT_VERSION = [^;]*/CURRENT_PROJECT_VERSION = $BUILD_VERSION/g" "$PBXPROJ" 2>/dev/null || true
             echo "✅ Updated CURRENT_PROJECT_VERSION to $BUILD_VERSION in project.pbxproj"
           fi
-          
+
           echo ""
           echo "=== Final iOS Version Summary ==="
           echo "Version Name (CFBundleShortVersionString): $NEW_VERSION_NAME"
@@ -1288,7 +1286,7 @@ EOF
           success: true
           failure: true
       # App Store Connect / TestFlight Publishing Configuration
-      # 
+      #
       # CONFIGURATION NOTES:
       # - auth: integration - Uses the App Store Connect API key stored in Codemagic
       #   - Integration name: "codemagic" (must match the key name in Codemagic Team Settings)
