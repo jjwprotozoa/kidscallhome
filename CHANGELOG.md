@@ -6,6 +6,43 @@ All notable changes to this project will be documented in this file.
 
 ### Changed - 2026-01-02
 
+#### Referral System Improvements
+- **Unified Referral Attribution**: Top navigation Share button and Referrals page now generate identical referral links with `source` parameter for analytics tracking
+  - Top nav share uses `source=top_nav_share`
+  - Referrals page share uses `source=referrals_page`
+  - Both methods count toward the same referral tracking
+- **Enhanced Referral Lifecycle Display**: Added clear lifecycle states and visual indicators
+  - **Lifecycle States**: Signed up → Subscribed → Reward credited
+  - **Referral History UI**: Shows masked email, "Signed up" date, "Subscribed" date (when available), and status badges
+  - **Status Badges**: "Signed Up" (neutral), "Subscribed" (success), "Reward Credited" (success)
+  - **Summary Counters**: Updated labels to clarify Total Referrals (all signups), Pending (not subscribed), Completed (subscribed), Weeks Earned (reward credited)
+- **Updated Copy**: "How it works" section now clarifies that rewards happen when referred users subscribe to the Family Plan, not just when they sign up
+- **Centralized Share Messages**: Created shared `shareMessages.ts` module for consistent messaging across all share methods
+  - All share methods (Share Link, Copy Message, WhatsApp, Facebook, Twitter/X, Email) now include full referral URLs with `ref` and `source` parameters
+  - Messages clarify that 1 week free is for subscribing to the Family Plan, not just creating an account
+  - ShareModal and SocialShareButtons now use the same message templates
+- **Files**: 
+  - `src/features/referrals/utils/referralHelpers.ts` - Centralized referral link generation
+  - `src/features/referrals/utils/shareMessages.ts` - Shared share message module (NEW)
+  - `src/features/referrals/components/ReferralsTab.tsx` - Updated history UI and counters
+  - `src/components/ShareModal.tsx` - Uses referral links and shared messages
+  - `src/components/Navigation.tsx` - Fetches and passes referral code to ShareModal
+  - `src/features/referrals/components/SocialShareButtons.tsx` - Uses shared messages
+  - `src/integrations/supabase/types.ts` - Added referral function types
+
+### Fixed - 2026-01-02
+
+#### Navigation Component Router Context Error
+- **Fixed `useNavigate()` error in NativeNotificationHandler**: Moved `NativeNotificationHandler` component inside `BrowserRouter` to fix "useNavigate() may be used only in the context of a <Router> component" error
+  - Component was being rendered before Router was initialized
+  - Now renders inside Router context, allowing proper navigation functionality
+- **Made referral code fetch non-blocking**: Referral code loading no longer blocks navigation rendering
+  - Uses setTimeout to ensure async fetch doesn't delay initial render
+  - Improved error handling to prevent crashes
+- **Files**: `src/App.tsx`, `src/components/Navigation.tsx`
+
+### Changed - 2026-01-02
+
 #### Native App Subscription Management (iOS/Android)
 - **Updated Upgrade page for iOS/Android**: Native app users now see app store-specific subscription management instructions instead of Stripe checkout
   - iOS users see step-by-step instructions to manage subscriptions through App Store
