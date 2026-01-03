@@ -31,11 +31,78 @@ workflows:
 
       - name: Set up Android keystore
         script: |
-          if [ ! -z "$CM_KEYSTORE_PATH" ]; then
-            echo "✅ Using keystore from CM_KEYSTORE_PATH"
-          else
-            echo "⚠️ No keystore configured, using debug signing"
+          echo "=== Setting up Android Keystore for Signing ==="
+          echo ""
+          
+          # Check if keystore environment variables are set
+          if [ -z "$CM_KEYSTORE_PATH" ]; then
+            echo "❌ ERROR: CM_KEYSTORE_PATH is not set!"
+            echo "Please configure the keystore in Codemagic Team Settings → Code Signing → android_keystore group"
+            exit 1
           fi
+          
+          if [ -z "$CM_KEYSTORE_PASSWORD" ]; then
+            echo "❌ ERROR: CM_KEYSTORE_PASSWORD is not set!"
+            exit 1
+          fi
+          
+          if [ -z "$CM_KEY_ALIAS" ]; then
+            echo "❌ ERROR: CM_KEY_ALIAS is not set!"
+            exit 1
+          fi
+          
+          if [ -z "$CM_KEY_PASSWORD" ]; then
+            echo "❌ ERROR: CM_KEY_PASSWORD is not set!"
+            exit 1
+          fi
+          
+          echo "✅ All keystore environment variables are set"
+          echo "  Keystore path: $CM_KEYSTORE_PATH"
+          echo "  Key alias: $CM_KEY_ALIAS"
+          echo ""
+          
+          # Verify keystore file exists
+          if [ ! -f "$CM_KEYSTORE_PATH" ]; then
+            echo "❌ ERROR: Keystore file not found at: $CM_KEYSTORE_PATH"
+            exit 1
+          fi
+          
+          echo "✅ Keystore file found"
+          
+          # Copy keystore to android directory
+          KEYSTORE_DEST="android/upload-keystore.jks"
+          echo "Copying keystore to: $KEYSTORE_DEST"
+          cp "$CM_KEYSTORE_PATH" "$KEYSTORE_DEST"
+          
+          if [ ! -f "$KEYSTORE_DEST" ]; then
+            echo "❌ ERROR: Failed to copy keystore file!"
+            exit 1
+          fi
+          
+          echo "✅ Keystore copied successfully"
+          
+          # Create keystore.properties file in android directory
+          KEYSTORE_PROPERTIES="android/keystore.properties"
+          echo "Creating keystore.properties file..."
+          
+          cat > "$KEYSTORE_PROPERTIES" << EOF
+storeFile=upload-keystore.jks
+storePassword=$CM_KEYSTORE_PASSWORD
+keyAlias=$CM_KEY_ALIAS
+keyPassword=$CM_KEY_PASSWORD
+EOF
+          
+          if [ ! -f "$KEYSTORE_PROPERTIES" ]; then
+            echo "❌ ERROR: Failed to create keystore.properties file!"
+            exit 1
+          fi
+          
+          echo "✅ keystore.properties created"
+          echo ""
+          echo "Verifying keystore.properties contents (without passwords):"
+          sed 's/Password=.*/Password=***/' "$KEYSTORE_PROPERTIES" | sed 's/storePassword=.*/storePassword=***/'
+          echo ""
+          echo "✅ Keystore setup complete - AAB will be signed during build"
 
       - name: Verify Java version and configure Gradle
         script: |
@@ -277,6 +344,164 @@ workflows:
             ls -la app/build/ 2>/dev/null || echo "app/build does not exist"
           fi
 
+      - name: Set version code and version name for Android
+        script: |
+          cd android/app
+          echo "=== Setting Android Version ==="
+          
+          # Use Codemagic's BUILD_NUMBER if available (auto-increments per build)
+          # Otherwise, read current version and increment it
+          BUILD_GRADLE="build.gradle"
+          
+          if [ ! -f "$BUILD_GRADLE" ]; then
+            echo "❌ ERROR: build.gradle not found at android/app/build.gradle"
+            exit 1
+          fi
+          
+          # Extract current version code
+          CURRENT_VERSION_CODE=$(grep "versionCode" "$BUILD_GRADLE" | head -1 | sed 's/.*versionCode //' | sed 's/[^0-9].*//')
+          
+          if [ -z "$CURRENT_VERSION_CODE" ]; then
+            echo "⚠️ Could not extract current version code, defaulting to 1"
+            CURRENT_VERSION_CODE=1
+          fi
+          
+          echo "Current version code in build.gradle: $CURRENT_VERSION_CODE"
+          
+          # Determine new version code
+          if [ ! -z "$BUILD_NUMBER" ]; then
+            # Use Codemagic's BUILD_NUMBER if it's >= current (avoids skipping versions)
+            if [ "$BUILD_NUMBER" -ge "$CURRENT_VERSION_CODE" ]; then
+              NEW_VERSION_CODE="$BUILD_NUMBER"
+              echo "Using Codemagic BUILD_NUMBER: $NEW_VERSION_CODE"
+            else
+              # BUILD_NUMBER is lower than current, increment current instead
+              NEW_VERSION_CODE=$((CURRENT_VERSION_CODE + 1))
+              echo "BUILD_NUMBER ($BUILD_NUMBER) is lower than current ($CURRENT_VERSION_CODE), incrementing to: $NEW_VERSION_CODE"
+            fi
+          else
+            # Increment current version code
+            NEW_VERSION_CODE=$((CURRENT_VERSION_CODE + 1))
+            echo "No BUILD_NUMBER available, incrementing version code to: $NEW_VERSION_CODE"
+          fi
+          
+          # Extract current version name
+          CURRENT_VERSION_NAME=$(grep "versionName" "$BUILD_GRADLE" | head -1 | sed 's/.*versionName "//' | sed 's/".*//')
+          
+          if [ -z "$CURRENT_VERSION_NAME" ]; then
+            echo "⚠️ Could not extract current version name, defaulting to 1.0.0"
+            CURRENT_VERSION_NAME="1.0.0"
+          fi
+          
+          echo "Current version name: $CURRENT_VERSION_NAME"
+          
+          # Increment patch version (e.g., 1.0.1 -> 1.0.2)
+          # Extract major.minor.patch
+          MAJOR=$(echo "$CURRENT_VERSION_NAME" | cut -d. -f1)
+          MINOR=$(echo "$CURRENT_VERSION_NAME" | cut -d. -f2)
+          PATCH=$(echo "$CURRENT_VERSION_NAME" | cut -d. -f3)
+          
+          # Default to 0 if empty
+          MAJOR=${MAJOR:-1}
+          MINOR=${MINOR:-0}
+          PATCH=${PATCH:-0}
+          
+          # Increment patch version
+          PATCH=$((PATCH + 1))
+          NEW_VERSION_NAME="$MAJOR.$MINOR.$PATCH"
+          
+          echo "New version name: $NEW_VERSION_NAME"
+          
+          # Update version code in build.gradle
+          # Handle both formats: versionCode 2 and versionCode = 2
+          sed -i '' "s/versionCode [0-9]*/versionCode $NEW_VERSION_CODE/g" "$BUILD_GRADLE" || \
+          sed -i '' "s/versionCode = [0-9]*/versionCode = $NEW_VERSION_CODE/g" "$BUILD_GRADLE" || \
+          sed -i '' "s/versionCode[[:space:]]*[0-9]*/versionCode $NEW_VERSION_CODE/g" "$BUILD_GRADLE"
+          
+          # Update version name in build.gradle
+          # Handle both formats: versionName "1.0.1" and versionName = "1.0.1"
+          sed -i '' "s/versionName \"[^\"]*\"/versionName \"$NEW_VERSION_NAME\"/g" "$BUILD_GRADLE" || \
+          sed -i '' "s/versionName = \"[^\"]*\"/versionName = \"$NEW_VERSION_NAME\"/g" "$BUILD_GRADLE"
+          
+          # Verify the update
+          echo ""
+          echo "=== Verification ==="
+          UPDATED_VERSION_CODE=$(grep "versionCode" "$BUILD_GRADLE" | head -1 | sed 's/.*versionCode //' | sed 's/[^0-9].*//')
+          UPDATED_VERSION_NAME=$(grep "versionName" "$BUILD_GRADLE" | head -1 | sed 's/.*versionName "//' | sed 's/".*//')
+          
+          echo "Updated version code: $UPDATED_VERSION_CODE"
+          echo "Updated version name: $UPDATED_VERSION_NAME"
+          
+          if [ "$UPDATED_VERSION_CODE" != "$NEW_VERSION_CODE" ]; then
+            echo "⚠️ WARNING: Version code may not have been updated correctly"
+          fi
+          
+          if [ "$UPDATED_VERSION_NAME" != "$NEW_VERSION_NAME" ]; then
+            echo "⚠️ WARNING: Version name may not have been updated correctly"
+          fi
+          
+          echo ""
+          echo "✅ Version updated successfully"
+          echo "   Version Code: $UPDATED_VERSION_CODE"
+          echo "   Version Name: $UPDATED_VERSION_NAME"
+
+      - name: Verify signing configuration before build
+        script: |
+          cd android
+          echo "=== Verifying Signing Configuration ==="
+          echo ""
+          
+          # Check if keystore.properties exists
+          if [ ! -f "keystore.properties" ]; then
+            echo "❌ ERROR: keystore.properties not found!"
+            echo "The keystore setup step should have created this file."
+            echo "Please check the 'Set up Android keystore' step output."
+            exit 1
+          fi
+          
+          echo "✅ keystore.properties found"
+          
+          # Verify keystore file exists
+          KEYSTORE_FILE=$(grep "^storeFile=" keystore.properties | cut -d'=' -f2)
+          if [ -z "$KEYSTORE_FILE" ]; then
+            echo "❌ ERROR: storeFile not found in keystore.properties"
+            exit 1
+          fi
+          
+          if [ ! -f "$KEYSTORE_FILE" ]; then
+            echo "❌ ERROR: Keystore file not found: $KEYSTORE_FILE"
+            echo "Expected location: android/$KEYSTORE_FILE"
+            exit 1
+          fi
+          
+          echo "✅ Keystore file found: $KEYSTORE_FILE"
+          
+          # Verify all required properties are set (without showing values)
+          if ! grep -q "^keyAlias=" keystore.properties; then
+            echo "❌ ERROR: keyAlias not found in keystore.properties"
+            exit 1
+          fi
+          
+          if ! grep -q "^storePassword=" keystore.properties; then
+            echo "❌ ERROR: storePassword not found in keystore.properties"
+            exit 1
+          fi
+          
+          if ! grep -q "^keyPassword=" keystore.properties; then
+            echo "❌ ERROR: keyPassword not found in keystore.properties"
+            exit 1
+          fi
+          
+          echo "✅ All signing properties are configured"
+          echo ""
+          echo "Signing configuration summary:"
+          echo "  Keystore file: $KEYSTORE_FILE"
+          echo "  Key alias: $(grep "^keyAlias=" keystore.properties | cut -d'=' -f2)"
+          echo "  Store password: ***"
+          echo "  Key password: ***"
+          echo ""
+          echo "✅ Signing configuration verified - AAB will be signed during build"
+
       - name: Build Android App Bundle
         script: |
           cd android
@@ -364,6 +589,33 @@ workflows:
           ls -la app/build/outputs/bundle/debug/ 2>/dev/null || echo "Bundle debug directory not found"
           ls -la app/build/outputs/apk/release/ 2>/dev/null || echo "APK release directory not found"
           ls -la app/build/outputs/apk/debug/ 2>/dev/null || echo "APK debug directory not found"
+          
+          # Verify AAB is signed
+          echo ""
+          echo "=== Verifying AAB Signature ==="
+          AAB_FILE=$(find app/build/outputs/bundle/release -name "*.aab" -type f 2>/dev/null | head -1)
+          if [ ! -z "$AAB_FILE" ] && [ -f "$AAB_FILE" ]; then
+            echo "Found AAB file: $AAB_FILE"
+            echo "Verifying signature..."
+            
+            # Use jarsigner to verify the AAB is signed
+            jarsigner -verify -verbose -certs "$AAB_FILE" 2>&1 | head -20 || echo "⚠️ jarsigner verification failed or not available"
+            
+            # Check if AAB contains signature files (META-INF/*.SF, META-INF/*.RSA)
+            echo ""
+            echo "Checking for signature files in AAB..."
+            unzip -l "$AAB_FILE" 2>/dev/null | grep -E "META-INF/.*\.(SF|RSA|DSA|EC)" | head -10 || echo "⚠️ No signature files found in AAB"
+            
+            # If we can extract and check, verify signature files exist
+            if unzip -l "$AAB_FILE" 2>/dev/null | grep -q "META-INF/.*\.SF"; then
+              echo "✅ AAB appears to be signed (contains signature files)"
+            else
+              echo "❌ WARNING: AAB may not be signed (no signature files found)"
+              echo "This could cause upload issues to Google Play Store"
+            fi
+          else
+            echo "⚠️ Release AAB file not found for signature verification"
+          fi
 
       - name: Build Release APK (for testing)
         script: |
@@ -923,11 +1175,54 @@ workflows:
           
           echo "✅ Provisioning profiles configured"
 
-      - name: Set build number for App Store distribution
+      - name: Set version and build number for App Store distribution
         script: |
           cd ios/App
-          echo "=== Setting Build Number ==="
+          echo "=== Setting iOS Version and Build Number ==="
           
+          INFO_PLIST="App/Info.plist"
+          
+          # Read current version name (CFBundleShortVersionString)
+          if [ -f "$INFO_PLIST" ]; then
+            CURRENT_VERSION_NAME=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$INFO_PLIST" 2>/dev/null || echo "")
+          else
+            CURRENT_VERSION_NAME=""
+          fi
+          
+          # If version name not found, try reading from project.pbxproj
+          if [ -z "$CURRENT_VERSION_NAME" ]; then
+            PROJECT_FILE=$(find . -name "*.xcodeproj" -type d | head -1)
+            if [ ! -z "$PROJECT_FILE" ]; then
+              PBXPROJ="$PROJECT_FILE/project.pbxproj"
+              CURRENT_VERSION_NAME=$(grep "MARKETING_VERSION" "$PBXPROJ" | head -1 | sed 's/.*MARKETING_VERSION = //' | sed 's/;//' | sed 's/"//g' | tr -d '[:space:]' || echo "")
+            fi
+          fi
+          
+          # Default to 1.0.0 if not found
+          if [ -z "$CURRENT_VERSION_NAME" ]; then
+            CURRENT_VERSION_NAME="1.0.0"
+            echo "⚠️ Version name not found, defaulting to: $CURRENT_VERSION_NAME"
+          else
+            echo "Current version name: $CURRENT_VERSION_NAME"
+          fi
+          
+          # Increment patch version (e.g., 1.0.1 -> 1.0.2)
+          MAJOR=$(echo "$CURRENT_VERSION_NAME" | cut -d. -f1)
+          MINOR=$(echo "$CURRENT_VERSION_NAME" | cut -d. -f2)
+          PATCH=$(echo "$CURRENT_VERSION_NAME" | cut -d. -f3)
+          
+          # Default to 0 if empty
+          MAJOR=${MAJOR:-1}
+          MINOR=${MINOR:-0}
+          PATCH=${PATCH:-0}
+          
+          # Increment patch version
+          PATCH=$((PATCH + 1))
+          NEW_VERSION_NAME="$MAJOR.$MINOR.$PATCH"
+          
+          echo "New version name: $NEW_VERSION_NAME"
+          
+          # Determine build number (CFBundleVersion)
           # Use Codemagic's BUILD_NUMBER if available (auto-increments per build)
           # Otherwise fall back to timestamp-based build number
           if [ ! -z "$BUILD_NUMBER" ]; then
@@ -939,9 +1234,13 @@ workflows:
             echo "Using timestamp-based build number: $BUILD_VERSION"
           fi
           
-          # Update CFBundleVersion in Info.plist
-          INFO_PLIST="App/Info.plist"
+          # Update CFBundleShortVersionString (version name) in Info.plist
           if [ -f "$INFO_PLIST" ]; then
+            /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $NEW_VERSION_NAME" "$INFO_PLIST" 2>/dev/null || \
+            /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string $NEW_VERSION_NAME" "$INFO_PLIST" 2>/dev/null || true
+            echo "✅ Updated CFBundleShortVersionString to $NEW_VERSION_NAME in Info.plist"
+            
+            # Update CFBundleVersion (build number) in Info.plist
             /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_VERSION" "$INFO_PLIST" 2>/dev/null || \
             /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string $BUILD_VERSION" "$INFO_PLIST" 2>/dev/null || true
             echo "✅ Updated CFBundleVersion to $BUILD_VERSION in Info.plist"
@@ -951,12 +1250,23 @@ workflows:
           PROJECT_FILE=$(find . -name "*.xcodeproj" -type d | head -1)
           if [ ! -z "$PROJECT_FILE" ]; then
             PBXPROJ="$PROJECT_FILE/project.pbxproj"
-            # Update CURRENT_PROJECT_VERSION in project.pbxproj
+            
+            # Update MARKETING_VERSION (version name) in project.pbxproj
+            # Handle both formats: MARKETING_VERSION = "1.0.1"; and MARKETING_VERSION = 1.0.1;
+            sed -i '' "s/MARKETING_VERSION = \"[^\"]*\"/MARKETING_VERSION = \"$NEW_VERSION_NAME\"/g" "$PBXPROJ" 2>/dev/null || \
+            sed -i '' "s/MARKETING_VERSION = [^;]*/MARKETING_VERSION = $NEW_VERSION_NAME/g" "$PBXPROJ" 2>/dev/null || true
+            echo "✅ Updated MARKETING_VERSION to $NEW_VERSION_NAME in project.pbxproj"
+            
+            # Update CURRENT_PROJECT_VERSION (build number) in project.pbxproj
             sed -i '' "s/CURRENT_PROJECT_VERSION = [^;]*/CURRENT_PROJECT_VERSION = $BUILD_VERSION/g" "$PBXPROJ" 2>/dev/null || true
             echo "✅ Updated CURRENT_PROJECT_VERSION to $BUILD_VERSION in project.pbxproj"
           fi
           
-          echo "Final build number: $BUILD_VERSION"
+          echo ""
+          echo "=== Final iOS Version Summary ==="
+          echo "Version Name (CFBundleShortVersionString): $NEW_VERSION_NAME"
+          echo "Build Number (CFBundleVersion): $BUILD_VERSION"
+          echo "✅ iOS version updated successfully"
 
       - name: Build IPA for distribution
         script: |

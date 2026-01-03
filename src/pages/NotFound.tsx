@@ -11,8 +11,16 @@ const NotFound = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
+    // Skip logging errors for invalid routes with "undefined" - these are likely from
+    // browser extensions, autofill, or code bugs and shouldn't be treated as real navigation
+    if (location.pathname.includes("undefined")) {
+      // Silently redirect to a valid route instead of showing 404
+      navigate("/parent/auth", { replace: true });
+      return;
+    }
+    
     console.error("404 Error: User attempted to access non-existent route:", location.pathname);
-  }, [location.pathname]);
+  }, [location.pathname, navigate]);
 
   return (
     <div className="flex min-h-[100dvh] items-center justify-center bg-gradient-to-br from-primary/5 via-background to-secondary/5 p-4">

@@ -23,6 +23,7 @@ if (import.meta.env.PROD) {
 // Suppress known browser extension/autofill errors that don't affect app functionality
 // These are harmless console noise from browser extensions and Chrome's autofill overlay
 if (typeof window !== "undefined") {
+  // Suppress console.error from browser extensions
   const originalError = console.error;
   console.error = (...args: any[]) => {
     const errorMessage = args[0]?.toString() || "";
@@ -40,6 +41,32 @@ if (typeof window !== "undefined") {
       originalError.apply(console, args);
     }
   };
+
+  // Suppress unhandled promise rejections from browser extensions
+  // These occur when extensions try to manipulate the DOM while React is re-rendering
+  window.addEventListener("unhandledrejection", (event) => {
+    const error = event.reason;
+    const errorMessage = error?.toString() || "";
+    const errorStack = error?.stack || "";
+    const errorName = error?.name || "";
+    
+    // Check if this is a browser extension/autofill error
+    const isBrowserExtensionError = 
+      errorMessage.includes("bootstrap-autofill-overlay") ||
+      errorMessage.includes("AutofillInlineMenuContentService") ||
+      errorStack.includes("bootstrap-autofill-overlay") ||
+      errorStack.includes("AutofillInlineMenuContentService") ||
+      (errorName === "NotFoundError" && 
+       (errorMessage.includes("insertBefore") || errorStack.includes("insertBefore")));
+    
+    // Suppress browser extension errors silently - they don't affect app functionality
+    if (isBrowserExtensionError) {
+      event.preventDefault(); // Prevent the error from being logged to console
+      return;
+    }
+    
+    // Let other unhandled rejections through to the normal error handlers
+  });
 }
 
 // Log startup (only in development)

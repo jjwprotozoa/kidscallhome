@@ -127,6 +127,10 @@ export const EmailInputWithBreachCheck = ({
             onBlur={() => setEmailBlurred(true)}
             required={required}
             autoComplete={isLogin ? "username" : "email"}
+            // Add data attributes to help browser extensions identify the field correctly
+            data-form-type="email"
+            // Prevent browser extensions from interfering with React's DOM management
+            data-autofill-safe="true"
             className={
               emailBlurred && !emailValid && email
                 ? "border-destructive"

@@ -1,56 +1,24 @@
 {
   "default": true,
-  "MD012": {
-    "maximum": 1,
-    "strict": true
-  },
   "MD013": {
     "line_length": 120,
-    "code_blocks": false,
-    "tables": false,
-    "headings": false
+    "ignore_code_blocks": true,
+    "tables": false
   },
-  "MD022": {
-    "lines_above": 1,
-    "lines_below": 1
-  },
-  "MD031": {
-    "list_items": true
-  },
-  "MD032": {
-    "list_items": true
-  },
-  "MD034": {
-    "allowed_elements": []
-  },
-  "MD036": {
-    "punctuation": ".,;:!"
-  },
+  "MD034": true,
   "MD040": {
     "allowed_languages": [
       "bash",
       "sh",
       "shell",
-      "typescript",
-      "ts",
-      "javascript",
-      "js",
+      "powershell",
+      "ps",
       "json",
-      "sql",
-      "text",
-      "plaintext",
-      "markdown",
-      "md",
+      "ts",
+      "tsx",
+      "js",
       "yaml",
-      "yml",
-      "python",
-      "py",
-      "html",
-      "css",
-      "scss",
-      "xml",
-      "env"
+      "yml"
     ]
   }
 }
-

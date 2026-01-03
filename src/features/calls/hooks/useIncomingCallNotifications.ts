@@ -11,6 +11,11 @@ import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { useAudioNotifications } from "./useAudioNotifications";
 import { setUserStartedCall } from "@/utils/userInteraction";
 import { endCall as endCallUtil } from "@/features/calls/utils/callEnding";
+import { 
+  isNativePlatform, 
+  showIncomingCallNotification, 
+  cancelIncomingCallNotification 
+} from "@/utils/nativeAndroid";
 
 interface IncomingCallData {
   callId: string;
@@ -156,50 +161,94 @@ export const useIncomingCallNotifications = (
       activeCallDataRef.current = callData;
       notificationShownRef.current = false;
 
-      // If tab is visible and has been visible (user has interacted), play ringtone immediately
-      if (isVisible && hasBeenVisible) {
-        playRingtone().catch((error) => {
-          if (import.meta.env.DEV) {
-            console.error("[CALL NOTIFICATIONS] Failed to play ringtone:", error);
+      // CRITICAL: On native platforms (iOS/Android), always use native notifications
+      // Native notifications work even when app is in background or closed
+      if (isNativePlatform()) {
+        try {
+          // Show native notification with sound and vibration
+          // This works in background/closed states
+          await showIncomingCallNotification(
+            callData.callId,
+            callData.callerName || "Caller",
+            callData.callerId || "",
+            () => {
+              // Handle accept from notification
+              setUserStartedCall();
+              if (onAnswerFromNotification) {
+                onAnswerFromNotification(callData.callId, callData.url);
+              } else if (callData.url) {
+                navigate(callData.url);
+              }
+            },
+            () => {
+              // Handle decline from notification
+              if (onDeclineFromNotification) {
+                onDeclineFromNotification(callData.callId);
+              }
+            }
+          );
+
+          // Also play ringtone if app is in foreground
+          if (isVisible && hasBeenVisible) {
+            playRingtone().catch((error) => {
+              if (import.meta.env.DEV) {
+                console.error("[CALL NOTIFICATIONS] Failed to play ringtone:", error);
+              }
+            });
           }
-        });
-      } else {
-        // Tab is not visible or hasn't been interacted with - show push notification
 
-        // Request notification permission if needed
-        if (!hasPermission) {
-          // Permission will be requested by sendNotification
+          notificationShownRef.current = true;
+        } catch (error) {
+          console.error("[CALL NOTIFICATIONS] Failed to show native notification:", error);
+          // Fall through to web notification fallback
         }
+      } else {
+        // Web platform: Use web notifications
+        // If tab is visible and has been visible (user has interacted), play ringtone immediately
+        if (isVisible && hasBeenVisible) {
+          playRingtone().catch((error) => {
+            if (import.meta.env.DEV) {
+              console.error("[CALL NOTIFICATIONS] Failed to play ringtone:", error);
+            }
+          });
+        } else {
+          // Tab is not visible or hasn't been interacted with - show push notification
 
-        // Show push notification with Answer/Decline action buttons
-        // Action buttons work on Windows (Chrome/Edge), Android Chrome, and desktop Chrome/Edge
-        await sendNotification({
-          title: "Incoming Call",
-          body: callData.callerName
-            ? `${callData.callerName} is calling...`
-            : "You have an incoming call",
-          icon: "/icon-192x192.png",
-          badge: "/icon-96x96.png",
-          tag: "incoming-call",
-          requireInteraction: true,
-          vibrate: [200, 100, 200, 100, 200], // Vibrate pattern for notification
-          data: {
-            callId: callData.callId,
-            callerName: callData.callerName,
-            callerId: callData.callerId,
-            url: callData.url,
-          },
-          // Action buttons (supported in Chrome/Edge on Windows, macOS, Linux, Android)
-          actions: [
-            { action: "answer", title: "✓ Answer" },
-            { action: "decline", title: "✕ Decline" },
-          ],
-        });
+          // Request notification permission if needed
+          if (!hasPermission) {
+            // Permission will be requested by sendNotification
+          }
 
-        notificationShownRef.current = true;
+          // Show push notification with Answer/Decline action buttons
+          // Action buttons work on Windows (Chrome/Edge), Android Chrome, and desktop Chrome/Edge
+          await sendNotification({
+            title: "Incoming Call",
+            body: callData.callerName
+              ? `${callData.callerName} is calling...`
+              : "You have an incoming call",
+            icon: "/icon-192x192.png",
+            badge: "/icon-96x96.png",
+            tag: "incoming-call",
+            requireInteraction: true,
+            vibrate: [200, 100, 200, 100, 200], // Vibrate pattern for notification
+            data: {
+              callId: callData.callId,
+              callerName: callData.callerName,
+              callerId: callData.callerId,
+              url: callData.url,
+            },
+            // Action buttons (supported in Chrome/Edge on Windows, macOS, Linux, Android)
+            actions: [
+              { action: "answer", title: "✓ Answer" },
+              { action: "decline", title: "✕ Decline" },
+            ],
+          });
+
+          notificationShownRef.current = true;
+        }
       }
     },
-    [enabled, isVisible, hasBeenVisible, hasPermission, sendNotification, playRingtone]
+    [enabled, isVisible, hasBeenVisible, hasPermission, sendNotification, playRingtone, navigate, onAnswerFromNotification, onDeclineFromNotification]
   );
 
   // When tab becomes visible and we have an active call, start ringing
@@ -226,6 +275,18 @@ export const useIncomingCallNotifications = (
       if (!callId || activeCallRef.current === callId || activeCallRef.current !== null) {
         stopRingtone();
         await closeNotification("incoming-call");
+        
+        // Cancel native notification if on native platform
+        if (isNativePlatform() && activeCallRef.current) {
+          try {
+            await cancelIncomingCallNotification(activeCallRef.current);
+          } catch (error) {
+            if (import.meta.env.DEV) {
+              console.error("[CALL NOTIFICATIONS] Failed to cancel native notification:", error);
+            }
+          }
+        }
+        
         activeCallRef.current = null;
         activeCallDataRef.current = null;
         notificationShownRef.current = false;

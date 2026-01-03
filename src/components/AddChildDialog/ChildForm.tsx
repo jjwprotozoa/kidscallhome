@@ -40,7 +40,7 @@ export const ChildForm = ({
   onGenerateCode,
 }: ChildFormProps) => {
   return (
-    <form className="space-y-6">
+    <div className="space-y-6">
       <div className="space-y-2">
         <label className="text-sm font-medium">Child's Name</label>
         <Input
@@ -191,7 +191,7 @@ export const ChildForm = ({
           </div>
         )}
       </div>
-    </form>
+    </div>
   );
 };
 

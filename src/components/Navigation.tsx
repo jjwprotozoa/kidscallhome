@@ -123,6 +123,7 @@ const Navigation = () => {
   // Kid-friendly logout dialog state
   const [showChildLogoutDialog, setShowChildLogoutDialog] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [referralCode, setReferralCode] = useState<string | null>(null);
   const [pendingConnectionsCount, setPendingConnectionsCount] = useState(0);
   const [newReportsCount, setNewReportsCount] = useState(0);
   const [blockedContactsCount, setBlockedContactsCount] = useState(0);
@@ -418,6 +419,45 @@ const Navigation = () => {
     loadParentBadges();
   }, [userType]);
 
+  // Fetch referral code for parents (non-blocking, optional)
+  useEffect(() => {
+    if (userType !== "parent") {
+      setReferralCode(null);
+      return;
+    }
+
+    // Load referral code asynchronously without blocking render
+    const loadReferralCode = async () => {
+      try {
+        const { supabase } = await import("@/integrations/supabase/client");
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (!user) return;
+
+        // Get referral code from referral stats
+        const { data: statsData, error } = await supabase.rpc(
+          "get_referral_stats",
+          { p_parent_id: user.id }
+        );
+
+        if (!error && statsData) {
+          const stats = statsData as { referral_code?: string };
+          setReferralCode(stats.referral_code || null);
+        }
+      } catch (error) {
+        // Silently fail - referral code is optional and shouldn't block navigation
+        if (import.meta.env.DEV) {
+          console.warn("Referral code fetch failed (non-critical):", error);
+        }
+      }
+    };
+
+    // Use setTimeout to ensure this doesn't block initial render
+    const timeoutId = setTimeout(loadReferralCode, 0);
+    return () => clearTimeout(timeoutId);
+  }, [userType]);
+
   const handleLogout = async () => {
     // Children don't have logout - they stay logged in for easy access
     // This removes friction and ensures children are always available
@@ -553,9 +593,9 @@ const Navigation = () => {
       <>
         <nav
           ref={navRef}
-          className="fixed top-0 left-0 right-0 z-50 border-b bg-background w-full overflow-x-hidden safe-area-top"
+          className="fixed top-0 left-0 right-0 z-50 border-b bg-background w-full overflow-x-hidden"
         >
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full safe-area-top">
             <div className="flex items-center justify-between h-16 min-w-0">
               {/* Mobile hamburger menu */}
               <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
@@ -681,7 +721,12 @@ const Navigation = () => {
           </AlertDialog>
 
           {/* Share Modal */}
-          <ShareModal open={showShareModal} onOpenChange={setShowShareModal} />
+          <ShareModal 
+            open={showShareModal} 
+            onOpenChange={setShowShareModal}
+            referralCode={referralCode || undefined}
+            source="top_nav_share"
+          />
         </>
       );
     }
@@ -765,9 +810,9 @@ const Navigation = () => {
       <>
         <nav
           ref={navRef}
-          className="fixed top-0 left-0 right-0 z-50 border-b bg-background w-full overflow-x-hidden safe-area-top"
+          className="fixed top-0 left-0 right-0 z-50 border-b bg-background w-full overflow-x-hidden"
         >
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full safe-area-top">
             <div className="flex items-center justify-between h-16 min-w-0">
               {/* Mobile hamburger menu */}
               <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
@@ -1017,7 +1062,12 @@ const Navigation = () => {
         </AlertDialog>
 
         {/* Share Modal */}
-        <ShareModal open={showShareModal} onOpenChange={setShowShareModal} />
+        <ShareModal 
+          open={showShareModal} 
+          onOpenChange={setShowShareModal}
+          referralCode={userType === "parent" ? (referralCode || undefined) : undefined}
+          source="top_nav_share"
+        />
       </>
     );
   }
@@ -1079,9 +1129,9 @@ const Navigation = () => {
       <>
         <nav
           ref={navRef}
-          className="fixed top-0 left-0 right-0 z-50 border-b bg-background w-full overflow-x-hidden safe-area-top"
+          className="fixed top-0 left-0 right-0 z-50 border-b bg-background w-full overflow-x-hidden"
         >
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full safe-area-top">
             <div className="flex items-center justify-between h-16 min-w-0">
               {/* Mobile hamburger menu */}
               <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
@@ -1238,7 +1288,12 @@ const Navigation = () => {
         </nav>
 
         {/* Share Modal */}
-        <ShareModal open={showShareModal} onOpenChange={setShowShareModal} />
+        <ShareModal 
+          open={showShareModal} 
+          onOpenChange={setShowShareModal}
+          referralCode={userType === "parent" ? (referralCode || undefined) : undefined}
+          source="top_nav_share"
+        />
 
         {/* Kid-friendly Emoji Logout Dialog */}
         <ChildLogoutDialog

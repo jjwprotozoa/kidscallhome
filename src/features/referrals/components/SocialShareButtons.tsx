@@ -2,6 +2,7 @@
 // Purpose: Social media sharing buttons for referral links with branded marketing messages
 
 import { Button } from "@/components/ui/button";
+import { ToastAction } from "@/components/ui/toast";
 import { useToast } from "@/hooks/use-toast";
 import {
   Copy,
@@ -11,119 +12,33 @@ import {
   Share2,
   Twitter,
 } from "lucide-react";
+import { detectBrowser } from "@/utils/browserUtils";
+import { getReferralShareLink } from "../utils/referralHelpers";
+import {
+  APP_NAME,
+  APP_TAGLINE,
+  getWhatsAppMessage,
+  getTwitterMessage,
+  getFacebookQuote,
+  getEmailSubject,
+  getEmailBody,
+  getNativeShareMessage,
+  getGeneralShareMessage,
+} from "../utils/shareMessages";
 
 interface SocialShareButtonsProps {
   referralCode: string;
-  referralUrl: string;
+  referralUrl?: string; // Optional - will be generated if not provided
 }
-
-const APP_NAME = "Kids Call Home";
-const APP_TAGLINE = "Safe Video Calls for Kids";
-
-// Platform-specific share messages with branding and emojis
-const getWhatsAppMessage = (code: string, url: string) => `
-📱💚 *${APP_NAME}* – ${APP_TAGLINE}
-
-Hey! I found an amazing app that lets kids video call family safely – no phone number needed! 
-
-✨ *What makes it special:*
-• Kids can call grandparents, aunts & uncles anytime
-• Parents approve every contact – 100% safe
-• Works on any tablet or old phone
-• No social media, no strangers
-
-🎁 *Special offer:* Use my code and we BOTH get 1 week FREE!
-
-👉 *My referral code:* ${code}
-
-Sign up here: ${url}
-
-Perfect for keeping the whole family connected! 👨‍👩‍👧‍👦💕
-`.trim();
-
-const getTwitterMessage = (code: string) =>
-  `📱 Discovered ${APP_NAME} – lets my kids video call grandparents safely! No phone needed, parents control everything.
-
-🎁 Use code ${code} and we both get 1 week FREE!
-
-#KidsCallHome #FamilyTech #ParentingTips`;
-
-const getFacebookQuote = (code: string) =>
-  `My kids can now video call their grandparents anytime – safely! 📱💚
-
-${APP_NAME} is a game-changer for family connection. Parents approve every contact, so there's zero worry about strangers.
-
-🎁 Use my referral code ${code} when you sign up and we BOTH get 1 week FREE!
-
-Perfect for:
-✅ Kids without their own phone
-✅ Staying connected with grandparents
-✅ Safe messaging with approved family only
-
-Highly recommend for any family! 👨‍👩‍👧‍👦`;
-
-const getEmailSubject = () =>
-  `🏠 ${APP_NAME} – Safe way for kids to video call family (+ 1 week FREE!)`;
-
-const getEmailBody = (code: string, url: string) => `
-Hi there! 👋
-
-I wanted to share something that's been wonderful for our family – an app called ${APP_NAME}.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-📱 WHAT IS ${APP_NAME.toUpperCase()}?
-
-It's a safe video calling and messaging app designed specifically for kids. My children can now:
-
-   ✅ Video call grandparents, aunts, uncles & cousins
-   ✅ Send messages to approved family members
-   ✅ Stay connected – even without their own phone!
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-🛡️ WHY IT'S SAFE
-
-As a parent, I control everything:
-   • I approve every single contact
-   • No strangers, no social media exposure
-   • I can see all messages and calls
-   • Works on any tablet or spare phone
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-🎁 SPECIAL OFFER – 1 WEEK FREE!
-
-Use my referral code when you sign up, and we BOTH get 1 week free on the Family Plan!
-
-   📋 My referral code: ${code}
-
-   🔗 Sign up here:
-   ${url}
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-The Family Plan ($14.99/month) covers up to 5 kids and unlimited family members – grandparents, aunts, uncles, everyone!
-
-I genuinely think you'll love it as much as we do. Let me know if you have any questions!
-
-Take care,
-
-P.S. – The free tier lets you try it with 1 parent + 1 child before committing to anything. 🙂
-`.trim();
-
-const getNativeShareMessage = (code: string) =>
-  `📱 ${APP_NAME} – Safe Video Calls for Kids
-
-Kids can video call grandparents & family safely! Parents control everything.
-
-🎁 Use my code ${code} – we both get 1 week FREE!`;
 
 export const SocialShareButtons = ({
   referralCode,
-  referralUrl,
+  referralUrl: providedUrl,
 }: SocialShareButtonsProps) => {
   const { toast } = useToast();
+  
+  // Use provided URL or generate one with source parameter
+  const referralUrl = providedUrl || getReferralShareLink(referralCode, "referrals_page");
 
   const copyToClipboard = async (text: string, label: string) => {
     try {
@@ -146,7 +61,7 @@ export const SocialShareButtons = ({
       try {
         await navigator.share({
           title: `${APP_NAME} – ${APP_TAGLINE}`,
-          text: getNativeShareMessage(referralCode),
+          text: getNativeShareMessage(referralCode, referralUrl),
           url: referralUrl,
         });
       } catch (error) {
@@ -170,10 +85,31 @@ export const SocialShareButtons = ({
       const shareWindow = window.open(url, "_blank", "width=600,height=500,noopener,noreferrer");
       // Check if popup was blocked
       if (!shareWindow || shareWindow.closed || typeof shareWindow.closed === 'undefined') {
+        const browser = detectBrowser();
         toast({
           title: "Popup blocked",
-          description: "Please allow popups for this site to use social sharing, or copy the link manually.",
+          description: (
+            <div className="space-y-2">
+              <p>To enable social sharing, allow popups for this site:</p>
+              <p className="text-xs font-mono bg-background/50 p-2 rounded border">
+                {browser.popupInstructions}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Or click "Copy Link" below to share manually.
+              </p>
+            </div>
+          ),
           variant: "destructive",
+          action: (
+            <ToastAction
+              altText="Copy link"
+              onClick={() => copyToClipboard(referralUrl, "Referral link")}
+            >
+              <Copy className="h-3 w-3 mr-1" />
+              Copy Link
+            </ToastAction>
+          ),
+          duration: 10000, // Show longer so user can read instructions
         });
       }
     } catch (error) {
@@ -181,6 +117,15 @@ export const SocialShareButtons = ({
         title: "Share failed",
         description: "Could not open share window. Please try copying the link instead.",
         variant: "destructive",
+        action: (
+          <ToastAction
+            altText="Copy link"
+            onClick={() => copyToClipboard(referralUrl, "Referral link")}
+          >
+            <Copy className="h-3 w-3 mr-1" />
+            Copy Link
+          </ToastAction>
+        ),
       });
     }
   };
@@ -192,16 +137,34 @@ export const SocialShareButtons = ({
     openShareWindow(`https://wa.me/?text=${text}`);
   };
 
-  const shareToFacebook = () => {
+  const shareToFacebook = async () => {
+    // Facebook doesn't support pre-filled text via URL parameters anymore
+    // So we copy the message to clipboard and open the share dialog
+    const facebookMessage = getFacebookQuote(referralCode, referralUrl);
+    
+    // Copy message to clipboard
+    try {
+      await navigator.clipboard.writeText(facebookMessage);
+      toast({
+        title: "Message copied!",
+        description: "Paste it into the Facebook post (the share window will open)",
+        duration: 5000,
+      });
+    } catch {
+      // If clipboard fails, still open the share dialog
+      toast({
+        title: "Opening Facebook...",
+        description: "Copy the message manually from the 'Copy Message' button",
+      });
+    }
+    
+    // Open Facebook share dialog with just the URL
     const url = encodeURIComponent(referralUrl);
-    const quote = encodeURIComponent(getFacebookQuote(referralCode));
-    openShareWindow(
-      `https://www.facebook.com/sharer/sharer.php?u=${url}&quote=${quote}`
-    );
+    openShareWindow(`https://www.facebook.com/sharer/sharer.php?u=${url}`);
   };
 
   const shareToTwitter = () => {
-    const text = encodeURIComponent(getTwitterMessage(referralCode));
+    const text = encodeURIComponent(getTwitterMessage(referralCode, referralUrl));
     const url = encodeURIComponent(referralUrl);
     openShareWindow(
       `https://twitter.com/intent/tweet?text=${text}&url=${url}`
@@ -209,23 +172,15 @@ export const SocialShareButtons = ({
   };
 
   const shareViaEmail = () => {
-    const subject = encodeURIComponent(getEmailSubject());
+    const subject = encodeURIComponent(getEmailSubject(referralCode));
     const body = encodeURIComponent(getEmailBody(referralCode, referralUrl));
     window.location.href = `mailto:?subject=${subject}&body=${body}`;
   };
 
   // Copy a nicely formatted message with the link
   const copyFullMessage = () => {
-    const message = `📱 ${APP_NAME} – ${APP_TAGLINE}
-
-Safe video calls between kids and approved family members – no phone needed!
-
-🎁 Use my referral code: ${referralCode}
-We both get 1 week FREE when you subscribe!
-
-👉 Sign up: ${referralUrl}`;
-
-    copyToClipboard(message, "Share message");
+    const message = getGeneralShareMessage(referralCode, referralUrl);
+    copyToClipboard(message, "Referral message");
   };
 
   return (

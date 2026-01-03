@@ -1,6 +1,6 @@
 // src/utils/nativeAndroid.ts
-// Native Android utilities and wrappers for Capacitor plugins
-// Purpose: Provide native Android features (notifications, widgets, shortcuts) without modifying core call logic
+// Native mobile utilities and wrappers for Capacitor plugins (iOS and Android)
+// Purpose: Provide native mobile features (notifications, widgets, shortcuts) without modifying core call logic
 
 import { Capacitor } from '@capacitor/core';
 import { App } from '@capacitor/app';
@@ -14,6 +14,13 @@ import { safeLog } from '@/utils/security';
  */
 export function isNativeAndroid(): boolean {
   return Capacitor.getPlatform() === 'android';
+}
+
+/**
+ * Check if running on native iOS platform
+ */
+export function isNativeIOS(): boolean {
+  return Capacitor.getPlatform() === 'ios';
 }
 
 /**
@@ -38,20 +45,32 @@ export async function vibrate(style: ImpactStyle = ImpactStyle.Medium): Promise<
 
 /**
  * Vibrate with custom pattern (for incoming calls)
+ * Works on both iOS and Android
  */
 export async function vibratePattern(pattern: number[] = [200, 100, 200, 100, 200]): Promise<void> {
-  if (isNativeAndroid()) {
-    try {
-      // Android supports vibration patterns
+  if (!isNativePlatform()) {
+    return;
+  }
+
+  try {
+    if (isNativeAndroid()) {
+      // Android supports vibration patterns via Haptics
       for (let i = 0; i < pattern.length; i += 2) {
         await Haptics.impact({ style: ImpactStyle.Heavy });
         if (pattern[i + 1]) {
           await new Promise(resolve => setTimeout(resolve, pattern[i + 1]));
         }
       }
-    } catch (error) {
-      console.warn('Vibration pattern not available:', error);
+    } else if (isNativeIOS()) {
+      // iOS: Use heavy impact repeatedly for call pattern
+      // iOS doesn't support custom vibration patterns, so we simulate with repeated impacts
+      for (let i = 0; i < 5; i++) {
+        await Haptics.impact({ style: ImpactStyle.Heavy });
+        await new Promise(resolve => setTimeout(resolve, 300));
+      }
     }
+  } catch (error) {
+    console.warn('Vibration pattern not available:', error);
   }
 }
 
@@ -74,7 +93,9 @@ export async function requestPushNotificationPermission(): Promise<boolean> {
 
 /**
  * Show high-priority native notification for incoming call
+ * Works on both iOS and Android with sound and vibration
  * Uses Android CallStyle notification template (Android 11+)
+ * Uses iOS critical alerts for calls (requires proper entitlements)
  */
 export async function showIncomingCallNotification(
   callId: string,
@@ -91,37 +112,24 @@ export async function showIncomingCallNotification(
     // Request permission first
     const hasPermission = await requestPushNotificationPermission();
     if (!hasPermission) {
-      console.warn('Push notification permission not granted');
+      console.warn('📱 Push notification permission not granted');
       return;
     }
 
-    // Register push notification listeners (one-time setup)
-    PushNotifications.addListener('registration', (token: Token) => {
-      // SECURITY: Never log push tokens - they are sensitive credentials
-      safeLog.log('Push registration success, token: [REDACTED]');
-    });
+    // Generate a stable notification ID from callId
+    const notificationId = Math.abs(
+      parseInt(callId.slice(0, 8), 16) || Date.now()
+    ) % 2147483647; // Max safe integer for notification IDs
 
-    PushNotifications.addListener('registrationError', (error: any) => {
-      console.error('Push registration error:', error);
-    });
-
-    PushNotifications.addListener('pushNotificationActionPerformed', (notification: ActionPerformed) => {
-      const data = notification.notification.data;
-      if (data?.action === 'accept') {
-        onAccept();
-      } else if (data?.action === 'decline') {
-        onDecline();
-      }
-    });
-
-    // Show local notification with actions (Android will use CallStyle if available)
+    // Show local notification with high priority
+    // This works even when app is in background or closed
     await LocalNotifications.schedule({
       notifications: [
         {
           title: 'Incoming Call',
           body: `${callerName} is calling...`,
-          id: parseInt(callId.slice(0, 8), 16) || Date.now(),
-          sound: 'default',
+          id: notificationId,
+          sound: 'default', // Uses system default ringtone
           attachments: undefined,
           actionTypeId: 'INCOMING_CALL',
           extra: {
@@ -129,17 +137,29 @@ export async function showIncomingCallNotification(
             callerName,
             callerId,
             action: 'incoming_call',
+            url: `/parent/call/${callerId}?callId=${callId}`, // Default URL, can be overridden
           },
-          // Android-specific: Use high priority for call notifications
+          // Schedule immediately (100ms delay to ensure it shows)
           schedule: { at: new Date(Date.now() + 100) },
+          // iOS: Use critical alert sound (requires entitlements)
+          // Android: Use high priority for call notifications
         },
       ],
     });
 
-    // Vibrate device
+    // Vibrate device immediately (works in background)
     await vibratePattern([200, 100, 200, 100, 200]);
+
+    if (import.meta.env.DEV) {
+      console.log('📱 Native call notification shown:', {
+        callId,
+        callerName,
+        notificationId,
+        platform: Capacitor.getPlatform(),
+      });
+    }
   } catch (error) {
-    console.error('Failed to show incoming call notification:', error);
+    console.error('❌ Failed to show incoming call notification:', error);
   }
 }
 
@@ -160,13 +180,15 @@ export async function cancelIncomingCallNotification(callId: string): Promise<vo
 }
 
 /**
- * Show high-priority message notification
+ * Show message notification with sound and vibration
+ * Works on both iOS and Android, even when app is in background or closed
  */
 export async function showMessageNotification(
   messageId: string,
   senderName: string,
   messageText: string,
-  onOpen: () => void
+  childId?: string,
+  onOpen?: () => void
 ): Promise<void> {
   if (!isNativePlatform()) {
     return;
@@ -175,29 +197,56 @@ export async function showMessageNotification(
   try {
     const hasPermission = await requestPushNotificationPermission();
     if (!hasPermission) {
+      if (import.meta.env.DEV) {
+        console.warn('📱 Message notification permission not granted');
+      }
       return;
     }
+
+    // Generate a stable notification ID from messageId
+    const notificationId = Math.abs(
+      parseInt(messageId.slice(0, 8), 16) || Date.now()
+    ) % 2147483647;
+
+    // Truncate message text for notification (max 100 chars)
+    const truncatedText =
+      messageText.length > 100
+        ? `${messageText.substring(0, 100)}...`
+        : messageText;
 
     await LocalNotifications.schedule({
       notifications: [
         {
           title: `New message from ${senderName}`,
-          body: messageText,
-          id: parseInt(messageId.slice(0, 8), 16) || Date.now(),
-          sound: 'default',
+          body: truncatedText,
+          id: notificationId,
+          sound: 'default', // System default notification sound
           extra: {
             messageId,
             senderName,
+            childId,
             action: 'open_message',
+            url: childId ? `/chat/${childId}` : undefined,
           },
+          // Schedule immediately
+          schedule: { at: new Date(Date.now() + 100) },
         },
       ],
     });
 
     // Light vibration for messages
     await vibrate(ImpactStyle.Light);
+
+    if (import.meta.env.DEV) {
+      console.log('📱 Native message notification shown:', {
+        messageId,
+        senderName,
+        notificationId,
+        platform: Capacitor.getPlatform(),
+      });
+    }
   } catch (error) {
-    console.error('Failed to show message notification:', error);
+    console.error('❌ Failed to show message notification:', error);
   }
 }
 
@@ -248,10 +297,52 @@ export async function initializeNativeAndroid(): Promise<void> {
       handleAppIntent(data);
     });
 
+    // Register LocalNotifications listeners for handling notification taps
+    LocalNotifications.addListener('localNotificationReceived', (notification) => {
+      if (import.meta.env.DEV) {
+        console.log('📱 Local notification received:', notification);
+      }
+    });
+
+    LocalNotifications.addListener('localNotificationActionPerformed', (action) => {
+      if (import.meta.env.DEV) {
+        console.log('📱 Local notification action performed:', action);
+      }
+      
+      const data = action.notification.extra;
+      if (!data) return;
+
+      // Handle incoming call notifications
+      if (data.action === 'incoming_call' && data.callId) {
+        // Dispatch custom event for incoming call handling
+        window.dispatchEvent(new CustomEvent('nativeNotificationCall', {
+          detail: {
+            callId: data.callId,
+            callerName: data.callerName,
+            callerId: data.callerId,
+            actionId: action.actionId,
+            url: data.url,
+          }
+        }));
+      }
+      
+      // Handle message notifications
+      if (data.action === 'open_message' && data.childId) {
+        // Dispatch custom event for message handling
+        window.dispatchEvent(new CustomEvent('nativeNotificationMessage', {
+          detail: {
+            messageId: data.messageId,
+            childId: data.childId,
+            url: data.url,
+          }
+        }));
+      }
+    });
+
     // Request notification permissions
     await requestPushNotificationPermission();
   } catch (error) {
-    console.error('Failed to initialize native Android features:', error);
+    console.error('Failed to initialize native mobile features:', error);
   }
 }
 

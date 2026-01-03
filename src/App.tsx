@@ -38,6 +38,7 @@ import { useWidgetData } from "@/hooks/useWidgetData";
 import {
   initializeNativeAndroid,
   isNativeAndroid,
+  isNativePlatform,
 } from "@/utils/nativeAndroid";
 import { loadWidgetData } from "@/utils/widgetData";
 import { initRoutePrefetching } from "@/utils/routePrefetch.ts";
@@ -259,6 +260,59 @@ const NativeAndroidInitializer = () => {
   return null;
 };
 
+// Component to handle native notification actions (calls and messages)
+const NativeNotificationHandler = () => {
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!isNativePlatform()) {
+      return;
+    }
+
+    // Handle incoming call notifications
+    const handleNativeCallNotification = (event: CustomEvent) => {
+      const { callId, callerId, url } = event.detail || {};
+      if (url) {
+        // Validate URL doesn't contain undefined
+        if (!url.includes("undefined")) {
+          navigate(url);
+        }
+      } else if (callerId) {
+        // Fallback: construct URL from callerId - validate callerId is defined
+        if (callerId && typeof callerId === "string" && callerId !== "undefined") {
+          navigate(`/parent/call/${callerId}?callId=${callId}`);
+        }
+      }
+    };
+
+    // Handle message notifications
+    const handleNativeMessageNotification = (event: CustomEvent) => {
+      const { childId, url } = event.detail || {};
+      if (url) {
+        // Validate URL doesn't contain undefined
+        if (!url.includes("undefined")) {
+          navigate(url);
+        }
+      } else if (childId) {
+        // Validate childId is defined before navigating
+        if (childId && typeof childId === "string" && childId !== "undefined") {
+          navigate(`/chat/${childId}`);
+        }
+      }
+    };
+
+    window.addEventListener('nativeNotificationCall', handleNativeCallNotification as EventListener);
+    window.addEventListener('nativeNotificationMessage', handleNativeMessageNotification as EventListener);
+
+    return () => {
+      window.removeEventListener('nativeNotificationCall', handleNativeCallNotification as EventListener);
+      window.removeEventListener('nativeNotificationMessage', handleNativeMessageNotification as EventListener);
+    };
+  }, [navigate]);
+
+  return null;
+};
+
 // Component to handle widget intents and deep links
 const WidgetIntentHandler = () => {
   const navigate = useNavigate();
@@ -278,7 +332,7 @@ const WidgetIntentHandler = () => {
       const { childId } = event.detail || {};
 
       // Use childId from event if available (from widget URI)
-      if (childId) {
+      if (childId && typeof childId === "string" && childId !== "undefined") {
         if (import.meta.env.DEV) {
           // eslint-disable-next-line no-console
           console.log("📱 Routing to child from widget:", childId);
@@ -290,7 +344,7 @@ const WidgetIntentHandler = () => {
       // Fallback: Try to load widget data to get last-called child
       const widgetData = loadWidgetData();
 
-      if (widgetData?.childId) {
+      if (widgetData?.childId && typeof widgetData.childId === "string" && widgetData.childId !== "undefined") {
         // Route directly to last-called child's call screen
         if (import.meta.env.DEV) {
           // eslint-disable-next-line no-console
@@ -558,6 +612,9 @@ const App = ({ bootResult }: AppProps = {}) => {
                 v7_relativeSplatPath: true,
               }}
             >
+              <ErrorBoundary fallback={null}>
+                <NativeNotificationHandler />
+              </ErrorBoundary>
               <ErrorBoundary fallback={null}>
                 <WidgetIntentHandler />
               </ErrorBoundary>

@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { SEOHead } from "@/components/SEOHead";
 import { Link } from "react-router-dom";
+import { Info, ExternalLink } from "lucide-react";
 import { FamilySetupSelection } from "@/features/onboarding/components/FamilySetupSelection";
 import { useToast } from "@/hooks/use-toast";
 import { useAccountLockout } from "@/hooks/useAccountLockout";
@@ -377,9 +378,35 @@ const ParentAuth = () => {
           </p>
           {/* Referral code indicator */}
           {referralCode && !authState.isLogin && (
-            <div className="bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-300 text-sm px-3 py-2 rounded-md border border-green-200 dark:border-green-800">
-              🎁 Referral code <strong>{referralCode}</strong> applied! You'll
-              both get 1 week free when you subscribe.
+            <div className="space-y-3">
+              <div className="bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-300 text-sm px-3 py-2 rounded-md border border-green-200 dark:border-green-800">
+                🎁 Referral code <strong>{referralCode}</strong> applied! You'll
+                both get 1 week free when you subscribe.
+              </div>
+              {/* Learn More section for referral users */}
+              <div className="bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 text-sm px-3 py-2 rounded-md border border-blue-200 dark:border-blue-800">
+                <div className="flex items-start gap-2">
+                  <Info className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                  <div className="flex-1 space-y-2">
+                    <p className="font-medium">Want to learn more first?</p>
+                    <p className="text-xs text-blue-600 dark:text-blue-400">
+                      Explore our home page to see how Kids Call Home works before signing up. Your referral code will be saved.
+                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      asChild
+                      className="w-full mt-2 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900"
+                    >
+                      <Link to="/" className="flex items-center justify-center gap-2">
+                        <span>Visit Home Page</span>
+                        <ExternalLink className="h-3 w-3" />
+                      </Link>
+                    </Button>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
         </div>

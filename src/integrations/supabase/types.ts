@@ -681,6 +681,28 @@ export type Database = {
         Args: { p_child_id: string; p_parent_id: string }
         Returns: boolean
       }
+      get_referral_stats: {
+        Args: { p_parent_id: string }
+        Returns: {
+          referral_code: string
+          total_referrals: number
+          pending_referrals: number
+          completed_referrals: number
+          total_bonus_days: number
+          bonus_weeks: number
+        }
+      }
+      get_referral_list: {
+        Args: { p_parent_id: string }
+        Returns: {
+          id: string
+          referred_email: string
+          status: string
+          reward_days: number
+          created_at: string
+          credited_at: string | null
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never

@@ -4,7 +4,62 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed - 2026-01-02
+
+#### Nested Form Warning in AddChildDialog
+- **Fixed React DOM nesting warning**: Resolved "validateDOMNesting(...): <form> cannot appear as a descendant of <form>" warning in AddChildDialog
+  - Changed `ChildForm` component from using `<form>` tag to `<div>` tag since the parent `AddChildDialog` already wraps the form in a `<form>` element
+  - Form submission is still handled correctly by the parent component's `onSubmit` handler
+  - Eliminates console warning while maintaining all form functionality
+- **Files**:
+  - `src/components/AddChildDialog/ChildForm.tsx` - Changed form wrapper to div element
+
+#### Referral Page Not Loading Data
+- **Fixed referral code and referral history not displaying**: Resolved issue where `/parent/referrals` page was not showing referral code or referral list
+  - Enhanced error handling in `loadReferralData` function with better logging and null checks
+  - Added proper JSONB response handling (parses string if needed, uses object directly otherwise)
+  - Improved error state UI with retry button when data fails to load
+  - Added explicit null state handling to prevent UI from showing incorrect data
+  - Enhanced loading states with better user feedback
+- **Files**:
+  - `src/features/referrals/components/ReferralsTab.tsx` - Improved error handling and data loading logic
+
 ### Changed - 2026-01-02
+
+#### Enhanced Popup Blocked Notification
+- **Browser-specific popup enable instructions**: When social sharing popups are blocked, users now see detailed instructions specific to their browser
+  - Detects browser type (Chrome, Edge, Firefox, Safari) and device type (desktop/mobile)
+  - Shows step-by-step instructions for enabling popups in the detected browser
+  - Instructions formatted in a code-style box for clarity
+  - Added "Copy Link" action button as fallback option
+  - Extended toast duration to 10 seconds so users have time to read instructions
+- **Improved error handling**: Better error messages and fallback options when popups are blocked
+- **Files**:
+  - `src/utils/browserUtils.ts` - New browser detection utility (NEW)
+  - `src/components/ShareModal.tsx` - Enhanced popup blocked notification
+  - `src/features/referrals/components/SocialShareButtons.tsx` - Enhanced popup blocked notification
+
+#### Referral History Display Improvements
+- **Enhanced referral history to show both signed up and subscribed dates**: Referral history now displays both milestones when applicable
+  - Shows "Signed up" date for anyone who has moved past "pending" status
+  - Shows "Subscribed" date when status is "subscribed" or "credited"
+  - For "credited" status, uses `credited_at` timestamp for accurate subscribed date
+  - For "subscribed" status (not yet credited), uses `created_at` as fallback
+  - Makes referral progression clear: users can see when someone signed up AND when they subscribed
+- **Files**:
+  - `src/features/referrals/components/ReferralsTab.tsx` - Enhanced date display logic in referral history
+
+### Changed - 2026-01-02
+
+#### Referral Auth Page - Learn More Before Signup
+- **Added "Learn More" section on referral signup page**: Parents visiting `/parent/auth?ref=CODE` now see an informational banner with a link to the home page
+  - Appears only when a referral code is present and user is in signup mode
+  - Includes clear messaging that the referral code will be saved if they navigate away
+  - Provides "Visit Home Page" button to explore the app before committing to signup
+  - Uses blue info banner design to distinguish from the green referral code indicator
+  - Helps improve conversion by allowing parents to learn about the app before signing up
+- **Files**:
+  - `src/pages/ParentAuth/ParentAuth.tsx` - Added Learn More section with home page link
 
 #### Referral System Improvements
 - **Unified Referral Attribution**: Top navigation Share button and Referrals page now generate identical referral links with `source` parameter for analytics tracking
@@ -21,7 +76,7 @@ All notable changes to this project will be documented in this file.
   - All share methods (Share Link, Copy Message, WhatsApp, Facebook, Twitter/X, Email) now include full referral URLs with `ref` and `source` parameters
   - Messages clarify that 1 week free is for subscribing to the Family Plan, not just creating an account
   - ShareModal and SocialShareButtons now use the same message templates
-- **Files**: 
+- **Files**:
   - `src/features/referrals/utils/referralHelpers.ts` - Centralized referral link generation
   - `src/features/referrals/utils/shareMessages.ts` - Shared share message module (NEW)
   - `src/features/referrals/components/ReferralsTab.tsx` - Updated history UI and counters
@@ -31,6 +86,42 @@ All notable changes to this project will be documented in this file.
   - `src/integrations/supabase/types.ts` - Added referral function types
 
 ### Fixed - 2026-01-02
+
+#### Share Message Encoding and Facebook Sharing
+- **Removed all emojis from share messages**: Eliminated encoding issues causing garbled characters () when sharing across platforms
+  - WhatsApp messages: Removed all emojis (📱💚, ✨, 🎁, 👉, 👨‍👩‍👧‍👦💕) while preserving bold text formatting (`*text*`)
+  - Facebook, Twitter, Email, Native Share, and General Share messages: Already cleaned of problematic emojis
+  - All messages now use plain text with bullet points and formatting that renders consistently across all platforms
+- **Fixed Facebook sharing message not appearing**: Facebook's sharer no longer supports pre-filled text via URL parameters
+  - Now automatically copies the Facebook message to clipboard when user clicks Facebook share button
+  - Opens Facebook share dialog with URL, and shows toast notification instructing user to paste the message
+  - Provides same user experience as WhatsApp (message ready to paste) while working within Facebook's limitations
+- **Verified Open Graph configuration**: Confirmed proper Open Graph meta tags for social sharing
+  - `og:image` correctly points to `/og/kidscallhome-og.png` (1200x630px)
+  - All required Open Graph properties configured (title, description, image, site_name, locale)
+  - App icon properly referenced for PWA and social sharing
+- **Files**:
+  - `src/features/referrals/utils/shareMessages.ts` - Removed all emojis, added platform-specific comments
+  - `src/components/ShareModal.tsx` - Updated Facebook share to copy message to clipboard
+  - `src/features/referrals/components/SocialShareButtons.tsx` - Updated Facebook share to copy message to clipboard
+
+#### Invalid Route Navigation Errors
+- **Fixed `/parent/undefined` route error when typing in email/password fields**: Resolved issue where typing in authentication form fields triggered navigation to invalid routes
+  - Added validation in `prefetchRoute()` to skip routes containing "undefined" values
+  - Added validation in route prefetching event handlers to prevent prefetching invalid routes
+  - Added validation in navigation handlers (`NativeNotificationHandler`, `WidgetIntentHandler`) to ensure variables are defined before constructing routes
+  - Updated `NotFound` component to automatically redirect away from invalid routes with "undefined" instead of showing 404 errors
+  - Prevents console errors and navigation attempts to malformed routes
+- **Files**: `src/utils/routePrefetch.ts`, `src/App.tsx`, `src/pages/NotFound.tsx`
+
+#### Browser Extension Autofill Errors
+- **Suppressed browser extension autofill errors in console**: Added global error handlers to suppress harmless errors from password manager and autofill browser extensions
+  - Added unhandled promise rejection handler to suppress `bootstrap-autofill-overlay.js` errors
+  - Errors occur when browser extensions try to manipulate DOM while React is re-rendering
+  - These errors are harmless and don't affect app functionality - they're just console noise
+  - Legitimate app errors are still logged normally
+  - Enhanced email input with `data-form-type` and `data-autofill-safe` attributes for better extension compatibility
+- **Files**: `src/main.tsx`, `src/components/auth/EmailInputWithBreachCheck.tsx`
 
 #### Navigation Component Router Context Error
 - **Fixed `useNavigate()` error in NativeNotificationHandler**: Moved `NativeNotificationHandler` component inside `BrowserRouter` to fix "useNavigate() may be used only in the context of a <Router> component" error

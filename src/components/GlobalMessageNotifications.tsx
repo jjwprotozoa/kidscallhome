@@ -191,7 +191,27 @@ const GlobalMessageNotificationsInner = () => {
             }
           : undefined; // Fallback to default if no color
 
-        // Show toast notification with noticeable styling
+        // Show native notification on mobile platforms (works in background/closed)
+        // Also show toast for in-app notification
+        const { isNativePlatform, showMessageNotification } = await import("@/utils/nativeAndroid");
+        
+        if (isNativePlatform()) {
+          try {
+            await showMessageNotification(
+              message.id,
+              senderName,
+              messagePreview,
+              message.child_id,
+              () => {
+                navigate(`/chat/${message.child_id}`);
+              }
+            );
+          } catch (error) {
+            console.error("Failed to show native message notification:", error);
+          }
+        }
+
+        // Show toast notification with noticeable styling (for in-app visibility)
         toast({
           title: `New message from ${senderName}`,
           description: messagePreview,

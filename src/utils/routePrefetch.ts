@@ -42,6 +42,16 @@ const prefetchedRoutes = new Set<string>();
  * Returns true if prefetch was successful, false if route not found or already prefetched
  */
 export function prefetchRoute(path: string): boolean {
+  // Validate path - skip invalid routes with undefined values
+  if (!path || typeof path !== "string") {
+    return false;
+  }
+  
+  // Skip routes containing "undefined" - these are invalid and shouldn't be prefetched
+  if (path.includes("undefined")) {
+    return false;
+  }
+  
   // Normalize path (remove trailing slash, handle dynamic segments)
   const normalizedPath = path.split("?")[0].split("#")[0].replace(/\/$/, "");
   
@@ -107,6 +117,11 @@ export function initRoutePrefetching(): void {
     
     const href = link.getAttribute("href");
     if (!href) return;
+    
+    // Skip invalid routes with undefined values
+    if (href.includes("undefined")) {
+      return;
+    }
     
     // Only prefetch internal routes (not external links or anchors)
     if (href.startsWith("http") || href.startsWith("mailto:") || href.startsWith("#")) {
