@@ -374,7 +374,10 @@ const AddChildDialog = ({
       setSelectedNumber("");
       setGeneratedCode("");
       onOpenChange(false);
-      onChildAdded();
+      
+      // Await the callback to ensure it completes, especially important on mobile
+      // where database replication might have a slight delay
+      await onChildAdded();
     } catch (error: unknown) {
       const errorMessage =
         error instanceof Error

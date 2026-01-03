@@ -17,11 +17,12 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useUnreadBadgeForChild } from "@/stores/badgeStore";
 import { MessageCircle, MoreVertical, Phone, Plus } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useCodeHandlers } from "@/pages/ParentDashboard/useCodeHandlers";
 import { useChildHandlers } from "@/pages/ParentDashboard/useChildHandlers";
 import { Child } from "@/pages/ParentDashboard/types";
+import { getPlatform } from "@/utils/platformDetection";
 
 // Compact child card component - 1-row contact-list style
 const ChildCard = ({
@@ -124,6 +125,7 @@ const ParentChildrenList = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { familyCode } = useParentData();
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   // Track children's online presence (real-time via Supabase Realtime)
   const childIds = useMemo(() => children.map((child) => child.id), [children]);
@@ -132,7 +134,7 @@ const ParentChildrenList = () => {
     enabled: children.length > 0,
   });
 
-  const fetchChildren = useCallback(async () => {
+  const fetchChildren = useCallback(async (retryCount = 0) => {
     try {
       // Get authenticated user ID to filter children (defense in depth - RLS should also enforce this)
       const {
@@ -147,6 +149,7 @@ const ParentChildrenList = () => {
         console.warn("🔍 [PARENT CHILDREN] Fetching children for parent:", {
           userId: user.id,
           email: user.email,
+          retryCount,
         });
       }
 
@@ -204,6 +207,28 @@ const ParentChildrenList = () => {
     }
   }, [toast]);
 
+  // Enhanced fetchChildren with retry for mobile platforms
+  // On mobile (iOS/Android), database replication might have a slight delay
+  const fetchChildrenWithRetry = useCallback(async () => {
+    const platform = getPlatform();
+    const isMobile = platform === "ios" || platform === "android";
+    
+    // On mobile, add a small delay and retry once to handle replication lag
+    if (isMobile) {
+      // First attempt with a small delay
+      await new Promise(resolve => setTimeout(resolve, 300));
+      await fetchChildren(0);
+      
+      // Retry once after a short delay if we still don't see the new child
+      // This is handled by the real-time subscription, but this ensures immediate visibility
+      setTimeout(async () => {
+        await fetchChildren(1);
+      }, 1000);
+    } else {
+      await fetchChildren(0);
+    }
+  }, [fetchChildren]);
+
   useEffect(() => {
     const checkAuth = async () => {
       const {
@@ -225,11 +250,82 @@ const ParentChildrenList = () => {
           navigate("/family-member", { replace: true });
           return;
         }
+
+        // Set up real-time subscription for children table changes
+        // This ensures the list updates automatically when children are added/updated/deleted
+        if (channelRef.current) {
+          await supabase.removeChannel(channelRef.current);
+        }
+
+        channelRef.current = supabase
+          .channel(`parent-children-${user.id}`)
+          .on(
+            "postgres_changes",
+            {
+              event: "INSERT",
+              schema: "public",
+              table: "children",
+              filter: `parent_id=eq.${user.id}`,
+            },
+            (payload) => {
+              if (import.meta.env.DEV) {
+                console.warn("✅ [PARENT CHILDREN] New child added via realtime:", {
+                  childId: payload.new.id,
+                  childName: payload.new.name,
+                });
+              }
+              // Refresh the list when a new child is added
+              fetchChildren(0);
+            }
+          )
+          .on(
+            "postgres_changes",
+            {
+              event: "UPDATE",
+              schema: "public",
+              table: "children",
+              filter: `parent_id=eq.${user.id}`,
+            },
+            () => {
+              // Refresh the list when a child is updated
+              fetchChildren(0);
+            }
+          )
+          .on(
+            "postgres_changes",
+            {
+              event: "DELETE",
+              schema: "public",
+              table: "children",
+              filter: `parent_id=eq.${user.id}`,
+            },
+            () => {
+              // Refresh the list when a child is deleted
+              fetchChildren(0);
+            }
+          )
+          .subscribe((status, err) => {
+            if (import.meta.env.DEV) {
+              if (status === "SUBSCRIBED") {
+                console.warn("✅ [PARENT CHILDREN] Realtime subscription active");
+              } else if (err) {
+                console.error("❌ [PARENT CHILDREN] Realtime subscription error:", err);
+              }
+            }
+          });
       }
 
       fetchChildren();
     };
     checkAuth();
+
+    // Cleanup subscription on unmount
+    return () => {
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
+    };
   }, [navigate, fetchChildren]);
 
   // Optimistic update function for child login code
@@ -438,7 +534,7 @@ const ParentChildrenList = () => {
       <AddChildDialog
         open={showAddChild}
         onOpenChange={setShowAddChild}
-        onChildAdded={fetchChildren}
+        onChildAdded={fetchChildrenWithRetry}
       />
 
       {selectedChild && (

@@ -4,6 +4,30 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed - 2026-01-02
+
+#### Native App Subscription Management (iOS/Android)
+- **Updated Upgrade page for iOS/Android**: Native app users now see app store-specific subscription management instructions instead of Stripe checkout
+  - iOS users see step-by-step instructions to manage subscriptions through App Store
+  - Android users see step-by-step instructions to manage subscriptions through Google Play Store
+  - Current plan information is still displayed (read-only)
+  - Pricing plans and Stripe payment options are hidden for native apps
+  - Web/PWA users continue to see full Stripe-based subscription management with pricing plans
+- **Why**: iOS and Android require subscriptions to be managed through their respective app stores per platform policies. Web/PWA users can still use Stripe checkout directly.
+- **Files**: `src/pages/Upgrade/Upgrade.tsx`
+
+### Fixed - 2026-01-02
+
+#### Child Addition Not Visible on iOS/Android
+- **Fixed child not appearing after adding on mobile devices**: Resolved issue where children added on iOS/Android were not immediately visible on the `/parent/children` page
+  - Made `onChildAdded` callback async and properly awaited in `AddChildDialog` to ensure refresh completes
+  - Added real-time Supabase subscription to automatically update children list when changes occur (INSERT/UPDATE/DELETE)
+  - Implemented mobile-specific retry mechanism with delay to handle database replication lag on iOS/Android
+    - 300ms initial delay before first fetch
+    - Automatic retry after 1 second as fallback
+    - Works alongside real-time subscription for immediate updates
+  - **Files**: `src/components/AddChildDialog/AddChildDialog.tsx`, `src/components/AddChildDialog/types.ts`, `src/pages/ParentChildrenList.tsx`
+
 ### Fixed - 2026-01-02
 
 #### Stripe Webhook Integration Fix

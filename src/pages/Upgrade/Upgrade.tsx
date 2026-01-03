@@ -12,7 +12,7 @@ import { useFamilyMemberRedirect } from "@/hooks/useFamilyMemberRedirect";
 import { Loader2, Sparkles } from "lucide-react";
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { isPWA } from "@/utils/platformDetection";
+import { isPWA, getPlatform } from "@/utils/platformDetection";
 import { useSubscriptionData } from "./useSubscriptionData";
 import { usePaymentHandlers } from "./usePaymentHandlers";
 import { PricingPlans } from "./PricingPlans";
@@ -199,8 +199,12 @@ const Upgrade = () => {
     }
   };
 
-  // Show native purchase UI for native apps
+  // Show app store subscription management message for native apps
   if (!isPWA()) {
+    const platform = getPlatform();
+    const isIOS = platform === "ios";
+    const isAndroid = platform === "android";
+    
     return (
       <ParentLayout>
         <OnboardingTour role="parent" pageKey="parent_upgrade" />
@@ -208,9 +212,9 @@ const Upgrade = () => {
         <div className="p-4">
           <div className="max-w-6xl mx-auto space-y-6">
             <div className="mt-2">
-              <h1 className="text-3xl font-bold">Manage Plan</h1>
+              <h1 className="text-3xl font-bold">Manage Subscription</h1>
               <p className="text-muted-foreground mt-2">
-                Choose a plan that fits your family's needs
+                Manage your subscription through your device's app store
               </p>
             </div>
 
@@ -221,56 +225,51 @@ const Upgrade = () => {
               allowedChildren={subscriptionData?.allowedChildren || 1}
             />
 
-            <PricingPlans
-              subscriptionType={subscriptionData?.subscriptionType || "free"}
-              hasActiveSubscription={subscriptionData?.hasActiveSubscription || false}
-              isProcessing={isProcessing}
-              onPlanSelect={handlePlanSelect}
-            />
-
-            {/* Info Section */}
+            {/* App Store Subscription Management Info */}
             <Card className="p-6 bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
               <div className="flex items-start gap-3">
                 <Sparkles className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
-                <div className="space-y-2">
+                <div className="space-y-3">
                   <h3 className="font-semibold text-blue-900 dark:text-blue-100">
-                    In-App Purchases
+                    {isIOS && "Manage Subscription in App Store"}
+                    {isAndroid && "Manage Subscription in Google Play"}
+                    {!isIOS && !isAndroid && "Manage Subscription in App Store"}
                   </h3>
-                  <ul className="text-sm text-blue-800 dark:text-blue-200 space-y-1 list-disc list-inside">
-                    <li>Purchases are processed through your device's app store</li>
-                    <li>Subscriptions are managed through your app store account</li>
-                    <li>
-                      Your subscription syncs across all your devices
-                      <span className="text-xs text-blue-700 dark:text-blue-300 block mt-0.5 ml-4">
-                        (Requires signing in with the same account on each device)
-                      </span>
-                    </li>
-                    <li>Start adding more children right away!</li>
-                  </ul>
+                  <p className="text-sm text-blue-800 dark:text-blue-200">
+                    Subscriptions for this app are managed through your device's app store. 
+                    To upgrade, change, or cancel your subscription:
+                  </p>
+                  {isIOS && (
+                    <ol className="text-sm text-blue-800 dark:text-blue-200 space-y-2 list-decimal list-inside ml-2">
+                      <li>Open the <strong>App Store</strong> app on your device</li>
+                      <li>Tap your profile icon in the top right</li>
+                      <li>Tap <strong>Subscriptions</strong></li>
+                      <li>Find <strong>KidsCallHome</strong> and tap to manage</li>
+                    </ol>
+                  )}
+                  {isAndroid && (
+                    <ol className="text-sm text-blue-800 dark:text-blue-200 space-y-2 list-decimal list-inside ml-2">
+                      <li>Open <strong>Google Play Store</strong> app on your device</li>
+                      <li>Tap your profile icon in the top right</li>
+                      <li>Tap <strong>Payments & subscriptions</strong> → <strong>Subscriptions</strong></li>
+                      <li>Find <strong>KidsCallHome</strong> and tap to manage</li>
+                    </ol>
+                  )}
+                  {!isIOS && !isAndroid && (
+                    <p className="text-sm text-blue-800 dark:text-blue-200">
+                      Please access your device's app store settings to manage your subscription.
+                    </p>
+                  )}
+                  <div className="pt-2 mt-3 border-t border-blue-200 dark:border-blue-800">
+                    <p className="text-xs text-blue-700 dark:text-blue-300">
+                      <strong>Note:</strong> Your subscription will sync across all devices when you sign in with the same account.
+                    </p>
+                  </div>
                 </div>
               </div>
             </Card>
           </div>
         </div>
-
-        <PaymentDialog
-          open={showEmailDialog}
-          onOpenChange={setShowEmailDialog}
-          selectedPlan={selectedPlan}
-          email={email}
-          onEmailChange={setEmail}
-          emailLocked={true}
-          isProcessing={isProcessing}
-          onPayment={handlePaymentClick}
-          onManualUpgrade={handleManualUpgradeClick}
-        />
-
-        <SuccessDialog
-          open={showSuccessDialog}
-          onOpenChange={setShowSuccessDialog}
-          message={successMessage}
-          onNavigateToDashboard={() => navigate("/parent/family")}
-        />
       </ParentLayout>
     );
   }

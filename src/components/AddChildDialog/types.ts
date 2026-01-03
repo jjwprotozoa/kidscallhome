@@ -4,7 +4,7 @@
 export interface AddChildDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onChildAdded: () => void;
+  onChildAdded: () => void | Promise<void>;
 }
 
 export interface ChildFormData {
