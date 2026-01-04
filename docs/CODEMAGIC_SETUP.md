@@ -20,15 +20,16 @@ This is the recommended approach per [Codemagic documentation](https://docs.code
    - Go to: **Codemagic → Teams → Code Signing → Android keystores**
    - Click **Choose a file** or drag `android/upload-keystore.jks` to upload
    - Enter the following:
-     - **Keystore password:** `KidsCallHome2024!`
+     - **Keystore password:** `KidsCallHome2025!`
      - **Key alias:** `upload`
-     - **Key password:** `KidsCallHome2024!`
+     - **Key password:** `KidsCallHome2025!`
      - **Reference name:** `upload_keystore` (or any name you prefer)
    - Click **Add keystore**
 
 3. **Update codemagic.yaml:**
    - Uncomment the `android_signing` field in the environment section
    - Replace `upload_keystore` with your reference name:
+
      ```yaml
      environment:
        android_signing:
@@ -40,10 +41,11 @@ This is the recommended approach per [Codemagic documentation](https://docs.code
 The keystore is already in the repository at `android/upload-keystore.jks` and will be used automatically. No additional setup needed.
 
 **Keystore Details:**
+
 - **File:** `android/upload-keystore.jks`
-- **Password:** `KidsCallHome2024!`
+- **Password:** `KidsCallHome2025!`
 - **Alias:** `upload`
-- **Key Password:** `KidsCallHome2024!`
+- **Key Password:** `KidsCallHome2025!`
 
 #### Generate a New Keystore (if needed)
 
@@ -53,8 +55,8 @@ If you need to generate a new keystore:
 keytool -genkey -v -keystore android/upload-keystore.jks \
   -keyalg RSA -keysize 2048 -validity 10000 \
   -alias upload \
-  -storepass KidsCallHome2024! \
-  -keypass KidsCallHome2024! \
+  -storepass KidsCallHome2025! \
+  -keypass KidsCallHome2025! \
   -dname "CN=Kids Call Home, OU=Development, O=KidsCallHome, L=Unknown, ST=Unknown, C=US"
 ```
 

@@ -65,13 +65,13 @@ workflows:
             
             # Create keystore.properties file for repository keystore
             KEYSTORE_PROPERTIES="android/keystore.properties"
-            printf "storeFile=upload-keystore.jks\nstorePassword=KidsCallHome2024!\nkeyAlias=upload\nkeyPassword=KidsCallHome2024!\n" > "$KEYSTORE_PROPERTIES"
-            
+            printf "storeFile=upload-keystore.jks\nstorePassword=KidsCallHome2025!\nkeyAlias=upload\nkeyPassword=KidsCallHome2025!\n" > "$KEYSTORE_PROPERTIES"
+
             if [ ! -f "$KEYSTORE_PROPERTIES" ]; then
               echo "❌ ERROR: Failed to create keystore.properties file!"
               exit 1
             fi
-            
+
             echo "✅ keystore.properties created for repository keystore"
           else
             echo "⚠️ WARNING: No keystore configured. Release builds will NOT be signed."
