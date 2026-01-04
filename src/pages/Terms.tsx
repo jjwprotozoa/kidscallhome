@@ -6,7 +6,7 @@ import { Link } from "react-router-dom";
 
 const Terms = () => {
   return (
-    <main className="min-h-[100dvh] bg-background">
+    <main className="min-h-[100dvh] bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
       <SEOHead
         title="Terms of Service - Usage Guidelines"
         description="Kids Call Home terms of service. Family-only communication, parent responsibilities, and acceptable use guidelines for safe video calling."

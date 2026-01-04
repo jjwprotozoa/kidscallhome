@@ -309,7 +309,7 @@ const ChildCallScreen = () => {
 
   if (!childId || !parentId) {
     return (
-      <div className="min-h-[100dvh] bg-background flex items-center justify-center">
+      <div className="min-h-[100dvh] bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
         <div>Loading...</div>
       </div>
     );

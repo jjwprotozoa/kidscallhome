@@ -4,6 +4,73 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed - 2026-01-04
+
+#### Homepage Modularization and Content Updates
+- **Modularized homepage components**: Broke down large `Index.tsx` file (960+ lines) into smaller, maintainable components
+  - Created `src/pages/HomePage/` directory with 13 focused components
+  - Reduced main `Index.tsx` to ~365 lines (62% reduction)
+  - Each section now has its own component file for better organization and reusability
+  - Components: `HomePageNav`, `HeroSection`, `IfThisSoundsFamiliarSection`, `FounderStorySection`, `ComparisonTableSection`, `TrustSecuritySection`, `AppAvailabilitySection`, `TestimonialsSection`, `ProblemsWeSolveSection`, `ParentsSection`, `HowItWorksSection`, `DeviceCompatibilitySection`, `PricingSection`
+- **Enhanced navigation bar**: Added fixed top navigation with improved login flow
+  - "Log in" button opens modal with two cards: Child Login and Parent/Family Member Login
+  - "Get started" button navigates directly to signup page
+  - Modal uses app's gradient background for visual consistency
+  - Buttons styled with outline variant for "Log in" and primary variant for "Get started"
+- **Updated all CTA buttons**: All "Get started" buttons now navigate to signup page with `?mode=signup` parameter
+  - Hero section "Get started free" button
+  - Navigation "Get started" button
+  - Parents section "Get started free" button
+  - Ensures users see signup form by default instead of login form
+- **Files**:
+  - `src/pages/Index.tsx` - Refactored to use modular components
+  - `src/pages/HomePage/` - New directory with 13 component files (NEW)
+  - `src/pages/HomePage/index.ts` - Barrel export file for clean imports
+  - `src/pages/ParentAuth/ParentAuth.tsx` - Added signup mode detection from URL parameter
+
+#### Mobile Signup Page Optimization
+- **Fixed mobile viewport issues**: Optimized signup page to fit all content on mobile screens without scrolling
+  - Reduced container padding on mobile (`pt-4` instead of `pt-safe`, `pb-4` instead of `pb-8`)
+  - Made card padding responsive (`p-4 sm:p-6 md:p-8`)
+  - Reduced spacing between elements (`space-y-4 sm:space-y-6` on card, `space-y-1.5 sm:space-y-2` on form fields)
+  - Smaller header elements on mobile (logo `h-10`, title `text-2xl`)
+  - Reduced trust signal spacing and bottom link text size
+  - Changed container alignment from `items-center` to `justify-start` for better top alignment
+  - "Already have an account? Sign in" link now visible without scrolling
+- **Files**:
+  - `src/pages/ParentAuth/ParentAuth.tsx` - Optimized spacing and padding for mobile
+  - `src/pages/ParentAuth/SignupForm.tsx` - Reduced form field spacing on mobile
+
+### Changed - 2026-01-02
+
+#### Parent Login Page Redesign and Copy Updates
+- **Enhanced login page visual design**: Improved parent authentication page (`/parent/auth`) with better visual grounding and depth
+  - Added soft vertical background gradient for structured, anchored feel
+  - Introduced subtle vignette effect and depth cues to separate foreground from background
+  - Adjusted vertical spacing to position card higher while respecting safe area insets (iOS/Android)
+  - Enhanced card shadow and border for better visual separation
+  - Card now feels intentionally placed rather than floating in empty space
+- **Updated login page copy and messaging**:
+  - Replaced generic welcome message with clear value proposition: "Sign in to your family-only calling and messaging account for kids"
+  - Added supporting line about tablets/Wi‑Fi devices, no SIM card or social media needed
+  - Added helper text under Email field: "Use the email you were invited with (parent or family member)"
+  - Added helper text under Password field explaining Kids Call Home password and magic links for kids
+  - Added helper text under "Stay signed in" checkbox: "Only on your own trusted device"
+  - Added reassurance line below Sign In button: "Encrypted calls and messages. No ads. No public profiles or stranger contact"
+  - Added role explanation: "Parents create the family account and approve all contacts. Grandparents and other family members sign in with the email they're invited with"
+- **Added informational links to /info page**:
+  - Two button-style links at bottom of login card linking to key /info sections
+  - "How Kids Call Home keeps kids safer than typical messaging apps" → `/info#trust`
+  - "Does it work on tablets and Wi‑Fi devices without a SIM card?" → `/info#description`
+  - Links styled as subtle ghost buttons with borders and improved hover states for better contrast
+- **Polish improvements**:
+  - Improved line-height (`leading-relaxed`) for all helper text to enhance readability on smaller screens
+  - Reduced info button size and spacing to keep focus on primary Sign In button
+  - Used non-breaking space to prevent awkward line breaks in link text
+- **Files**:
+  - `src/pages/ParentAuth/ParentAuth.tsx` - Updated layout, background, heading copy, and info links
+  - `src/pages/ParentAuth/LoginForm.tsx` - Added helper text, reassurance messaging, and improved typography
+
 ### Fixed - 2026-01-02
 
 #### Nested Form Warning in AddChildDialog

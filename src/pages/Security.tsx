@@ -7,7 +7,7 @@ import { Link } from "react-router-dom";
 
 const Security = () => {
   return (
-    <main className="min-h-[100dvh] bg-background">
+    <main className="min-h-[100dvh] bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
       <SEOHead
         title="Security - How We Keep Your Family Safe"
         description="Kids Call Home security features. Encrypted calls and messages, parent-controlled contacts, secure authentication, and regular security updates."

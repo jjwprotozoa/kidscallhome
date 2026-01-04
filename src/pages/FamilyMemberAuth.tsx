@@ -671,7 +671,7 @@ const FamilyMemberAuth = () => {
   };
 
   return (
-    <div className="min-h-[100dvh] bg-background flex items-center justify-center p-4">
+    <div className="min-h-[100dvh] bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center p-4">
       <SEOHead
         title="Family Member Login - Grandparents, Aunts, Uncles"
         description="Login for invited family members on Kids Call Home. Grandparents, aunts, uncles, and cousins can video call kids safely after being invited by parents."

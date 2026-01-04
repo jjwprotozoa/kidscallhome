@@ -27,7 +27,7 @@ const Pricing = () => {
   }, []);
 
   return (
-    <main className="min-h-[100dvh] bg-background">
+    <main className="min-h-[100dvh] bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
       <SEOHead
         title="Pricing - Free Plan & Family Subscriptions"
         description="Kids Call Home is free for 1 child. Family Plan from $14.99/month for up to 5 kids. No hidden fees, no ads. Safe video calling for the whole family."
@@ -129,8 +129,8 @@ const Pricing = () => {
                     Local currency equivalents may vary.
                   </p>
                   <p className="text-xs text-muted-foreground mt-2">
-                    <strong>Note:</strong> Payments are processed by Fluid Investment Group LLC, 
-                    the holding and development company operating Kids Call Home. 
+                    <strong>Note:</strong> Payments are processed by Fluid Investment Group LLC,
+                    the holding and development company operating Kids Call Home.
                     You will see "Fluid Investment Group LLC" on your payment receipts and billing statements.
                   </p>
                 </div>

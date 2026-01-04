@@ -81,7 +81,7 @@ const FamilyMemberCard = ({
       )}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex items-center space-x-3 sm:space-x-4 flex-1 min-w-0">
-          <div 
+          <div
             className="w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center text-white font-bold text-xl sm:text-2xl flex-shrink-0"
             style={{ backgroundColor: conv.participant.avatar_color || "#8B5CF6" }}
           >
@@ -355,14 +355,14 @@ const ChildParentsList = () => {
     // Store participant info for the call screen BEFORE navigation
     localStorage.setItem("selectedParentId", participantId);
     localStorage.setItem("selectedParticipantType", participantType);
-    
+
     console.log("📞 [CHILD PARENTS LIST] handleCall:", {
       participantId,
       participantType,
       storedParentId: localStorage.getItem("selectedParentId"),
       storedType: localStorage.getItem("selectedParticipantType"),
     });
-    
+
     // Navigate to call screen - it will handle both parents and family members
     navigate(`/child/call/${participantId}`);
   };
@@ -370,7 +370,7 @@ const ChildParentsList = () => {
   // CLS: Reserve space for loading state to match final layout structure
   if (loading || !child) {
     return (
-      <div className="min-h-[100dvh] bg-background w-full overflow-x-hidden">
+      <div className="min-h-[100dvh] bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 w-full overflow-x-hidden">
         <Navigation />
         <div
           className="p-4 sm:p-6"
@@ -402,7 +402,7 @@ const ChildParentsList = () => {
   }
 
   return (
-    <div className="min-h-[100dvh] bg-background w-full overflow-x-hidden">
+    <div className="min-h-[100dvh] bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 w-full overflow-x-hidden">
       <Navigation />
       <OnboardingTour role="child" pageKey="child_parents_list" />
       <HelpBubble role="child" pageKey="child_parents_list" />
@@ -451,7 +451,7 @@ const ChildParentsList = () => {
                           )}
                           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                             <div className="flex items-center space-x-3 sm:space-x-4 flex-1 min-w-0">
-                              <div 
+                              <div
                                 className="w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center text-white font-bold text-xl sm:text-2xl flex-shrink-0 ring-2 ring-primary/30"
                                 style={{ backgroundColor: conv.participant.avatar_color || "#3B82F6" }}
                               >

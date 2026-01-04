@@ -45,10 +45,10 @@ const FamilyMemberChildCard = ({
   const unreadMessageCount = useUnreadBadgeForChild(child.id);
 
   return (
-    <Card 
+    <Card
       className={`p-4 sm:p-6 hover:shadow-lg transition-all ${
-        isOnline 
-          ? "shadow-[0_0_12px_-3px_rgba(34,197,94,0.35)] border-green-500/20" 
+        isOnline
+          ? "shadow-[0_0_12px_-3px_rgba(34,197,94,0.35)] border-green-500/20"
           : ""
       }`}
     >
@@ -453,7 +453,7 @@ const FamilyMemberDashboard = () => {
 
   if (loading) {
     return (
-      <div className="min-h-[100dvh] bg-background flex items-center justify-center">
+      <div className="min-h-[100dvh] bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
         <Card className="p-8">
           <p>Loading...</p>
         </Card>
@@ -462,7 +462,7 @@ const FamilyMemberDashboard = () => {
   }
 
   return (
-    <div className="min-h-[100dvh] bg-background w-full overflow-x-hidden">
+    <div className="min-h-[100dvh] bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 w-full overflow-x-hidden">
       <Navigation />
       <OnboardingTour role="family_member" pageKey="family_member_dashboard" />
       <HelpBubble role="family_member" pageKey="family_member_dashboard" />
@@ -496,8 +496,8 @@ const FamilyMemberDashboard = () => {
           ) : (
             <div className="space-y-4">
               {children.map((child, index) => (
-                <div 
-                  key={child.id} 
+                <div
+                  key={child.id}
                   data-tour={index === 0 ? "family-member-child-card" : undefined}
                 >
                   <FamilyMemberChildCard

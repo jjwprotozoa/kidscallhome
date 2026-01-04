@@ -32,7 +32,7 @@ const ChildHome = () => {
     if (hasCheckedSession.current) {
       return;
     }
-    
+
     const childData = getChildSessionLegacy();
     if (!childData) {
       hasCheckedSession.current = true;
@@ -54,7 +54,7 @@ const ChildHome = () => {
   // CLS: Reserve space for loading state to match final layout structure
   if (!child) {
     return (
-      <div className="min-h-[100dvh] bg-background">
+      <div className="min-h-[100dvh] bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
         <Navigation />
         <div
           className="p-4"
@@ -81,7 +81,7 @@ const ChildHome = () => {
   }
 
   return (
-    <div className="min-h-[100dvh] bg-background">
+    <div className="min-h-[100dvh] bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
       <Navigation />
       <OnboardingTour role="child" pageKey="child_home" />
       <HelpBubble role="child" pageKey="child_home" />

@@ -188,7 +188,7 @@ const FamilyMemberInvite = () => {
           "Direct update failed, trying RPC function:",
           sanitizeError(updateError)
         );
-        
+
         // Fallback: Use the SECURITY DEFINER function to link the user
         // This bypasses RLS restrictions for newly registered users
         const { data: linkResult, error: linkError } = await supabase.rpc(
@@ -308,7 +308,7 @@ const FamilyMemberInvite = () => {
 
   if (loading) {
     return (
-      <div className="min-h-[100dvh] bg-background flex items-center justify-center">
+      <div className="min-h-[100dvh] bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
         <Card className="p-8">
           <div className="flex items-center gap-4">
             <Loader2 className="h-6 w-6 animate-spin" />
@@ -326,7 +326,7 @@ const FamilyMemberInvite = () => {
   // Show success state if account was created and email confirmation is required
   if (accountCreated && requiresEmailConfirmation) {
     return (
-      <div className="min-h-[100dvh] bg-background flex items-center justify-center p-4">
+      <div className="min-h-[100dvh] bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center p-4">
         <Card className="p-8 w-full max-w-md">
           <div className="space-y-6">
             <div className="text-center">
@@ -388,7 +388,7 @@ const FamilyMemberInvite = () => {
   }
 
   return (
-    <div className="min-h-[100dvh] bg-background flex items-center justify-center p-4">
+    <div className="min-h-[100dvh] bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center p-4">
       <Card className="p-8 w-full max-w-md">
         <div className="space-y-6">
           <div className="text-center">

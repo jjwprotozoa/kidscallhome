@@ -13,7 +13,7 @@ interface ParentLayoutProps {
 
 /**
  * ParentLayout - Shared wrapper for all parent pages
- * 
+ *
  * Features:
  * - Renders Navigation component (fixed at top)
  * - Applies padding-top using CSS variable --kch-topnav-h (set by Navigation component)
@@ -25,7 +25,7 @@ export const ParentLayout: React.FC<ParentLayoutProps> = ({
   className,
 }) => {
   return (
-    <div className="min-h-[100dvh] bg-background w-full overflow-x-hidden">
+    <div className="min-h-[100dvh] bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 w-full overflow-x-hidden">
       <Navigation />
       <main
         className={cn(

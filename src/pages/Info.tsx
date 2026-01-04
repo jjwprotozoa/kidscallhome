@@ -98,9 +98,9 @@ const Info = () => {
         }
 
         // Only load Supabase if we detect a stored session
-        const hasStoredSession = typeof window !== 'undefined' && 
+        const hasStoredSession = typeof window !== 'undefined' &&
           Object.keys(localStorage).some(key => key.startsWith('sb-') || key.includes('supabase'));
-        
+
         if (!hasStoredSession) {
           setUserType(null);
           setLoading(false);
@@ -109,7 +109,7 @@ const Info = () => {
 
         // Lazy import Supabase only when we detect a stored session
         const { supabase } = await import("@/integrations/supabase/client");
-        
+
         const {
           data: { session },
         } = await supabase.auth.getSession();
@@ -234,7 +234,7 @@ const Info = () => {
   };
 
   return (
-    <div className="min-h-[100dvh] bg-background w-full overflow-x-hidden">
+    <div className="min-h-[100dvh] bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 w-full overflow-x-hidden">
       <SEOHead
         title="App Information & Safety - Complete Guide"
         description="Complete guide to Kids Call Home. Learn about safety features, privacy policy, pricing, supported devices, and how we protect your family's communication."
@@ -289,8 +289,8 @@ const Info = () => {
             {/* Brief intro - detailed content moved to About section */}
             <div className="mt-4 md:mt-5 text-sm md:text-base text-muted-foreground">
               <p>
-                Comprehensive information about Kids Call Home, including our mission, 
-                safety commitments, technical details, and legal information. For a 
+                Comprehensive information about Kids Call Home, including our mission,
+                safety commitments, technical details, and legal information. For a
                 quick overview of features and benefits, visit our{" "}
                 <a href="/" className="text-primary hover:underline">homepage</a>.
               </p>

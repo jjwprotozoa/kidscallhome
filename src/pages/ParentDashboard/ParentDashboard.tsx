@@ -120,9 +120,9 @@ const ParentDashboard = () => {
 
   // Optimistic update function for child login code
   const updateChildLoginCode = useCallback((childId: string, newCode: string) => {
-    setChildren(prevChildren => 
-      prevChildren.map(child => 
-        child.id === childId 
+    setChildren(prevChildren =>
+      prevChildren.map(child =>
+        child.id === childId
           ? { ...child, login_code: newCode }
           : child
       )
@@ -222,11 +222,11 @@ const ParentDashboard = () => {
   }, [incomingCall]);
 
   return (
-    <div className="min-h-[100dvh] bg-background w-full overflow-x-hidden">
+    <div className="min-h-[100dvh] bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 w-full overflow-x-hidden">
       <Navigation />
       <OnboardingTour role="parent" pageKey="parent_dashboard" />
       <HelpBubble role="parent" pageKey="parent_dashboard" />
-      
+
       <PageContentLayout>
         <DashboardHeader
           parentName={parentName}

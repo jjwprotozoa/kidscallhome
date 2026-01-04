@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAccountLockout } from "@/hooks/useAccountLockout";
 import { safeLog } from "@/utils/security";
 import { LogIn } from "lucide-react";
+import { Link } from "react-router-dom";
 
 interface LoginFormProps {
   email: string;
@@ -50,18 +51,28 @@ export const LoginForm = ({
 
   return (
     <>
-      <EmailInputWithBreachCheck
-        email={email}
-        onChange={onEmailChange}
-        isLogin={true}
-      />
+      <div className="space-y-2">
+        <EmailInputWithBreachCheck
+          email={email}
+          onChange={onEmailChange}
+          isLogin={true}
+        />
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          Use the email you were invited with (parent or family member).
+        </p>
+      </div>
 
-      <PasswordInputWithBreachCheck
-        password={password}
-        onChange={onPasswordChange}
-        isLogin={true}
-        autoComplete="current-password"
-      />
+      <div className="space-y-2">
+        <PasswordInputWithBreachCheck
+          password={password}
+          onChange={onPasswordChange}
+          isLogin={true}
+          autoComplete="current-password"
+        />
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          This is your Kids Call Home password. Kids can also use magic links on their own devices—no passwords to remember.
+        </p>
+      </div>
 
       {/* SECURITY: Show lockout warning */}
       {lockoutInfo && <LockoutWarning lockoutInfo={lockoutInfo} />}
@@ -88,34 +99,44 @@ export const LoginForm = ({
         </div>
       )}
 
-      <div className="flex items-center space-x-2">
-        <Checkbox
-          id="staySignedIn"
-          checked={staySignedIn}
-          onCheckedChange={(checked) => onStaySignedInChange(checked === true)}
-        />
-        <Label
-          htmlFor="staySignedIn"
-          className="text-sm font-normal cursor-pointer"
-        >
-          Stay signed in
-        </Label>
+      <div className="space-y-1">
+        <div className="flex items-center space-x-2">
+          <Checkbox
+            id="staySignedIn"
+            checked={staySignedIn}
+            onCheckedChange={(checked) => onStaySignedInChange(checked === true)}
+          />
+          <Label
+            htmlFor="staySignedIn"
+            className="text-sm font-normal cursor-pointer"
+          >
+            Stay signed in
+          </Label>
+        </div>
+        <p className="text-xs text-muted-foreground pl-6 leading-relaxed">
+          Only on your own trusted device.
+        </p>
       </div>
 
-      <Button
-        type="submit"
-        className="w-full"
-        disabled={disabled || loading || lockoutInfo?.locked}
-      >
-        {loading ? (
-          "Processing..."
-        ) : (
-          <>
-            <LogIn className="mr-2 h-4 w-4" />
-            Sign In
-          </>
-        )}
-      </Button>
+      <div className="space-y-2">
+        <Button
+          type="submit"
+          className="w-full"
+          disabled={disabled || loading || lockoutInfo?.locked}
+        >
+          {loading ? (
+            "Processing..."
+          ) : (
+            <>
+              <LogIn className="mr-2 h-4 w-4" />
+              Sign In
+            </>
+          )}
+        </Button>
+        <p className="text-xs text-muted-foreground text-center leading-relaxed">
+          Encrypted calls and messages. No ads. No public profiles or stranger contact.
+        </p>
+      </div>
     </>
   );
 };

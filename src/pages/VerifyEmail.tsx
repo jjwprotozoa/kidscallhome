@@ -42,14 +42,14 @@ const VerifyEmail = () => {
         const {
           data: { session },
         } = await supabase.auth.getSession();
-        
+
         if (session?.user) {
           // If user is already verified, redirect to app
           if (session.user.email_confirmed_at) {
             navigate("/parent/children", { replace: true });
             return;
           }
-          
+
           setHasSession(true);
           setUserEmail(session.user.email || null);
         } else {
@@ -88,7 +88,7 @@ const VerifyEmail = () => {
     // Poll for email verification status (frictionless - auto-detects when verified)
     // This allows users to verify via email link in another tab/window and auto-redirect
     let pollInterval: NodeJS.Timeout | null = null;
-    
+
     if (hasSession || userEmail) {
       pollInterval = setInterval(async () => {
         try {
@@ -120,7 +120,7 @@ const VerifyEmail = () => {
     try {
       // Refresh session to get latest verification status
       const { data: { session }, error } = await supabase.auth.refreshSession();
-      
+
       if (error) {
         // If refresh fails, try getting session directly
         const { data: { session: currentSession } } = await supabase.auth.getSession();
@@ -133,7 +133,7 @@ const VerifyEmail = () => {
         navigate("/parent/children", { replace: true });
         return;
       }
-      
+
       // Not verified yet
       toast({
         title: "Not verified yet",
@@ -318,7 +318,7 @@ const VerifyEmail = () => {
 
   if (loading) {
     return (
-      <div className="min-h-[100dvh] flex items-center justify-center p-4">
+      <div className="min-h-[100dvh] flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 p-4">
         <div className="text-center">
           <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
           <p className="text-muted-foreground">Loading...</p>
@@ -328,7 +328,7 @@ const VerifyEmail = () => {
   }
 
   return (
-    <div className="min-h-[100dvh] flex items-center justify-center bg-background p-4">
+    <div className="min-h-[100dvh] flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 p-4">
       <Card className="w-full max-w-md p-8 space-y-6">
         <div className="text-center space-y-2">
           <div className="flex justify-center">
@@ -373,7 +373,7 @@ const VerifyEmail = () => {
               </>
             )}
           </Button>
-          
+
           <Button
             type="button"
             variant="outline"

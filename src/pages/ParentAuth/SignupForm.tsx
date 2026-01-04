@@ -77,32 +77,32 @@ export const SignupForm = ({
   const emailValid = isValidEmailBasic(email);
   const emailsMatch =
     normalizeEmail(email) === normalizeEmail(confirmEmail) || !confirmEmail;
-  
+
   // Check if email is restricted (only when emails match to avoid double friction)
   const normalizedEmail = normalizeEmail(email);
   const normalizedConfirmEmail = normalizeEmail(confirmEmail);
   const emailsMatchForRestriction = normalizedEmail === normalizedConfirmEmail;
-  const isRestricted = 
-    emailsMatchForRestriction && 
-    emailValid && 
+  const isRestricted =
+    emailsMatchForRestriction &&
+    emailValid &&
     isLikelyRestrictedEmail(email);
 
   // Update restricted email state
   useEffect(() => {
     setIsRestrictedEmail(isRestricted);
-    
+
     // Log detection on first render of panel (per session using sessionStorage)
     if (isRestricted) {
       const domain = getEmailDomain(email);
       const route = location.pathname;
       const logKey = `restricted_email_detected:${domain}:${route}`;
-      
+
       if (!sessionStorage.getItem(logKey)) {
         logAppEvent("restricted_email_detected", { domain, route });
         sessionStorage.setItem(logKey, "true");
       }
     }
-    
+
     // Reset override when email changes
     if (!isRestricted) {
       setOverrideChecked(false);
@@ -133,7 +133,7 @@ export const SignupForm = ({
   return (
     <>
       {/* Family Role Selector */}
-      <div className="space-y-2">
+      <div className="space-y-1.5 sm:space-y-2">
         <label className="text-sm font-medium">I am a...</label>
         <Select
           value={familyRole}
@@ -155,7 +155,7 @@ export const SignupForm = ({
       {/* Show different content based on role selection */}
       {isParent ? (
         <>
-          <div className="space-y-2">
+          <div className="space-y-1.5 sm:space-y-2">
             <label className="text-sm font-medium">Your Name</label>
             <Input
               type="text"
@@ -266,7 +266,7 @@ export const SignupForm = ({
                 Family members need an invitation
               </p>
               <p className="text-sm text-blue-700 dark:text-blue-300">
-                As a {selectedRole?.label.toLowerCase()}, you'll need to be invited by the child's parent/guardian. 
+                As a {selectedRole?.label.toLowerCase()}, you'll need to be invited by the child's parent/guardian.
                 Ask them to send you an invitation from their Kids Call Home dashboard.
               </p>
               <p className="text-xs text-blue-600 dark:text-blue-400 mt-2">

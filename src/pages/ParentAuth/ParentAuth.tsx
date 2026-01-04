@@ -67,8 +67,10 @@ const ParentAuth = () => {
   const hasSwitchedToSignup = useRef(false);
   useEffect(() => {
     const refFromUrl = searchParams.get("ref");
-    if (refFromUrl && authState.isLogin && !hasSwitchedToSignup.current) {
-      // If referral code is in URL, switch to signup mode for new user registration
+    const signupMode = searchParams.get("mode") === "signup" || searchParams.get("signup") === "true";
+
+    if ((refFromUrl || signupMode) && authState.isLogin && !hasSwitchedToSignup.current) {
+      // If referral code or signup parameter is in URL, switch to signup mode for new user registration
       authState.setIsLogin(false);
       hasSwitchedToSignup.current = true;
     }
@@ -130,7 +132,7 @@ const ParentAuth = () => {
       if (!authState.isLogin) {
         const normalizedEmail = normalizeEmail(authState.email);
         const normalizedConfirmEmail = normalizeEmail(authState.confirmEmail);
-        
+
         if (!isValidEmailBasic(authState.email)) {
           toast({
             title: "Invalid email",
@@ -208,7 +210,7 @@ const ParentAuth = () => {
     } catch (error: unknown) {
       const sanitizedError = sanitizeError(error);
       safeLog.error("Auth operation failed:", sanitizedError);
-      
+
       // Handle email not confirmed error
       if (error instanceof Error && error.message === "EMAIL_NOT_CONFIRMED") {
         setShowResendEmail(true);
@@ -232,7 +234,7 @@ const ParentAuth = () => {
         }
         return; // Don't show generic error toast
       }
-      
+
       if (!(error instanceof Error && error.message.includes("locked"))) {
         toast({
           title: "Error",
@@ -330,7 +332,7 @@ const ParentAuth = () => {
       referralCode,
       familyRole: authState.familyRole,
     });
-    
+
     // Log override if user accepted restricted email warning
     if (restrictedEmailOverride && restrictedEmailOverride === email) {
       const domain = getEmailDomain(email);
@@ -338,14 +340,14 @@ const ParentAuth = () => {
       logAppEvent("restricted_email_override", { domain, route });
       setRestrictedEmailOverride(null);
     }
-    
+
     if (result.needsFamilySetup && result.user) {
       authState.setUserId(result.user.id);
       // Clear stored referral code after successful signup
       localStorage.removeItem("kch_referral_code");
       // Clear signup draft after successful signup
       authState.clearSignupDraft();
-      
+
       // Show family setup immediately - household selection happens BEFORE email verification
       // The FamilySetupSelection component handles unauthenticated users via RPC function
       authState.setNeedsFamilySetup(true);
@@ -353,29 +355,56 @@ const ParentAuth = () => {
   };
 
   return (
-    <div className="min-h-[100dvh] flex items-center justify-center bg-background p-4">
+    <div className="min-h-[100dvh] flex flex-col items-center justify-start bg-gradient-to-b from-slate-50 via-blue-50/80 to-slate-100/60 px-4 pt-4 sm:pt-safe pb-4 sm:pb-8 relative overflow-y-auto">
       <SEOHead
         title={authState.isLogin ? "Parent Login" : "Create Parent Account - Get Started Free"}
         description="Sign in or create your Kids Call Home parent account. Set up safe video calling for your kids in minutes. Free for 1 child, no credit card required."
         path="/parent/auth"
       />
-      <Card className="w-full max-w-md p-8 space-y-6">
-        <div className="text-center space-y-2">
+
+      {/* Soft vignette effect for depth */}
+      <div className="absolute inset-0 pointer-events-none">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_transparent_0%,_transparent_40%,_rgba(0,0,0,0.03)_100%)]" />
+      </div>
+
+      {/* Structured tonal container to anchor the card */}
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none pt-12">
+        <div className="w-full max-w-lg h-[680px] bg-gradient-to-b from-white/40 via-white/30 to-white/20 rounded-3xl blur-3xl" />
+        {/* Additional subtle layer for depth */}
+        <div className="absolute w-full max-w-md h-[600px] bg-white/15 rounded-2xl blur-2xl -mt-8" />
+      </div>
+
+      {/* Single quiet trust signal above card - signup only */}
+      {!authState.isLogin && (
+        <div className="w-full max-w-md mb-3 sm:mb-6 relative z-10 text-center pt-4 sm:pt-8">
+          <p className="text-xs sm:text-sm text-muted-foreground/70">
+            Free for 1 child • No credit card required
+          </p>
+        </div>
+      )}
+
+      <Card className={`w-full max-w-md p-4 sm:p-6 md:p-8 space-y-4 sm:space-y-6 relative z-10 shadow-xl shadow-black/5 border border-border/50 mb-4 sm:mb-8 ${authState.isLogin ? 'mt-8' : 'mt-0'}`}>
+        <div className="text-center space-y-1.5 sm:space-y-2">
           <div className="flex justify-center">
             <img
               src="/icon-192x192.png"
               alt="Kids Call Home"
-              className="h-12 w-12"
+              className="h-10 w-10 sm:h-12 sm:w-12"
             />
           </div>
-          <h1 className="text-3xl font-bold">Kids Call Home</h1>
-          <p className="text-muted-foreground">
-            {authState.isLogin
-              ? authState.parentName
-                ? `Welcome back, ${authState.parentName}!`
-                : "Welcome back!"
-              : "Create your account"}
-          </p>
+          <h1 className="text-2xl sm:text-3xl font-bold">Kids Call Home</h1>
+          {authState.isLogin ? (
+            <>
+              <p className="text-muted-foreground">
+                Sign in to your family-only calling and messaging account for kids.
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Kids Call Home lets children safely call parents and family from tablets and Wi‑Fi devices—no phone number, SIM card or social media needed.
+              </p>
+            </>
+          ) : (
+            <p className="text-sm sm:text-base text-muted-foreground">Create your account</p>
+          )}
           {/* Referral code indicator */}
           {referralCode && !authState.isLogin && (
             <div className="space-y-3">
@@ -485,19 +514,50 @@ const ParentAuth = () => {
           </div>
         )}
 
-        <div className="text-center">
+        <div className="text-center space-y-2 sm:space-y-3 pt-1">
           <button
             type="button"
             onClick={() => {
               authState.setIsLogin(!authState.isLogin);
               setShowResendEmail(false); // Reset resend option when switching modes
             }}
-            className="text-sm text-primary hover:underline"
+            className="text-xs sm:text-sm text-primary hover:underline py-1"
           >
             {authState.isLogin
               ? "Need an account? Sign up"
               : "Already have an account? Sign in"}
           </button>
+
+          {authState.isLogin && (
+            <>
+              <p className="text-xs text-muted-foreground">
+                Parents create the family account and approve all contacts. Grandparents and other family members sign in with the email they're invited with.
+              </p>
+
+              <div className="space-y-1.5 pt-3 border-t border-border/50">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  asChild
+                  className="w-full justify-start text-[11px] h-auto py-2 px-3 text-left font-normal border border-border hover:bg-muted hover:text-foreground"
+                >
+                  <Link to="/info#trust">
+                    How Kids Call Home keeps kids safer than typical messaging&nbsp;apps
+                  </Link>
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  asChild
+                  className="w-full justify-start text-[11px] h-auto py-2 px-3 text-left font-normal border border-border hover:bg-muted hover:text-foreground"
+                >
+                  <Link to="/info#description">
+                    Does it work on tablets and Wi‑Fi devices without a SIM card?
+                  </Link>
+                </Button>
+              </div>
+            </>
+          )}
         </div>
       </Card>
 
@@ -514,20 +574,20 @@ const ParentAuth = () => {
                 // FamilySetupSelection component already handles the household_type update
                 // (using RPC function if not authenticated, or direct UPDATE if authenticated)
                 // So we just need to handle the post-setup flow here
-                
+
                 authState.setNeedsFamilySetup(false);
-                
+
                 // Check if email confirmation is required AFTER household selection
                 // Get the email from current user or fallback to authState.email
                 const { data: { user }, error: getUserError } = await supabase.auth.getUser();
                 const userEmail = user?.email || authState.email;
-                
+
                 // If user is not authenticated OR email is not confirmed, go to verify-email
                 if (!user || getUserError || !user.email_confirmed_at) {
                   // User needs email verification - redirect to verify-email screen
-                  toast({ 
-                    title: "Family setup complete!", 
-                    description: "Please verify your email to continue." 
+                  toast({
+                    title: "Family setup complete!",
+                    description: "Please verify your email to continue."
                   });
                   navigate(`/verify-email?email=${encodeURIComponent(userEmail)}`, { replace: true });
                 } else {
@@ -544,8 +604,8 @@ const ParentAuth = () => {
                 } else {
                   toast({
                     title: "Error",
-                    description: error instanceof Error 
-                      ? error.message 
+                    description: error instanceof Error
+                      ? error.message
                       : "An error occurred. Please try again.",
                     variant: "destructive",
                   });

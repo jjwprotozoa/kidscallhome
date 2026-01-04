@@ -7,7 +7,7 @@ import { Link } from "react-router-dom";
 
 const Privacy = () => {
   return (
-    <main className="min-h-[100dvh] bg-background">
+    <main className="min-h-[100dvh] bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
       <SEOHead
         title="Privacy Policy - How We Protect Your Family's Data"
         description="Kids Call Home privacy policy. We collect minimal data, never sell to advertisers, and encrypt all communications. COPPA and GDPR compliant design."

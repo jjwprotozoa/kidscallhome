@@ -114,13 +114,13 @@ const ParentCallScreen = () => {
         state: callEngine.state,
         callId: callEngine.callId,
       });
-      
+
       // CRITICAL: Mark user as having started the call (enables audio)
       setUserStartedCall();
-      
+
       autoAcceptAttemptedRef.current = urlCallId;
       stopIncomingCall(urlCallId);
-      
+
       // Accept the call - state is already "incoming" so this should work
       callEngine.acceptIncomingCall(urlCallId).catch((error) => {
         console.error("Failed to accept call:", error);
@@ -148,16 +148,16 @@ const ParentCallScreen = () => {
     if (callStartedRef.current || callFailed) {
       return;
     }
-    
+
     if (callEngine.state === "idle" && parentId && childId) {
       callStartedRef.current = true;
       // CRITICAL: User navigated to call screen - enable audio
       setUserStartedCall();
-      
+
       // Track analytics: call started
       trackCallStarted("video", "parent");
       callStartTimeRef.current = Date.now();
-      
+
       callEngine.startOutgoingCall(childId).catch((error) => {
         console.error("Failed to start call:", error);
         setCallFailed(true);
@@ -187,7 +187,7 @@ const ParentCallScreen = () => {
 
   if (!parentId || !childId) {
     return (
-      <div className="min-h-[100dvh] bg-background flex items-center justify-center">
+      <div className="min-h-[100dvh] bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
         <div>Loading...</div>
       </div>
     );

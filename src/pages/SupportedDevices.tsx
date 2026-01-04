@@ -17,7 +17,7 @@ const SupportedDevices = () => {
   ];
 
   return (
-    <main className="min-h-[100dvh] bg-background">
+    <main className="min-h-[100dvh] bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
       <SEOHead
         title="Supported Devices - iPad, Android, Kindle Fire, Chromebook"
         description="Kids Call Home works on iPads, Android tablets, Kindle Fire, Chromebooks, iPhones, and Android phones. No SIM card needed - just WiFi or mobile data."

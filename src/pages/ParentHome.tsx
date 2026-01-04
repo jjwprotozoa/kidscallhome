@@ -56,7 +56,7 @@ const ParentHome = () => {
 
   // Show minimal loader only - redirect happens immediately, no UI flash
   return (
-    <div className="min-h-[100dvh] bg-background flex items-center justify-center">
+    <div className="min-h-[100dvh] bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
       <div className="text-center">
         <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]" />
       </div>

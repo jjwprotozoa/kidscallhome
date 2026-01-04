@@ -73,8 +73,60 @@ export const useChildAuth = (skipFamilyCode: boolean) => {
           }
         );
 
-        // Fallback without country_code if needed
+        // Handle duplicate key errors gracefully (race condition - device already exists)
         if (
+          deviceError &&
+          (deviceError.code === "23505" ||
+            deviceError.message?.includes("duplicate key") ||
+            deviceError.message?.includes("already exists"))
+        ) {
+          // Duplicate key error - device was created by another request
+          // This is expected in race conditions, so we'll try to fetch the existing device
+          await logDeviceTracking(
+            "warn",
+            "Device already exists (race condition), fetching existing device",
+            {
+              parent_id: childData.parent_id,
+              child_id: childData.id,
+              device_identifier: deviceIdentifier,
+            }
+          );
+
+          // Try to get the existing device ID
+          const { data: existingDevice } = await supabase
+            .from("devices")
+            .select("id")
+            .eq("parent_id", childData.parent_id)
+            .eq("device_identifier", deviceIdentifier)
+            .eq("is_active", true)
+            .maybeSingle();
+
+          if (existingDevice?.id) {
+            deviceData = existingDevice.id;
+            deviceError = null;
+            await logDeviceTracking(
+              "success",
+              "Device tracked successfully (existing device found)",
+              {
+                parent_id: childData.parent_id,
+                child_id: childData.id,
+                device_identifier: deviceIdentifier,
+                device_id: deviceData,
+              }
+            );
+          } else {
+            // If we can't find the device, it's a real error
+            await logDeviceTracking("error", "Device tracking error", {
+              parent_id: childData.parent_id,
+              child_id: childData.id,
+              device_identifier: deviceIdentifier,
+              error: deviceError,
+            });
+            // Don't throw - device tracking is non-critical
+          }
+        }
+        // Fallback without country_code if needed (function signature mismatch)
+        else if (
           deviceError &&
           (deviceError.code === "42883" ||
             deviceError.message?.includes("function") ||
@@ -109,29 +161,30 @@ export const useChildAuth = (skipFamilyCode: boolean) => {
               device_identifier: deviceIdentifier,
               error: fallbackResult.error,
             });
-            throw fallbackResult.error;
+            // Don't throw - device tracking is non-critical
+          } else {
+            deviceData = fallbackResult.data;
+            deviceError = null;
+            await logDeviceTracking(
+              "success",
+              "Device tracked successfully (without country_code)",
+              {
+                parent_id: childData.parent_id,
+                child_id: childData.id,
+                device_identifier: deviceIdentifier,
+                device_id: deviceData,
+              }
+            );
           }
-
-          deviceData = fallbackResult.data;
-          deviceError = null;
-          await logDeviceTracking(
-            "success",
-            "Device tracked successfully (without country_code)",
-            {
-              parent_id: childData.parent_id,
-              child_id: childData.id,
-              device_identifier: deviceIdentifier,
-              device_id: deviceData,
-            }
-          );
         } else if (deviceError) {
+          // Other errors - log but don't throw (device tracking is non-critical)
           await logDeviceTracking("error", "Device tracking error", {
             parent_id: childData.parent_id,
             child_id: childData.id,
             device_identifier: deviceIdentifier,
             error: deviceError,
           });
-          throw deviceError;
+          // Don't throw - device tracking is non-critical and shouldn't block login
         } else {
           await logDeviceTracking("success", "Device tracked successfully", {
             parent_id: childData.parent_id,
@@ -326,7 +379,7 @@ export const useChildAuth = (skipFamilyCode: boolean) => {
 
         // Success - create enhanced session with expiration and device fingerprint
         setChildData(data);
-        
+
         // Set session synchronously before navigation
         setChildSession({
           childId: data.id,
@@ -338,7 +391,7 @@ export const useChildAuth = (skipFamilyCode: boolean) => {
         // Verify session was set correctly before navigating
         // Use a small delay to ensure localStorage write completes
         await new Promise(resolve => setTimeout(resolve, 100));
-        
+
         // Double-check session exists before navigation
         const { getChildSessionLegacy } = await import("@/lib/childSession");
         const verifySession = getChildSessionLegacy();
