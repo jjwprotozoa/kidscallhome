@@ -6,32 +6,57 @@ This guide explains how to configure Codemagic for Android and iOS builds.
 
 ### Required: Android Keystore Setup
 
-The Android build requires a keystore for signing release builds. Configure the following in Codemagic:
+The Android build requires a keystore for signing release builds. You have **two options**:
 
-1. **Go to Codemagic Dashboard**
-   - Navigate to: **Teams → Code Signing → Environment Variables**
-   - Find or create the group: **`android_keystore`**
+#### Option 1: Upload Keystore to Codemagic (Recommended)
 
-2. **Add the following environment variables:**
+This is the recommended approach per [Codemagic documentation](https://docs.codemagic.io/yaml-code-signing/signing-android/):
 
-   | Variable Name | Description | Example |
-   | ------------- | ----------- | ------- |
-   | `CM_KEYSTORE_PATH` | Path to your `.jks` keystore file | `/path/to/upload-keystore.jks` |
-   | `CM_KEYSTORE_PASSWORD` | Password for the keystore | `your-keystore-password` |
-   | `CM_KEY_ALIAS` | Alias name of the key in the keystore | `upload` |
-   | `CM_KEY_PASSWORD` | Password for the key alias | `your-key-password` |
+1. **Get your keystore file:**
+   - You already have one in the repository: `android/upload-keystore.jks`
+   - Or generate a new one (see Option 2 below)
 
-3. **If you don't have a keystore yet:**
+2. **Upload to Codemagic:**
+   - Go to: **Codemagic → Teams → Code Signing → Android keystores**
+   - Click **Choose a file** or drag `android/upload-keystore.jks` to upload
+   - Enter the following:
+     - **Keystore password:** `KidsCallHome2024!`
+     - **Key alias:** `upload`
+     - **Key password:** `KidsCallHome2024!`
+     - **Reference name:** `upload_keystore` (or any name you prefer)
+   - Click **Add keystore**
 
-   Generate one using the following command:
+3. **Update codemagic.yaml:**
+   - Uncomment the `android_signing` field in the environment section
+   - Replace `upload_keystore` with your reference name:
+     ```yaml
+     environment:
+       android_signing:
+         - upload_keystore  # Your reference name from step 2
+     ```
 
-   ```bash
-   keytool -genkey -v -keystore upload-keystore.jks \
-     -keyalg RSA -keysize 2048 -validity 10000 \
-     -alias upload
-   ```
+#### Option 2: Use Repository Keystore (Current Setup)
 
-   Then upload the `.jks` file to Codemagic and set `CM_KEYSTORE_PATH` to point to it.
+The keystore is already in the repository at `android/upload-keystore.jks` and will be used automatically. No additional setup needed.
+
+**Keystore Details:**
+- **File:** `android/upload-keystore.jks`
+- **Password:** `KidsCallHome2024!`
+- **Alias:** `upload`
+- **Key Password:** `KidsCallHome2024!`
+
+#### Generate a New Keystore (if needed)
+
+If you need to generate a new keystore:
+
+```bash
+keytool -genkey -v -keystore android/upload-keystore.jks \
+  -keyalg RSA -keysize 2048 -validity 10000 \
+  -alias upload \
+  -storepass KidsCallHome2024! \
+  -keypass KidsCallHome2024! \
+  -dname "CN=Kids Call Home, OU=Development, O=KidsCallHome, L=Unknown, ST=Unknown, C=US"
+```
 
 ### Required: Google Play Store Publishing
 
