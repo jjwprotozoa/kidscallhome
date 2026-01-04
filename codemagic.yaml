@@ -900,10 +900,11 @@ workflows:
       #   - Must match the package name in Google Play Console
       #
       google_play:
-        credentials: GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
+        credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
         # Credentials come from the "google_play" environment group
         # Configure in Codemagic → Teams → Environment Variables → google_play group
         # Add variable: GCLOUD_SERVICE_ACCOUNT_CREDENTIALS with your Google Play API JSON key content
+        # The $ prefix tells Codemagic to use the environment variable from the google_play group
         #
         # IMPORTANT: If publishing fails, verify:
         # 1. The "google_play" environment group exists in Codemagic
