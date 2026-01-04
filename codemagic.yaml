@@ -607,14 +607,14 @@ workflows:
       google_play:
         credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
         # IMPORTANT: GCLOUD_SERVICE_ACCOUNT_CREDENTIALS must contain the FULL JSON content
-        # 
+        #
         # Setup instructions:
         # 1. Go to Codemagic → Teams → Environment Variables → google_play group
         # 2. Add variable: GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
         # 3. Open your Google Play API service account JSON key file
         # 4. Copy the ENTIRE file content (should start with { and end with })
         # 5. Paste it as the value for GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
-        # 
+        #
         # The JSON should look like:
         # {
         #   "type": "service_account",
@@ -659,15 +659,23 @@ workflows:
       xcode: latest
       cocoapods: default
       ios_signing:
+        # iOS Code Signing Configuration
+        # See: https://docs.codemagic.io/yaml-code-signing/signing-ios/
+        #
+        # Using distribution_type and bundle_identifier automatically fetches matching
+        # certificates and provisioning profiles from Codemagic Code Signing identities.
+        #
+        # Required in Codemagic → Teams → Code Signing → iOS certificates:
+        # - Apple Distribution Certificate (for app_store distribution)
+        # - App Store Provisioning Profile for bundle ID: com.kidscallhome.app
+        #
         # IMPORTANT: If you get "No matching profiles found" error:
-        # 1. Go to Codemagic → Teams → Code Signing → ios_certificates group
-        # 2. Ensure you have:
-        #    - A Distribution Certificate (not Development)
-        #    - An App Store Provisioning Profile (not Development/Ad Hoc)
-        #    - The provisioning profile must be for bundle ID: com.kidscallhome.app
-        # 3. If profiles are missing, generate them in Codemagic or upload from Apple Developer
+        # 1. Go to Codemagic → Teams → Code Signing → iOS certificates
+        # 2. Upload or generate an Apple Distribution Certificate
+        # 3. Upload or fetch an App Store Provisioning Profile for: com.kidscallhome.app
         # 4. Verify the bundle ID in the profile matches exactly: com.kidscallhome.app
-        distribution_type: app_store  # or 'development' for testing
+        #
+        distribution_type: app_store  # Required for App Store/TestFlight publishing
         bundle_identifier: "com.kidscallhome.app"
     scripts:
       - name: Install dependencies
@@ -1038,26 +1046,35 @@ workflows:
           echo "   - An App Store Provisioning Profile for bundle ID: $BUNDLE_ID"
           echo "3. The provisioning profile must match exactly: $BUNDLE_ID"
 
-      - name: Set up provisioning profiles settings on Xcode project
+      - name: Set up code signing settings on Xcode project
         script: |
-          echo "=== Setting up provisioning profiles ==="
+          echo "=== Setting up code signing settings on Xcode project ==="
           echo "Bundle ID: $BUNDLE_ID"
           echo "Distribution type: app_store"
           echo ""
+          echo "Applying provisioning profiles to Xcode project..."
+          echo "See: https://docs.codemagic.io/yaml-code-signing/signing-ios/#using-provisioning-profiles"
+          echo ""
 
-          # Use Codemagic's xcode-project command to set up profiles
+          # Apply provisioning profiles to Xcode project
+          # This must be run before building the IPA
+          # Codemagic automatically fetches certificates and profiles based on
+          # distribution_type and bundle_identifier configured in ios_signing
           xcode-project use-profiles || {
             echo "❌ Failed to set up provisioning profiles"
             echo ""
             echo "Troubleshooting steps:"
-            echo "1. Verify 'ios_certificates' group exists in Codemagic"
-            echo "2. Ensure it contains an App Store provisioning profile for: $BUNDLE_ID"
-            echo "3. Check that the certificate and profile are valid and not expired"
-            echo "4. Try regenerating the certificate/profile in Codemagic if needed"
+            echo "1. Verify certificates and profiles are uploaded in Codemagic → Teams → Code Signing"
+            echo "2. Ensure you have an Apple Distribution Certificate (not Development)"
+            echo "3. Ensure you have an App Store Provisioning Profile for bundle ID: $BUNDLE_ID"
+            echo "4. Check that the certificate and profile are valid and not expired"
+            echo "5. Verify bundle ID matches exactly: $BUNDLE_ID"
+            echo ""
+            echo "See: https://docs.codemagic.io/yaml-code-signing/signing-ios/"
             exit 1
           }
 
-          echo "✅ Provisioning profiles configured"
+          echo "✅ Code signing settings configured"
 
       - name: Set version and build number for App Store distribution
         script: |
