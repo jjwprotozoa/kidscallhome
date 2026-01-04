@@ -94,7 +94,7 @@ workflows:
             echo "Copying keystore to: $KEYSTORE_DEST"
             mkdir -p android
             cp "$KEYSTORE_PATH" "$KEYSTORE_DEST"
-            
+
             if [ ! -f "$KEYSTORE_DEST" ]; then
               echo "❌ ERROR: Failed to copy keystore file!"
               exit 1
@@ -606,21 +606,31 @@ workflows:
       #
       google_play:
         credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
-        # Credentials come from the "google_play" environment group
-        # Configure in Codemagic → Teams → Environment Variables → google_play group
-        # Add variable: GCLOUD_SERVICE_ACCOUNT_CREDENTIALS with your Google Play API JSON key content
-        # The $ prefix tells Codemagic to use the environment variable from the google_play group
+        # IMPORTANT: GCLOUD_SERVICE_ACCOUNT_CREDENTIALS must contain the FULL JSON content
+        # 
+        # Setup instructions:
+        # 1. Go to Codemagic → Teams → Environment Variables → google_play group
+        # 2. Add variable: GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
+        # 3. Open your Google Play API service account JSON key file
+        # 4. Copy the ENTIRE file content (should start with { and end with })
+        # 5. Paste it as the value for GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
+        # 
+        # The JSON should look like:
+        # {
+        #   "type": "service_account",
+        #   "project_id": "...",
+        #   "private_key_id": "...",
+        #   "private_key": "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n",
+        #   ...
+        # }
         #
-        # IMPORTANT: If publishing fails, verify:
-        # 1. The "google_play" environment group exists in Codemagic
-        # 2. The group contains GCLOUD_SERVICE_ACCOUNT_CREDENTIALS with valid JSON key content
-        # 3. The service account has the correct permissions in Google Play Console
-        # 4. The package name matches your app in Google Play Console: com.kidscallhome.app
+        # Common errors:
+        # - "Expecting value: line 1 column 1" = JSON is empty or invalid
+        # - Make sure you copied the ENTIRE JSON file content, not just part of it
+        # - Make sure there are no extra spaces or line breaks at the start/end
         #
         track: internal
         # Options: internal, alpha, beta, production
-        # Start with "internal" for testing, then move to "production" for public releases
-        #
         submit_as_draft: false
         # When false: Automatically submits for review after upload
         # When true: Uploads as draft (you must manually submit in Play Console)
