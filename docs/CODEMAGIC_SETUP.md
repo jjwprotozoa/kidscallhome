@@ -15,7 +15,7 @@ The Android build requires a keystore for signing release builds. Configure the 
 2. **Add the following environment variables:**
 
    | Variable Name | Description | Example |
-   |--------------|-------------|---------|
+   | ------------- | ----------- | ------- |
    | `CM_KEYSTORE_PATH` | Path to your `.jks` keystore file | `/path/to/upload-keystore.jks` |
    | `CM_KEYSTORE_PASSWORD` | Password for the keystore | `your-keystore-password` |
    | `CM_KEY_ALIAS` | Alias name of the key in the keystore | `upload` |
@@ -24,6 +24,7 @@ The Android build requires a keystore for signing release builds. Configure the 
 3. **If you don't have a keystore yet:**
 
    Generate one using the following command:
+
    ```bash
    keytool -genkey -v -keystore upload-keystore.jks \
      -keyalg RSA -keysize 2048 -validity 10000 \
@@ -32,11 +33,50 @@ The Android build requires a keystore for signing release builds. Configure the 
 
    Then upload the `.jks` file to Codemagic and set `CM_KEYSTORE_PATH` to point to it.
 
+### Required: Google Play Store Publishing
+
+The Android build can automatically publish to Google Play Store (similar to iOS App Store publishing).
+
+1. **Create Google Play API Service Account**
+   - Go to [Google Play Console](https://play.google.com/console)
+   - Navigate to: **Setup → API access**
+   - Click **Create new service account**
+   - Follow the Google Cloud Console link to create the service account
+   - Download the JSON key file for the service account
+   - Back in Play Console, grant the service account access to your app
+   - Grant permissions: **View app information** and **Manage production releases** (or **Manage testing releases** for internal/alpha/beta tracks)
+
+2. **Configure Integration in Codemagic**
+   - Go to: **Codemagic → Teams → Integrations → Google Play**
+   - Click **Add Integration**
+   - Name it: **`google_play`** (must match the name in `codemagic.yaml`)
+   - Upload the JSON key file from step 1
+
+3. **Verify Integration Name**
+   - The integration name in Codemagic must match the name in `codemagic.yaml`
+   - Current name: **`google_play`** (line 10 in `codemagic.yaml`)
+   - To change: Update both the Codemagic integration name AND the YAML file
+
+4. **Configure Publishing Track**
+   - In `codemagic.yaml`, the `track` is set to `internal` (for testing)
+   - Options: `internal`, `alpha`, `beta`, `production`
+   - Change `track: production` when ready for public releases
+   - Set `submit_as_draft: false` to auto-submit for review, or `true` to upload as draft
+
 ### Troubleshooting Android Build
 
 **Error: `CM_KEYSTORE_PATH is not set!`**
-- ✅ Solution: Configure the `android_keystore` environment group in Codemagic Team Settings
-- ✅ Ensure all four variables are set: `CM_KEYSTORE_PATH`, `CM_KEYSTORE_PASSWORD`, `CM_KEY_ALIAS`, `CM_KEY_PASSWORD`
+
+- ✅ Solution: The keystore is now in the repository at `android/upload-keystore.jks`
+- ✅ If using environment variables, configure the `android_keystore` environment group in Codemagic Team Settings
+
+**Error: Google Play publishing failed**
+
+- ✅ Verify the integration `google_play` exists in Codemagic
+- ✅ Check that the service account JSON key is valid and not expired
+- ✅ Ensure the service account has the correct permissions in Google Play Console
+- ✅ Verify the package name matches: `com.kidscallhome.app`
+- ✅ Check that the track (`internal`, `alpha`, `beta`, `production`) exists in Play Console
 
 ---
 
@@ -133,6 +173,7 @@ Common causes and solutions:
 ## Quick Checklist
 
 ### Android
+
 - [ ] `android_keystore` environment group created
 - [ ] `CM_KEYSTORE_PATH` set (points to uploaded `.jks` file)
 - [ ] `CM_KEYSTORE_PASSWORD` set
@@ -140,6 +181,7 @@ Common causes and solutions:
 - [ ] `CM_KEY_PASSWORD` set
 
 ### iOS
+
 - [ ] App Store Connect API key created
 - [ ] Integration `codemagic` created in Codemagic
 - [ ] Integration contains: Key ID, Issuer ID, Private Key
@@ -157,4 +199,3 @@ Common causes and solutions:
 - [Codemagic iOS Code Signing](https://docs.codemagic.io/code-signing/ios-code-signing/)
 - [Codemagic App Store Connect Integration](https://docs.codemagic.io/publishing-yaml/distribution/#app-store-connect)
 - [App Store Connect API Keys](https://developer.apple.com/documentation/appstoreconnectapi/creating_api_keys_for_app_store_connect_api)
-

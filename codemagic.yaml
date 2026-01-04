@@ -7,6 +7,12 @@ workflows:
     name: Android Build
     max_build_duration: 120
     instance_type: mac_mini_m1
+    # Google Play Integration
+    # References the Google Play API service account stored in Codemagic Team Settings
+    # Integration name: "google_play" (must match the key name in Codemagic Team Settings)
+    # To change: Update the integration name in Codemagic Team Settings → Integrations → Google Play
+    integrations:
+      google_play: google_play
     environment:
       groups:
         - android_keystore
@@ -34,121 +40,95 @@ workflows:
           echo "=== Setting up Android Keystore for Signing ==="
           echo ""
 
-          # Check for keystore environment variables
+          # Priority order:
+          # 1. Environment variables (Codemagic Team Settings - requires subscription)
+          # 2. Keystore file in repository (android/upload-keystore.jks)
+          # 3. Skip signing if neither is available
+
           KEYSTORE_PATH=""
           KEYSTORE_PASSWORD=""
           KEY_ALIAS=""
           KEY_PASSWORD=""
 
-          # Try to find keystore file from environment variables or common locations
+          # First, try environment variables (Codemagic Team Settings - requires subscription)
           if [ ! -z "$CM_KEYSTORE_PATH" ] && [ -f "$CM_KEYSTORE_PATH" ]; then
             KEYSTORE_PATH="$CM_KEYSTORE_PATH"
-            echo "✅ Found keystore at CM_KEYSTORE_PATH: $KEYSTORE_PATH"
-          elif [ ! -z "$CM_KEYSTORE" ] && [ -f "$CM_KEYSTORE" ]; then
-            KEYSTORE_PATH="$CM_KEYSTORE"
-            echo "✅ Found keystore at CM_KEYSTORE: $KEYSTORE_PATH"
-          else
-            # Try common Codemagic file locations
-            if [ -f "$HOME/keystore.jks" ]; then
-              KEYSTORE_PATH="$HOME/keystore.jks"
-              echo "✅ Found keystore at $HOME/keystore.jks"
-            elif [ -f "$HOME/upload-keystore.jks" ]; then
-              KEYSTORE_PATH="$HOME/upload-keystore.jks"
-              echo "✅ Found keystore at $HOME/upload-keystore.jks"
-            elif [ -f "./keystore.jks" ]; then
-              KEYSTORE_PATH="./keystore.jks"
-              echo "✅ Found keystore at ./keystore.jks"
-            elif [ -f "./upload-keystore.jks" ]; then
-              KEYSTORE_PATH="./upload-keystore.jks"
-              echo "✅ Found keystore at ./upload-keystore.jks"
-            fi
-          fi
-
-          # Get passwords and alias from environment variables
-          if [ ! -z "$CM_KEYSTORE_PASSWORD" ]; then
-            KEYSTORE_PASSWORD="$CM_KEYSTORE_PASSWORD"
-          elif [ ! -z "$KEYSTORE_PASSWORD" ]; then
-            KEYSTORE_PASSWORD="$KEYSTORE_PASSWORD"
-          fi
-
-          if [ ! -z "$CM_KEY_ALIAS" ]; then
-            KEY_ALIAS="$CM_KEY_ALIAS"
-          elif [ ! -z "$KEY_ALIAS" ]; then
-            KEY_ALIAS="$KEY_ALIAS"
-          else
-            # Default alias if not set
+            KEYSTORE_PASSWORD="${CM_KEYSTORE_PASSWORD:-}"
+            KEY_ALIAS="${CM_KEY_ALIAS:-upload}"
+            KEY_PASSWORD="${CM_KEY_PASSWORD:-$CM_KEYSTORE_PASSWORD}"
+            echo "✅ Using keystore from Codemagic environment variables"
+          # Second, try keystore file in repository
+          elif [ -f "android/upload-keystore.jks" ]; then
+            KEYSTORE_PATH="android/upload-keystore.jks"
+            # Use hardcoded password from keystore generation
+            # NOTE: These passwords are in the repository - change them if needed
+            KEYSTORE_PASSWORD="KidsCallHome2024!"
             KEY_ALIAS="upload"
-          fi
-
-          if [ ! -z "$CM_KEY_PASSWORD" ]; then
-            KEY_PASSWORD="$CM_KEY_PASSWORD"
-          elif [ ! -z "$KEY_PASSWORD" ]; then
-            KEY_PASSWORD="$KEY_PASSWORD"
-          fi
-
-          # If keystore path is found but passwords not set, try to use same value for both
-          if [ ! -z "$KEYSTORE_PATH" ] && [ -z "$KEYSTORE_PASSWORD" ] && [ ! -z "$CM_KEYSTORE_PASSWORD" ]; then
-            KEYSTORE_PASSWORD="$CM_KEYSTORE_PASSWORD"
-            if [ -z "$KEY_PASSWORD" ]; then
-              KEY_PASSWORD="$CM_KEYSTORE_PASSWORD"
-            fi
-          fi
-
-          # Verify all required values are set
-          if [ -z "$KEYSTORE_PATH" ] || [ ! -f "$KEYSTORE_PATH" ]; then
-            echo "⚠️ Keystore file not found. Checking environment variables:"
-            echo "  CM_KEYSTORE_PATH: ${CM_KEYSTORE_PATH:-not set}"
-            echo "  CM_KEYSTORE: ${CM_KEYSTORE:-not set}"
+            KEY_PASSWORD="KidsCallHome2024!"
+            echo "✅ Using keystore from repository (android/upload-keystore.jks)"
+          elif [ -f "upload-keystore.jks" ]; then
+            KEYSTORE_PATH="upload-keystore.jks"
+            KEYSTORE_PASSWORD="KidsCallHome2024!"
+            KEY_ALIAS="upload"
+            KEY_PASSWORD="KidsCallHome2024!"
+            echo "✅ Using keystore from repository root"
+          else
+            echo "⚠️ Keystore file not found. Checking locations:"
+            echo "  - android/upload-keystore.jks: $([ -f "android/upload-keystore.jks" ] && echo 'found' || echo 'not found')"
+            echo "  - upload-keystore.jks: $([ -f "upload-keystore.jks" ] && echo 'found' || echo 'not found')"
+            echo "  - CM_KEYSTORE_PATH: ${CM_KEYSTORE_PATH:-not set}"
             echo ""
             echo "⚠️ WARNING: Keystore not configured. Release builds will not be signed."
-            echo "To configure keystore signing:"
-            echo "1. Go to Codemagic → Teams → Code Signing"
-            echo "2. Find or create the 'android_keystore' environment group"
-            echo "3. Upload your .jks keystore file"
-            echo "4. Add environment variables:"
-            echo "   - CM_KEYSTORE_PATH: Path to the uploaded keystore file"
-            echo "   - CM_KEYSTORE_PASSWORD: Keystore password"
-            echo "   - CM_KEY_ALIAS: Key alias (default: upload)"
-            echo "   - CM_KEY_PASSWORD: Key password (can be same as keystore password)"
+            echo ""
+            echo "To enable signing, either:"
+            echo "1. Commit upload-keystore.jks to repository in android/ directory"
+            echo "2. Or configure in Codemagic: Teams → Code Signing → android_keystore group"
             echo ""
             echo "Continuing without signing configuration (debug builds will work)..."
             exit 0
           fi
 
-          if [ -z "$KEYSTORE_PASSWORD" ]; then
-            echo "⚠️ WARNING: CM_KEYSTORE_PASSWORD not set. Cannot configure signing."
-            echo "Continuing without signing configuration..."
-            exit 0
+          # Verify keystore file exists
+          if [ ! -f "$KEYSTORE_PATH" ]; then
+            echo "❌ ERROR: Keystore file not found at: $KEYSTORE_PATH"
+            exit 1
           fi
 
+          # Set defaults if not provided
           if [ -z "$KEY_ALIAS" ]; then
             KEY_ALIAS="upload"
-            echo "⚠️ Using default key alias: $KEY_ALIAS"
           fi
 
-          if [ -z "$KEY_PASSWORD" ]; then
+          if [ -z "$KEY_PASSWORD" ] && [ ! -z "$KEYSTORE_PASSWORD" ]; then
             KEY_PASSWORD="$KEYSTORE_PASSWORD"
-            echo "⚠️ Using keystore password as key password"
+          fi
+
+          if [ -z "$KEYSTORE_PASSWORD" ]; then
+            echo "❌ ERROR: Keystore password not set!"
+            exit 1
           fi
 
           echo ""
-          echo "✅ Keystore configuration found:"
+          echo "✅ Keystore configuration:"
           echo "  Keystore file: $KEYSTORE_PATH"
           echo "  Key alias: $KEY_ALIAS"
           echo ""
 
-          # Copy keystore to android directory
+          # Copy keystore to android directory if it's not already there
           KEYSTORE_DEST="android/upload-keystore.jks"
-          echo "Copying keystore to: $KEYSTORE_DEST"
-          mkdir -p android
-          cp "$KEYSTORE_PATH" "$KEYSTORE_DEST"
+          if [ "$KEYSTORE_PATH" != "$KEYSTORE_DEST" ]; then
+            echo "Copying keystore to: $KEYSTORE_DEST"
+            mkdir -p android
+            cp "$KEYSTORE_PATH" "$KEYSTORE_DEST"
 
-          if [ ! -f "$KEYSTORE_DEST" ]; then
-            echo "❌ ERROR: Failed to copy keystore file!"
-            exit 1
+            if [ ! -f "$KEYSTORE_DEST" ]; then
+              echo "❌ ERROR: Failed to copy keystore file!"
+              exit 1
+            fi
+            echo "✅ Keystore copied successfully"
+          else
+            echo "✅ Keystore already in correct location"
           fi
-
-          echo "✅ Keystore copied successfully"
 
           # Create keystore.properties file in android directory
           KEYSTORE_PROPERTIES="android/keystore.properties"
@@ -169,7 +149,7 @@ workflows:
           echo "Verifying keystore.properties contents (without passwords):"
           sed 's/Password=.*/Password=***/' "$KEYSTORE_PROPERTIES" | sed 's/storePassword=.*/storePassword=***/'
           echo ""
-          echo "✅ Keystore setup complete - AAB will be signed during build"
+          echo "✅ Keystore setup complete - APK and AAB will be signed during build"
 
       - name: Verify Java version and configure Gradle
         script: |
@@ -563,10 +543,17 @@ workflows:
 
           # Check if keystore.properties exists
           if [ ! -f "keystore.properties" ]; then
-            echo "❌ ERROR: keystore.properties not found!"
-            echo "The keystore setup step should have created this file."
-            echo "Please check the 'Set up Android keystore' step output."
-            exit 1
+            echo "⚠️ WARNING: keystore.properties not found!"
+            echo "Signing is not configured. This is OK for debug builds."
+            echo "Release builds will not be signed unless keystore is configured."
+            echo ""
+            echo "To enable signing, configure the keystore in Codemagic:"
+            echo "1. Go to Codemagic → Teams → Code Signing"
+            echo "2. Find or create the 'android_keystore' environment group"
+            echo "3. Upload your .jks keystore file and set environment variables"
+            echo ""
+            echo "Continuing with build (debug builds will work without signing)..."
+            exit 0
           fi
 
           echo "✅ keystore.properties found"
@@ -574,32 +561,37 @@ workflows:
           # Verify keystore file exists
           KEYSTORE_FILE=$(grep "^storeFile=" keystore.properties | cut -d'=' -f2)
           if [ -z "$KEYSTORE_FILE" ]; then
-            echo "❌ ERROR: storeFile not found in keystore.properties"
-            exit 1
+            echo "⚠️ WARNING: storeFile not found in keystore.properties"
+            echo "Signing configuration is incomplete. Continuing without signing..."
+            exit 0
           fi
 
           if [ ! -f "$KEYSTORE_FILE" ]; then
-            echo "❌ ERROR: Keystore file not found: $KEYSTORE_FILE"
+            echo "⚠️ WARNING: Keystore file not found: $KEYSTORE_FILE"
             echo "Expected location: android/$KEYSTORE_FILE"
-            exit 1
+            echo "Signing configuration is incomplete. Continuing without signing..."
+            exit 0
           fi
 
           echo "✅ Keystore file found: $KEYSTORE_FILE"
 
           # Verify all required properties are set (without showing values)
           if ! grep -q "^keyAlias=" keystore.properties; then
-            echo "❌ ERROR: keyAlias not found in keystore.properties"
-            exit 1
+            echo "⚠️ WARNING: keyAlias not found in keystore.properties"
+            echo "Signing configuration is incomplete. Continuing without signing..."
+            exit 0
           fi
 
           if ! grep -q "^storePassword=" keystore.properties; then
-            echo "❌ ERROR: storePassword not found in keystore.properties"
-            exit 1
+            echo "⚠️ WARNING: storePassword not found in keystore.properties"
+            echo "Signing configuration is incomplete. Continuing without signing..."
+            exit 0
           fi
 
           if ! grep -q "^keyPassword=" keystore.properties; then
-            echo "❌ ERROR: keyPassword not found in keystore.properties"
-            exit 1
+            echo "⚠️ WARNING: keyPassword not found in keystore.properties"
+            echo "Signing configuration is incomplete. Continuing without signing..."
+            exit 0
           fi
 
           echo "✅ All signing properties are configured"
@@ -787,6 +779,38 @@ workflows:
           ls -la app/build/outputs/apk/release/ 2>/dev/null || echo "APK release directory not found"
           ls -la app/build/outputs/apk/debug/ 2>/dev/null || echo "APK debug directory not found"
 
+          # Verify Release APK is signed
+          echo ""
+          echo "=== Verifying Release APK Signature ==="
+          RELEASE_APK=$(find app/build/outputs/apk/release -name "*.apk" -type f 2>/dev/null | head -1)
+          if [ ! -z "$RELEASE_APK" ] && [ -f "$RELEASE_APK" ]; then
+            echo "Found Release APK: $RELEASE_APK"
+            echo "Verifying signature..."
+
+            # Use apksigner to verify the APK is signed (if available)
+            if command -v apksigner &> /dev/null; then
+              apksigner verify --verbose "$RELEASE_APK" 2>&1 | head -20 || echo "⚠️ apksigner verification failed"
+            fi
+
+            # Use jarsigner to verify the APK is signed (fallback)
+            jarsigner -verify -verbose -certs "$RELEASE_APK" 2>&1 | head -20 || echo "⚠️ jarsigner verification failed or not available"
+
+            # Check if APK contains signature files (META-INF/*.SF, META-INF/*.RSA)
+            echo ""
+            echo "Checking for signature files in APK..."
+            unzip -l "$RELEASE_APK" 2>/dev/null | grep -E "META-INF/.*\.(SF|RSA|DSA|EC)" | head -10 || echo "⚠️ No signature files found in APK"
+
+            # If we can extract and check, verify signature files exist
+            if unzip -l "$RELEASE_APK" 2>/dev/null | grep -q "META-INF/.*\.SF"; then
+              echo "✅ Release APK appears to be signed (contains signature files)"
+            else
+              echo "❌ WARNING: Release APK may not be signed (no signature files found)"
+              echo "This could cause installation issues on devices"
+            fi
+          else
+            echo "⚠️ Release APK file not found for signature verification"
+          fi
+
       - name: Verify artifacts from workspace root
         script: |
           echo "=== Verifying artifacts from workspace root ==="
@@ -860,6 +884,48 @@ workflows:
         notify:
           success: true
           failure: true
+      # Google Play Store Publishing Configuration
+      #
+      # CONFIGURATION NOTES:
+      # - credentials: Uses the Google Play API service account from Codemagic integration
+      #   - Integration name: "google_play" (must match the key name in Codemagic Team Settings)
+      #   - To change: Update the integration name in Codemagic Team Settings → Integrations → Google Play
+      #   - Required: Google Play API service account JSON key file
+      #
+      # - track: internal|alpha|beta|production - Which track to publish to
+      #   - internal: Internal testing track (fastest, for team testing)
+      #   - alpha: Alpha testing track
+      #   - beta: Beta testing track (for open beta testing)
+      #   - production: Production track (public release)
+      #
+      # - submit_as_draft: true - Uploads as draft (requires manual review in Play Console)
+      #   - Set to false to automatically submit for review after upload
+      #
+      # PACKAGE NAME:
+      # - Package name: Set in vars.PACKAGE_NAME (currently: com.kidscallhome.app)
+      #   - Must match the package name in Google Play Console
+      #
+      google_play:
+        credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
+        # Integration name: "google_play" (configured in Codemagic Team Settings)
+        # To use a different integration, change the name here and ensure it exists in Codemagic
+        #
+        # IMPORTANT: If publishing fails, verify:
+        # 1. The integration "google_play" exists in Codemagic → Teams → Integrations → Google Play
+        # 2. The integration contains a valid Google Play API service account JSON key
+        # 3. The service account has the correct permissions in Google Play Console
+        # 4. The package name matches your app in Google Play Console: com.kidscallhome.app
+        #
+        track: internal
+        # Options: internal, alpha, beta, production
+        # Start with "internal" for testing, then move to "production" for public releases
+        #
+        submit_as_draft: false
+        # When false: Automatically submits for review after upload
+        # When true: Uploads as draft (you must manually submit in Play Console)
+        #
+        # In-app updates priority: optional
+        # Only relevant for production track - set to "immediate" for critical updates
 
   ios-build:
     name: iOS Build

@@ -42,12 +42,14 @@ android/app/.cxx/
 # Android local properties (machine-specific SDK paths)
 android/local.properties
 
-# Android keystore files (NEVER commit these!)
+# Android keystore files
 android/keystore.properties
-android/app/*.jks
-android/app/*.keystore
+# Ignore all keystore files first
 android/**/*.jks
 android/**/*.keystore
+# Exception: Allow upload-keystore.jks in android/ root for Codemagic auto-signing
+# (Must come AFTER the pattern above to override it)
+!android/upload-keystore.jks
 
 # Package manager lockfiles (using npm, ignore others)
 bun.lockb
