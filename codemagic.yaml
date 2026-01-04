@@ -31,11 +31,96 @@ workflows:
 
       - name: Set up Android keystore
         script: |
-          if [ ! -z "$CM_KEYSTORE_PATH" ]; then
-            echo "✅ Using keystore from CM_KEYSTORE_PATH"
+          echo "=== Setting up Android Keystore for Signing ==="
+          echo ""
+
+          KEYSTORE_PATH=""
+          KEYSTORE_PASSWORD=""
+          KEY_ALIAS="upload"
+          KEY_PASSWORD=""
+
+          # First, try environment variables (Codemagic Team Settings)
+          if [ ! -z "$CM_KEYSTORE_PATH" ] && [ -f "$CM_KEYSTORE_PATH" ]; then
+            KEYSTORE_PATH="$CM_KEYSTORE_PATH"
+            KEYSTORE_PASSWORD="${CM_KEYSTORE_PASSWORD:-}"
+            KEY_ALIAS="${CM_KEY_ALIAS:-upload}"
+            KEY_PASSWORD="${CM_KEY_PASSWORD:-$CM_KEYSTORE_PASSWORD}"
+            echo "✅ Using keystore from Codemagic environment variables"
+          # Second, try keystore file in repository
+          elif [ -f "android/upload-keystore.jks" ]; then
+            KEYSTORE_PATH="android/upload-keystore.jks"
+            KEYSTORE_PASSWORD="KidsCallHome2024!"
+            KEY_ALIAS="upload"
+            KEY_PASSWORD="KidsCallHome2024!"
+            echo "✅ Using keystore from repository (android/upload-keystore.jks)"
           else
-            echo "⚠️ No keystore configured, using debug signing"
+            echo "⚠️ WARNING: Keystore not found. Release builds will NOT be signed."
+            echo "  - CM_KEYSTORE_PATH: ${CM_KEYSTORE_PATH:-not set}"
+            echo "  - android/upload-keystore.jks: $([ -f "android/upload-keystore.jks" ] && echo 'found' || echo 'not found')"
+            echo ""
+            echo "Continuing without signing (debug builds will work, but AAB cannot be uploaded to Play Store)..."
+            exit 0
           fi
+
+          # Verify keystore file exists
+          if [ ! -f "$KEYSTORE_PATH" ]; then
+            echo "❌ ERROR: Keystore file not found at: $KEYSTORE_PATH"
+            exit 1
+          fi
+
+          # Set defaults if not provided
+          if [ -z "$KEY_ALIAS" ]; then
+            KEY_ALIAS="upload"
+          fi
+
+          if [ -z "$KEY_PASSWORD" ] && [ ! -z "$KEYSTORE_PASSWORD" ]; then
+            KEY_PASSWORD="$KEYSTORE_PASSWORD"
+          fi
+
+          if [ -z "$KEYSTORE_PASSWORD" ]; then
+            echo "❌ ERROR: Keystore password not set!"
+            exit 1
+          fi
+
+          echo ""
+          echo "✅ Keystore configuration:"
+          echo "  Keystore file: $KEYSTORE_PATH"
+          echo "  Key alias: $KEY_ALIAS"
+          echo ""
+
+          # Copy keystore to android directory if it's not already there
+          KEYSTORE_DEST="android/upload-keystore.jks"
+          if [ "$KEYSTORE_PATH" != "$KEYSTORE_DEST" ]; then
+            echo "Copying keystore to: $KEYSTORE_DEST"
+            mkdir -p android
+            cp "$KEYSTORE_PATH" "$KEYSTORE_DEST"
+            
+            if [ ! -f "$KEYSTORE_DEST" ]; then
+              echo "❌ ERROR: Failed to copy keystore file!"
+              exit 1
+            fi
+            echo "✅ Keystore copied successfully"
+          else
+            echo "✅ Keystore already in correct location"
+          fi
+
+          # Create keystore.properties file in android directory (required by build.gradle)
+          KEYSTORE_PROPERTIES="android/keystore.properties"
+          echo "Creating keystore.properties file for Gradle signing..."
+
+          printf "storeFile=upload-keystore.jks\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n" \
+            "$KEYSTORE_PASSWORD" \
+            "$KEY_ALIAS" \
+            "$KEY_PASSWORD" > "$KEYSTORE_PROPERTIES"
+
+          if [ ! -f "$KEYSTORE_PROPERTIES" ]; then
+            echo "❌ ERROR: Failed to create keystore.properties file!"
+            exit 1
+          fi
+
+          echo "✅ keystore.properties created"
+          echo ""
+          echo "Keystore setup complete - Release APK and AAB will be signed during build"
 
       - name: Verify Java version and configure Gradle
         script: |
