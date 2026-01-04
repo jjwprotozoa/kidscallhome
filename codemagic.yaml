@@ -33,64 +33,115 @@ workflows:
         script: |
           echo "=== Setting up Android Keystore for Signing ==="
           echo ""
-          echo "=== DIAGNOSTIC: Checking environment variables ==="
-          echo "CM_KEYSTORE_PATH: ${CM_KEYSTORE_PATH:-❌ NOT SET}"
-          echo "CM_KEYSTORE_PASSWORD: ${CM_KEYSTORE_PASSWORD:+✅ SET (hidden)}${CM_KEYSTORE_PASSWORD:-❌ NOT SET}"
-          echo "CM_KEY_ALIAS: ${CM_KEY_ALIAS:-❌ NOT SET}"
-          echo "CM_KEY_PASSWORD: ${CM_KEY_PASSWORD:+✅ SET (hidden)}${CM_KEY_PASSWORD:-❌ NOT SET}"
+
+          # Check for keystore environment variables
+          KEYSTORE_PATH=""
+          KEYSTORE_PASSWORD=""
+          KEY_ALIAS=""
+          KEY_PASSWORD=""
+
+          # Try to find keystore file from environment variables or common locations
+          if [ ! -z "$CM_KEYSTORE_PATH" ] && [ -f "$CM_KEYSTORE_PATH" ]; then
+            KEYSTORE_PATH="$CM_KEYSTORE_PATH"
+            echo "✅ Found keystore at CM_KEYSTORE_PATH: $KEYSTORE_PATH"
+          elif [ ! -z "$CM_KEYSTORE" ] && [ -f "$CM_KEYSTORE" ]; then
+            KEYSTORE_PATH="$CM_KEYSTORE"
+            echo "✅ Found keystore at CM_KEYSTORE: $KEYSTORE_PATH"
+          else
+            # Try common Codemagic file locations
+            if [ -f "$HOME/keystore.jks" ]; then
+              KEYSTORE_PATH="$HOME/keystore.jks"
+              echo "✅ Found keystore at $HOME/keystore.jks"
+            elif [ -f "$HOME/upload-keystore.jks" ]; then
+              KEYSTORE_PATH="$HOME/upload-keystore.jks"
+              echo "✅ Found keystore at $HOME/upload-keystore.jks"
+            elif [ -f "./keystore.jks" ]; then
+              KEYSTORE_PATH="./keystore.jks"
+              echo "✅ Found keystore at ./keystore.jks"
+            elif [ -f "./upload-keystore.jks" ]; then
+              KEYSTORE_PATH="./upload-keystore.jks"
+              echo "✅ Found keystore at ./upload-keystore.jks"
+            fi
+          fi
+
+          # Get passwords and alias from environment variables
+          if [ ! -z "$CM_KEYSTORE_PASSWORD" ]; then
+            KEYSTORE_PASSWORD="$CM_KEYSTORE_PASSWORD"
+          elif [ ! -z "$KEYSTORE_PASSWORD" ]; then
+            KEYSTORE_PASSWORD="$KEYSTORE_PASSWORD"
+          fi
+
+          if [ ! -z "$CM_KEY_ALIAS" ]; then
+            KEY_ALIAS="$CM_KEY_ALIAS"
+          elif [ ! -z "$KEY_ALIAS" ]; then
+            KEY_ALIAS="$KEY_ALIAS"
+          else
+            # Default alias if not set
+            KEY_ALIAS="upload"
+          fi
+
+          if [ ! -z "$CM_KEY_PASSWORD" ]; then
+            KEY_PASSWORD="$CM_KEY_PASSWORD"
+          elif [ ! -z "$KEY_PASSWORD" ]; then
+            KEY_PASSWORD="$KEY_PASSWORD"
+          fi
+
+          # If keystore path is found but passwords not set, try to use same value for both
+          if [ ! -z "$KEYSTORE_PATH" ] && [ -z "$KEYSTORE_PASSWORD" ] && [ ! -z "$CM_KEYSTORE_PASSWORD" ]; then
+            KEYSTORE_PASSWORD="$CM_KEYSTORE_PASSWORD"
+            if [ -z "$KEY_PASSWORD" ]; then
+              KEY_PASSWORD="$CM_KEYSTORE_PASSWORD"
+            fi
+          fi
+
+          # Verify all required values are set
+          if [ -z "$KEYSTORE_PATH" ] || [ ! -f "$KEYSTORE_PATH" ]; then
+            echo "⚠️ Keystore file not found. Checking environment variables:"
+            echo "  CM_KEYSTORE_PATH: ${CM_KEYSTORE_PATH:-not set}"
+            echo "  CM_KEYSTORE: ${CM_KEYSTORE:-not set}"
+            echo ""
+            echo "⚠️ WARNING: Keystore not configured. Release builds will not be signed."
+            echo "To configure keystore signing:"
+            echo "1. Go to Codemagic → Teams → Code Signing"
+            echo "2. Find or create the 'android_keystore' environment group"
+            echo "3. Upload your .jks keystore file"
+            echo "4. Add environment variables:"
+            echo "   - CM_KEYSTORE_PATH: Path to the uploaded keystore file"
+            echo "   - CM_KEYSTORE_PASSWORD: Keystore password"
+            echo "   - CM_KEY_ALIAS: Key alias (default: upload)"
+            echo "   - CM_KEY_PASSWORD: Key password (can be same as keystore password)"
+            echo ""
+            echo "Continuing without signing configuration (debug builds will work)..."
+            exit 0
+          fi
+
+          if [ -z "$KEYSTORE_PASSWORD" ]; then
+            echo "⚠️ WARNING: CM_KEYSTORE_PASSWORD not set. Cannot configure signing."
+            echo "Continuing without signing configuration..."
+            exit 0
+          fi
+
+          if [ -z "$KEY_ALIAS" ]; then
+            KEY_ALIAS="upload"
+            echo "⚠️ Using default key alias: $KEY_ALIAS"
+          fi
+
+          if [ -z "$KEY_PASSWORD" ]; then
+            KEY_PASSWORD="$KEYSTORE_PASSWORD"
+            echo "⚠️ Using keystore password as key password"
+          fi
+
           echo ""
-          echo "=== CONFIGURATION INSTRUCTIONS ==="
-          echo "To fix this error, configure the following in Codemagic:"
-          echo "1. Go to Codemagic → Teams → Code Signing"
-          echo "2. Find or create the 'android_keystore' environment group"
-          echo "3. Add the following variables:"
-          echo "   - CM_KEYSTORE_PATH: Path to your .jks keystore file (upload the file first)"
-          echo "   - CM_KEYSTORE_PASSWORD: Password for the keystore"
-          echo "   - CM_KEY_ALIAS: Alias name of the key in the keystore"
-          echo "   - CM_KEY_PASSWORD: Password for the key alias"
-          echo "4. If you don't have a keystore yet, generate one using:"
-          echo "   keytool -genkey -v -keystore upload-keystore.jks -keyalg RSA -keysize 2048 -validity 10000 -alias upload"
+          echo "✅ Keystore configuration found:"
+          echo "  Keystore file: $KEYSTORE_PATH"
+          echo "  Key alias: $KEY_ALIAS"
           echo ""
-
-          # Check if keystore environment variables are set
-          if [ -z "$CM_KEYSTORE_PATH" ]; then
-            echo "❌ ERROR: CM_KEYSTORE_PATH is not set!"
-            echo "Please configure the keystore in Codemagic Team Settings → Code Signing → android_keystore group"
-            exit 1
-          fi
-
-          if [ -z "$CM_KEYSTORE_PASSWORD" ]; then
-            echo "❌ ERROR: CM_KEYSTORE_PASSWORD is not set!"
-            exit 1
-          fi
-
-          if [ -z "$CM_KEY_ALIAS" ]; then
-            echo "❌ ERROR: CM_KEY_ALIAS is not set!"
-            exit 1
-          fi
-
-          if [ -z "$CM_KEY_PASSWORD" ]; then
-            echo "❌ ERROR: CM_KEY_PASSWORD is not set!"
-            exit 1
-          fi
-
-          echo "✅ All keystore environment variables are set"
-          echo "  Keystore path: $CM_KEYSTORE_PATH"
-          echo "  Key alias: $CM_KEY_ALIAS"
-          echo ""
-
-          # Verify keystore file exists
-          if [ ! -f "$CM_KEYSTORE_PATH" ]; then
-            echo "❌ ERROR: Keystore file not found at: $CM_KEYSTORE_PATH"
-            exit 1
-          fi
-
-          echo "✅ Keystore file found"
 
           # Copy keystore to android directory
           KEYSTORE_DEST="android/upload-keystore.jks"
           echo "Copying keystore to: $KEYSTORE_DEST"
-          cp "$CM_KEYSTORE_PATH" "$KEYSTORE_DEST"
+          mkdir -p android
+          cp "$KEYSTORE_PATH" "$KEYSTORE_DEST"
 
           if [ ! -f "$KEYSTORE_DEST" ]; then
             echo "❌ ERROR: Failed to copy keystore file!"
@@ -104,9 +155,9 @@ workflows:
           echo "Creating keystore.properties file..."
 
           printf "storeFile=upload-keystore.jks\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n" \
-            "$CM_KEYSTORE_PASSWORD" \
-            "$CM_KEY_ALIAS" \
-            "$CM_KEY_PASSWORD" > "$KEYSTORE_PROPERTIES"
+            "$KEYSTORE_PASSWORD" \
+            "$KEY_ALIAS" \
+            "$KEY_PASSWORD" > "$KEYSTORE_PROPERTIES"
 
           if [ ! -f "$KEYSTORE_PROPERTIES" ]; then
             echo "❌ ERROR: Failed to create keystore.properties file!"
@@ -409,10 +460,11 @@ workflows:
             CURRENT_VERSION_NAME="1.0.0"
           fi
 
-          echo "Current version name: $CURRENT_VERSION_NAME"
+          echo "Current version name (raw): $CURRENT_VERSION_NAME"
 
-          # Increment patch version (e.g., 1.0.1 -> 1.0.2)
-          # Extract major.minor.patch
+          # Normalize version to exactly 3 parts (major.minor.patch)
+          # Extract only the first 3 parts, ignoring any additional parts
+          # This fixes malformed versions like "1.0.1.0.1.0" -> "1.0.1"
           MAJOR=$(echo "$CURRENT_VERSION_NAME" | cut -d. -f1)
           MINOR=$(echo "$CURRENT_VERSION_NAME" | cut -d. -f2)
           PATCH=$(echo "$CURRENT_VERSION_NAME" | cut -d. -f3)
@@ -422,22 +474,43 @@ workflows:
           MINOR=${MINOR:-0}
           PATCH=${PATCH:-0}
 
+          # Validate that all parts are numeric (Android/Google Play requirement)
+          if ! [[ "$MAJOR" =~ ^[0-9]+$ ]] || ! [[ "$MINOR" =~ ^[0-9]+$ ]] || ! [[ "$PATCH" =~ ^[0-9]+$ ]]; then
+            echo "⚠️ WARNING: Version contains non-numeric parts, normalizing to 1.0.0"
+            MAJOR=1
+            MINOR=0
+            PATCH=0
+          fi
+
           # Increment patch version
           PATCH=$((PATCH + 1))
           NEW_VERSION_NAME="$MAJOR.$MINOR.$PATCH"
 
-          echo "New version name: $NEW_VERSION_NAME"
+          # Validate final version format (must be exactly 3 parts, all numeric)
+          if ! [[ "$NEW_VERSION_NAME" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "❌ ERROR: Invalid version format: $NEW_VERSION_NAME"
+            echo "Version must be in format: major.minor.patch (e.g., 1.0.1)"
+            exit 1
+          fi
+
+          echo "Normalized and incremented version name: $NEW_VERSION_NAME"
 
           # Update version code in build.gradle
           # Handle both formats: versionCode 2 and versionCode = 2
           sed -i '' "s/versionCode [0-9]*/versionCode $NEW_VERSION_CODE/g" "$BUILD_GRADLE" || \
           sed -i '' "s/versionCode = [0-9]*/versionCode = $NEW_VERSION_CODE/g" "$BUILD_GRADLE" || \
-          sed -i '' "s/versionCode[[:space:]]*[0-9]*/versionCode $NEW_VERSION_CODE/g" "$BUILD_GRADLE"
+          sed -i '' "s/versionCode[[:space:]]*[0-9]*/versionCode $NEW_VERSION_CODE/g" "$BUILD_GRADLE" || {
+            echo "❌ ERROR: Failed to update versionCode in build.gradle"
+            exit 1
+          }
 
           # Update version name in build.gradle
           # Handle both formats: versionName "1.0.1" and versionName = "1.0.1"
           sed -i '' "s/versionName \"[^\"]*\"/versionName \"$NEW_VERSION_NAME\"/g" "$BUILD_GRADLE" || \
-          sed -i '' "s/versionName = \"[^\"]*\"/versionName = \"$NEW_VERSION_NAME\"/g" "$BUILD_GRADLE"
+          sed -i '' "s/versionName = \"[^\"]*\"/versionName = \"$NEW_VERSION_NAME\"/g" "$BUILD_GRADLE" || {
+            echo "❌ ERROR: Failed to update versionName in build.gradle"
+            exit 1
+          }
 
           # Verify the update
           echo ""
@@ -449,17 +522,38 @@ workflows:
           echo "Updated version name: $UPDATED_VERSION_NAME"
 
           if [ "$UPDATED_VERSION_CODE" != "$NEW_VERSION_CODE" ]; then
-            echo "⚠️ WARNING: Version code may not have been updated correctly"
+            echo "❌ ERROR: Version code was not updated correctly"
+            echo "Expected: $NEW_VERSION_CODE"
+            echo "Found: $UPDATED_VERSION_CODE"
+            exit 1
           fi
 
           if [ "$UPDATED_VERSION_NAME" != "$NEW_VERSION_NAME" ]; then
-            echo "⚠️ WARNING: Version name may not have been updated correctly"
+            echo "❌ ERROR: Version name was not updated correctly"
+            echo "Expected: $NEW_VERSION_NAME"
+            echo "Found: $UPDATED_VERSION_NAME"
+            exit 1
+          fi
+
+          # Final validation: Ensure version name has exactly 3 parts
+          PART_COUNT=$(echo "$UPDATED_VERSION_NAME" | tr '.' '\n' | wc -l | tr -d ' ')
+          if [ "$PART_COUNT" -ne 3 ]; then
+            echo "❌ ERROR: Version name has $PART_COUNT parts, but must have exactly 3 parts"
+            echo "Current value: $UPDATED_VERSION_NAME"
+            exit 1
+          fi
+
+          # Validate format is numeric
+          if ! [[ "$UPDATED_VERSION_NAME" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "❌ ERROR: Version name format is invalid: $UPDATED_VERSION_NAME"
+            echo "Version must be exactly 3 numeric parts separated by periods (e.g., 1.0.1)"
+            exit 1
           fi
 
           echo ""
-          echo "✅ Version updated successfully"
+          echo "✅ Version updated and validated successfully"
           echo "   Version Code: $UPDATED_VERSION_CODE"
-          echo "   Version Name: $UPDATED_VERSION_NAME"
+          echo "   Version Name: $UPDATED_VERSION_NAME (validated: 3 parts, all numeric)"
 
       - name: Verify signing configuration before build
         script: |
@@ -1219,24 +1313,41 @@ workflows:
             CURRENT_VERSION_NAME="1.0.0"
             echo "⚠️ Version name not found, defaulting to: $CURRENT_VERSION_NAME"
           else
-            echo "Current version name: $CURRENT_VERSION_NAME"
+            echo "Current version name (raw): $CURRENT_VERSION_NAME"
           fi
 
-          # Increment patch version (e.g., 1.0.1 -> 1.0.2)
+          # Normalize version to exactly 3 parts (major.minor.patch)
+          # Extract only the first 3 parts, ignoring any additional parts
+          # This fixes malformed versions like "1.0.1.0.1.0" -> "1.0.1"
           MAJOR=$(echo "$CURRENT_VERSION_NAME" | cut -d. -f1)
           MINOR=$(echo "$CURRENT_VERSION_NAME" | cut -d. -f2)
           PATCH=$(echo "$CURRENT_VERSION_NAME" | cut -d. -f3)
 
-          # Default to 0 if empty
+          # Default to 0 if empty or non-numeric
           MAJOR=${MAJOR:-1}
           MINOR=${MINOR:-0}
           PATCH=${PATCH:-0}
+
+          # Validate that all parts are numeric (Apple requirement)
+          if ! [[ "$MAJOR" =~ ^[0-9]+$ ]] || ! [[ "$MINOR" =~ ^[0-9]+$ ]] || ! [[ "$PATCH" =~ ^[0-9]+$ ]]; then
+            echo "⚠️ WARNING: Version contains non-numeric parts, normalizing to 1.0.0"
+            MAJOR=1
+            MINOR=0
+            PATCH=0
+          fi
 
           # Increment patch version
           PATCH=$((PATCH + 1))
           NEW_VERSION_NAME="$MAJOR.$MINOR.$PATCH"
 
-          echo "New version name: $NEW_VERSION_NAME"
+          # Validate final version format (must be exactly 3 parts, all numeric)
+          if ! [[ "$NEW_VERSION_NAME" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "❌ ERROR: Invalid version format: $NEW_VERSION_NAME"
+            echo "Version must be in format: major.minor.patch (e.g., 1.0.1)"
+            exit 1
+          fi
+
+          echo "Normalized and incremented version name: $NEW_VERSION_NAME"
 
           # Determine build number (CFBundleVersion)
           # Use Codemagic's BUILD_NUMBER if available (auto-increments per build)
@@ -1251,14 +1362,30 @@ workflows:
           fi
 
           # Update CFBundleShortVersionString (version name) in Info.plist
+          # Use quotes around the value to ensure proper string handling
           if [ -f "$INFO_PLIST" ]; then
-            /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $NEW_VERSION_NAME" "$INFO_PLIST" 2>/dev/null || \
-            /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string $NEW_VERSION_NAME" "$INFO_PLIST" 2>/dev/null || true
+            /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString \"$NEW_VERSION_NAME\"" "$INFO_PLIST" 2>/dev/null || \
+            /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string \"$NEW_VERSION_NAME\"" "$INFO_PLIST" 2>/dev/null || {
+              echo "❌ ERROR: Failed to update CFBundleShortVersionString in Info.plist"
+              exit 1
+            }
             echo "✅ Updated CFBundleShortVersionString to $NEW_VERSION_NAME in Info.plist"
 
+            # Verify the update
+            VERIFIED_VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$INFO_PLIST" 2>/dev/null || echo "")
+            if [ "$VERIFIED_VERSION" != "$NEW_VERSION_NAME" ]; then
+              echo "❌ ERROR: Version verification failed!"
+              echo "Expected: $NEW_VERSION_NAME"
+              echo "Found: $VERIFIED_VERSION"
+              exit 1
+            fi
+
             # Update CFBundleVersion (build number) in Info.plist
-            /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_VERSION" "$INFO_PLIST" 2>/dev/null || \
-            /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string $BUILD_VERSION" "$INFO_PLIST" 2>/dev/null || true
+            /usr/libexec/PlistBuddy -c "Set :CFBundleVersion \"$BUILD_VERSION\"" "$INFO_PLIST" 2>/dev/null || \
+            /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string \"$BUILD_VERSION\"" "$INFO_PLIST" 2>/dev/null || {
+              echo "❌ ERROR: Failed to update CFBundleVersion in Info.plist"
+              exit 1
+            }
             echo "✅ Updated CFBundleVersion to $BUILD_VERSION in Info.plist"
           fi
 
@@ -1270,11 +1397,22 @@ workflows:
             # Update MARKETING_VERSION (version name) in project.pbxproj
             # Handle both formats: MARKETING_VERSION = "1.0.1"; and MARKETING_VERSION = 1.0.1;
             sed -i '' "s/MARKETING_VERSION = \"[^\"]*\"/MARKETING_VERSION = \"$NEW_VERSION_NAME\"/g" "$PBXPROJ" 2>/dev/null || \
-            sed -i '' "s/MARKETING_VERSION = [^;]*/MARKETING_VERSION = $NEW_VERSION_NAME/g" "$PBXPROJ" 2>/dev/null || true
+            sed -i '' "s/MARKETING_VERSION = [^;]*/MARKETING_VERSION = $NEW_VERSION_NAME/g" "$PBXPROJ" 2>/dev/null || {
+              echo "⚠️ WARNING: Failed to update MARKETING_VERSION in project.pbxproj"
+            }
             echo "✅ Updated MARKETING_VERSION to $NEW_VERSION_NAME in project.pbxproj"
 
+            # Verify MARKETING_VERSION update
+            VERIFIED_MARKETING_VERSION=$(grep "MARKETING_VERSION" "$PBXPROJ" | head -1 | sed 's/.*MARKETING_VERSION = //' | sed 's/;//' | sed 's/"//g' | tr -d '[:space:]' || echo "")
+            if [[ ! "$VERIFIED_MARKETING_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "⚠️ WARNING: MARKETING_VERSION verification failed or invalid format"
+              echo "Found: $VERIFIED_MARKETING_VERSION"
+            fi
+
             # Update CURRENT_PROJECT_VERSION (build number) in project.pbxproj
-            sed -i '' "s/CURRENT_PROJECT_VERSION = [^;]*/CURRENT_PROJECT_VERSION = $BUILD_VERSION/g" "$PBXPROJ" 2>/dev/null || true
+            sed -i '' "s/CURRENT_PROJECT_VERSION = [^;]*/CURRENT_PROJECT_VERSION = $BUILD_VERSION/g" "$PBXPROJ" 2>/dev/null || {
+              echo "⚠️ WARNING: Failed to update CURRENT_PROJECT_VERSION in project.pbxproj"
+            }
             echo "✅ Updated CURRENT_PROJECT_VERSION to $BUILD_VERSION in project.pbxproj"
           fi
 
@@ -1282,6 +1420,31 @@ workflows:
           echo "=== Final iOS Version Summary ==="
           echo "Version Name (CFBundleShortVersionString): $NEW_VERSION_NAME"
           echo "Build Number (CFBundleVersion): $BUILD_VERSION"
+          echo ""
+          echo "=== Final Verification ==="
+          if [ -f "$INFO_PLIST" ]; then
+            FINAL_VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$INFO_PLIST" 2>/dev/null || echo "")
+            FINAL_BUILD=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$INFO_PLIST" 2>/dev/null || echo "")
+            echo "Info.plist CFBundleShortVersionString: $FINAL_VERSION"
+            echo "Info.plist CFBundleVersion: $FINAL_BUILD"
+
+            # Validate final version format
+            if [[ ! "$FINAL_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "❌ ERROR: Final version format is invalid: $FINAL_VERSION"
+              echo "Version must be exactly 3 numeric parts separated by periods (e.g., 1.0.1)"
+              exit 1
+            fi
+
+            # Count the number of parts
+            PART_COUNT=$(echo "$FINAL_VERSION" | tr '.' '\n' | wc -l | tr -d ' ')
+            if [ "$PART_COUNT" -ne 3 ]; then
+              echo "❌ ERROR: Version has $PART_COUNT parts, but must have exactly 3 parts"
+              echo "Current value: $FINAL_VERSION"
+              exit 1
+            fi
+
+            echo "✅ Version format validation passed (3 parts, all numeric)"
+          fi
           echo "✅ iOS version updated successfully"
 
       - name: Build IPA for distribution
