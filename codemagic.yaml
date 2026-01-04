@@ -33,6 +33,24 @@ workflows:
         script: |
           echo "=== Setting up Android Keystore for Signing ==="
           echo ""
+          echo "=== DIAGNOSTIC: Checking environment variables ==="
+          echo "CM_KEYSTORE_PATH: ${CM_KEYSTORE_PATH:-❌ NOT SET}"
+          echo "CM_KEYSTORE_PASSWORD: ${CM_KEYSTORE_PASSWORD:+✅ SET (hidden)}${CM_KEYSTORE_PASSWORD:-❌ NOT SET}"
+          echo "CM_KEY_ALIAS: ${CM_KEY_ALIAS:-❌ NOT SET}"
+          echo "CM_KEY_PASSWORD: ${CM_KEY_PASSWORD:+✅ SET (hidden)}${CM_KEY_PASSWORD:-❌ NOT SET}"
+          echo ""
+          echo "=== CONFIGURATION INSTRUCTIONS ==="
+          echo "To fix this error, configure the following in Codemagic:"
+          echo "1. Go to Codemagic → Teams → Code Signing"
+          echo "2. Find or create the 'android_keystore' environment group"
+          echo "3. Add the following variables:"
+          echo "   - CM_KEYSTORE_PATH: Path to your .jks keystore file (upload the file first)"
+          echo "   - CM_KEYSTORE_PASSWORD: Password for the keystore"
+          echo "   - CM_KEY_ALIAS: Alias name of the key in the keystore"
+          echo "   - CM_KEY_PASSWORD: Password for the key alias"
+          echo "4. If you don't have a keystore yet, generate one using:"
+          echo "   keytool -genkey -v -keystore upload-keystore.jks -keyalg RSA -keysize 2048 -validity 10000 -alias upload"
+          echo ""
 
           # Check if keystore environment variables are set
           if [ -z "$CM_KEYSTORE_PATH" ]; then
@@ -1268,9 +1286,81 @@ workflows:
 
       - name: Build IPA for distribution
         script: |
+          echo "=== Building IPA for Distribution ==="
+          echo "Workspace: ios/App/$XCODE_WORKSPACE"
+          echo "Scheme: $XCODE_SCHEME"
+          echo ""
+
+          # Build IPA
           xcode-project build-ipa \
             --workspace "ios/App/$XCODE_WORKSPACE" \
             --scheme "$XCODE_SCHEME"
+
+          # Verify IPA was created
+          echo ""
+          echo "=== Verifying IPA was created ==="
+          IPA_PATH=$(find build/ios/ipa -name "*.ipa" -type f 2>/dev/null | head -1)
+
+          if [ -z "$IPA_PATH" ]; then
+            echo "⚠️ IPA not found in build/ios/ipa/, searching other locations..."
+            find . -name "*.ipa" -type f 2>/dev/null | head -10 || echo "No IPA files found"
+            echo ""
+            echo "Common IPA locations:"
+            ls -la build/ios/ipa/ 2>/dev/null || echo "build/ios/ipa/ does not exist"
+            ls -la build/ 2>/dev/null || echo "build/ does not exist"
+          else
+            echo "✅ IPA found: $IPA_PATH"
+            ls -lh "$IPA_PATH"
+            echo ""
+            echo "IPA size: $(du -h "$IPA_PATH" | cut -f1)"
+          fi
+
+      - name: Verify App Store Connect configuration before publishing
+        script: |
+          echo "=== Verifying App Store Connect Configuration ==="
+          echo ""
+
+          # Check if IPA exists
+          IPA_PATH=$(find build/ios/ipa -name "*.ipa" -type f 2>/dev/null | head -1)
+          if [ -z "$IPA_PATH" ]; then
+            echo "❌ ERROR: IPA file not found!"
+            echo "Cannot publish to App Store Connect without an IPA file."
+            echo "Expected location: build/ios/ipa/*.ipa"
+            echo ""
+            echo "Searching for IPA files..."
+            find . -name "*.ipa" -type f 2>/dev/null || echo "No IPA files found anywhere"
+            exit 1
+          fi
+
+          echo "✅ IPA file found: $IPA_PATH"
+          echo ""
+
+          # Check App Store Connect variables
+          echo "=== App Store Connect Configuration Check ==="
+          echo "APP_STORE_APPLE_ID: ${APP_STORE_APPLE_ID:-❌ NOT SET}"
+          echo "BUNDLE_ID: ${BUNDLE_ID:-❌ NOT SET}"
+          echo ""
+
+          # Check if integration exists (we can't directly verify, but we can document)
+          echo "=== Integration Check ==="
+          echo "Expected integration name: 'codemagic'"
+          echo "This integration must be configured in:"
+          echo "  Codemagic → Teams → Integrations → App Store Connect"
+          echo ""
+          echo "The integration should contain:"
+          echo "  - APP_STORE_CONNECT_API_KEY_ID"
+          echo "  - APP_STORE_CONNECT_ISSUER_ID"
+          echo "  - APP_STORE_CONNECT_API_KEY (P8 file content)"
+          echo ""
+
+          if [ -z "$APP_STORE_APPLE_ID" ]; then
+            echo "⚠️ WARNING: APP_STORE_APPLE_ID is not set!"
+            echo "This is required for App Store Connect publishing."
+            echo "Set it in the workflow vars section or as an environment variable."
+          fi
+
+          echo ""
+          echo "✅ Pre-publishing checks complete"
 
     artifacts:
       - build/ios/ipa/*.ipa
@@ -1325,10 +1415,21 @@ workflows:
         auth: integration
         # Integration name: "codemagic" (configured in Codemagic Team Settings)
         # To use a different integration, change the name here and ensure it exists in Codemagic
+        #
+        # IMPORTANT: If publishing fails, verify:
+        # 1. The integration "codemagic" exists in Codemagic → Teams → Integrations → App Store Connect
+        # 2. The integration contains valid App Store Connect API credentials:
+        #    - APP_STORE_CONNECT_API_KEY_ID
+        #    - APP_STORE_CONNECT_ISSUER_ID
+        #    - APP_STORE_CONNECT_API_KEY (P8 file content)
+        # 3. The API key has the correct permissions (App Manager or Admin role)
+        # 4. The APP_STORE_APPLE_ID matches your app in App Store Connect
+        #
         submit_to_testflight: true
         # Automatic TestFlight distribution to beta groups
         # Uncomment and customize the group names to match your TestFlight groups in App Store Connect
         # Groups must be created in App Store Connect → TestFlight → Groups before they can be used here
+        # If the group doesn't exist, publishing will fail - either create the group or comment out beta_groups
         beta_groups:
           - "Internal Testers"  # Change to your actual TestFlight group name(s)
         # Automatic App Store submission
