@@ -7,12 +7,6 @@ workflows:
     name: Android Build
     max_build_duration: 120
     instance_type: mac_mini_m1
-    # Google Play Integration
-    # References the Google Play API service account stored in Codemagic Team Settings
-    # Integration name: "google_play" (must match the key name in Codemagic Team Settings)
-    # To change: Update the integration name in Codemagic Team Settings → Integrations → Google Play
-    integrations:
-      google_play: google_play
     environment:
       groups:
         - android_keystore
@@ -906,13 +900,14 @@ workflows:
       #   - Must match the package name in Google Play Console
       #
       google_play:
-        credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
-        # Integration name: "google_play" (configured in Codemagic Team Settings)
-        # To use a different integration, change the name here and ensure it exists in Codemagic
+        credentials: GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
+        # Credentials come from the "google_play" environment group
+        # Configure in Codemagic → Teams → Environment Variables → google_play group
+        # Add variable: GCLOUD_SERVICE_ACCOUNT_CREDENTIALS with your Google Play API JSON key content
         #
         # IMPORTANT: If publishing fails, verify:
-        # 1. The integration "google_play" exists in Codemagic → Teams → Integrations → Google Play
-        # 2. The integration contains a valid Google Play API service account JSON key
+        # 1. The "google_play" environment group exists in Codemagic
+        # 2. The group contains GCLOUD_SERVICE_ACCOUNT_CREDENTIALS with valid JSON key content
         # 3. The service account has the correct permissions in Google Play Console
         # 4. The package name matches your app in Google Play Console: com.kidscallhome.app
         #
@@ -923,9 +918,6 @@ workflows:
         submit_as_draft: false
         # When false: Automatically submits for review after upload
         # When true: Uploads as draft (you must manually submit in Play Console)
-        #
-        # In-app updates priority: optional
-        # Only relevant for production track - set to "immediate" for critical updates
 
   ios-build:
     name: iOS Build
