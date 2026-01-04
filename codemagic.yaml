@@ -16,6 +16,20 @@ workflows:
       vars:
         PACKAGE_NAME: "com.kidscallhome.app"
         APP_NAME: "Kids Call Home"
+      # Android Code Signing Configuration
+      # See: https://docs.codemagic.io/yaml-code-signing/signing-android/
+      #
+      # Option 1 (Recommended): Upload keystore to Codemagic Code Signing identities
+      # 1. Go to Codemagic → Teams → Code Signing → Android keystores
+      # 2. Upload your keystore file and set reference name (e.g., "upload_keystore")
+      # 3. Uncomment and update the android_signing field below with your reference name
+      # 4. Codemagic will automatically provide: CM_KEYSTORE_PATH, CM_KEYSTORE_PASSWORD, CM_KEY_ALIAS, CM_KEY_PASSWORD
+      #
+      # Option 2 (Fallback): Use keystore from repository (android/upload-keystore.jks)
+      # If android_signing is not configured, the setup script will use the repository keystore
+      #
+      # android_signing:
+      #   - upload_keystore  # Replace with your keystore reference name from Codemagic
     scripts:
       - name: Install dependencies
         script: |
@@ -32,95 +46,47 @@ workflows:
       - name: Set up Android keystore
         script: |
           echo "=== Setting up Android Keystore for Signing ==="
+          echo "See: https://docs.codemagic.io/yaml-code-signing/signing-android/"
           echo ""
 
-          KEYSTORE_PATH=""
-          KEYSTORE_PASSWORD=""
-          KEY_ALIAS="upload"
-          KEY_PASSWORD=""
-
-          # First, try environment variables (Codemagic Team Settings)
+          # Check if keystore is provided by Codemagic (via android_signing in environment)
           if [ ! -z "$CM_KEYSTORE_PATH" ] && [ -f "$CM_KEYSTORE_PATH" ]; then
-            KEYSTORE_PATH="$CM_KEYSTORE_PATH"
-            KEYSTORE_PASSWORD="${CM_KEYSTORE_PASSWORD:-}"
-            KEY_ALIAS="${CM_KEY_ALIAS:-upload}"
-            KEY_PASSWORD="${CM_KEY_PASSWORD:-$CM_KEYSTORE_PASSWORD}"
-            echo "✅ Using keystore from Codemagic environment variables"
-          # Second, try keystore file in repository
+            echo "✅ Using keystore from Codemagic Code Signing identities"
+            echo "  Keystore path: $CM_KEYSTORE_PATH"
+            echo "  Key alias: ${CM_KEY_ALIAS:-not set}"
+            echo ""
+            echo "build.gradle will use environment variables (CM_KEYSTORE_*) for signing"
+            echo "No keystore.properties file needed - signing handled by Gradle via env vars"
+          # Fallback: Use keystore from repository (for local builds or if not uploaded to Codemagic)
           elif [ -f "android/upload-keystore.jks" ]; then
-            KEYSTORE_PATH="android/upload-keystore.jks"
-            KEYSTORE_PASSWORD="KidsCallHome2024!"
-            KEY_ALIAS="upload"
-            KEY_PASSWORD="KidsCallHome2024!"
             echo "✅ Using keystore from repository (android/upload-keystore.jks)"
+            echo ""
+            echo "Creating keystore.properties for local/repository keystore signing..."
+            
+            # Create keystore.properties file for repository keystore
+            KEYSTORE_PROPERTIES="android/keystore.properties"
+            printf "storeFile=upload-keystore.jks\nstorePassword=KidsCallHome2024!\nkeyAlias=upload\nkeyPassword=KidsCallHome2024!\n" > "$KEYSTORE_PROPERTIES"
+            
+            if [ ! -f "$KEYSTORE_PROPERTIES" ]; then
+              echo "❌ ERROR: Failed to create keystore.properties file!"
+              exit 1
+            fi
+            
+            echo "✅ keystore.properties created for repository keystore"
           else
-            echo "⚠️ WARNING: Keystore not found. Release builds will NOT be signed."
-            echo "  - CM_KEYSTORE_PATH: ${CM_KEYSTORE_PATH:-not set}"
-            echo "  - android/upload-keystore.jks: $([ -f "android/upload-keystore.jks" ] && echo 'found' || echo 'not found')"
+            echo "⚠️ WARNING: No keystore configured. Release builds will NOT be signed."
+            echo ""
+            echo "To enable signing, choose one:"
+            echo "1. Upload keystore to Codemagic → Teams → Code Signing → Android keystores"
+            echo "   Then add android_signing field in codemagic.yaml environment section"
+            echo "2. Or ensure android/upload-keystore.jks exists in repository"
             echo ""
             echo "Continuing without signing (debug builds will work, but AAB cannot be uploaded to Play Store)..."
             exit 0
           fi
 
-          # Verify keystore file exists
-          if [ ! -f "$KEYSTORE_PATH" ]; then
-            echo "❌ ERROR: Keystore file not found at: $KEYSTORE_PATH"
-            exit 1
-          fi
-
-          # Set defaults if not provided
-          if [ -z "$KEY_ALIAS" ]; then
-            KEY_ALIAS="upload"
-          fi
-
-          if [ -z "$KEY_PASSWORD" ] && [ ! -z "$KEYSTORE_PASSWORD" ]; then
-            KEY_PASSWORD="$KEYSTORE_PASSWORD"
-          fi
-
-          if [ -z "$KEYSTORE_PASSWORD" ]; then
-            echo "❌ ERROR: Keystore password not set!"
-            exit 1
-          fi
-
           echo ""
-          echo "✅ Keystore configuration:"
-          echo "  Keystore file: $KEYSTORE_PATH"
-          echo "  Key alias: $KEY_ALIAS"
-          echo ""
-
-          # Copy keystore to android directory if it's not already there
-          KEYSTORE_DEST="android/upload-keystore.jks"
-          if [ "$KEYSTORE_PATH" != "$KEYSTORE_DEST" ]; then
-            echo "Copying keystore to: $KEYSTORE_DEST"
-            mkdir -p android
-            cp "$KEYSTORE_PATH" "$KEYSTORE_DEST"
-
-            if [ ! -f "$KEYSTORE_DEST" ]; then
-              echo "❌ ERROR: Failed to copy keystore file!"
-              exit 1
-            fi
-            echo "✅ Keystore copied successfully"
-          else
-            echo "✅ Keystore already in correct location"
-          fi
-
-          # Create keystore.properties file in android directory (required by build.gradle)
-          KEYSTORE_PROPERTIES="android/keystore.properties"
-          echo "Creating keystore.properties file for Gradle signing..."
-
-          printf "storeFile=upload-keystore.jks\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n" \
-            "$KEYSTORE_PASSWORD" \
-            "$KEY_ALIAS" \
-            "$KEY_PASSWORD" > "$KEYSTORE_PROPERTIES"
-
-          if [ ! -f "$KEYSTORE_PROPERTIES" ]; then
-            echo "❌ ERROR: Failed to create keystore.properties file!"
-            exit 1
-          fi
-
-          echo "✅ keystore.properties created"
-          echo ""
-          echo "Keystore setup complete - Release APK and AAB will be signed during build"
+          echo "✅ Keystore setup complete - Release APK and AAB will be signed during build"
 
       - name: Verify Java version and configure Gradle
         script: |
